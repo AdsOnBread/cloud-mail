@@ -10,14 +10,14 @@ name = "email"
 [observability]
 enabled = true
 
-#[[d1_databases]]
-#binding = "db"			#Keep the D1 binding name unchanged
-#database_name = ""		#D1 database name
-#database_id = ""		#D1 database ID
+[[d1_databases]]
+binding = "db"
+database_name = "email-d1"
+database_id = "cbce56cf-640a-4cfe-93bf-186a0b817e72"
 
-#[[kv_namespaces]]
-#binding = "kv"			#Keep the KV binding name unchanged
-#id = ""					#KV namespace ID
+[[kv_namespaces]]
+binding = "kv"
+id = "03aa07f4c9734423a9e3ad02943f87c7"
 
 #[[r2_buckets]]
 #binding = "r2"			#Keep the R2 binding name unchanged
