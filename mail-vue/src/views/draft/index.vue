@@ -35,6 +35,9 @@ defineOptions({
   name: 'draft'
 })
 
+import router from '@/router';
+import { useEmailStore } from '@/store/email';
+const emailStore=useEmailStore();
 const draftStore = userDraftStore();
 const uiStore = useUiStore();
 const scroll = ref({})
@@ -65,7 +68,10 @@ async function deleteDraft(draftIds) {
 async function jumpContent(email) {
   const att = await db.value.att.get(email.draftId)
   email.attachments = att?.attachments || []
-  uiStore.writerRef.openDraft(email);
+  if(email.inlineReply && email.sendType==='reply' && email.emailId) {
+    emailStore.pendingReplyDraft={...email};
+    await router.push({path:'/mail',query:{emailId:email.emailId}});
+  } else uiStore.writerRef.openDraft(email);
 }
 
 </script>

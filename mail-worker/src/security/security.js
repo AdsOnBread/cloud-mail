@@ -20,6 +20,7 @@ const exclude = [
 ];
 
 const requirePerms = [
+	'/email/conversation/delete',
 	'/email/send',
 	'/email/delete',
 	'/account/list',
@@ -60,7 +61,7 @@ const requirePerms = [
 ];
 
 const premKey = {
-	'email:delete': ['/email/delete'],
+	'email:delete': ['/email/delete', '/email/conversation/delete'],
 	'email:send': ['/email/send'],
 	'account:add': ['/account/add'],
 	'account:query': ['/account/list'],

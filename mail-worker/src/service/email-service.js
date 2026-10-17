@@ -178,6 +178,8 @@ const emailService = {
 		if (!Number.isSafeInteger(id) || id <= 0) throw new BizError('Message not found.', 404);
 		const row = await orm(c).select({
 			...emailListColumns,
+			mailboxEmail: account.email,
+			mailboxName: account.name,
 			isStar: sql`CASE WHEN ${star.starId} IS NULL THEN 0 ELSE 1 END`.as('isStar'),
 		}).from(email)
 			.innerJoin(account, eq(account.accountId, email.accountId))

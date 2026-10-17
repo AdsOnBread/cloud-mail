@@ -244,6 +244,7 @@ html:not(.dark) {
     --secondary-text-color: #5f6368;
     --email-scroll-content-color: #5f6368;
     --light-border-color: #e0e3e7;
+    --compose-divider: #e0e3e7;
     --email-hover-background: #e8edf5;
     --base-fill: #eef2f7;
     --settings-page-background: #fff;
@@ -272,6 +273,7 @@ html.dark {
     --regular-text-color: #c4c7c5;
     --secondary-text-color: #a9adb4;
     --light-border-color: #3f4249;
+    --compose-divider: #3f4249;
     --base-fill: #34363c;
     --email-scroll-content-color: #b1b5bd;
     --aside-backgound: var(--mail-canvas);

@@ -3,6 +3,7 @@ import emailService from '../service/email-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
+import { conversationList, conversationMessages, conversationAction } from '../service/conversation-service';
 
 app.get('/email/list', async (c) => {
 	const data = await emailService.list(c, c.req.query(), userContext.getUserId(c));
@@ -39,3 +40,14 @@ app.put('/email/read', async (c) => {
 	return c.json(result.ok());
 })
 
+// Conversation routes share the mobile index while keeping its wire contract unchanged.
+app.use('/email/conversation*', async (c, next) => {
+	c.header('Cache-Control', 'private, no-store');
+	await next();
+});
+app.get('/email/conversations', async c => c.json(result.ok(await conversationList(c, c.req.query(), userContext.getUserId(c)))));
+app.get('/email/conversation/messages', async c => c.json(result.ok(await conversationMessages(c, c.req.query(), userContext.getUserId(c)))));
+for (const action of ['read', 'delete', 'star']) {
+	app.post(`/email/conversation/${action}`, async c =>
+		c.json(result.ok(await conversationAction(c, await c.req.json(), userContext.getUserId(c), action))));
+}

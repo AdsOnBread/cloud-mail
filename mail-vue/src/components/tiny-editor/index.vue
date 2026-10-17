@@ -1,34 +1,56 @@
 <template>
   <div class="editor-box" :class="showLoading ? 'editor-box-loading' : ''">
-    <loading class="loading" v-if="showLoading"/>
-    <textarea v-else style="outline: none" :id="editorId" ref="editorRef"></textarea>
+    <loading class="loading" v-if="showLoading" />
+    <textarea
+      v-else
+      style="outline: none"
+      :id="editorId"
+      ref="editorRef"
+    ></textarea>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted, onBeforeUnmount, watch, nextTick, shallowRef, defineEmits, computed} from 'vue';
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  watch,
+  nextTick,
+  shallowRef,
+} from "vue";
 import loading from "@/components/loading/index.vue";
-import {useUiStore} from '@/store/ui.js'
+import { useUiStore } from "@/store/ui.js";
 
 defineExpose({
   clearEditor,
   focus,
-  getContent
-})
+  getContent,
+  ready,
+});
 
 const props = defineProps({
   defValue: {
     type: String,
-    default: ''
+    default: "",
   },
   editorId: {
     type: String,
-    default: () => `editor-${Date.now()}`
-  }
+    default: () => `editor-${crypto.randomUUID()}`,
+  },
 });
 
-
-const emit = defineEmits(['change','focus']);
+const emit = defineEmits(["change", "focus"]);
+let pendingInit = Promise.resolve();
+let themeRevision = 0,
+  disposed = false;
+async function ready() {
+  let current;
+  do {
+    current = pendingInit;
+    await current;
+  } while (current !== pendingInit);
+}
 const editor = shallowRef(null);
 const isInitialized = ref(false);
 const editorRef = ref(null);
@@ -36,133 +58,156 @@ const showLoading = ref(false);
 const uiStore = useUiStore();
 
 onMounted(() => {
-  initTinyMCE();
+  pendingInit = initTinyMCE();
 });
 
 onBeforeUnmount(() => {
+  disposed = true;
+  themeRevision++;
   destroyEditor();
 });
 
-watch(() => props.defValue, (newValue) => {
-  if (editor.value && editor.value.getContent() !== newValue) {
-    editor.value.setContent(newValue);
-  }
-});
+watch(
+  () => props.defValue,
+  (newValue) => {
+    if (
+      isInitialized.value &&
+      editor.value &&
+      editor.value.getContent() !== newValue
+    ) {
+      editor.value.setContent(newValue);
+    }
+  },
+);
 
-watch(() => uiStore.dark, () => {
-  const content = editor.value?.getContent() ?? props.defValue;
-  destroyEditor();
-  initEditor(content);
-});
-
+watch(
+  () => uiStore.dark,
+  async () => {
+    const revision = ++themeRevision;
+    await ready();
+    if (disposed || revision !== themeRevision) return;
+    const content = isInitialized.value
+      ? editor.value?.getContent()
+      : props.defValue;
+    destroyEditor();
+    await initEditor(content);
+  },
+);
 
 function clearEditor() {
-  if (editor.value) {
-    editor.value.setContent('');
+  if (isInitialized.value && editor.value) {
+    editor.value.setContent("");
   }
 }
 
-function initTinyMCE() {
-  if (window.tinymce) {
-    initEditor();
-  } else {
+async function initTinyMCE() {
+  if (!window.tinymce) {
     showLoading.value = true;
-    const script = document.createElement('script');
-    script.src = '/tinymce/tinymce.min.js';
-    script.onload = () => initEditor();
-    document.head.appendChild(script);
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "/tinymce/tinymce.min.js";
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Could not load the editor."));
+      document.head.appendChild(script);
+    });
     showLoading.value = false;
+    await nextTick();
   }
+  return initEditor();
 }
 
-function initEditor(initialContent = props.defValue) {
-  window.tinymce.init({
+function initEditor(initialContent) {
+  pendingInit = window.tinymce.init({
     selector: `#${props.editorId}`,
     statusbar: false,
     height: "100%",
 
     //relative_urls: false,  //Keep image URLs absolute when they share the site domain
     //remove_script_host: false, // Preserve the hostname in URLs
-    forced_root_block: 'div',
-    skin: `${uiStore.dark ? 'oxide-dark' : 'oxide'}`,
-    content_css: `/tinymce/css/index.css,${uiStore.dark ? 'dark' : 'default'}`,
-    content_style: `body { background: ${uiStore.dark ? '#242529' : '#ffffff'}; color: ${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}; font-family: Arial, Helvetica, sans-serif; font-size:14px; } :root {
-         --scrollbar-track-color: ${uiStore.dark ? '#141414' : '#FFFFFF'};
-         --scrollbar-thumb-color: ${uiStore.dark ? '#8D9095' : '#A8ABB2'};
+    forced_root_block: "div",
+    skin: `${uiStore.dark ? "oxide-dark" : "oxide"}`,
+    content_css: `/tinymce/css/index.css,${uiStore.dark ? "dark" : "default"}`,
+    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:14px; } :root {
+         --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
+         --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     }`,
-    plugins: 'link image advlist lists emoticons fullscreen table preview code',
-    toolbar: 'undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat',
-    toolbar_location: 'bottom',
-    toolbar_mode: 'sliding',
-    font_size_formats: '8px 10px 12px 14px 16px 18px 24px 36px',
+    plugins: "link image advlist lists emoticons fullscreen table preview code",
+    toolbar:
+      "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
+    toolbar_location: "bottom",
+    toolbar_mode: "sliding",
+    font_size_formats: "8px 10px 12px 14px 16px 18px 24px 36px",
     emoticons_search: false,
-    language: 'en',
+    language: "en",
     language_load: false,
     menubar: false,
-    license_key: 'gpl',
-    noneditable_class: 'mceNonEditable',
+    license_key: "gpl",
+    noneditable_class: "mceNonEditable",
     setup: (ed) => {
       editor.value = ed;
-      ed.on('init', () => {
-        ed.setContent(initialContent);
+      ed.on("init", () => {
+        ed.setContent(initialContent ?? props.defValue);
         isInitialized.value = true;
-        emit('change', ed.getContent(), ed.getContent({format:'text'}));
+        emit("change", ed.getContent(), ed.getContent({ format: "text" }));
       });
-      ed.on('input change', () => {
+      ed.on("input change", () => {
         const content = ed.getContent();
-        const text = ed.getContent({format: 'text'});
-        emit('change', content, text);
+        const text = ed.getContent({ format: "text" });
+        emit("change", content, text);
       });
-      ed.on('focus', () => {
-        emit('focus', focus);
-      })
+      ed.on("focus", () => {
+        emit("focus", focus);
+      });
     },
 
     branding: false,
-    file_picker_types: 'image',
+    file_picker_types: "image",
     image_dimensions: false,
     image_description: false,
     link_title: false,
-    dialog_type: 'none',
+    dialog_type: "none",
     file_picker_callback: (callback, value, meta) => {
-      const input = document.createElement('input');
-      input.setAttribute('type', 'file');
-      input.setAttribute('accept', 'image/*');
+      const input = document.createElement("input");
+      input.setAttribute("type", "file");
+      input.setAttribute("accept", "image/*");
 
-      input.addEventListener('change', async (e) => {
+      input.addEventListener("change", async (e) => {
         let file = e.target.files[0];
         const reader = new FileReader();
         reader.onload = () => {
-          const id = 'blobid' + (new Date()).getTime();
+          const id = "blobid" + new Date().getTime();
           const blobCache = tinymce.activeEditor.editorUpload.blobCache;
-          const base64 = reader.result.split(',')[1];
+          const base64 = reader.result.split(",")[1];
           const blobInfo = blobCache.create(id, file, base64);
           blobCache.add(blobInfo);
 
-          callback(blobInfo.blobUri(), {title: file.name});
-        }
+          callback(blobInfo.blobUri(), { title: file.name });
+        };
         reader.readAsDataURL(file);
       });
 
       input.click();
-    }
+    },
   });
+  return pendingInit;
 }
 
 function focus() {
   nextTick(() => {
-    editor.value?.focus()
-  })
+    editor.value?.focus();
+  });
 }
 
 function getContent() {
-  return editor.value?.getContent() || ''
+  return isInitialized.value
+    ? editor.value?.getContent() || ""
+    : props.defValue;
 }
 
-
 function destroyEditor() {
+  isInitialized.value = false;
   if (editor.value) {
-    editor.value.destroy();
+    editor.value.remove();
     editor.value = null;
   }
 }
@@ -217,9 +262,24 @@ function destroyEditor() {
 :deep(.tox .tox-edit-area::before) {
   display: none;
 }
-
 </style>
 
 <style scoped>
-:deep(.tox .tox-toolbar), :deep(.tox .tox-toolbar__primary), :deep(.tox .tox-toolbar__overflow), :deep(.tox .tox-editor-header) { background:var(--mail-surface); box-shadow:none; }
+:deep(.tox .tox-tbtn) {
+  background: transparent;
+}
+:deep(.tox .tox-tbtn:hover) {
+  background: var(--mail-hover);
+}
+:deep(.tox .tox-tbtn--enabled),
+:deep(.tox .tox-tbtn--enabled:hover) {
+  background: var(--mail-selected);
+}
+:deep(.tox .tox-toolbar),
+:deep(.tox .tox-toolbar__primary),
+:deep(.tox .tox-toolbar__overflow),
+:deep(.tox .tox-editor-header) {
+  background: var(--mail-surface);
+  box-shadow: none;
+}
 </style>

@@ -5,7 +5,7 @@
     <button v-if="uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main"><Main /></main>
     <writer ref="writerRef" />
-    <button v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+    <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>

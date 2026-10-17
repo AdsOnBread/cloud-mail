@@ -52,11 +52,11 @@ function paste(event) {
 defineExpose({ commit, focus: () => input.value?.focus(), clear: () => { pending.value = ''; } });
 </script>
 <style scoped>
-.recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:40px; border-bottom:1px solid var(--light-border-color); padding:5px 0; }
+.recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:40px; border-bottom:1px solid var(--compose-divider, var(--light-border-color)); padding:5px 0; }
 label { width:35px; flex-shrink:0; color:var(--regular-text-color); font-size:13px; }
 .recipient-entry { flex:1; min-width:100px; display:flex; align-items:center; flex-wrap:wrap; gap:4px; cursor:text; }
-input { flex:1; width:100px; min-width:80px; padding:4px 0; color:inherit; }
-.recipient-chip { display:inline-flex; align-items:center; border:1px solid var(--light-border-color); border-radius:16px; padding:1px 6px 1px 10px; font-size:12px; max-width:100%; gap:4px; }
+input { appearance:none; border:0; border-radius:0; outline:none; background:transparent; font:inherit; flex:1; width:100px; min-width:80px; padding:4px 0; color:inherit; }
+.recipient-chip { display:inline-flex; align-items:center; border:1px solid var(--compose-divider, var(--light-border-color)); border-radius:16px; padding:1px 6px 1px 10px; font-size:12px; max-width:100%; gap:4px; }
 .recipient-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .recipient-chip button { width:20px; height:24px; cursor:pointer; color:var(--regular-text-color); border-radius:50%; }
 .invalid { border-color:var(--el-color-danger); }

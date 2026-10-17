@@ -8,6 +8,7 @@ export const useAccountStore = defineStore('account', {
         currentAccount: {},
         changeUserAccountName: '',
         accounts: [],
+        recipientOwnAddresses: [],
         owner: '',
         loading: false,
         loaded: false,
@@ -17,7 +18,7 @@ export const useAccountStore = defineStore('account', {
     getters: {
         ownAddresses(state) {
             return [...new Set([useUserStore().user.email, state.currentAccount.email,
-                ...state.accounts.map(account => account.email)].filter(Boolean))];
+                ...state.recipientOwnAddresses, ...state.accounts.map(account => account.email)].filter(Boolean))];
         }
     },
     actions: {
@@ -25,6 +26,7 @@ export const useAccountStore = defineStore('account', {
             const owner = useUserStore().user.email;
             if (this.owner !== owner) {
                 this.accounts.splice(0);
+                this.recipientOwnAddresses=[];
                 this.loaded = false;
                 this.pending = null;
                 this.owner = owner;

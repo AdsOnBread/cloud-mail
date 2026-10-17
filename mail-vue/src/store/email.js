@@ -5,6 +5,8 @@ import { emailDetail } from '@/request/email.js'
 export const useEmailStore = defineStore('email', {
     state: () => ({
         deleteIds: 0,
+        conversationRevision: 0,
+        pendingReplyDraft: null,
         starScroll: null,
         emailScroll: null,
         cancelStarEmailId: 0,
