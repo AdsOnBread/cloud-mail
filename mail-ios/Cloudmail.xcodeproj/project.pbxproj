@@ -1,0 +1,600 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1D63EECBBF9CD783EAA84D94 /* CloudmailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B80AE887E1E607D5891E9F1B /* CloudmailApp.swift */; };
+		216F754F3BF970C694BC6A9D /* MailHTML.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC4810DFA9F41095F433E49 /* MailHTML.swift */; };
+		3CD17C1C6FD73F94BEB28D32 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4D95C5AAFA3C14B1B3FAE71 /* Foundation.framework */; };
+		40160D8ACBCFC9CC71990CE7 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DD9EF97919FEE4B53D35EA /* Models.swift */; };
+		43B9941909A1D8B5BBF4CF93 /* CloudmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6352087B1151770F5990453A /* CloudmailTests.swift */; };
+		50196D051F94D033DC40E92E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4D95C5AAFA3C14B1B3FAE71 /* Foundation.framework */; };
+		8BFD7A1B1543995A1D6D5ECD /* API.swift in Sources */ = {isa = PBXBuildFile; fileRef = 453DD9E39AFEB43730F9E374 /* API.swift */; };
+		970340746B29C34BA019E6B6 /* MailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51EAC43B09E73CD8C203C86E /* MailStore.swift */; };
+		ADCA176D40A0B4DD05A34AB6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A44AEFB9F3716D4671BA3819 /* Assets.xcassets */; };
+		C629041ACD161DDE54DC9B51 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4D95C5AAFA3C14B1B3FAE71 /* Foundation.framework */; };
+		E41D2753AB53E27EE43081F2 /* Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC5A4B9E32B113DFE94EE55 /* Notifications.swift */; };
+		ED00BB35AFEE8D710F55BED1 /* ComposeAndSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F11EE618B39BED442330574 /* ComposeAndSettings.swift */; };
+		F0258AF02DA91D528D4DFB45 /* CloudmailUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8316DCFC0F0A2E0A56F4B010 /* CloudmailUITests.swift */; };
+		F4DCE3374ED9B856097921D7 /* MailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CA479D63CBF833421C86BD /* MailViews.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6C019B34CBD131A7BFF3B19B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 212DF67914DD6C09764E898C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3EEDA68E0C854EEACAB6E7E8;
+			remoteInfo = Cloudmail;
+		};
+		BBCC21C4D460491EBA300775 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 212DF67914DD6C09764E898C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3EEDA68E0C854EEACAB6E7E8;
+			remoteInfo = Cloudmail;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		453DD9E39AFEB43730F9E374 /* API.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
+		4F11EE618B39BED442330574 /* ComposeAndSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ComposeAndSettings.swift; sourceTree = "<group>"; };
+		51EAC43B09E73CD8C203C86E /* MailStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MailStore.swift; sourceTree = "<group>"; };
+		6352087B1151770F5990453A /* CloudmailTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudmailTests.swift; sourceTree = "<group>"; };
+		68CA479D63CBF833421C86BD /* MailViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MailViews.swift; sourceTree = "<group>"; };
+		8316DCFC0F0A2E0A56F4B010 /* CloudmailUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudmailUITests.swift; sourceTree = "<group>"; };
+		A44AEFB9F3716D4671BA3819 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1DD9EF97919FEE4B53D35EA /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		B4D95C5AAFA3C14B1B3FAE71 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		B66807FC88811481E002434B /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B80AE887E1E607D5891E9F1B /* CloudmailApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CloudmailApp.swift; sourceTree = "<group>"; };
+		B849DF20A329547CCF28A721 /* CloudmailTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudmailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BFC5A4B9E32B113DFE94EE55 /* Notifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Notifications.swift; sourceTree = "<group>"; };
+		D36CFA594F78F7FF4EFF47EC /* CloudmailUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudmailUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE10EF64A02443BBDD953A08 /* Cloudmail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cloudmail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FCC4810DFA9F41095F433E49 /* MailHTML.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MailHTML.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		15E0D283E48331E54951D914 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3CD17C1C6FD73F94BEB28D32 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		27E19EDE75E222733C1DE6C7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C629041ACD161DDE54DC9B51 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC49A7E50567AFCB8767396C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				50196D051F94D033DC40E92E /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2D070CC7C5E4AB2D632CC5C0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EE10EF64A02443BBDD953A08 /* Cloudmail.app */,
+				B849DF20A329547CCF28A721 /* CloudmailTests.xctest */,
+				D36CFA594F78F7FF4EFF47EC /* CloudmailUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3434575BC5455D7F724A3FFB = {
+			isa = PBXGroup;
+			children = (
+				2D070CC7C5E4AB2D632CC5C0 /* Products */,
+				4A11FF155DA8617E8D2EBA43 /* Frameworks */,
+				7C9BBC15FFA316503F9D5AAE /* Cloudmail */,
+				B17B71F1B3B05ECFE3C4CE2E /* CloudmailTests */,
+				93567F416B5C29C6145E6B54 /* CloudmailUITests */,
+			);
+			sourceTree = "<group>";
+		};
+		4A11FF155DA8617E8D2EBA43 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C2C06D9A081EDE8D3A70086D /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7C9BBC15FFA316503F9D5AAE /* Cloudmail */ = {
+			isa = PBXGroup;
+			children = (
+				453DD9E39AFEB43730F9E374 /* API.swift */,
+				B80AE887E1E607D5891E9F1B /* CloudmailApp.swift */,
+				4F11EE618B39BED442330574 /* ComposeAndSettings.swift */,
+				FCC4810DFA9F41095F433E49 /* MailHTML.swift */,
+				51EAC43B09E73CD8C203C86E /* MailStore.swift */,
+				68CA479D63CBF833421C86BD /* MailViews.swift */,
+				B1DD9EF97919FEE4B53D35EA /* Models.swift */,
+				BFC5A4B9E32B113DFE94EE55 /* Notifications.swift */,
+				B66807FC88811481E002434B /* Info.plist */,
+				A44AEFB9F3716D4671BA3819 /* Assets.xcassets */,
+			);
+			path = Cloudmail;
+			sourceTree = "<group>";
+		};
+		93567F416B5C29C6145E6B54 /* CloudmailUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8316DCFC0F0A2E0A56F4B010 /* CloudmailUITests.swift */,
+			);
+			path = CloudmailUITests;
+			sourceTree = "<group>";
+		};
+		B17B71F1B3B05ECFE3C4CE2E /* CloudmailTests */ = {
+			isa = PBXGroup;
+			children = (
+				6352087B1151770F5990453A /* CloudmailTests.swift */,
+			);
+			path = CloudmailTests;
+			sourceTree = "<group>";
+		};
+		C2C06D9A081EDE8D3A70086D /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				B4D95C5AAFA3C14B1B3FAE71 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3EEDA68E0C854EEACAB6E7E8 /* Cloudmail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84F23B26BA0D72F57D0F88C1 /* Build configuration list for PBXNativeTarget "Cloudmail" */;
+			buildPhases = (
+				027019844049C6B034394C33 /* Sources */,
+				DC49A7E50567AFCB8767396C /* Frameworks */,
+				33B305C58FACAA87D641DD94 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Cloudmail;
+			productName = Cloudmail;
+			productReference = EE10EF64A02443BBDD953A08 /* Cloudmail.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7C205290E7904DCA52BAF6D0 /* CloudmailUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7615CCC6A27286530EC506AC /* Build configuration list for PBXNativeTarget "CloudmailUITests" */;
+			buildPhases = (
+				3D3BA4E3B4A2FD71E34ECC3D /* Sources */,
+				27E19EDE75E222733C1DE6C7 /* Frameworks */,
+				178D50C64E520A555624F44D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				83044B0C7B2FC966995C14A2 /* PBXTargetDependency */,
+			);
+			name = CloudmailUITests;
+			productName = CloudmailUITests;
+			productReference = D36CFA594F78F7FF4EFF47EC /* CloudmailUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		96DCF66DC8956E1CD26C0F0F /* CloudmailTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 399282566DE77E0D9D1790EB /* Build configuration list for PBXNativeTarget "CloudmailTests" */;
+			buildPhases = (
+				3AF6A3BB1870DD9D617489B3 /* Sources */,
+				15E0D283E48331E54951D914 /* Frameworks */,
+				95E818F7B8A31EC5FF00B157 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0F4F0D7F9A530FDBD24BA487 /* PBXTargetDependency */,
+			);
+			name = CloudmailTests;
+			productName = CloudmailTests;
+			productReference = B849DF20A329547CCF28A721 /* CloudmailTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		212DF67914DD6C09764E898C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					3EEDA68E0C854EEACAB6E7E8 = {
+						DevelopmentTeam = BCU8ZR2922;
+						ProvisioningStyle = Automatic;
+					};
+					7C205290E7904DCA52BAF6D0 = {
+						ProvisioningStyle = Automatic;
+					};
+					96DCF66DC8956E1CD26C0F0F = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = FEAA5BC41FE408791C2B4609 /* Build configuration list for PBXProject "Cloudmail" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 3434575BC5455D7F724A3FFB;
+			productRefGroup = 2D070CC7C5E4AB2D632CC5C0 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3EEDA68E0C854EEACAB6E7E8 /* Cloudmail */,
+				96DCF66DC8956E1CD26C0F0F /* CloudmailTests */,
+				7C205290E7904DCA52BAF6D0 /* CloudmailUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		178D50C64E520A555624F44D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		33B305C58FACAA87D641DD94 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADCA176D40A0B4DD05A34AB6 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		95E818F7B8A31EC5FF00B157 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		027019844049C6B034394C33 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8BFD7A1B1543995A1D6D5ECD /* API.swift in Sources */,
+				1D63EECBBF9CD783EAA84D94 /* CloudmailApp.swift in Sources */,
+				ED00BB35AFEE8D710F55BED1 /* ComposeAndSettings.swift in Sources */,
+				216F754F3BF970C694BC6A9D /* MailHTML.swift in Sources */,
+				970340746B29C34BA019E6B6 /* MailStore.swift in Sources */,
+				F4DCE3374ED9B856097921D7 /* MailViews.swift in Sources */,
+				40160D8ACBCFC9CC71990CE7 /* Models.swift in Sources */,
+				E41D2753AB53E27EE43081F2 /* Notifications.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3AF6A3BB1870DD9D617489B3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				43B9941909A1D8B5BBF4CF93 /* CloudmailTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3D3BA4E3B4A2FD71E34ECC3D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F0258AF02DA91D528D4DFB45 /* CloudmailUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0F4F0D7F9A530FDBD24BA487 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Cloudmail;
+			target = 3EEDA68E0C854EEACAB6E7E8 /* Cloudmail */;
+			targetProxy = BBCC21C4D460491EBA300775 /* PBXContainerItemProxy */;
+		};
+		83044B0C7B2FC966995C14A2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Cloudmail;
+			target = 3EEDA68E0C854EEACAB6E7E8 /* Cloudmail */;
+			targetProxy = 6C019B34CBD131A7BFF3B19B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1FFBD21F75FBB5A4806A7D02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal.CloudmailUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Cloudmail;
+			};
+			name = Debug;
+		};
+		23A41A88A00390C08E997DB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal.CloudmailTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cloudmail.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cloudmail";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		90ABAAD01D502E10E545F4F5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BCU8ZR2922;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Cloudmail/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		9E9A7D03FCB325D9DED790A0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A2A8BA8E86BF2C0BD4516B4D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal.CloudmailTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cloudmail.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Cloudmail";
+			};
+			name = Debug;
+		};
+		C2AD3C0CE830BD0EAB6F2AF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BCU8ZR2922;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Cloudmail/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0794BAC839CD7E1B7AC40F5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cloudmail.internal.CloudmailUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Cloudmail;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D25263D1383E87C1676FB0A0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		399282566DE77E0D9D1790EB /* Build configuration list for PBXNativeTarget "CloudmailTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				23A41A88A00390C08E997DB2 /* Release */,
+				A2A8BA8E86BF2C0BD4516B4D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7615CCC6A27286530EC506AC /* Build configuration list for PBXNativeTarget "CloudmailUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0794BAC839CD7E1B7AC40F5 /* Release */,
+				1FFBD21F75FBB5A4806A7D02 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		84F23B26BA0D72F57D0F88C1 /* Build configuration list for PBXNativeTarget "Cloudmail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				90ABAAD01D502E10E545F4F5 /* Release */,
+				C2AD3C0CE830BD0EAB6F2AF8 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FEAA5BC41FE408791C2B4609 /* Build configuration list for PBXProject "Cloudmail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D25263D1383E87C1676FB0A0 /* Debug */,
+				9E9A7D03FCB325D9DED790A0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 212DF67914DD6C09764E898C /* Project object */;
+}
