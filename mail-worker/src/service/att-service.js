@@ -49,7 +49,7 @@ const attService = {
 		).all();
 	},
 
-	async toImageUrlHtml(c, content) {
+	async toImageUrlHtml(c, content, userId) {
 
 		const { r2Domain } = await settingService.query(c);
 
@@ -121,7 +121,7 @@ const attService = {
 
 		//Look up metadata for stored inline images
 		const keys = [...new Set(imageDataList.filter(item => !item.content).map(item => item.key))];
-		const dbImageList = keys.length ? await this.selectOneByKeys(c, keys) : [];
+		const dbImageList = keys.length ? await this.selectOneByKeys(c, keys, userId) : [];
 
 		//Populate attachment metadata and content
 		await Promise.all(imageDataList.map(async image => {
@@ -273,11 +273,11 @@ const attService = {
 		await this.removeAttByField(c, "account_id", [accountId])
 	},
 
-	selectOneByKeys(c, keys) {
+	selectOneByKeys(c, keys, userId) {
 		if (!keys || keys.length === 0) {
 			return []
 		}
-		return orm(c).select().from(att).where(inArray(att.key, keys)).orderBy(desc(att.attId)).groupBy(att.key).all();
+		return orm(c).select().from(att).where(and(inArray(att.key, keys),userId ? eq(att.userId,userId) : undefined)).orderBy(desc(att.attId)).groupBy(att.key).all();
 	}
 };
 

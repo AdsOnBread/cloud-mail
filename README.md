@@ -29,6 +29,7 @@ See [Cloudflare Email Sending setup](https://developers.cloudflare.com/email-ser
 
 - `mail-worker`: Hono API, mailbox services, D1 initialization and upgrades, email handlers, and Wrangler configuration.
 - `mail-vue`: Vue interface, Pinia state, Element Plus components, and TinyMCE editor.
+- `mail-ios`: native iOS 18+ SwiftUI client, local drafts and cache, multiple user sessions, conversations, and best-effort background notifications. See [iOS setup](mail-ios/README.md).
 - `.github/workflows/deploy-cloudflare.yml`: automated build and deployment.
 
 ## Configure the Worker
@@ -50,7 +51,10 @@ Configure these Worker variables:
 | --- | --- |
 | `domain` | Array of mailbox domains, for example `["example.com"]` |
 | `admin` | Administrator email address on a configured domain |
-| `jwt_secret` | Long random signing and initialization secret |
+| `jwt_secret` | Existing user-session signing secret |
+| `app_access_secret` | Shared installation-access secret, entered on each device |
+| `init_secret` | Separate database-initialization credential |
+| `browser_origins` | Optional comma-separated development browser origins; production defaults to same origin |
 | `ai_model` | Optional Workers AI model override |
 | `analysis_cache` | Optional analytics caching flag |
 | `orm_log` | Optional SQL logging flag |
@@ -71,13 +75,19 @@ The Vue release build writes assets to `mail-worker/dist`. The Worker build hook
 
 When ready to publish, run `pnpm --dir mail-worker deploy`. For the existing separate test deployment configuration, use `pnpm --dir mail-worker deploy:test`. These commands deploy real resources; `pnpm --dir mail-worker test` runs automated local tests only.
 
-After deployment, invoke the existing initialization endpoint `/api/init/<jwt_secret>` on your Worker with your configured secret. It returns `success`, initializes or upgrades D1, translates unchanged built-in labels, and refreshes the settings cache. Keep this URL private. Then register or sign in with the configured administrator address and enable sending under System Settings.
+Before using the deployment, configure three independent Worker secrets. Keep the existing `jwt_secret` when upgrading to preserve user sessions. Configure `app_access_secret` and `init_secret` using Wrangler's interactive secret prompts or the Cloudflare dashboard; use at least 32 random characters for each.
+
+All HTTP app access now fails closed until `app_access_secret` is configured. Browsers unlock at `/unlock` and receive a seven-day HttpOnly cookie. Native clients and integrations send `X-Cloudmail-App-Secret`, in addition to their existing user authorization. Rotating the installation secret invalidates browser unlock cookies and requires re-entry on devices. It grants no user or administrator mailbox privileges.
+
+Initialization is now **POST `/api/init`**, with `X-Cloudmail-App-Secret` and `X-Cloudmail-Init-Secret` headers. The old signing-secret URL has been removed. For local administration, save the two access credentials in a mode-600, git-ignored `.cloudmail-secrets.json` at the repository root and run `node scripts/initialize-cloudmail.mjs https://your-cloudmail-host`. The script does not print credentials. Initialization upgrades D1, installs mobile change-log triggers, translates unchanged built-in labels, and refreshes settings. Then register or sign in with the configured administrator address and enable sending under System Settings.
+
+Keep Cloudflare Access enabled during the upgrade. Remove its application/policy only after validating the replacement gate and authenticated attachments. Make attachment storage private: disable public R2/S3 object access and public custom domains, and purge any formerly public attachment caches. Cloudmail now serves stored files through ownership-checked API downloads; raw storage access would bypass those checks. Inbound Email Routing is independent of HTTP Access.
 
 Configure an Email Routing rule for your domain that sends incoming email to this Worker.
 
 ### GitHub Actions
 
-Set `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DOMAIN` (a JSON array), `ADMIN`, and `JWT_SECRET` in repository secrets. Optional values include `NAME`, `CUSTOM_DOMAIN`, `D1_DATABASE_ID`, `KV_NAMESPACE_ID`, `R2_BUCKET_NAME`, `AI_MODEL`, `ANALYSIS_CACHE`, and `PROJECT_LINK`.
+Set `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DOMAIN` (a JSON array), `ADMIN`, `JWT_SECRET`, `APP_ACCESS_SECRET`, and `INIT_SECRET` in repository secrets. Optional values include `NAME`, `CUSTOM_DOMAIN`, `D1_DATABASE_ID`, `KV_NAMESPACE_ID`, `R2_BUCKET_NAME`, `AI_MODEL`, `ANALYSIS_CACHE`, and `PROJECT_LINK`.
 
 The workflow uses supplied D1/KV IDs or provisions the resources through its existing setup steps. It always includes the `email` binding. The former `CF_EMAIL` toggle is no longer needed. Sender-domain onboarding remains a prerequisite.
 
@@ -99,7 +109,7 @@ pnpm --dir mail-worker dev
 pnpm --dir mail-vue dev
 ```
 
-Update `wrangler-dev.toml` for your local setup. The Vue development server calls `http://127.0.0.1:8787/api`. Initialize the local database through the same initialization endpoint using the local secret.
+Update `wrangler-dev.toml` for your local setup. The Vue development server calls `http://127.0.0.1:8787/api`. Set `jwt_secret`, `app_access_secret`, and `init_secret` in a git-ignored `.dev.vars` and initialize through the same header-protected POST endpoint. For a separate Vite server, configure `browser_origins = "http://localhost:3001"` or your exact development origin.
 
 Email bindings are simulated by default and do not send actual email. Cloudflare documents a local simulator limitation for binary attachment content. The automated tests use a mocked sending binding and verify exact binary payloads; use a test deployment to confirm real binary delivery.
 
@@ -122,11 +132,37 @@ Internal-only mail still uses direct mailbox delivery, including without an exte
 
 ```sh
 pnpm --dir mail-worker test
+pnpm --dir mail-vue test
 pnpm --dir mail-vue build
 ```
 
 Tests use isolated local D1, KV, and R2 storage and mocked sending. They do not send real email or deploy resources.
 
+For an isolated visual preview, run `pnpm --dir mail-vue test:preview` and open `http://127.0.0.1:3001/__preview`. It uses fictional users and mail, local browser drafts, and in-memory delivery; it does not connect to your deployment. Ports 3001 and 8787 must be available.
+
+The web client uses a Gmail-style layout with a mailbox selector, light/dark themes, Cc/Bcc compose fields, and Reply all. Mail search accepts a plain substring in the current Inbox/Sent scope or user-wide Starred list; advanced Gmail operators are not supported. `GET /api/email/list` and `GET /api/star/list` accept optional `q`, and `GET /api/email/detail?emailId=…` returns the body, recipient metadata, and attachment metadata of an owned, non-deleted message. Bcc is exposed only on sent copies. These additions require no database migration.
+
+
 ## License
 
 [MIT](LICENSE). Third-party components retain their own licenses.
+
+## Mobile APIs
+
+The iOS client uses `/api/mobile/v1`. All routes require the installation secret or web unlock cookie, plus an existing Cloudmail user token in `Authorization` (the existing raw JWT format). Responses retain `{ code, message, data }`; mobile clients must inspect both HTTP status and the envelope's `code`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /bootstrap` | Consistent baseline cursor, mailboxes, unread total, and initial conversation page |
+| `GET /changes?after=<cursor>&limit=100` | Ascending, replayable change pages, current message summaries, thread updates and deletion markers |
+| `GET /threads?folder=inbox&accountId=…&q=…&before=…` | Search and paginate conversations; folders also include `sent`, `starred`, `all` |
+| `GET /threads/:id/messages?after=<emailId>&limit=100` | Chronological conversation messages, including sent replies |
+| `GET /messages/:id` | Body and attachment metadata for an owned message |
+| `GET /attachments/:id/content` | Authenticated attachment bytes |
+| `GET /attachment-by-key?key=…` | Authenticated compatibility download for web inline images |
+
+`POST /api/email/send` accepts optional `cc` and `bcc` arrays in addition to `receiveEmail` (To). Combined recipient validation, permissions, size checks, quotas, and internal delivery include all three lists. Recipient copies omit Bcc. `PUT /api/email/read` accepts `{ emailIds, unread: 0 | 1 }`; omitting `unread` retains existing mark-read behavior (`1` means read).
+
+Conversation membership is scoped to a user. RFC references and local reply links take priority over the subject/participant fallback. Outgoing provider IDs are not RFC message IDs; the provider controls external Message-ID headers. Historical or incomplete headers can therefore leave some messages separate or require the documented 14-day subject/participant heuristic.
+
+The change log is retained without pruning in version one so offline clients do not lose deletion markers. Monitor D1 growth before introducing retention and a cursor-reset protocol.

@@ -1,124 +1,45 @@
 <template>
-  <div class="content-box" ref="contentBox">
-    <div ref="container" class="content-html"></div>
+  <div>
+    <button v-if="hasRemoteImages && !remote" class="remote-toggle" @click="remote = true">Load remote images</button>
+    <p v-if="error" role="status">{{ error }}</p>
+    <iframe v-if="documentHTML" :key="documentHTML" :srcdoc="documentHTML" title="Email message" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" />
   </div>
 </template>
-
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-
-const props = defineProps({
-  html: {
-    type: String,
-    required: true
-  }
-})
-
-const container = ref(null)
-const contentBox = ref(null)
-let shadowRoot = null
-
-function updateContent() {
-  if (!shadowRoot) return;
-
-  // 1. Extract body styles, if present
-  const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
-  const bodyStyleMatch = props.html.match(bodyStyleRegex);
-  const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
-
-  // 2. Remove body tags while preserving their content
-  const cleanedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');
-
-  // 3. Apply body styles to .shadow-content
-  shadowRoot.innerHTML = `
-    <style>
-      :host {
-        all: initial;
-        width: 100%;
-        height: 100%;
-        font-family: Inter, 'Helvetica Neue', Helvetica, 'PingFang SC',
-                    'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
-        font-size: 14px;
-        line-height: 1.5;
-        color: #13181D;
-        word-break: break-word;
-      }
-
-      h1, h2, h3, h4 {
-          font-size: 18px;
-          font-weight: 700;
-      }
-
-      p {
-        margin: 0;
-      }
-
-      a {
-        text-decoration: none;
-        color: #0E70DF;
-      }
-
-      .shadow-content {
-        background: #FFFFFF;
-        width: fit-content;
-        height: fit-content;
-        min-width: 100%;
-        ${bodyStyle ? bodyStyle : ''} /* Apply the body styles */
-      }
-
-      img:not(table img) {
-        max-width: 100%;
-        height: auto !important;
-      }
-
-    </style>
-    <div class="shadow-content">
-      ${cleanedHtml}
-    </div>
-  `;
-}
-
-function autoScale() {
-  if (!shadowRoot || !contentBox.value) return
-
-  const parent = contentBox.value
-  const shadowContent = shadowRoot.querySelector('.shadow-content')
-
-  if (!shadowContent) return
-
-  const parentWidth = parent.offsetWidth
-  const childWidth = shadowContent.scrollWidth
-
-  if (childWidth === 0) return
-
-  const scale = parentWidth / childWidth
-
-  const hostElement = shadowRoot.host
-  hostElement.style.zoom = scale
-}
-
-onMounted(() => {
-  shadowRoot = container.value.attachShadow({ mode: 'open' })
-  updateContent()
-  autoScale()
-})
-
-watch(() => props.html, () => {
-  updateContent()
-  autoScale()
-})
+import { ref, watch, onUnmounted } from 'vue'
+import { useUiStore } from '@/store/ui.js'
+import { privateFileURL, storedKey } from '@/utils/private-files'
+const props = defineProps({ html: { type: String, required: true } })
+const remote = ref(false)
+const hasRemoteImages = ref(false)
+const uiStore = useUiStore()
+const documentHTML = ref('')
+const error = ref('')
+let urls = []
+let generation = 0
+watch(() => [props.html, remote.value, uiStore.dark], async () => {
+  const current = ++generation
+  const created = []
+  const doc = new DOMParser().parseFromString(props.html, 'text/html')
+  doc.querySelectorAll('script,iframe,object,embed,form,meta,base,link,svg,math').forEach(e => e.remove())
+  doc.querySelectorAll('*').forEach(e => Array.from(e.attributes).forEach(a => {
+    if (/^on/i.test(a.name) || ['srcdoc','srcset','ping'].includes(a.name) || (/^(href|src|action)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value))) e.removeAttribute(a.name)
+  }))
+  doc.querySelectorAll('a').forEach(a => { a.target='_blank';a.rel='noopener noreferrer' })
+  error.value = ''
+  hasRemoteImages.value = Array.from(doc.images).some(image => !storedKey(image.getAttribute('src')) && /^(https?:)?\/\//i.test(image.getAttribute('src') || ''))
+  await Promise.all(Array.from(doc.images).map(async image => {
+    const key=storedKey(image.getAttribute('src'))
+    if (!key) return
+    try { const url=await privateFileURL(key);created.push(url);image.src=url } catch { image.removeAttribute('src');error.value='Some inline images are unavailable.' }
+  }))
+  if (current !== generation) { created.forEach(URL.revokeObjectURL);return }
+  urls.forEach(URL.revokeObjectURL);urls=created
+  const sources=remote.value ? 'https: http:' : ''
+  documentHTML.value=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:#007aff}</style></head><body>${doc.body.innerHTML}</body></html>`
+}, {immediate:true})
+onUnmounted(() => { generation++;urls.forEach(URL.revokeObjectURL) })
 </script>
-
 <style scoped>
-.content-box {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  font-family: Inter, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
-}
-
-.content-html {
-  width: 100%;
-  height: 100%;
-}
+iframe{display:block;width:100%;min-height:280px;border:0;background:transparent;border-radius:0}.remote-toggle{border:0;background:transparent;color:#007aff;padding:10px 0;cursor:pointer;font:inherit}
 </style>

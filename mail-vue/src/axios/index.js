@@ -3,7 +3,8 @@ import router from "@/router";
 import i18n from "@/i18n/index.js";
 
 let http = axios.create({
-    baseURL: import.meta.env.VITE_BASE_URL
+    baseURL: import.meta.env.VITE_BASE_URL,
+    withCredentials: true
 });
 
 http.interceptors.request.use(config => {
@@ -69,9 +70,9 @@ http.interceptors.response.use((res) => {
     },
     (error) => {
 
-        if (error.status === 403) {
-            location.reload();
-            return;
+        if (error.response?.data?.error === 'APP_ACCESS_REQUIRED') {
+            location.assign(new URL(import.meta.env.VITE_BASE_URL || '/api', location.origin).origin + '/unlock');
+            return Promise.reject(error);
         }
 
         const noMsg = error.config.noMsg;

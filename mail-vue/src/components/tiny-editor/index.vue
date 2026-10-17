@@ -50,8 +50,9 @@ watch(() => props.defValue, (newValue) => {
 });
 
 watch(() => uiStore.dark, () => {
+  const content = editor.value?.getContent() ?? props.defValue;
   destroyEditor();
-  initEditor();
+  initEditor(content);
 });
 
 
@@ -74,24 +75,25 @@ function initTinyMCE() {
   }
 }
 
-function initEditor() {
+function initEditor(initialContent = props.defValue) {
   window.tinymce.init({
     selector: `#${props.editorId}`,
     statusbar: false,
     height: "100%",
-    auto_focus: true,
+
     //relative_urls: false,  //Keep image URLs absolute when they share the site domain
     //remove_script_host: false, // Preserve the hostname in URLs
     forced_root_block: 'div',
     skin: `${uiStore.dark ? 'oxide-dark' : 'oxide'}`,
     content_css: `/tinymce/css/index.css,${uiStore.dark ? 'dark' : 'default'}`,
-    content_style: `:root {
+    content_style: `body { background: ${uiStore.dark ? '#242529' : '#ffffff'}; color: ${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}; font-family: Arial, Helvetica, sans-serif; font-size:14px; } :root {
          --scrollbar-track-color: ${uiStore.dark ? '#141414' : '#FFFFFF'};
          --scrollbar-thumb-color: ${uiStore.dark ? '#8D9095' : '#A8ABB2'};
     }`,
-    plugins: 'link image advlist lists  emoticons fullscreen  table preview code',
-    toolbar: 'bold emoticons forecolor backcolor italic fontsize | alignleft aligncenter alignright alignjustify | outdent indent |  bullist numlist | link image  | table code preview fullscreen',
-    toolbar_mode: 'scrolling',
+    plugins: 'link image advlist lists emoticons fullscreen table preview code',
+    toolbar: 'undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat',
+    toolbar_location: 'bottom',
+    toolbar_mode: 'sliding',
     font_size_formats: '8px 10px 12px 14px 16px 18px 24px 36px',
     emoticons_search: false,
     language: 'en',
@@ -102,8 +104,9 @@ function initEditor() {
     setup: (ed) => {
       editor.value = ed;
       ed.on('init', () => {
-        ed.setContent(props.defValue);
+        ed.setContent(initialContent);
         isInitialized.value = true;
+        emit('change', ed.getContent(), ed.getContent({format:'text'}));
       });
       ed.on('input change', () => {
         const content = ed.getContent();
@@ -114,7 +117,7 @@ function initEditor() {
         emit('focus', focus);
       })
     },
-    autofocus: true,
+
     branding: false,
     file_picker_types: 'image',
     image_dimensions: false,
@@ -148,12 +151,12 @@ function initEditor() {
 
 function focus() {
   nextTick(() => {
-    editor.value.focus()
+    editor.value?.focus()
   })
 }
 
 function getContent() {
-  return editor.value.getContent()
+  return editor.value?.getContent() || ''
 }
 
 
@@ -215,4 +218,8 @@ function destroyEditor() {
   display: none;
 }
 
+</style>
+
+<style scoped>
+:deep(.tox .tox-toolbar), :deep(.tox .tox-toolbar__primary), :deep(.tox .tox-toolbar__overflow), :deep(.tox .tox-editor-header) { background:var(--mail-surface); box-shadow:none; }
 </style>

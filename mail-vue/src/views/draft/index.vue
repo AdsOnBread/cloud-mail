@@ -14,7 +14,7 @@
                :type="'draft'"
   >
     <template #name="props">
-      <span class="send-email">{{ props.email.receiveEmail?.join(',') || '(' + $t('noRecipient') + ')' }}</span>
+      <span class="send-email">{{ [...(props.email.receiveEmail || []), ...(props.email.cc || []), ...(props.email.bcc || [])].join(', ') || '(' + $t('noRecipient') + ')' }}</span>
     </template>
     <template #subject="props">
       {{ props.email.subject || '(' + $t('noSubject') + ')' }}
@@ -39,29 +39,6 @@ const draftStore = userDraftStore();
 const uiStore = useUiStore();
 const scroll = ref({})
 
-watch(() => draftStore.setDraft, async () => {
-
-  const draft = toRaw(draftStore.setDraft)
-  const draftId = draft.draftId
-  const attachments = toRaw(draftStore.setDraft.attachments)
-
-  delete draft.draftId
-  delete draft.attachments
-
-  if (!draft.content && !draft.subject && !(draft.receiveEmail.length > 0)) {
-    await db.value.draft.delete(draftId);
-    await db.value.att.delete(draftId);
-    draftStore.refreshList++
-    return;
-  }
-
-  await db.value.draft.update(draftId, draft);
-  await db.value.att.update(draftId, {attachments: attachments});
-  draftStore.refreshList++
-}, {
-  deep: true
-})
-
 watch(() => draftStore.refreshList, async () => {
   const {list} = await getEmailList();
     scroll.value.emailList.length = 0
@@ -78,13 +55,16 @@ function getEmailList() {
 }
 
 async function deleteDraft(draftIds) {
-  await db.value.draft.bulkDelete(draftIds);
+  await db.value.transaction('rw', db.value.draft, db.value.att, async () => {
+    await db.value.draft.bulkDelete(draftIds);
+    await db.value.att.bulkDelete(draftIds);
+  });
   draftStore.refreshList++
 }
 
 async function jumpContent(email) {
   const att = await db.value.att.get(email.draftId)
-  email.attachments = att.attachments
+  email.attachments = att?.attachments || []
   uiStore.writerRef.openDraft(email);
 }
 

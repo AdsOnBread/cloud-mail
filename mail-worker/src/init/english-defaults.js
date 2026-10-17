@@ -176,12 +176,16 @@ export const permissionDefaults = [
     "Delete Code"
   ]
 ];
-export const defaultNotice = "This project is for learning and discussion. Do not use it for illegal activities.\n<br>\nFollow local laws. The author accepts no legal responsibility.";
+export const defaultNotice = '';
+export const legacyNoticeContents = [
+	"This project is for learning and discussion. Do not use it for illegal activities.\n<br>\nFollow local laws. The author accepts no legal responsibility.",
+	"\u672c\u9879\u76ee\u4ec5\u4f9b\u5b66\u4e60\u4ea4\u6d41\uff0c\u7981\u6b62\u7528\u4e8e\u8fdd\u6cd5\u4e1a\u52a1\n<br>\n\u8bf7\u9075\u5b88\u5f53\u5730\u6cd5\u89c4\uff0c\u4f5c\u8005\u4e0d\u627f\u62c5\u4efb\u4f55\u6cd5\u5f8b\u8d23\u4efb"
+];
 export async function upgradeEnglishDefaults(db) {
 	const statements = permissionDefaults.map(([id, oldName, name]) =>
 		db.prepare("UPDATE perm SET name = ? WHERE perm_id = ? AND name = ?").bind(name, id, oldName));
 	statements.push(db.prepare("UPDATE role SET name = ? WHERE role_id = 1 AND name = ?").bind("Standard User", "\u666e\u901a\u7528\u6237"));
 	statements.push(db.prepare("UPDATE role SET description = ? WHERE role_id = 1 AND description = ?").bind("Standard mailbox permissions", "\u53ea\u6709\u666e\u901a\u4f7f\u7528\u6743\u9650"));
-	statements.push(db.prepare("UPDATE setting SET notice_content = ? WHERE notice_content = ?").bind(defaultNotice, "\u672c\u9879\u76ee\u4ec5\u4f9b\u5b66\u4e60\u4ea4\u6d41\uff0c\u7981\u6b62\u7528\u4e8e\u8fdd\u6cd5\u4e1a\u52a1\n<br>\n\u8bf7\u9075\u5b88\u5f53\u5730\u6cd5\u89c4\uff0c\u4f5c\u8005\u4e0d\u627f\u62c5\u4efb\u4f55\u6cd5\u5f8b\u8d23\u4efb"));
+	statements.push(db.prepare("UPDATE setting SET notice_content = ? WHERE notice_content IN (?, ?)").bind(defaultNotice, ...legacyNoticeContents));
 	await db.batch(statements);
 }

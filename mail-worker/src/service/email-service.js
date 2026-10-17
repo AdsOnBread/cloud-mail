@@ -1,6 +1,7 @@
 import orm from '../entity/orm';
 import email from '../entity/email';
 import { emailListColumns, emailBriefColumns, EMAIL_LIST_TEXT_LEN } from '../lib/email-list-columns';
+import { mailSearchFilter } from '../lib/mail-search';
 import { attConst, emailConst, isDel, settingConst } from '../const/entity-const';
 import { and, desc, eq, gt, inArray, notInArray, lt, count, asc, sql, ne, or, like, lte, gte } from 'drizzle-orm';
 import { star } from '../entity/star';
@@ -8,7 +9,8 @@ import settingService from './setting-service';
 import accountService from './account-service';
 import BizError from '../error/biz-error';
 import emailUtils from '../utils/email-utils';
-import { buildMessage, sendMessage, normalizeAttachment, validateRecipients, validateAttachmentCount } from './email-sender';
+import { buildMessage, sendMessage, normalizeAttachment, normalizeRecipients, validateAttachmentCount } from './email-sender';
+import { referenceIds } from '../mobile/threads';
 import attService from './att-service';
 import { parseHTML } from 'linkedom';
 import userService from './user-service';
@@ -64,8 +66,8 @@ const emailService = {
 			allReceive = accountRow.allReceive;
 		}
 
-		const filters = this.emailListFilters({ userId, accountId, type, allReceive, emailId, timeSort });
-		const countFilters = this.emailListFilters({ userId, accountId, type, allReceive, withCursor: false });
+		const filters = this.emailListFilters({ userId, accountId, type, allReceive, emailId, timeSort, q: params.q });
+		const countFilters = this.emailListFilters({ userId, accountId, type, allReceive, withCursor: false, q: params.q });
 		const columns = full ? emailListColumns : emailBriefColumns;
 
 		const query = orm(c)
@@ -154,12 +156,13 @@ const emailService = {
 		return list;
 	},
 
-	emailListFilters({ userId, accountId, type, allReceive, emailId, timeSort, withCursor = true }) {
+	emailListFilters({ userId, accountId, type, allReceive, emailId, timeSort, withCursor = true, q }) {
 		const conditions = [
 			eq(email.userId, userId),
 			eq(email.type, type),
 			eq(email.isDel, isDel.NORMAL),
 			eq(account.isDel, isDel.NORMAL),
+			mailSearchFilter(q),
 		];
 		if (!allReceive) {
 			conditions.push(eq(email.accountId, accountId));
@@ -168,6 +171,22 @@ const emailService = {
 			conditions.push(timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId));
 		}
 		return conditions;
+	},
+
+	async detail(c, emailId, userId) {
+		const id = Number(emailId);
+		if (!Number.isSafeInteger(id) || id <= 0) throw new BizError('Message not found.', 404);
+		const row = await orm(c).select({
+			...emailListColumns,
+			isStar: sql`CASE WHEN ${star.starId} IS NULL THEN 0 ELSE 1 END`.as('isStar'),
+		}).from(email)
+			.innerJoin(account, eq(account.accountId, email.accountId))
+			.leftJoin(star, and(eq(star.emailId, email.emailId), eq(star.userId, userId)))
+			.where(and(eq(email.emailId, id), eq(email.userId, userId),
+				eq(account.userId, userId), eq(email.isDel, isDel.NORMAL), eq(account.isDel, isDel.NORMAL))).get();
+		if (!row) throw new BizError('Message not found.', 404);
+		await this.emailAddAtt(c, [row]);
+		return row;
 	},
 
 	allEmailListFilters({ emailId, name, subject, accountEmail, userEmail, type, timeSort, withCursor = true }) {
@@ -259,10 +278,11 @@ const emailService = {
 			subject, //Subject
 			attachments = [] //Attachments
 		} = params;
+		const recipients = normalizeRecipients(receiveEmail,params.cc,params.bcc);
+		receiveEmail = recipients.all;
 
 		const { r2Domain, send, domainList } = await settingService.query(c);
 
-		validateRecipients(receiveEmail);
 		validateAttachmentCount(attachments);
 		if (typeof subject !== 'string' || !subject.trim() || subject.length > 998 || /[\r\n]/.test(subject)) {
 			throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
@@ -350,20 +370,23 @@ const emailService = {
 
 			emailRow = await this.selectById(c, emailId);
 
-			if (!emailRow) {
+			if (!emailRow || emailRow.userId !== userId) {
 				throw new BizError(t('notExistEmailReply'));
 			}
 
 		}
 
-		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
+		const referenceChain = [...new Set([...referenceIds(emailRow.relation), ...referenceIds(emailRow.messageId)])];
+		while (new TextEncoder().encode(referenceChain.join(' ')).length > 1900) referenceChain.shift();
+		const references = referenceChain.join(' ');
+		let { imageDataList, html } = await attService.toImageUrlHtml(c, content, userId);
 		validateAttachmentCount(imageDataList, true);
 		attachments = await Promise.all(attachments.map(normalizeAttachment));
 		const message = await buildMessage({
-			name, accountEmail: accountRow.email, receiveEmail, subject,
+			name, accountEmail: accountRow.email, receiveEmail: recipients.to, cc: recipients.cc, bcc: recipients.bcc, subject,
 			text: text || emailUtils.htmlToText(html), html,
 			attachments: [...imageDataList, ...attachments],
-			sendType, messageId: emailRow.messageId
+			sendType, messageId: emailRow.messageId, references
 		});
 		const sendResult = allInternal ? null : await sendMessage(c.env.email, message);
 
@@ -384,10 +407,13 @@ const emailService = {
 		emailData.type = emailConst.type.SEND;
 		emailData.userId = userId;
 		emailData.providerMessageId = sendResult?.messageId;
+		emailData.messageId = allInternal ? `<${crypto.randomUUID()}@${emailUtils.getDomain(accountRow.email)}>` : '';
+		emailData.cc = JSON.stringify(recipients.cc.map(address => ({address,name:''})));
+		emailData.bcc = JSON.stringify(recipients.bcc.map(address => ({address,name:''})));
 
 		const recipient = [];
 
-		receiveEmail.forEach(item => {
+		recipients.to.forEach(item => {
 			recipient.push({ address: item, name: '' });
 		});
 
@@ -395,7 +421,8 @@ const emailService = {
 
 		if (sendType === 'reply') {
 			emailData.inReplyTo = emailRow.messageId;
-			emailData.relation = emailRow.messageId;
+			emailData.relation = references;
+			emailData.replyToEmailId = emailRow.emailId;
 		}
 
 		//Increment the send count when the role has a quota
@@ -444,7 +471,7 @@ const emailService = {
 		const { noRecipient  } = await settingService.query(c);
 
 		//Look up recipient accounts
-		let accountList = await orm(c).select().from(account).where(inArray(account.email, receiveEmail)).all();
+		let accountList = await orm(c).select().from(account).where(sql`lower(${account.email}) in (${sql.join(receiveEmail.map(address => sql`${address.toLowerCase()}`), sql`, `)})`).all();
 
 		// Resolve unmatched plus addresses to their base accounts
 		const plusEmails = receiveEmail.filter(
@@ -478,13 +505,16 @@ const emailService = {
 
 			//Prepare a received copy of the sent message
 			const emailValues = {...sendEmailData}
+			emailValues.bcc = '[]';
+			// Reply relationships are local to an owner; recipients link using RFC headers.
+			emailValues.replyToEmailId = null;
 			emailValues.status = emailConst.status.RECEIVE;
 			emailValues.type = emailConst.type.RECEIVE;
 			emailValues.toEmail = email;
 			emailValues.toName = emailUtils.getName(email);
 			emailValues.emailId = null;
 
-			let accountRow = allAccounts.find(accountRow => accountRow.email === email);
+			let accountRow = allAccounts.find(accountRow => accountRow.email.toLowerCase() === email.toLowerCase());
 
 			// Fall back to the base address when there is no exact plus-address match
 			if (!accountRow && email.includes('+')) {
@@ -935,8 +965,9 @@ const emailService = {
 	},
 
 	async read(c, params, userId) {
-		const { emailIds } = params;
-		await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
+		const { emailIds, unread = emailConst.unread.READ } = params;
+		if (!Array.isArray(emailIds) || !emailIds.length || emailIds.length>100 || emailIds.some(id=>!Number.isSafeInteger(id) || id<1) || ![0,1].includes(unread)) throw new BizError('Invalid read-state update.',400);
+		await orm(c).update(email).set({ unread }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
 	}
 };
 

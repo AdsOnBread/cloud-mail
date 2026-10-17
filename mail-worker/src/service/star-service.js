@@ -1,6 +1,7 @@
 import orm from '../entity/orm';
 import { star } from '../entity/star';
 import emailService from './email-service';
+import { mailSearchFilter } from '../lib/mail-search';
 import BizError from '../error/biz-error';
 import { and, desc, eq, lt, sql, inArray } from 'drizzle-orm';
 import email from '../entity/email';
@@ -57,6 +58,8 @@ const starService = {
 			.where(
 				and(
 					eq(star.userId, userId),
+					eq(email.userId, userId),
+					mailSearchFilter(params.q),
 					eq(email.isDel, isDel.NORMAL),
 					emailId ? lt(star.emailId, emailId) : undefined))
 			.orderBy(desc(star.emailId))

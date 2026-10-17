@@ -1,7 +1,7 @@
 <template>
   <div class="email-container">
     <div class="header-actions">
-      <el-checkbox
+      <el-checkbox aria-label="Select all messages"
           v-model="checkAll"
           :indeterminate="isIndeterminate"
           :disabled="!emailList.length || loading"
@@ -11,19 +11,14 @@
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
         <slot name="first"></slot>
-        <Icon class="icon reload" icon="ion:reload" width="18" height="18" @click="refresh"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
-              v-if="getSelectedMailsIds().length > 0"
-              @click="handleDelete"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
-              v-if="getSelectedMailsIds().length > 0 && showUnread"
-              @click="handleRead"/>
+        <button type="button" class="list-action" title="Refresh" aria-label="Refresh mail" @click="refresh"><Icon icon="material-symbols:refresh" width="22" /></button>
+        <button v-if="getSelectedMailsIds().length > 0" v-perm="'email:delete'" type="button" class="list-action" title="Delete selected" aria-label="Delete selected messages" @click="handleDelete"><Icon icon="material-symbols:delete-outline" width="22" /></button>
+        <button v-if="getSelectedMailsIds().length > 0 && showUnread" v-perm="'email:delete'" type="button" class="list-action" title="Mark as read" aria-label="Mark selected messages as read" @click="handleRead"><Icon icon="material-symbols:mark-email-read-outline" width="22" /></button>
       </div>
 
       <div class="header-right">
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
-        <Icon v-if="showAccountIcon" class="more-icon icon" width="16" height="16" icon="akar-icons:dot-grid-fill"
-              @click="changeAccountShow"/>
+        <span v-if="['email','send'].includes(type)" class="current-mailbox" :title="accountStore.currentAccount.email">{{ accountStore.currentAccount.allReceive ? 'All mailboxes' : accountStore.currentAccount.email }}</span>
       </div>
     </div>
 
@@ -38,21 +33,21 @@
                         :key="keyCount"
         >
           <template #default="{ data: item, index }" >
-            <div :class="['email-row', props.type, { 'right-checked': item.rightChecked }]"
-                 :data-checked="item.checked"
+            <div :class="['email-row', props.type, { 'right-checked': item.rightChecked, 'unread-row': item.unread === EmailUnreadEnum.UNREAD && showUnread }]"
+                 :data-checked="item.checked" tabindex="0" :aria-label="`${item.name || item.sendEmail || 'Draft'}: ${item.subject || 'No subject'}`" @keydown.enter.self="jumpDetails(item)"
                  @click="jumpDetails(item)"
                  v-if="!item.expand"
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
             >
               <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
-                           v-model="item.checked"
+                           v-model="item.checked" :aria-label="`Select ${item.subject || 'message'}`"
                            :disabled="!item.checked && isSelectMax"
                            @click.stop></el-checkbox>
-              <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
+              <button type="button" @click.stop="starChange(item)" class="pc-star" v-if="showStar" :aria-label="item.isStar ? 'Remove star' : 'Star message'" :title="item.isStar ? 'Remove star' : 'Star message'">
                 <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
-                <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
-              </div>
+                <Icon v-else icon="material-symbols:star-outline" width="20" height="20"/>
+              </button>
               <div v-if="!showStar"></div>
               <div class="title" :class="accountShow ? 'title-column' : 'title-column'">
 
@@ -71,7 +66,7 @@
                   <span class="name">
                     <span>
                       <div class="unread" v-if="isMobile && (item.unread === EmailUnreadEnum.UNREAD && showUnread) "/>
-                      <slot name="name" :email="item"> {{ item.name }}</slot>
+                      <slot name="name" :email="item"> {{ item.name || item.sendEmail }}</slot>
                     </span>
                     <span>
                       <Icon v-if="item.isStar" icon="fluent-color:star-16" width="18" height="18"/>
@@ -86,7 +81,7 @@
                       <span v-if="item.code" class="code-tag" @click.stop="copyCode(item.code)">[{{ t('codeLabel') }}{{ item.code }}]</span>
                       <span class="subject-text">
                         <slot name="subject" :email="item" >
-                          {{ item.subject || '\u200B' }}
+                          {{ item.subject || '(no subject)' }}
                         </slot>
                       </span>
                     </span>
@@ -131,14 +126,15 @@
                        :showStatus="showStatus"
                        :showUserInfo="showUserInfo"
                        :type="type"/>
-      <skeletonBlock v-if="loading"
+      <skeletonBlock v-if="loading && !firstLoad"
                        :rows="skeletonRows"
                        :showStar="showStar"
                        :accountShow="accountShow"
                        :showStatus="showStatus"
                        :showUserInfo="showUserInfo"
                        :type="type"/>
-      <div class="empty" v-if="noLoading && emailList.length === 0 && !loading">
+      <div v-if="loadError" class="list-error" role="alert">{{ loadError }} <button type="button" @click="loadError = ''; loadData()">Retry</button></div>
+      <div class="empty" v-if="!loadError && noLoading && emailList.length === 0 && !loading">
         <el-empty :image-size="isMobile ? 120 : null" :description="$t('noMessagesFound')"/>
       </div>
     </div>
@@ -172,7 +168,7 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','star'].includes(props.type)" @click="openReply(rightClickEmail)">
+          <el-dropdown-item v-if="['email','star'].includes(props.type) && hasPerm('email:send')" @click="openReply(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="la:reply" width="20" height="20"  />
@@ -180,7 +176,10 @@
               </div>
             </template>
           </el-dropdown-item>
-          <el-dropdown-item v-if="['email','send', 'star'].includes(props.type)" @click="openForward(rightClickEmail)">
+          <el-dropdown-item v-if="['email','star'].includes(props.type) && hasPerm('email:send')" @click="openReplyAll(rightClickEmail)">
+            <div class="right-dropdown-item"><Icon icon="material-symbols:reply-all" width="20" /><span>Reply all</span></div>
+          </el-dropdown-item>
+          <el-dropdown-item v-if="['email','send', 'star'].includes(props.type) && hasPerm('email:send')" @click="openForward(rightClickEmail)">
             <template #default>
               <div class="right-dropdown-item">
                 <Icon icon="iconoir:arrow-up-right" width="19" height="19"  />
@@ -241,14 +240,18 @@ import {computed, onActivated, reactive, ref, watch, nextTick, onMounted, onUnmo
 import {useEmailStore} from "@/store/email.js";
 import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
-import {sleep} from "@/utils/time-utils.js"
 import {fromNow} from "@/utils/day.js";
 import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'
 import { useScroll } from '@vueuse/core'
+import { createRequestGuard } from '@/utils/request-guard.js';
+import { useMailSearchStore } from '@/store/mail-search.js';
+import { hasPerm } from '@/perm/perm.js';
+import { useAccountStore } from '@/store/account.js';
 
 const props = defineProps({
+  requestKey: { type: String, default: '' },
   getEmailList: Function,
   emailDelete: Function,
   emailRead: Function,
@@ -316,8 +319,11 @@ const firstLoad = ref(true)
 let scrollTop = 0
 const latestEmail = ref(null)
 const scrollbarRef = ref(null)
-let reqLock = false
-let isMobile = ref(innerWidth < 1367)
+const requests = createRequestGuard();
+const mailSearch = useMailSearchStore();
+const accountStore = useAccountStore();
+const loadError = ref('');
+let isMobile = ref(innerWidth < 768)
 let skeletonRows = 0
 const timePaddingRight = ref('');
 const keyCount = ref(0);
@@ -379,9 +385,10 @@ onUnmounted(() => {
 
 getEmailList()
 
-window.onresize = () => {
-  isMobile.value = innerWidth < 1367
-}
+function resize() { isMobile.value = innerWidth < 768; }
+onMounted(() => window.addEventListener('resize', resize));
+onUnmounted(() => window.removeEventListener('resize', resize));
+watch(() => props.requestKey, () => refreshList());
 
 function onScroll(e) {
   scrollTop = e.target.scrollTop;
@@ -398,9 +405,9 @@ const list = computed(() => {
 
 const itemHeight = computed(() => {
     if (props.type === 'all-email') {
-      return isMobile.value ? 132 : 65;
+      return isMobile.value ? 116 : 64;
     } else  {
-      return isMobile.value ? 83 : 48;
+      return isMobile.value ? 84 : 40;
     }
 })
 
@@ -425,7 +432,7 @@ watch(followLoading, (isFollowLoading) => {
     })
   } else {
     const index = expandList.findIndex(item => item.expand === 'loading')
-    expandList.splice(index, 1);
+    if (index >= 0) expandList.splice(index, 1);
   }
 });
 
@@ -437,7 +444,7 @@ watch(noLoading, (isNoLoading) => {
     })
   } else {
     const index = expandList.findIndex(item => item.expand === 'noMoreData')
-    expandList.splice(index, 1);
+    if (index >= 0) expandList.splice(index, 1);
   }
 })
 
@@ -483,23 +490,14 @@ watch(() => emailStore.addStarEmailId, () => {
   })
 })
 
-window.addEventListener('wheel', (event) => {
-  if (dropdownShow.value) {
-    dropdownRef.value.handleClose();
-  }
-})
+function closeContextMenu() { if (dropdownShow.value) dropdownRef.value.handleClose(); }
+onMounted(() => window.addEventListener('wheel', closeContextMenu));
+onUnmounted(() => window.removeEventListener('wheel', closeContextMenu));
 
-function openReply(email) {
-  const fullEmail = emailStore.detailMap[email.emailId]
-  if (!fullEmail) return
-  uiStore.writerRef.openReply(fullEmail)
-}
+function openReply(email) { uiStore.writerRef.openReply(email); }
+function openReplyAll(email) { uiStore.writerRef.openReplyAll(email); }
 
-function openForward(email) {
-  const fullEmail = emailStore.detailMap[email.emailId]
-  if (!fullEmail) return
-  uiStore.writerRef.openForward(fullEmail)
-}
+function openForward(email) { uiStore.writerRef.openForward(email); }
 
 function visibleChange(e) {
   dropdownShow.value = e;
@@ -583,10 +581,6 @@ function starChange(email) {
       email.isStar = 1;
     })
   }
-}
-
-function changeAccountShow() {
-  uiStore.accountShow = !uiStore.accountShow;
 }
 
 const handleRead = () => {
@@ -700,6 +694,8 @@ function deleteEmail(emailIds) {
 }
 
 function addItem(email) {
+  if (['email','send','star'].includes(props.type) && mailSearch.query) return false;
+  if (['email','send'].includes(props.type) && !accountStore.currentAccount.allReceive && email.accountId && email.accountId !== accountStore.currentAccountId) return false;
 
   const existIndex = emailList.findIndex(item => item.emailId === email.emailId)
 
@@ -795,67 +791,38 @@ function jumpDetails(email) {
 }
 
 
-function getEmailList(refresh = false) {
-
-  if (reqLock) return;
-
-  let emailId = emailList.length > 0 ? emailList.at(-1).emailId : 0;
-
-  reqLock = true
-
-  if (!refresh) {
-
-    if (loading.value || noLoading.value) {
-      reqLock = false
-      return
-    }
-
-  } else {
-    getSkeletonRows()
-    emailId = 0
-    loading.value = true
-    scrollTop = 0
+async function getEmailList(refresh = false) {
+  if (!refresh && (loading.value || noLoading.value)) return;
+  const token = requests.begin(refresh);
+  if (token === null) return;
+  let emailId = !refresh && emailList.length ? emailList.at(-1).emailId : 0;
+  if (refresh) {
+    getSkeletonRows(); scrollTop = 0; emailList.splice(0);
+    noLoading.value = false; checkAll.value = false; isIndeterminate.value = false;
+    followLoading.value = false;
   }
-
-  if (emailList.length === 0) {
-    loading.value = true
-  } else {
-    followLoading.value = !refresh;
-  }
-  let start = Date.now();
-
-  props.getEmailList(emailId, queryParam.size).then(async data => {
-    let end = Date.now();
-    let duration = end - start;
-    if (duration < 300 && !emailId) {
-        await sleep(300 - duration)
-    }
-    firstLoad.value = false
-
-    let list = data.list.map(item => ({
-      ...item,
-      checked: false
-    }));
-
-
-    if (refresh) {
-      emailList.length = 0
-    }
-
-    latestEmail.value = data.latestEmail
-
-    handleList(list);
-    emailList.push(...list);
-    if (refresh) scrollbarRef.value?.setScrollTop(0);
-
+  loading.value = !emailId;
+  followLoading.value = !!emailId;
+  loadError.value = '';
+  try {
+    const data = await props.getEmailList(emailId, queryParam.size);
+    if (!requests.current(token)) return;
+    firstLoad.value = false;
+    const items = data.list.map(item => ({ ...item, checked:false }));
+    latestEmail.value = data.latestEmail;
+    handleList(items); emailList.push(...items);
+    if (refresh) { keyCount.value++; scrollTop = 0; }
     noLoading.value = data.list.length < queryParam.size;
-    followLoading.value = data.list.length >= queryParam.size;
-
     total.value = data.total;
-  }).finally(() => {
-    loading.value = false
-    reqLock = false
-  })
+  } catch (error) {
+    if (requests.current(token)) {
+      firstLoad.value = false;
+      loadError.value = error.message || 'Could not load mail. Please try again.';
+    }
+  } finally {
+    if (requests.current(token)) { loading.value = false; followLoading.value = false; }
+    requests.finish(token);
+  }
 }
 
 function handleList(list) {
@@ -876,7 +843,7 @@ function handleList(list) {
     if (email.isDel) {
       email.isDelContent = t('selectDeleted');
     }
-    email.statusIcon = statusIconMap[email.status];
+    email.statusIcon = statusIconMap[email.status] || { icon:'material-symbols:mail-outline', color:'#80868b', content:'Mail' };
   })
 }
 
@@ -899,461 +866,75 @@ function loadData() {
 }
 
 </script>
-<style lang="scss" scoped>
-
-.email-container {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  padding: 0;
-  font-size: 14px;
-  color: var(--el-text-color-primary);
-  overflow: hidden;
-  height: 100%;
-}
-
-.scroll {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
-
-  .virtual {
-    will-change: scroll-position;
-  }
-
-  .empty {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    width: 100%;
-  }
-
-  .noLoading {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 15px 0 0 0;
-    color: var(--secondary-text-color);
-  }
-
-  .follow-loading {
-    height: 60px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .loading {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: var(--loadding-background);
-    height: 100%;
-    width: 100%;
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    left: 0;
-  }
-
-  .loading-show {
-    transition: all 200ms ease 200ms;
-    opacity: 1;
-  }
-
-  .loading-hide {
-    pointer-events: none;
-    transition: var(--loading-hide-transition);
-    opacity: 0;
-  }
-}
-
+<style scoped lang="scss">
+.email-container { display:grid; grid-template-rows:48px minmax(0,1fr); height:100%; overflow:hidden; color:var(--el-text-color-primary); font-size:14px; }
+.header-actions { display:flex; align-items:center; gap:20px; padding:0 16px; }
+.header-left { flex:1; display:flex; align-items:center; gap:20px; min-width:0; }
+.header-right { display:flex; align-items:center; gap:20px; color:var(--regular-text-color); font-size:12px; min-width:0; }
+.email-count { white-space:nowrap; }
+.current-mailbox { max-width:200px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.icon { cursor:pointer; }
+.list-action { display:flex; align-items:center; justify-content:center; cursor:pointer; width:32px; height:32px; border-radius:50%; color:var(--regular-text-color); }
+.list-action:hover { background:var(--mail-hover); }
+.scroll { height:100%; min-height:0; overflow:hidden; }
+.empty { display:flex; align-items:center; justify-content:center; height:100%; }
+.list-error { padding:32px; text-align:center; color:var(--regular-text-color); }
+.list-error button { color:var(--el-color-primary); text-decoration:underline; cursor:pointer; }
+.noLoading, .follow-loading { display:flex; align-items:center; justify-content:center; height:40px; font-size:12px; color:var(--secondary-text-color); }
 :deep(.email-row) {
-  display: flex;
-  padding: 8px 0;
-  justify-content: space-between;
-  box-shadow: var(--header-actions-border);
-  cursor: pointer;
-  align-items: center;
-  position: relative;
-  transition: background 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-  height: 48px;
-  @media (max-width: 1366px) {
-    height: 83px;
-  }
-
-  @media (pointer: coarse) {
-    /* Touchscreen */
-    user-select: none;
-  }
-  &.all-email {
-    height: 65px;
-    @media (max-width: 1366px) {
-      height: 132px;
-    }
-  }
-  .user-info {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 10px;
-    margin-top: 5px;
-    margin-bottom: 2px;
-    color: var(--email-scroll-content-color);
-    @media (max-width: 1366px) {
-      flex-direction: column;
-    }
-
-    .user, .account {
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      transition: all 300ms;
-      line-height: 12px;
-      max-width: 300px;
-      min-width: 0;
-
-      @media (max-width: 1223px) {
-        max-width: 280px;
-      }
-
-      span:first-child {
-        position: relative;
-      }
-
-      span:last-child {
-        margin-left: 5px;
-        position: relative;
-        bottom: 5px;
-      }
-    }
-  }
-
-  .checkbox {
-    display: flex;
-    padding-left: 15px;
-    padding-right: 20px;
-    justify-content: center;
-  }
-
-  .all-email-checkbox {
-    display: flex;
-    padding-left: 15px;
-    padding-right: 20px;
-    justify-content: center;
-    @media (min-width: 1367px) {
-      justify-content: start;
-      height: 100%;
-      align-self: start;
-      padding-bottom: 30px;
-    }
-  }
-
-  .title-column {
-    @media (max-width: 1366px) {
-      grid-template-columns: 1fr !important;
-      gap: 4px !important;
-    }
-  }
-
-  .title {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    @media (max-width: 1366px) {
-      padding-right: 15px;
-    }
-    @media (max-width: 1366px) {
-      grid-template-columns: 1fr;
-      gap: 4px;
-    }
-
-    .email-sender {
-      color: var(--el-text-color-primary);
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-
-      .email-status {
-        display: flex;
-        flex-direction: column;
-        align-content: center;
-        @media (max-width: 1366px) {
-          flex-direction: row;
-          gap: 5px;
-        }
-      }
-
-      .name {
-        display: grid;
-        gap: 5px;
-        grid-template-columns: auto 1fr;
-
-        > span:last-child {
-          display: flex;
-          align-items: center;
-        }
-
-        @media (min-width: 1366px) {
-          grid-template-columns: 1fr;
-          > span:last-child {
-            display: none;
-          }
-        }
-
-        > span:first-child {
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-        }
-
-        .name-skeleton {
-          width: 150px;
-          height: 1rem;
-          @media (max-width: 767px) {
-            width: 130px;
-          }
-        }
-      }
-
-      .phone-time {
-        font-weight: normal;
-        font-size: 12px;
-        @media (min-width: 1367px) {
-          display: none;
-        }
-      }
-    }
-
-    .email-text-skeleton {
-      .text-skeleton-one {
-        width: 80%;
-        height: 16px;
-        @media (max-width: 1366px) {
-          width: 40%;
-        }
-        @media (max-width: 767px) {
-          width: 70%;
-        }
-      }
-
-      .text-skeleton-two {
-        width: min(300px, 100%);
-        height: 16px;
-        @media (min-width: 1367px) {
-          display: none;
-        }
-        @media (max-width: 1366px) {
-          width: 100%;
-        }
-      }
-    }
-
-    .email-text {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      @media (max-width: 1366px) {
-        grid-template-columns: 1fr;
-      }
-
-      .email-subject {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        overflow: hidden;
-        white-space: nowrap;
-        min-width: 0;
-        @media (min-width: 1367px) {
-          padding-left: 5px;
-        }
-      }
-
-      .code-tag {
-        flex: 0 0 auto;
-        max-width: 170px;
-        height: 20px;
-        line-height: 20px;
-        font-size: 14px;
-        color: var(--el-text-color-primary);
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        cursor: pointer;
-      }
-
-      .subject-text {
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        min-width: 0;
-      }
-
-      .email-content {
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        padding-left: 10px;
-        color: var(--email-scroll-content-color);
-        @media (max-width: 1366px) {
-          padding-left: 0;
-          margin-top: 0;
-        }
-      }
-    }
-  }
-
-
-  .email-right {
-    text-align: right;
-    font-size: 12px;
-    white-space: nowrap;
-    display: flex;
-    padding-left: 15px;
-    align-items: center;
-    @media (max-width: 1366px) {
-      display: none;
-    }
-  }
-
-  .email-right-skeleton {
-    @media (max-width: 1366px) {
-      display: none;
-    }
-  }
-
-  &:hover {
-    background-color: var(--email-hover-background);
-    z-index: 0;
-  }
-
-  &.right-checked,
-  &.right-checked:hover {
-    background-color: var(--email-right-click-background);
-  }
-
-  /*&[data-checked="true"] {
-    background-color: #c2dbff;
-  }*/
+ height:40px; display:flex; align-items:center; padding:0 16px 0 0; cursor:pointer; background:var(--mail-read); box-shadow:inset 0 -1px var(--light-border-color); position:relative;
+ &.unread-row { background:var(--mail-surface); }
+ &:hover { box-shadow:inset 1px 0 var(--light-border-color),inset -1px 0 var(--light-border-color),0 1px 3px #0003; z-index:1; }
+ &[data-checked="true"], &.right-checked { background:var(--mail-selected); }
+ .checkbox, .all-email-checkbox { flex-shrink:0; width:48px; height:40px; display:flex; align-items:center; justify-content:center; padding:0; }
+ .pc-star { flex-shrink:0; display:flex; align-items:center; justify-content:center; width:32px; height:32px; color:#747775; cursor:pointer; border-radius:50%; }
+ .pc-star:hover { background:var(--mail-hover); }
+ .title { flex:1; min-width:0; display:grid; align-items:center; grid-template-columns:180px minmax(0,1fr); gap:16px; padding-left:8px; }
+ .title > div { min-width:0; }
+ .email-sender { display:flex; align-items:center; gap:6px; min-width:0; }
+ .email-status { display:flex; flex-shrink:0; gap:4px; }
+ .email-status svg { width:16px; height:16px; }
+ .name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .name > span:last-child { display:none; }
+ .phone-time { display:none; }
+ .email-text { display:flex; align-items:center; min-width:0; }
+ .email-subject { display:flex; align-items:center; max-width:75%; min-width:0; gap:4px; flex-shrink:0; }
+ .subject-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .code-tag { flex-shrink:0; color:var(--el-color-primary); font-size:12px; }
+ .unread { display:none; }
+ .email-content { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--email-scroll-content-color); }
+ .email-content::before { content:' – '; white-space:pre; }
+ .email-right, .email-right-skeleton { flex-shrink:0; padding-left:24px; font-size:12px; white-space:nowrap; }
+ .user-info { display:flex; gap:16px; color:var(--regular-text-color); font-size:12px; }
+ .user-info > div { display:flex; align-items:center; gap:4px; min-width:0; }
+ .user-info span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+ &.all-email { height:64px; }
+ .name-skeleton { width:130px; height:14px; }
+ .text-skeleton-one { width:70%; height:14px; }
+ .text-skeleton-two { display:none; }
 }
-
-
-.phone-star {
-  display: none;
+.right-dropdown-item { display:flex; align-items:center; gap:12px; }
+@media (max-width:1023px) and (min-width:768px) { :deep(.email-row .title) { grid-template-columns:150px minmax(0,1fr); gap:8px; } .current-mailbox { max-width:150px; } }
+@media (max-width:767px) {
+ .header-actions { gap:14px; padding:0 12px; }
+ .header-left { gap:14px; }
+ .header-right { gap:0; }
+ .current-mailbox { display:none; }
+ :deep(.email-row) {
+   height:84px; padding-right:12px;
+   .checkbox, .all-email-checkbox { width:36px; height:84px; }
+   .pc-star { position:absolute; right:8px; bottom:9px; width:28px; height:28px; }
+   .title { grid-template-columns:minmax(0,1fr); gap:3px; padding:0; }
+   .email-sender { justify-content:space-between; }
+   .name { flex:1; font-size:15px; }
+   .phone-time { display:inline; font-size:11px; color:var(--regular-text-color); flex-shrink:0; }
+   .email-text { display:block; padding-right:28px; font-size:13px; }
+   .email-subject { max-width:100%; }
+   .email-content { display:block; }
+   .email-content::before { content:none; }
+   .email-right, .email-right-skeleton { display:none; }
+   &.all-email { height:116px; }
+   .user-info { flex-wrap:wrap; gap:0 8px; }
+ }
 }
-
-.pc-star {
-  display: flex;
-  width: 40px;
-}
-
-@media (max-width: 1366px) {
-  .pc-star {
-    display: none;
-  }
-  .phone-star {
-    display: block;
-    align-self: end;
-    padding-right: 16px;
-    padding-top: 8px;
-  }
-  .star-pd {
-    padding-top: 6px !important;
-  }
-}
-
-.email-time {
-  padding-right: v-bind(timePaddingRight);
-}
-
-:deep(.el-scrollbar__view) {
-  height: 100%;
-}
-
-.header-actions {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 15px;
-  padding: 3px 15px;
-  box-shadow: var(--header-actions-border);
-
-  .header-left {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    position: relative;
-    column-gap: 20px;
-    row-gap: 8px;
-    padding-left: 2px;
-    color: var(--el-text-color-primary);;
-  }
-
-  .header-right {
-    display: grid;
-    grid-template-columns: auto auto;
-    align-items: start;
-    height: 100%;
-    color: var(--el-text-color-primary);;
-
-    .email-count {
-      white-space: nowrap;
-      margin-top: 6px;
-    }
-  }
-
-  .icon {
-    font-size: 18px;
-    cursor: pointer;
-  }
-
-  .more-icon {
-    margin-top: 8px;
-    margin-left: 15px;
-  }
-}
-
-.del-status {
-  color: var(--el-color-info);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  bottom: 1px;
-}
-
-
-
-.right-dropdown-item {
-  display: flex;
-  gap: 10px;
-}
-
-:deep(.el-dropdown-menu__item:last-child) {
-  padding-bottom: 10px;
-}
-
-:deep(.el-dropdown-menu__item:first-child) {
-  padding-top: 10px;
-}
-
-:deep(.el-dropdown-menu__item) {
-  padding-right: 14px;
-  padding-left: 14px;
-}
-
-.unread {
-  height: 6px;
-  width: 6px;
-  background: var(--el-color-primary);
-  margin-bottom: 2px;
-  margin-right: 5px;
-  border-radius: 50%;
-  display: inline-block;
-  justify-content: center;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
 </style>

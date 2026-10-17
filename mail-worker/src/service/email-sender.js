@@ -15,6 +15,16 @@ export function validateRecipients(recipients) {
 	}
 }
 
+export function normalizeRecipients(to, cc = [], bcc = []) {
+	if (![to,cc,bcc].every(Array.isArray)) throw new BizError('Recipients must be arrays.',400);
+	validateRecipients(to);
+	validateRecipients([...to,...cc,...bcc]);
+	const seen = new Set();
+	const unique = list => list.map(a => a.trim().toLowerCase()).filter(a => { if(seen.has(a)) return false; seen.add(a); return true; });
+	const recipients = { to: unique(to), cc: unique(cc), bcc: unique(bcc) };
+	return { ...recipients, all: [...recipients.to,...recipients.cc,...recipients.bcc] };
+}
+
 export function validateAttachmentCount(attachments, inline = false) {
 	if (!Array.isArray(attachments)) {
 		throw new BizError('Attachments must be an array.', 400);
@@ -81,7 +91,7 @@ export function validateMessageSize(message) {
 	const bytes = value => new TextEncoder().encode(value || '').byteLength;
 	// Reserve MIME boundaries and headers, and include base64 expansion and line wrapping.
 	let size = 16 * 1024 + encodedSize(bytes(message.html)) + encodedSize(bytes(message.text));
-	size += bytes(JSON.stringify({ from: message.from, to: message.to, subject: message.subject, headers: message.headers }));
+	size += bytes(JSON.stringify({ from: message.from, to: message.to, cc: message.cc, bcc: message.bcc, subject: message.subject, headers: message.headers }));
 	for (const attachment of message.attachments || []) {
 		size += encodedSize(attachment.content.byteLength) + bytes(attachment.filename) * 3 + bytes(attachment.type) + 1024;
 	}
@@ -91,7 +101,7 @@ export function validateMessageSize(message) {
 }
 
 export async function buildMessage(params) {
-	validateRecipients(params.receiveEmail);
+	const recipients = normalizeRecipients(params.receiveEmail,params.cc,params.bcc);
 	if (typeof params.subject !== 'string' || !params.subject.trim() || params.subject.length > 998 || /[\r\n]/.test(params.subject)) {
 		throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
 	}
@@ -102,12 +112,14 @@ export async function buildMessage(params) {
 	validateAttachmentCount(attachments.filter(item => item?.contentId), true);
 	const message = {
 		from: { email: params.accountEmail, name: params.name },
-		to: [...params.receiveEmail],
+		to: recipients.to,
 		subject: params.subject,
 		text: params.text || '',
 		html: params.html || '',
 		attachments: await Promise.all(attachments.map(normalizeAttachment))
 	};
+	if (recipients.cc.length) message.cc = recipients.cc;
+	if (recipients.bcc.length) message.bcc = recipients.bcc;
 	const ids = message.attachments.filter(item => item.contentId).map(item => item.contentId);
 	if (new Set(ids).size !== ids.length) throw new BizError('Inline image content IDs must be unique.', 400);
 	const { document } = parseHTML(message.html);
@@ -118,7 +130,7 @@ export async function buildMessage(params) {
 		}
 	}
 	if (params.sendType === 'reply' && params.messageId) {
-		message.headers = { 'In-Reply-To': params.messageId, References: params.messageId };
+		message.headers = { 'In-Reply-To': params.messageId, References: params.references || params.messageId };
 	}
 	validateMessageSize(message);
 	return message;

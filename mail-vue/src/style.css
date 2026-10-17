@@ -216,3 +216,92 @@ html[data-theme-to="light"]::view-transition-old(root) {
     from { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
     to   { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
 }
+
+/* Shared Gmail-inspired surfaces and controls. */
+html:not(.dark) {
+    --mail-canvas: #f6f8fc;
+    --mail-surface: #fff;
+    --mail-search: #eaf1fb;
+    --mail-compose: #c2e7ff;
+    --mail-on-compose: #001d35;
+    --mail-compose-header: #f2f6fc;
+    --mail-selected: #d3e3fd;
+    --mail-hover: #e8edf5;
+    --mail-read: #f2f6fc;
+    --el-color-primary: #0b57d0;
+    --el-color-primary-dark-2: #0842a0;
+    --el-color-primary-light-3: #5189df;
+    --el-color-primary-light-5: #88adeb;
+    --el-color-primary-light-7: #c2d7f6;
+    --el-color-primary-light-8: #d3e3fd;
+    --el-color-primary-light-9: #eaf1fb;
+    --el-text-color-primary: #1f1f1f;
+    --el-text-color-regular: #444746;
+    --el-bg-color: #fff;
+    --aside-backgound: var(--mail-canvas);
+    --aside-menu-active-background: var(--mail-selected);
+    --regular-text-color: #444746;
+    --secondary-text-color: #5f6368;
+    --email-scroll-content-color: #5f6368;
+    --light-border-color: #e0e3e7;
+    --email-hover-background: #e8edf5;
+    --base-fill: #eef2f7;
+    --settings-page-background: #fff;
+    --aside-right-border: none;
+}
+html.dark {
+    --mail-canvas: #1b1b1f;
+    --mail-surface: #242529;
+    --mail-search: #2d2f35;
+    --mail-compose: #004a77;
+    --mail-on-compose: #c2e7ff;
+    --mail-compose-header: #303238;
+    --mail-selected: #004a77;
+    --mail-hover: #36383f;
+    --mail-read: #292b30;
+    --el-color-primary: #a8c7fa;
+    --el-color-primary-dark-2: #c2d7fb;
+    --el-color-primary-light-3: #84acef;
+    --el-color-primary-light-5: #577db9;
+    --el-color-primary-light-7: #334969;
+    --el-color-primary-light-8: #2f4059;
+    --el-color-primary-light-9: #29384e;
+    --el-text-color-primary: #e3e3e3;
+    --el-text-color-regular: #c4c7c5;
+    --el-bg-color: #242529;
+    --regular-text-color: #c4c7c5;
+    --secondary-text-color: #a9adb4;
+    --light-border-color: #3f4249;
+    --base-fill: #34363c;
+    --email-scroll-content-color: #b1b5bd;
+    --aside-backgound: var(--mail-canvas);
+    --aside-menu-active-background: var(--mail-selected);
+    --email-hover-background: var(--mail-hover);
+    --settings-page-background: var(--mail-surface);
+    --aside-right-border: none;
+}
+body { font-family: Arial, Helvetica, sans-serif; }
+button { color:inherit; }
+button:disabled { cursor:default; opacity:.5; }
+:focus-visible { outline:2px solid var(--el-color-primary); outline-offset:2px; }
+.el-button { border-radius:20px; }
+.el-dialog { border-radius:16px; max-width:calc(100vw - 24px); }
+.el-dropdown__popper { border-radius:12px; }
+html.dark .el-button--primary { --el-button-text-color:#062e6f; --el-button-hover-text-color:#062e6f; }
+.mailbox-popover.el-popover { padding:0; border-radius:16px; overflow:visible; background:var(--mail-surface); color:var(--el-text-color-primary); }
+.mailbox-popover .account-box { width:100%; height:430px; background:var(--mail-surface); border:0; border-radius:16px; padding:8px; }
+.mailbox-popover .account-box .head-opt { padding:4px 8px 12px; height:42px; display:flex; gap:16px; align-items:center; }
+.mailbox-heading { flex:1; font-size:15px; font-weight:600; }
+.mailbox-popover .account-box .scrollbar { height:calc(100% - 42px); }
+.mailbox-popover .account-box .item { margin:2px 0 6px; border-radius:12px; box-shadow:none; background:var(--mail-surface); }
+.mailbox-popover .account-box .item-choose { background:var(--mail-selected); }
+.mailbox-popover .account-box .item:hover { background:var(--mail-hover); }
+.mailbox-popover .el-card__body { padding:12px !important; }
+.mailbox-error { padding:12px; font-size:13px; }
+.mailbox-error button { color:var(--el-color-primary); cursor:pointer; }
+.mailbox-popover .account-box .item { padding:0; }
+.mailbox-popover .account-box .item .account { margin-bottom:8px; font-size:13px; }
+.mailbox-popover .account-box .item .opt { padding:0; }
+.mailbox-popover .account-box .item .opt svg { color:var(--regular-text-color); }
+.mailbox-popover .account-box .item .opt .send-email { margin:0; }
+html .el-button { border-radius:20px; }

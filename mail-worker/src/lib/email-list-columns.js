@@ -16,16 +16,23 @@ function sqlStripWhitespace(column) {
 }
 
 /** Full query: all fields */
-export const emailListColumns = getTableColumns(email);
+export const emailListColumns = {
+	...getTableColumns(email),
+	bcc: sql`CASE WHEN ${email.type}=1 THEN ${email.bcc} ELSE '[]' END`.as('bcc'),
+};
 
 /** Summary query: prefer text and only read compact HTML as a fallback; omit content from responses */
 export const emailBriefColumns = {
 	emailId: email.emailId,
+	accountId: email.accountId,
+	userId: email.userId,
 	sendEmail: email.sendEmail,
 	name: email.name,
 	subject: email.subject,
 	code: email.code,
 	recipient: email.recipient,
+	cc: email.cc,
+	bcc: sql`CASE WHEN ${email.type}=1 THEN ${email.bcc} ELSE '[]' END`.as('bcc'),
 	toEmail: email.toEmail,
 	type: email.type,
 	status: email.status,

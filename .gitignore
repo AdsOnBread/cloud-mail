@@ -26,3 +26,10 @@ mail-vue/dist
 .wrangler
 .venv
 git-tools.js
+
+# Local installation credentials and Xcode outputs
+.cloudmail-secrets.json
+mail-worker/.dev.vars*
+mail-ios/build/
+**/xcuserdata/
+*.xcresult

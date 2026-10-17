@@ -2,15 +2,10 @@ import { defaultNotice, upgradeEnglishDefaults } from './english-defaults';
 import settingService from '../service/setting-service';
 import emailUtils from '../utils/email-utils';
 import {emailConst} from "../const/entity-const";
+import { migrateMobile } from '../mobile/schema';
 
 const dbInit = {
 	async init(c) {
-
-		const secret = c.req.param('secret');
-
-		if (secret !== c.env.jwt_secret) {
-			return c.text('❌ JWT secret mismatch');
-		}
 
 		await this.intDB(c);
 		await this.v1_1DB(c);
@@ -33,6 +28,7 @@ const dbInit = {
 		await this.v3_1DB(c);
 		await this.v3_2DB(c);
 		await this.v3_3DB(c);
+		await migrateMobile(c.env.db);
 		await upgradeEnglishDefaults(c.env.db);
 		await settingService.refresh(c);
 		return c.text('success');

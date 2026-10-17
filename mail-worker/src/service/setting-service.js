@@ -10,6 +10,7 @@ import {t} from '../i18n/i18n'
 import verifyRecordService from './verify-record-service';
 import userContext from '../security/user-context';
 import domainUtils from '../utils/domain-uitls';
+import { defaultNotice, legacyNoticeContents } from '../init/english-defaults';
 
 const settingService = {
 
@@ -76,6 +77,9 @@ const settingService = {
 			verifyRecordService.selectListByIP(c)
 		]);
 
+		if (legacyNoticeContents.includes(settingRow.noticeContent)) {
+			settingRow.noticeContent = defaultNotice;
+		}
 
 		if (!showSiteKey) {
 			settingRow.siteKey = settingRow.siteKey ? `${settingRow.siteKey.slice(0, 6)}******` : null;

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { EmailUnreadEnum } from '@/enums/email-enum.js'
+import { emailDetail } from '@/request/email.js'
 
 export const useEmailStore = defineStore('email', {
     state: () => ({
@@ -22,6 +23,13 @@ export const useEmailStore = defineStore('email', {
         pick: ['contentData'],
     },
     actions: {
+        async ensureDetail(message) {
+            const id = message.emailId;
+            if (this.detailMap[id]) return this.detailMap[id];
+            const detail = await emailDetail(id);
+            this.applyFullList([detail]);
+            return this.detailMap[id];
+        },
         fetchList(request) {
             return request(0).then(data => {
                 request(1).then(fullData => {

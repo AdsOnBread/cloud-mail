@@ -45,7 +45,7 @@ analysis_cache = "${ANALYSIS_CACHE}"
 #orm_log = false
 domain = "${DOMAIN}"
 admin = "${ADMIN}"
-jwt_secret = "${JWT_SECRET}"
+# Signing and access secrets are uploaded with wrangler secret bulk.
 project_link = "${PROJECT_LINK}"
 
 [build]

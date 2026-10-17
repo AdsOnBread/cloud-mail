@@ -1,27 +1,27 @@
 <template>
   <div class="account-box">
-    <div class="head-opt">
-      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+    <div class="head-opt"><span class="mailbox-heading">Mailboxes</span>
+      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" title="Add mailbox" role="button" tabindex="0" @keydown.enter="add" @click="add"/>
+      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" title="Refresh mailboxes" role="button" tabindex="0" @keydown.enter="refresh" @click="refresh"/>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
       <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
-        <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId"
-                 @click="changeAccount(item)">
+        <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId" tabindex="0" role="button" :aria-label="`Switch to ${item.email}`"
+                 @keydown.enter.self="changeAccount(item)" @keydown.space.self.prevent="changeAccount(item)" @click="changeAccount(item)">
           <div class="account">
             {{ item.email }}
           </div>
           <div class="opt">
             <div class="send-email" @click.stop>
-              <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
-              <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1" />
+              <Icon role="button" tabindex="0" :title="item.allReceive ? 'Show this mailbox only' : 'Receive from all mailboxes'" @keydown.enter="setAllReceive(item)" @click="setAllReceive(item)" v-if="!item.allReceive" icon="material-symbols:mail-outline" width="22" height="22" />
+              <Icon role="button" tabindex="0" :title="item.allReceive ? 'Show this mailbox only' : 'Receive from all mailboxes'" @keydown.enter="setAllReceive(item)" @click="setAllReceive(item)" v-else icon="material-symbols:all-inbox-outline" width="22" height="22"  />
             </div>
             <div class="settings" @click.stop>
-              <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
-              <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"
+              <Icon icon="material-symbols:content-copy-outline" width="22" height="22" role="button" tabindex="0" title="Copy address" aria-label="Copy address" @keydown.enter.stop="copyAccount(item.email)" @click.stop="copyAccount(item.email)"/>
+              <Icon icon="material-symbols:more-vert" width="21" height="21" color="#909399"
                     v-if="showNullSetting(item)"/>
               <el-dropdown v-else>
-                <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"/>
+                <Icon icon="material-symbols:more-vert" width="21" height="21" color="#909399"/>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item v-if="hasPerm('email:send')" @click="openSetName(item)">{{ $t('rename') }}</el-dropdown-item>
@@ -74,8 +74,11 @@
         </div>
       </div>
 
+      <div v-if="accountStore.loadError" class="mailbox-error" role="alert">
+        {{ accountStore.loadError }} <button type="button" @click="getAccountList">Retry</button>
+      </div>
     </el-scrollbar>
-    <el-dialog v-model="showAdd" :title="$t('addAccount')">
+    <el-dialog append-to-body v-model="showAdd" :title="$t('addAccount')">
       <div class="container">
         <el-input v-model="addForm.email" ref="addRef" type="text" :placeholder="$t('emailAccount')" autocomplete="off" @keyup.enter="submit">
           <template #append>
@@ -114,7 +117,7 @@
         <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
       </div>
     </el-dialog>
-    <el-dialog v-model="setNameShow" :title="$t('changeUserName')">
+    <el-dialog append-to-body v-model="setNameShow" :title="$t('changeUserName')">
       <div class="container">
         <el-input v-model="accountName" type="text" :placeholder="$t('username')" autocomplete="off" @keyup.enter="setName">
         </el-input>
@@ -126,6 +129,7 @@
   </div>
 </template>
 <script setup>
+import {useUiStore} from "@/store/ui.js";
 import {Icon} from "@iconify/vue";
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {
@@ -149,15 +153,16 @@ import {AccountAllReceiveEnum} from "@/enums/account-enum.js";
 const {t} = useI18n();
 const userStore = useUserStore();
 const accountStore = useAccountStore();
+const uiStore = useUiStore();
 const settingStore = useSettingStore();
 const emailStore = useEmailStore();
 const showAdd = ref(false)
 const addLoading = ref(false);
 const domainList = computed(() => settingStore.domainList)
-const accounts = reactive([])
-const noLoading = ref(false)
-const loading = ref(false)
-const followLoading = ref(false);
+const accounts = accountStore.accounts
+const noLoading = computed(() => accountStore.loaded)
+const loading = computed(() => accountStore.loading && !accounts.length)
+const followLoading = computed(() => accountStore.loading && !!accounts.length);
 const verifyShow = ref(false)
 const setNameShow = ref(false)
 const setNameLoading = ref(false)
@@ -186,7 +191,8 @@ if (hasPerm('account:query')) {
 }
 
 watch(() => accountStore.changeUserAccountName, () => {
-  accounts[0].name = accountStore.changeUserAccountName
+  const primary = accounts.find(item => item.accountId === userStore.user.account.accountId)
+  if (primary) primary.name = accountStore.changeUserAccountName
 })
 
 watch(() => settingStore.domainList, (list) => {
@@ -272,25 +278,18 @@ function openSetName(accountItem) {
   setNameShow.value = true
 }
 
-function setAllReceive(account) {
-  let allReceiveAccount = accounts.find(account => account.allReceive === AccountAllReceiveEnum.ENABLED);
-  if (allReceiveAccount && allReceiveAccount.accountId !== account.accountId) allReceiveAccount.allReceive = AccountAllReceiveEnum.DISABLED;
-  account.allReceive = account.allReceive === AccountAllReceiveEnum.DISABLED ? AccountAllReceiveEnum.ENABLED : AccountAllReceiveEnum.DISABLED;
-  accountSetAllReceive(account.accountId).catch(() => {
-    account.allReceive = account.allReceive === AccountAllReceiveEnum.DISABLED ? AccountAllReceiveEnum.ENABLED : AccountAllReceiveEnum.DISABLED;
-    if (allReceiveAccount) allReceiveAccount.allReceive = AccountAllReceiveEnum.ENABLED;
-  }).then(() => {
-    if (account.allReceive === AccountAllReceiveEnum.ENABLED) {
-      ElMessage({
-        message: t('setSuccess'),
-        type: 'success',
-        plain: true,
-      })
-    }
+async function setAllReceive(account) {
+  const previous = accounts.map(item => [item, item.allReceive]);
+  const enabled = account.allReceive === AccountAllReceiveEnum.DISABLED;
+  accounts.forEach(item => { item.allReceive = enabled && item.accountId === account.accountId ? 1 : 0; });
+  try {
+    await accountSetAllReceive(account.accountId);
     changeAccount(account);
     emailStore.emailScroll?.refreshList();
     emailStore.sendScroll?.refreshList();
-  })
+  } catch {
+    previous.forEach(([item,value]) => { item.allReceive = value; });
+  }
 }
 
 
@@ -313,6 +312,9 @@ function remove(account) {
     accountDelete(account.accountId).then(() => {
       const index = accounts.findIndex(item => item.accountId === account.accountId);
       accounts.splice(index, 1);
+      if (accountStore.currentAccountId === account.accountId) {
+        accountStore.select(accounts[0] || userStore.user.account)
+      }
       if (accounts.length < queryParams.size) {
         getAccountList()
       }
@@ -326,23 +328,13 @@ function remove(account) {
 }
 
 function refresh() {
-  if (loading.value) {
-    return
-  }
-  loading.value = false
-  followLoading.value = false
-  noLoading.value = false
-  queryParams.accountId = 0
-  queryParams.lastSort = null
-  getSkeletonRows();
-  scrollbarRef.value.setScrollTop(0)
-  accounts.splice(0, accounts.length)
-  getAccountList()
+  scrollbarRef.value?.setScrollTop(0)
+  accountStore.refresh().catch(() => {})
 }
 
 function changeAccount(account) {
-  accountStore.currentAccountId = account.accountId
-  accountStore.currentAccount = account
+  accountStore.select(account)
+  uiStore.accountShow = false
 }
 
 function add() {
@@ -361,8 +353,7 @@ function setAsTop(account, index) {
       plain: true,
     })
 
-    const [item] = accounts.splice(index, 1);
-    accounts.splice(1, 0, item);
+    refresh();
 
   });
 }
@@ -386,44 +377,7 @@ async function copyAccount(account) {
 }
 
 function getAccountList() {
-
-  if (loading.value || followLoading.value || noLoading.value) return;
-
-  if (accounts.length === 0) {
-    loading.value = true
-  } else {
-    followLoading.value = true
-  }
-
-  let start = Date.now();
-
-  const accountId = accounts.length > 0 ? accounts.at(-1).accountId : 0;
-  const lastSort = accounts.length > 0 ? accounts.at(-1).sort : null;
-
-  accountList(accountId, queryParams.size, lastSort).then(async list => {
-
-    let end = Date.now();
-    let duration = end - start;
-    if (duration < 300) {
-      await sleep(300 - duration)
-    }
-
-    if (list.length < queryParams.size) {
-      noLoading.value = true
-    }
-    if (accounts.length === 0) {
-      accountStore.currentAccount = list[0]
-    }
-
-    accounts.push(...list)
-
-    loading.value = false
-    followLoading.value = false
-    first = false
-  }).catch(() => {
-    loading.value = false
-    followLoading.value = false
-  })
+  return accountStore.loadMore().catch(() => {})
 }
 
 
@@ -522,7 +476,7 @@ path[fill="#ffdda1"] {
 <style scoped lang="scss">
 .account-box {
 
-  border-right: 1px solid var(--el-border-color) !important;
+  border-right: 0;
   background-color: var(--el-bg-color);
   height: 100%;
   overflow: hidden;
