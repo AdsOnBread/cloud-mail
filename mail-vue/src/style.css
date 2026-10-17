@@ -27,7 +27,7 @@ html, body {
 }
 
 body {
-    font-family: Inter, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+    font-family: Inter, "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
     line-height: 1.5;
     color: var(--el-text-color-primary);
     font-size: 14px;
@@ -177,7 +177,7 @@ button, input, select, textarea {
     --el-input-text-color: var(--el-text-color-primary) !important;
 }
 
-/* 视图过渡，基于径向剪裁 */
+/* View transitions using radial clipping */
 html.dark,
 html:not(.dark) {
     view-transition-name: root;
@@ -189,19 +189,19 @@ html:not(.dark) {
     mix-blend-mode: normal;
 }
 
-/* 层级控制，确保对应方向动画在上层可见 */
+/* Keep the active transition animation above the other view */
 html[data-theme-to="dark"]::view-transition-new(root) { z-index: 2; }
 html[data-theme-to="dark"]::view-transition-old(root) { z-index: 1; }
 html[data-theme-to="light"]::view-transition-old(root) { z-index: 2; }
 html[data-theme-to="light"]::view-transition-new(root) { z-index: 1; }
 
-/* 切到暗色：新视图从点击点向外扩散 */
+/* Dark mode: expand the new view from the click position */
 html[data-theme-to="dark"]::view-transition-new(root) {
     clip-path: circle(0px at var(--vt-x) var(--vt-y));
     animation: vt-radial-in var(--vt-duration) var(--vt-easing) forwards;
 }
 
-/* 切到浅色：旧视图向点击点收缩 */
+/* Light mode: contract the old view toward the click position */
 html[data-theme-to="light"]::view-transition-old(root) {
     clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y));
     animation: vt-radial-out var(--vt-duration) var(--vt-easing) forwards;

@@ -15,11 +15,8 @@ export async function init() {
     const accountStore = useAccountStore();
 
     const token = localStorage.getItem('token');
-    if (!settingStore.lang) {
-        let lang = navigator.language.split('-')[0]
-        lang = lang === 'zh' ? lang : 'en'
-        settingStore.lang = lang
-    }
+    // Normalize preferences saved by earlier multilingual versions.
+    settingStore.lang = 'en'
 
     i18n.global.locale.value = settingStore.lang
 

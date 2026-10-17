@@ -19,7 +19,7 @@ const oauthService = {
 		let userRow = await userService.selectByIdIncludeDel(c, oauthRow.userId);
 
 		if (userRow) {
-			throw new BizError('用户已绑定有邮箱')
+			throw new BizError('This user already has a linked email address')
 		}
 
 		await loginService.register(c, { email, password: cryptoUtils.genRandomPwd(), code }, true);
@@ -222,7 +222,7 @@ const oauthService = {
 		await orm(c).delete(oauth).where(inArray(oauth.userId, userIds)).run();
 	},
 
-	//定时任务凌晨清除未绑定邮箱的oauth用户
+	//Remove OAuth users without linked email addresses during the nightly cleanup
 	async clearNoBindOathUser(c) {
 		await orm(c).delete(oauth).where(eq(oauth.userId, 0)).run();
 	},

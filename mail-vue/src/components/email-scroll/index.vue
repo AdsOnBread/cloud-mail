@@ -412,7 +412,7 @@ watch(scrollbarRef, () => {
   updateHasScrollbar();
 })
 
-// 强制刷新 (itemHeight 更改后虚拟滚动列表不会自己更新)
+// Refresh explicitly after changing itemHeight; the virtual list does not update automatically
 watch(itemHeight, () => {
   keyCount.value ++
 })
@@ -442,7 +442,7 @@ watch(noLoading, (isNoLoading) => {
 })
 
 
-// 监听是否到达底部
+// Watch for the end of the list
 watch(() => arrivedState.bottom, (isBottom) => {
   if (isBottom && !loading.value) {
     loadData();
@@ -761,7 +761,7 @@ function handleCheckAllChange(val) {
   isIndeterminate.value = false;
 }
 
-// 获取选中的邮件列表id
+// Get selected message IDs
 function getSelectedMailsIds() {
   return emailList.filter(item => item.checked).map(item => item.emailId);
 }
@@ -983,7 +983,7 @@ function loadData() {
   }
 
   @media (pointer: coarse) {
-    /* 触屏 */
+    /* Touchscreen */
     user-select: none;
   }
   &.all-email {

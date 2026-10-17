@@ -120,7 +120,7 @@
                                  :placeholder="$t('total')">
                 </el-input-number>
                   <el-select v-model="form.sendType" placeholder="Select" size="small"
-                             :style="`width: ${ locale === 'zh' ? 65 : 85 }px;margin-left: 5px;`">
+                             :style="`width: ${ 85}px;margin-left: 5px;`">
                     <el-option :label="$t('total')" value="count"/>
                     <el-option :label="$t('daily')" value="day"/>
                     <el-option :label="$t('internal')" value="internal"/>
@@ -158,7 +158,7 @@ defineOptions({
 })
 
 const {domainList} = useSettingStore();
-const {t, locale} = useI18n();
+const {t} = useI18n();
 const userStore = useUserStore();
 const roleStore = useRoleStore();
 const roleFormShow = ref(false)
@@ -219,7 +219,7 @@ function availDomainChange() {
 
 function banEmailAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   form.banEmail.splice(form.banEmail.length - 1, 1)
@@ -401,7 +401,7 @@ function getRoleList() {
 
 function adjustWidth() {
   desShow.value = window.innerWidth > 767
-  settingWidth.value = window.innerWidth < 480 ? (locale.value === 'en' ? 85 : 75) : null
+  settingWidth.value = window.innerWidth < 480 ? (85) : null
   sortWidth.value = window.innerWidth < 480 ? 75 : null
   roleWidth.value = window.innerWidth < 480 ? 180 : 200
 }

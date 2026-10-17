@@ -9,6 +9,8 @@ import { parseHTML } from 'linkedom';
 import { v4 as uuidv4 } from 'uuid';
 import domainUtils from '../utils/domain-uitls';
 import settingService from "./setting-service";
+import BizError from '../error/biz-error';
+import { normalizeAttachment, validateAttachmentCount } from './email-sender';
 
 const attService = {
 
@@ -54,15 +56,19 @@ const attService = {
 		const { document } = parseHTML(content);
 
 		const images = Array.from(document.querySelectorAll('img'));
+		const storageDomain = domainUtils.toOssDomain(r2Domain);
+		const isStoredImage = src => src && (src.startsWith('attachments/') || (storageDomain && src.startsWith(storageDomain + '/')));
+		validateAttachmentCount(images.filter(img => img.getAttribute('src')?.startsWith('data:image') || isStoredImage(img.getAttribute('src'))), true);
 
 		let imageDataList = [];
 
 		for (const img of images) {
 
-			//邮件正文base64图片转cid附件
+			//Convert base64 body images to CID attachments
 			const src = img.getAttribute('src');
 			if (src && src.startsWith('data:image')) {
-				const file = fileUtils.base64ToFile(src);
+				let file;
+				try { file = fileUtils.base64ToFile(src); } catch { throw new BizError('An inline image contains invalid file data.', 400); }
 				const buff = await file.arrayBuffer();
 				const cid = uuidv4().replace(/-/g, '');
 				const key = constant.ATTACHMENT_PREFIX + await fileUtils.getBuffHash(buff) + fileUtils.getExtFileName(file.name);
@@ -81,16 +87,16 @@ const attService = {
 				imageDataList.push(attData);
 			}
 
-			//邮件正文站内图片转cid附件
-			if (src && (src.startsWith(domainUtils.toOssDomain(r2Domain)) || src.startsWith('attachments/'))) {
+			//Convert stored body images to CID attachments
+			if (isStoredImage(src)) {
 
 				const cid = uuidv4().replace(/-/g, '')
 				img.setAttribute('src', 'cid:' + cid);
 
 				const attData = {};
 
-				if (src.startsWith(domainUtils.toOssDomain(r2Domain))) {
-					attData.key = src.replace(domainUtils.toOssDomain(r2Domain) + '/','');
+				if (storageDomain && src.startsWith(storageDomain + '/')) {
+					attData.key = src.slice(storageDomain.length + 1);
 				}
 
 				if (src.startsWith('attachments/')) {
@@ -113,11 +119,11 @@ const attService = {
 			}
 		}
 
-		//查询已有内嵌url图片信息
+		//Look up metadata for stored inline images
 		const keys = [...new Set(imageDataList.filter(item => !item.content).map(item => item.key))];
-		const dbImageList  = await this.selectOneByKeys(c, keys);
+		const dbImageList = keys.length ? await this.selectOneByKeys(c, keys) : [];
 
-		//设置给当前附件
+		//Populate attachment metadata and content
 		await Promise.all(imageDataList.map(async image => {
 			if (image.content) {
 				return;
@@ -125,7 +131,7 @@ const attService = {
 
 			const dbImage = dbImageList.find(dbImage => image.key === dbImage.key);
 			if (!dbImage) {
-				return;
+				throw new BizError('An inline image is no longer available. Remove it or upload it again.', 400);
 			}
 
 			image.size = dbImage.size;
@@ -135,13 +141,12 @@ const attService = {
 
 			const obj = await r2Service.getObj(c, image.key);
 			if (!obj) {
-				return;
+				throw new BizError('An inline image file is missing from storage. Remove it or upload it again.', 400);
 			}
 
 			image.content = obj instanceof ArrayBuffer ? obj : await obj.arrayBuffer();
 		}))
 
-		imageDataList = imageDataList.filter(image => image.content);
 
 		return { imageDataList, html: document.toString() };
 	},
@@ -151,13 +156,15 @@ const attService = {
 		const attDataList = [];
 
 		for (let att of attList) {
-			att.buff = fileUtils.base64ToUint8Array(att.content);
+			const normalized = await normalizeAttachment(att);
+			att.buff = new Uint8Array(normalized.content);
+			att.mimeType = normalized.type;
 			att.key = constant.ATTACHMENT_PREFIX + await fileUtils.getBuffHash(att.buff) + fileUtils.getExtFileName(att.filename);
 			const attData = { userId, accountId, emailId };
 			attData.key = att.key;
 			attData.size = att.buff.length;
 			attData.filename = att.filename;
-			attData.mimeType = att.type;
+			attData.mimeType = att.mimeType;
 			attData.type = attConst.type.ATT;
 			attDataList.push(attData);
 		}
@@ -166,7 +173,7 @@ const attService = {
 
 		for (let att of attList) {
 			await r2Service.putObj(c, att.key, att.buff, {
-				contentType: att.type,
+				contentType: att.mimeType,
 				contentDisposition: `attachment;filename=${att.filename}`
 			});
 		}
@@ -244,7 +251,7 @@ const attService = {
 			try {
 				await this.batchDelete(c, delKeyList);
 			} catch (e) {
-				console.error('删除附件文件失败：', e);
+				console.error('Failed to delete attachment file:', e);
 			}
 		}
 

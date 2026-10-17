@@ -29,7 +29,7 @@
                 <div>
                   <el-select
                       @change="change"
-                      :style="`width: ${ locale === 'en' ?  100 : 80 }px;`"
+                      :style="`width: ${ 100}px;`"
                       v-model="setting.regKey"
                       placeholder="Select"
                   >
@@ -156,7 +156,7 @@
                 <div>
                   <el-select
                       @change="change"
-                      :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
+                      :style="`width: ${ 100}px;`"
                       v-model="setting.autoRefresh"
                       placeholder="Select"
                   >
@@ -189,19 +189,13 @@
                 </div>
               </div>
               <div class="setting-item">
-                <div><span>{{ setting.hasCfEmail ? $t('cloudflareEmailSending') : $t('resendToken') }}</span></div>
-                <div v-if="setting.hasCfEmail">
-                  <span>{{ $t('enabled') }}</span>
-                </div>
-                <div v-else>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendList" size="small"
-                             type="primary">
-                    <Icon icon="ic:round-list" width="18" height="18"/>
-                  </el-button>
-                  <el-button class="opt-button" style="margin-top: 0" @click="openResendForm" size="small"
-                             type="primary">
-                    <Icon icon="material-symbols:add-rounded" width="16" height="16"/>
-                  </el-button>
+                <div><span>{{ $t('cloudflareEmailSending') }}</span></div>
+                <div>
+                  <el-tooltip :content="setting.hasCfEmail ? $t('cloudflareEmailReady') : $t('cloudflareEmailSetup')">
+                    <el-tag :type="setting.hasCfEmail ? 'success' : 'warning'">
+                      {{ setting.hasCfEmail ? $t('configured') : $t('notConfigured') }}
+                    </el-tag>
+                  </el-tooltip>
                 </div>
               </div>
               <div class="setting-item">
@@ -326,7 +320,7 @@
                   </el-button>
                   <el-select
                       @change="change"
-                      :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
+                      :style="`width: ${ 100}px;`"
                       v-model="setting.registerVerify"
                       placeholder="Select"
                       class="bot-verify-select"
@@ -345,7 +339,7 @@
                   </el-button>
                   <el-select
                       @change="change"
-                      :style="`width: ${ locale === 'en' ? 100 : 80 }px;`"
+                      :style="`width: ${ 100}px;`"
                       v-model="setting.addEmailVerify"
                       placeholder="Select"
                       class="bot-verify-select"
@@ -483,7 +477,7 @@
               </div>
               <div class="concerning-item">
                 <span>{{ $t('help') }} : </span>
-                <el-button @click="jump('https://doc.skymail.ink')">
+                <el-button @click="jump('https://doc.skymail.ink/en/')">
                   {{ t('document') }}
                   <template #icon>
                     <Icon color="#79D6B5" icon="fluent-color:document-32" width="18" height="18"/>
@@ -500,20 +494,6 @@
         <form @submit.prevent>
           <el-input type="text" :placeholder="$t('websiteTitle')" v-model="editTitle" @keyup.enter="saveTitle"/>
           <el-button type="primary" :loading="settingLoading" @click="saveTitle">{{ $t('save') }}</el-button>
-        </form>
-      </el-dialog>
-      <el-dialog v-model="resendTokenFormShow" :title="$t('resendToken')" width="340" @closed="cleanResendTokenForm">
-        <form @submit.prevent>
-          <el-select style="margin-bottom: 15px" v-model="resendTokenForm.domain" placeholder="Select">
-            <el-option
-                v-for="item in settingStore.domainList"
-                :key="item"
-                :label="item"
-                :value="item"
-            />
-          </el-select>
-          <el-input type="text" :placeholder="$t('addResendTokenDesc')" v-model="resendTokenForm.token" @keyup.enter="saveResendToken"/>
-          <el-button type="primary" :loading="settingLoading" @click="saveResendToken">{{ $t('save') }}</el-button>
         </form>
       </el-dialog>
       <el-dialog v-model="r2DomainShow" :title="$t('addOsDomain')" width="340"
@@ -738,14 +718,6 @@ Authorization: &lt;secret&gt;</pre>
           </div>
         </template>
       </el-dialog>
-      <el-dialog class="resend-table" v-model="showResendList" :title="$t('resendTokenList')">
-        <el-table :data="resendList">
-          <el-table-column :min-width="emailColumnWidth" property="key" :label="$t('domain')"
-                           :show-overflow-tooltip="true"/>
-          <el-table-column :width="tokenColumnWidth" property="value" label="Token" fixed="right"
-                           :show-overflow-tooltip="true"/>
-        </el-table>
-      </el-dialog>
       <el-dialog v-model="regVerifyCountShow" :title="$t('rulesVerifyTitle',{count: regVerifyCount})"
                  @closed="regVerifyCount = setting.regVerifyCount">
         <form @submit.prevent>
@@ -956,7 +928,7 @@ defineOptions({
 const currentVersion = 'v3.3.0'
 const hasUpdate = ref(false)
 let getUpdateErrorCount = 1;
-const {t, locale} = useI18n();
+const {t} = useI18n();
 const firstLoading = ref(true)
 const settingReady = ref(false)
 const backgroundImage = ref('')
@@ -964,7 +936,6 @@ const localUpShow = ref(false)
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editTitleShow = ref(false)
-const resendTokenFormShow = ref(false)
 const blackFormShow = ref(false)
 const autoCleanShow = ref(false)
 const aiCodeFilterShow = ref(false)
@@ -976,7 +947,6 @@ const thirdEmailShow = ref(false)
 const webhookShow = ref(false)
 const forwardRulesShow = ref(false)
 const emailPrefixShow = ref(false)
-const showResendList = ref(false)
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const {settings: setting} = storeToRefs(settingStore);
@@ -998,10 +968,6 @@ let backup = '{}'
 const addS3Show = ref(false)
 const addVerifyCountShow = ref(false)
 const regVerifyCountShow = ref(false)
-const resendTokenForm = reactive({
-  domain: '',
-  token: '',
-})
 const turnstileForm = reactive({
   siteKey: '',
   secretKey: ''
@@ -1086,8 +1052,6 @@ const webhookPayloadExample = `{
   "code": "123456",
   "createTime": "2099-12-30 23:59:59"
 }`
-const emailColumnWidth = ref(0)
-const tokenColumnWidth = ref(0)
 const ruleType = ref(0)
 const ruleEmail = ref([])
 const tgMsgFrom = ref('')
@@ -1097,7 +1061,7 @@ const tgMsgText = ref('')
 const tgMsgFromOption = [{label: t('show'), value: 'show'}, {label: t('hide'), value: 'hide'}, {label: t('onlyName'), value:'only-name'}]
 const tgMsgToOption = [{label: t('show'), value: 'show'}, {label: t('hide'), value: 'hide'}]
 const tgMsgTextOption = [{label: t('show'), value: 'show'}, {label: t('hide'), value: 'hide'}]
-const tgMsgLabelWidth = computed(() => locale.value === 'en' ? '120px' : '100px');
+const tgMsgLabelWidth = '120px';
 
 getSettings()
 getUpdate()
@@ -1107,7 +1071,6 @@ function getSettings() {
   settingQuery().then(settingData => {
     setting.value = settingData
     settingStore.domainList = settingData.domainList;
-    resendTokenForm.domain = setting.value.domainList[0]
     loginOpacity.value = setting.value.loginOpacity
     minEmailPrefix.value = setting.value.minEmailPrefix
     firstLoading.value = false
@@ -1151,27 +1114,6 @@ function resetAddS3Form() {
   s3.forcePathStyle = setting.value.forcePathStyle
 }
 
-const resendList = computed(() => {
-
-  let list = Object.keys(setting.value.resendTokens).map(key => {
-    return {
-      key: key,
-      value: setting.value.resendTokens[key]
-    };
-  })
-
-  if (list.length > 0) {
-
-    const key = list.reduce((a, b) => compareByLengthAndUpperCase(a, b, 'key')).key;
-    emailColumnWidth.value = getTextWidth(key) + 30;
-
-    const value = list.reduce((a, b) => compareByLengthAndUpperCase(a, b, 'value')).value;
-    tokenColumnWidth.value = getTextWidth(value) + 30;
-
-  }
-
-  return list;
-});
 
 function getUpdate() {
   if (getUpdateErrorCount > 5 || !getUpdateErrorCount) return
@@ -1183,7 +1125,7 @@ function getUpdate() {
     setTimeout(() => {
       getUpdate()
     }, 2000)
-    console.error('检查更新失败：', e)
+    console.error('Failed to check for updates:', e)
   })
 }
 
@@ -1201,13 +1143,6 @@ function saveRegVerifyCount() {
   editSetting({regVerifyCount: regVerifyCount.value})
 }
 
-const compareByLengthAndUpperCase = (a, b, key) => {
-  const getUpperCaseCount = (str) => (str.match(/[A-Z]/g) || []).length;
-  if (a[key].length === b[key].length) {
-    return getUpperCaseCount(a[key]) > getUpperCaseCount(b[key]) ? a : b;
-  }
-  return a[key].length > b[key].length ? a : b;
-};
 
 
 function closedSetBackground() {
@@ -1235,9 +1170,6 @@ function openNoticePopupSetting() {
   noticePopupShow.value = true
 }
 
-function openResendList() {
-  showResendList.value = true
-}
 
 function resetNoticeForm() {
   noticeForm.notice = setting.value.notice
@@ -1303,7 +1235,7 @@ function openForwardRules() {
 
 function emailAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   forwardEmail.value.splice(forwardEmail.value.length - 1, 1)
@@ -1317,7 +1249,7 @@ function emailAddTag(val) {
 
 function ruleEmailAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   ruleEmail.value.splice(ruleEmail.value.length - 1, 1)
@@ -1332,7 +1264,7 @@ function ruleEmailAddTag(val) {
 function addChatTag(val) {
 
   const chatIds = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   tgChatId.value.splice(tgChatId.value.length - 1, 1)
@@ -1503,7 +1435,7 @@ function saveBlackList() {
 
 function banEmailAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   blackListForm.value.blackFrom.splice(blackListForm.value.blackFrom.length - 1, 1)
@@ -1517,7 +1449,7 @@ function banEmailAddTag(val) {
 
 function autoCleanExcludeAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   autoCleanExclude.value.splice(autoCleanExclude.value.length - 1, 1)
@@ -1531,7 +1463,7 @@ function autoCleanExcludeAddTag(val) {
 
 function aiCodeFilterAddTag(val) {
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   aiCodeFilter.value.splice(aiCodeFilter.value.length - 1, 1)
@@ -1644,9 +1576,6 @@ function saveR2domain() {
   editSetting(settingForm)
 }
 
-function openResendForm() {
-  resendTokenFormShow.value = true
-}
 
 function openBlackListForm() {
   blackFormShow.value = true
@@ -1656,26 +1585,14 @@ function openAiCodeFilter() {
   aiCodeFilterShow.value = true
 }
 
-function saveResendToken() {
-  const settingForm = {
-    resendTokens: {}
-  }
-  const domain = resendTokenForm.domain.slice(1)
-  settingForm.resendTokens[domain] = resendTokenForm.token
-  editSetting(settingForm)
-}
 
 function backupSetting() {
   const settingForm = {...setting.value}
-  delete settingForm.resendTokens
   delete settingForm.siteKey
   delete settingForm.secretKey
   backup = JSON.stringify(setting.value)
 }
 
-function cleanResendTokenForm() {
-  resendTokenForm.token = ''
-}
 
 function beforeChange() {
   if (!settingReady.value || settingLoading.value) return false
@@ -1691,7 +1608,6 @@ function change(e) {
   delete settingForm.s3AccessKey
   delete settingForm.s3SecretKey
   delete settingForm.tgBotToken
-  delete settingForm.resendTokens
   editSetting(settingForm, false)
 }
 
@@ -1731,7 +1647,6 @@ function editSetting(settingForm, refreshStatus = true) {
     }
     editTitleShow.value = false
     r2DomainShow.value = false
-    resendTokenFormShow.value = false
     turnstileShow.value = false
     tgSettingShow.value = false
     thirdEmailShow.value = false
@@ -1991,15 +1906,6 @@ function editSetting(settingForm, refreshStatus = true) {
   }
 }
 
-:deep(.resend-table.el-dialog) {
-  min-height: 300px;
-  width: 500px !important;
-  @media (max-width: 540px) {
-    width: calc(100% - 40px) !important;
-    margin-right: 20px !important;
-    margin-left: 20px !important;
-  }
-}
 
 :deep(.notice-popup.el-dialog) {
   min-height: 300px;
@@ -2011,9 +1917,6 @@ function editSetting(settingForm, refreshStatus = true) {
   }
 }
 
-:deep(.resend-table .el-dialog__header) {
-  padding-bottom: 5px;
-}
 
 :deep(.el-table__inner-wrapper:before) {
   background: var(--el-bg-color);

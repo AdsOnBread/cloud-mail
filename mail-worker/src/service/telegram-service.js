@@ -87,10 +87,10 @@ const telegramService = {
 					})
 				});
 				if (!res.ok) {
-					console.error(`转发 Telegram 失败 status: ${res.status} response: ${await res.text()}`);
+					console.error(`Telegram forwarding failed; status: ${res.status} response: ${await res.text()}`);
 				}
 			} catch (e) {
-				console.error(`转发 Telegram 失败:`, e.message);
+				console.error(`Telegram forwarding failed:`, e.message);
 			}
 		}));
 

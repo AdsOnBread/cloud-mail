@@ -120,7 +120,7 @@ function tryMarkRead() {
   const current = email.value
   if (!current?.emailId || current.unread !== EmailUnreadEnum.UNREAD) return
 
-  // 等详情数据就绪（detailMap 已写入，或正文已有内容）再标已读
+  // Mark as read after details are available in detailMap or the message body
   const full = emailStore.detailMap[current.emailId]
   const detailReady = !!full || !!(current.content || current.text)
   if (!detailReady) return
@@ -460,8 +460,8 @@ const handleDelete = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--message-block-color); /* 半透明黑色蒙层 */
-  pointer-events: none; /* 不影响点击 */
+  background: var(--message-block-color); /* Translucent message overlay */
+  pointer-events: none; /* Allow clicks through the overlay */
 }
 
 .email-text {

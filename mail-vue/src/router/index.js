@@ -78,9 +78,9 @@ const router = createRouter({
 })
 
 NProgress.configure({
-    showSpinner: false,   // 不显示旋转图标
-    trickleSpeed: 50,    // 自动递增速度
-    minimum: 0.1          // 最小百分比
+    showSpinner: false,   // Hide the spinner
+    trickleSpeed: 50,    // Automatic progress interval
+    minimum: 0.1          // Minimum progress
 });
 
 let timer
@@ -133,12 +133,12 @@ function loadBackground(next) {
         };
 
         img.onerror = () => {
-            console.warn("背景图片加载失败:", img.src);
+            console.warn("Background image failed to load:", img.src);
             next()
         };
 
         setTimeout(() => {
-            console.warn("背景加载超时，已放行");
+            console.warn("Background loading timed out; continuing");
             next()
         }, 3000)
 

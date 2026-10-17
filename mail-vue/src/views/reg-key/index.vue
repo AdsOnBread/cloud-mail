@@ -27,16 +27,16 @@
                 <span class="code" @click="copyCode(item.code)">{{ item.code }}</span>
               </div>
               <div class="info-left-item">
-                <div>{{ $t('remainingUses') }}：</div>
+                <div>{{ $t('remainingUses') }}:</div>
                 <div v-if="item.count">{{ item.count }}</div>
                 <el-tag v-else type="danger">{{ $t('exhausted') }}</el-tag>
               </div>
               <div class="info-left-item">
-                <div>{{ $t('roleDesc') }}：</div>
+                <div>{{ $t('roleDesc') }}:</div>
                 <el-tag>{{ item.roleName }}</el-tag>
               </div>
               <div class="info-left-item">
-                <div>{{ $t('validUntil') }}：</div>
+                <div>{{ $t('validUntil') }}:</div>
                 <div v-if="item.expireTime">{{ formatExpireTime(item.expireTime) }}</div>
                 <el-tag v-else type="danger">{{ $t('expired') }}</el-tag>
               </div>
@@ -99,7 +99,6 @@
 import {defineOptions, nextTick, reactive, ref, watch} from "vue"
 import {Icon} from "@iconify/vue";
 import loading from "@/components/loading/index.vue";
-import {useSettingStore} from "@/store/setting.js";
 import {roleSelectUse} from "@/request/role.js";
 import {useRoleStore} from "@/store/role.js";
 import {regKeyAdd, regKeyList, regKeyClearNotUse, regKeyDelete, regKeyHistory} from "@/request/reg-key.js";
@@ -113,7 +112,6 @@ defineOptions({
 })
 
 const roleStore = useRoleStore();
-const settingStore = useSettingStore();
 const params = reactive({
   code: '',
 })
@@ -191,48 +189,13 @@ const compareByLengthAndUpperCase = (a, b, key) => {
 };
 
 function formatUserCreateTime(regKey) {
-  const createTime = tzDayjs(regKey.createTime);
-  const currentYear = dayjs().year();
-  const expireYear = createTime.year();
-
-  if (settingStore.lang === 'en') {
-
-    if (expireYear === currentYear) {
-      return createTime.format('MMM D, HH:mm');
-    } else {
-      return createTime.format('MMM D, YYYY HH:mm');
-    }
-
-  } else {
-
-    if (expireYear === currentYear) {
-      return createTime.format('M月D日 HH:mm');
-    } else {
-      return createTime.format('YYYY年M月D日 HH:mm');
-    }
-
-  }
-
+  const date = tzDayjs(regKey.createTime);
+  return date.format(date.year() === dayjs().year() ? 'MMM D, HH:mm' : 'MMM D, YYYY HH:mm');
 }
 
 function formatExpireTime(expireTime) {
-  const expireDate = tzDayjs(expireTime);
-  const currentYear = dayjs().year();
-  const expireYear = expireDate.year();
-
-  if (settingStore.lang === 'en') {
-
-    return expireYear === currentYear
-        ? expireDate.format('MMM D')
-        : expireDate.format('MMM D, YYYY');
-
-  } else {
-
-    return expireYear === currentYear
-        ? expireDate.format('M月D日')
-        : expireDate.format('YYYY年M月D日');
-
-  }
+  const date = tzDayjs(expireTime);
+  return date.format(date.year() === dayjs().year() ? 'MMM D' : 'MMM D, YYYY');
 }
 
 function refresh() {
@@ -267,9 +230,9 @@ async function copyCode(code) {
       plain: true,
     })
   } catch (err) {
-    console.error('复制失败:', err);
+    console.error('Copy failed:', err);
     ElMessage({
-      message: '复制失败',
+      message: 'Copy failed',
       type: 'error',
       plain: true,
     })

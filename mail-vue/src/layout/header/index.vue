@@ -84,7 +84,6 @@ import {computed, ref} from "vue";
 import {useSettingStore} from "@/store/setting.js";
 import {hasPerm} from "@/perm/perm.js"
 import {useI18n} from "vue-i18n";
-import {setExtend} from "@/utils/day.js"
 
 const {t} = useI18n();
 const route = useRoute();
@@ -182,10 +181,6 @@ async function copyEmail(email) {
   }
 }
 
-function changeLang(lang) {
-  setExtend(lang === 'en' ? 'en' : 'zh-cn')
-  settingStore.lang = lang
-}
 
 function openNotice() {
   uiStore.showNotice()
@@ -208,7 +203,7 @@ function openDark(e) {
   const maxY = Math.max(y, window.innerHeight - y)
   const endRadius = Math.hypot(maxX, maxY)
 
-  // 标记切换目标，供 CSS 选择器使用
+  // Set the transition target for CSS selectors
   root.setAttribute('data-theme-to', nextIsDark ? 'dark' : 'light')
   root.style.setProperty('--vt-x', `${x}px`)
   root.style.setProperty('--vt-y', `${y}px`)
@@ -219,7 +214,7 @@ function openDark(e) {
   })
 
   transition.finished.finally(() => {
-    // 清理标记
+    // Clear the transition target
     root.removeAttribute('data-theme-to')
   })
 }

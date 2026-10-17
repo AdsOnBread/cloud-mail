@@ -15,7 +15,6 @@ const settingService = {
 
 	async refresh(c) {
 		const settingRow = await orm(c).select().from(setting).get();
-		settingRow.resendTokens = JSON.parse(settingRow.resendTokens);
 		c.set('setting', settingRow);
 		await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
 	},
@@ -27,9 +26,13 @@ const settingService = {
 		}
 
 		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+		if (setting && Object.hasOwn(setting, 'resendTokens')) {
+			delete setting.resendTokens;
+			await c.env.kv.put(KvConst.SETTING, JSON.stringify(setting));
+		}
 
 		if (!setting) {
-			throw new BizError('数据库未初始化 Database not initialized.');
+			throw new BizError('Database not initialized.');
 		}
 
 		let domainList = c.env.domain;
@@ -80,15 +83,12 @@ const settingService = {
 
 		settingRow.secretKey = settingRow.secretKey ? `${settingRow.secretKey.slice(0, 6)}******` : null;
 
-		Object.keys(settingRow.resendTokens).forEach(key => {
-			settingRow.resendTokens[key] = `${settingRow.resendTokens[key].slice(0, 12)}******`;
-		});
 
 		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
 		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
 		settingRow.tgBotToken = settingRow.tgBotToken ? `${settingRow.tgBotToken.slice(0, 20)}******` : null;
 		settingRow.hasR2 = !!c.env.r2
-		settingRow.hasCfEmail = !!c.env.email
+		settingRow.hasCfEmail = !!c.env.email?.send
 
 		let regVerifyOpen = false
 		let addVerifyOpen = false
@@ -111,11 +111,8 @@ const settingService = {
 	},
 
 	async set(c, params) {
-		const settingData = await this.query(c);
-		let resendTokens = { ...settingData.resendTokens, ...params.resendTokens };
-		Object.keys(resendTokens).forEach(domain => {
-			if (!resendTokens[domain]) delete resendTokens[domain];
-		});
+		// Ignore credentials submitted by older clients.
+		delete params.resendTokens;
 
 		if (Array.isArray(params.emailPrefixFilter)) {
 			params.emailPrefixFilter = params.emailPrefixFilter + '';
@@ -128,8 +125,6 @@ const settingService = {
 		if (params.webhookUrl !== undefined) {
 			params.webhookUrl = domainUtils.toOssDomain(params.webhookUrl) || '';
 		}
-
-		params.resendTokens = JSON.stringify(resendTokens);
 
 		await orm(c).update(setting).set({ ...params }).returning().get();
 		await this.refresh(c);

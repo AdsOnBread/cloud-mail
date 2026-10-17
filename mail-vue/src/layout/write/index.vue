@@ -46,7 +46,7 @@
         <el-input v-model="form.subject" :placeholder="t('subject')" />
         <tinyEditor :def-value="defValue" ref="editor" @change="change" @focus="focusChange" />
         <div class="button-item">
-          <div class="att-add" @click="chooseFile">
+          <div class="att-add" @click="chooseFile" :title="t('emailSizeLimit')" :aria-label="t('emailSizeLimit')">
             <Icon icon="iconamoon:attachment-fill" width="24" height="24"/>
           </div>
           <div class="att-clear" @click="clearContent">
@@ -235,7 +235,7 @@ function inputChange(value) {
 function addTagChange(val) {
 
   const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
+      val.split(/[,\uff0c]/).map(item => item.trim()).filter(item => item)
   ));
 
   form.receiveEmail.splice(form.receiveEmail.length - 1, 1)
@@ -468,9 +468,9 @@ function openReply(email) {
   form.receiveEmail.push(email.sendEmail)
   form.subject = (
       email.subject.startsWith('Re:') ||
-      email.subject.startsWith('Re：') ||
-      email.subject.startsWith('回复：') ||
-      email.subject.startsWith('回复:')) ? email.subject : 'Re: ' + email.subject
+      email.subject.startsWith('Re:') ||
+      email.subject.startsWith('\u56de\u590d\uff1a') ||
+      email.subject.startsWith('\u56de\u590d:')) ? email.subject : 'Re: ' + email.subject
   form.sendType = 'reply'
   form.emailId = email.emailId
 

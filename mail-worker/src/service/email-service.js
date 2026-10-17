@@ -8,8 +8,7 @@ import settingService from './setting-service';
 import accountService from './account-service';
 import BizError from '../error/biz-error';
 import emailUtils from '../utils/email-utils';
-import fileUtils from '../utils/file-utils';
-import { Resend } from 'resend';
+import { buildMessage, sendMessage, normalizeAttachment, validateRecipients, validateAttachmentCount } from './email-sender';
 import attService from './att-service';
 import { parseHTML } from 'linkedom';
 import userService from './user-service';
@@ -246,26 +245,33 @@ const emailService = {
 		return orm(c).insert(email).values({ ...params }).returning().get();
 	},
 
-	//邮件发送
+	//Send email
 	async send(c, params, userId) {
 
 		let {
-			accountId, //发送账号id
-			name, //发件人名字
-			sendType, //发件类型
-			emailId, //邮件id，如果是回复邮件会带
-			receiveEmail, //收件人邮箱
-			text, //邮件纯文本
-			content, //邮件内容
-			subject, //邮件标题
-			attachments = [] //附件
+			accountId, //Sender account ID
+			name, //Sender name
+			sendType, //Send type
+			emailId, //Original message ID when replying
+			receiveEmail, //Recipient addresses
+			text, //Plain text body
+			content, //Message content
+			subject, //Subject
+			attachments = [] //Attachments
 		} = params;
 
-		const { resendTokens, r2Domain, send, domainList } = await settingService.query(c);
+		const { r2Domain, send, domainList } = await settingService.query(c);
 
-		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
+		validateRecipients(receiveEmail);
+		validateAttachmentCount(attachments);
+		if (typeof subject !== 'string' || !subject.trim() || subject.length > 998 || /[\r\n]/.test(subject)) {
+			throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
+		}
+		if (typeof content !== 'string' || !content.trim()) throw new BizError('Enter a message body.', 400);
+		if (text !== undefined && typeof text !== 'string') throw new BizError('Message text must be a string.', 400);
 
-		//判断是否关闭发件功能
+
+		//Check whether sending is disabled
 		if (send === settingConst.send.CLOSE) {
 			throw new BizError(t('disabledSend'), 403);
 		}
@@ -273,7 +279,7 @@ const emailService = {
 		const userRow = await userService.selectById(c, userId);
 		const roleRow = await roleService.selectById(c, userRow.type);
 
-		//判断接收方是不是全部为站内邮箱
+		//Check whether all recipients are internal
 		const allInternal = receiveEmail.every(email => {
 			const domain = '@' + emailUtils.getDomain(email);
 			return domainList.includes(domain);
@@ -281,19 +287,19 @@ const emailService = {
 
 		if (c.env.admin !== userRow.email) {
 
-			//发件被禁用
+			//Enforce role sending restrictions
 			if (roleRow.sendType === 'ban') {
 				throw new BizError(t('bannedSend'), 403);
 			}
 
-			//发件被禁用
+			//Enforce role sending restrictions
 			if (roleRow.sendType === 'internal' && !allInternal) {
 				throw new BizError(t('onlyInternalSend'), 403);
 			}
 
 		}
 
-		//如果不是管理员，权限设置了发送次数
+		//Enforce sending quotas for non-administrators
 		if (c.env.admin !== userRow.email && roleRow.sendCount) {
 
 			if (userRow.sendCount >= roleRow.sendCount) {
@@ -319,23 +325,18 @@ const emailService = {
 		}
 
 		if (c.env.admin !== userRow.email) {
-			//用户没有这个域名的使用权限
+			//Enforce sender domain permissions
 			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
 				throw new BizError(t('noDomainPermSend'),403)
 			}
 
 		}
 
-		const domain = emailUtils.getDomain(accountRow.email);
-		const resendToken = resendTokens[domain];
-		const useCloudflareEmail = !!c.env.email;
-
-		//如果接收方存在站外邮箱，又没有发信服务
-		if (!useCloudflareEmail && !resendToken && !allInternal) {
-			throw new BizError(t('noSendProvider'));
+		if (!c.env.email?.send && !allInternal) {
+			throw new BizError('Cloudflare Email Sending is not configured. Add the send_email binding named "email" and onboard your sender domain.', 503);
 		}
 
-		//没有发件人名字自动截取
+		//Default to the local part when the sender name is empty
 		if (!name) {
 			name = emailUtils.getName(accountRow.email);
 		}
@@ -344,7 +345,7 @@ const emailService = {
 			messageId: null
 		};
 
-		//如果是回复邮件
+		//Load the original message when replying
 		if (sendType === 'reply') {
 
 			emailRow = await this.selectById(c, emailId);
@@ -355,52 +356,23 @@ const emailService = {
 
 		}
 
-		let sendResult = {};
-
-		//存在站外邮箱时，如果配置了 Cloudflare Email Service 就优先使用，否则使用 Resend
-		if (!allInternal) {
-
-			if (useCloudflareEmail) {
-				sendResult = await this.sendByCloudflareEmail(c, {
-					name,
-					accountEmail: accountRow.email,
-					receiveEmail,
-					subject,
-					text,
-					html,
-					attachments: [...imageDataList, ...attachments],
-					sendType,
-					messageId: emailRow.messageId
-				});
-			} else {
-				sendResult = await this.sendByResend(resendToken, {
-					name,
-					accountEmail: accountRow.email,
-					receiveEmail,
-					subject,
-					text,
-					html,
-					attachments: [...imageDataList, ...attachments],
-					sendType,
-					messageId: emailRow.messageId
-				});
-			}
-
-		}
-
-		const { data, error } = sendResult;
-
-
-		if (error) {
-			throw new BizError(error.message);
-		}
+		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
+		validateAttachmentCount(imageDataList, true);
+		attachments = await Promise.all(attachments.map(normalizeAttachment));
+		const message = await buildMessage({
+			name, accountEmail: accountRow.email, receiveEmail, subject,
+			text: text || emailUtils.htmlToText(html), html,
+			attachments: [...imageDataList, ...attachments],
+			sendType, messageId: emailRow.messageId
+		});
+		const sendResult = allInternal ? null : await sendMessage(c.env.email, message);
 
 		imageDataList = imageDataList.map(item => ({...item, contentId: `<${item.contentId}>`}))
 
-		//把图片标签cid标签切换会通用url
+		//Replace CID image sources with stored attachment URLs
 		html = this.imgReplace(html, imageDataList, r2Domain);
 
-		//封装数据保存到数据库
+		//Prepare the message record
 		const emailData = {};
 		emailData.sendEmail = accountRow.email;
 		emailData.name = name;
@@ -408,10 +380,10 @@ const emailService = {
 		emailData.content = html;
 		emailData.text = text;
 		emailData.accountId = accountId;
-		emailData.status = useCloudflareEmail ? emailConst.status.DELIVERED : emailConst.status.SENT;
+		emailData.status = emailConst.status.SENT;
 		emailData.type = emailConst.type.SEND;
 		emailData.userId = userId;
-		emailData.resendEmailId = data?.id;
+		emailData.providerMessageId = sendResult?.messageId;
 
 		const recipient = [];
 
@@ -426,34 +398,28 @@ const emailService = {
 			emailData.relation = emailRow.messageId;
 		}
 
-		//如果权限有发送次数增加用户发送次数
+		//Increment the send count when the role has a quota
 		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
 			await userService.incrUserSendCount(c, receiveEmail.length, userId);
 		}
 
-		//保存到数据库并返回结果
+		//Save the message record
 		const emailResult = await orm(c).insert(email).values(emailData).returning().get();
 
-		//保存内嵌附件
+		//Save inline images
 		if (imageDataList.length > 0) {
-			if (imageDataList.length > 10) {
-				throw new BizError(t('imageAttLimit'));
-			}
 			await attService.saveArticleAtt(c, imageDataList, userId, accountId, emailResult.emailId);
 		}
 
-		//保存普通附件
+		//Save file attachments
 		if (attachments?.length > 0) {
-			if (attachments.length > 10) {
-				throw new BizError(t('attLimit'));
-			}
 			await attService.saveSendAtt(c, attachments, userId, accountId, emailResult.emailId);
 		}
 
 		const attList = await attService.selectByEmailIds(c, [emailResult.emailId]);
 		emailResult.attList = attList;
 
-		//如果全是站内接收方，直接写入数据库
+		//Deliver internal-only messages directly to mailboxes
 		if (allInternal) {
 			await this.HandleOnSiteEmail(c, receiveEmail, emailResult, attList);
 		}
@@ -461,7 +427,7 @@ const emailService = {
 		const dateStr = dayjs().format('YYYY-MM-DD');
 		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
 
-		//记录每天发件次数统计
+		//Record daily sending statistics
 		if (!daySendTotal) {
 			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
 		} else  {
@@ -472,180 +438,15 @@ const emailService = {
 		return [ emailResult ];
 	},
 
-	async sendByCloudflareEmail(c, params) {
-		const sendForm = {
-			from: { email: params.accountEmail, name: params.name },
-			to: [...params.receiveEmail],
-			subject: params.subject
-		};
-
-		if (params.text) {
-			sendForm.text = params.text;
-		}
-
-		if (params.html) {
-			sendForm.html = params.html;
-		}
-
-		const attachments = await this.toCloudflareAttachments(params.attachments);
-		if (attachments.length > 0) {
-			sendForm.attachments = attachments;
-		}
-
-		if (params.sendType === 'reply' && params.messageId) {
-			sendForm.headers = {
-				'in-reply-to': params.messageId,
-				'references': params.messageId
-			};
-		}
-
-		const result = await c.env.email.send(sendForm);
-
-		return {
-			data: {
-				id: result.messageId
-			}
-		};
-	},
-
-	async sendByResend(resendToken, params) {
-		const resend = new Resend(resendToken);
-
-		const sendForm = {
-			from: `${params.name} <${params.accountEmail}>`,
-			to: [...params.receiveEmail],
-			subject: params.subject,
-			text: params.text,
-			html: params.html,
-			attachments: await this.toResendAttachments(params.attachments)
-		};
-
-		if (params.sendType === 'reply') {
-			sendForm.headers = {
-				'in-reply-to': params.messageId,
-				'references': params.messageId
-			};
-		}
-
-		return await resend.emails.send(sendForm);
-	},
-
-	async toCloudflareAttachments(attachments) {
-		const arrayBufferAttachments = await this.toArrayBufferAttachments(attachments);
-
-		return arrayBufferAttachments.map(attachment => {
-			const item = {
-				content: attachment.content,
-				filename: attachment.filename,
-				type: attachment.mimeType || attachment.contentType || attachment.type || 'application/octet-stream',
-				disposition: attachment.contentId ? 'inline' : 'attachment'
-			};
-
-			if (attachment.contentId) {
-				item.contentId = attachment.contentId.replace(/^<|>$/g, '');
-			}
-
-			return item;
-		});
-	},
-
-	async toResendAttachments(attachments = []) {
-		const result = [];
-
-		for (const attachment of attachments) {
-			const content = await this.toAttachmentBase64(attachment);
-			if (!content) {
-				continue;
-			}
-
-			result.push({
-				...attachment,
-				content,
-				contentType: attachment.contentType || attachment.mimeType || attachment.type || 'application/octet-stream'
-			});
-		}
-
-		return result;
-	},
-
-	async toArrayBufferAttachments(attachments = []) {
-		const result = [];
-
-		for (const attachment of attachments) {
-			const content = await this.toAttachmentArrayBuffer(attachment);
-			if (!content) {
-				continue;
-			}
-
-			result.push({ ...attachment, content });
-		}
-
-		return result;
-	},
-
-	async toAttachmentBase64(attachment) {
-		let content = attachment.content;
-
-		if (!content) {
-			return null;
-		}
-
-		if (typeof content === 'string') {
-			if (content.startsWith('data:')) {
-				content = content.split(',')[1] || content;
-			}
-			return content.replace(/\s+/g, '');
-		}
-
-		const arrayBuffer = await this.toAttachmentArrayBuffer(attachment);
-		if (!arrayBuffer) {
-			return null;
-		}
-
-		const bytes = new Uint8Array(arrayBuffer);
-		let binary = '';
-
-		for (let i = 0; i < bytes.length; i += 0x8000) {
-			binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-		}
-
-		return btoa(binary);
-	},
-
-	async toAttachmentArrayBuffer(attachment) {
-		let content = attachment.content;
-
-		if (!content) {
-			return null;
-		}
-
-		if (content instanceof ArrayBuffer) {
-			return content;
-		}
-
-		if (content instanceof Uint8Array) {
-			return content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength);
-		}
-
-		if (typeof content === 'string') {
-			if (content.startsWith('data:')) {
-				content = content.split(',')[1] || content;
-			}
-			return fileUtils.base64ToUint8Array(content.replace(/\s+/g, '')).buffer;
-		}
-
-		return content;
-	},
-
-	//处理站内邮件发送
+	//Deliver internal messages
 	async HandleOnSiteEmail(c, receiveEmail, sendEmailData, attList) {
 
 		const { noRecipient  } = await settingService.query(c);
 
-		//查询所有收件人账号信息
+		//Look up recipient accounts
 		let accountList = await orm(c).select().from(account).where(inArray(account.email, receiveEmail)).all();
 
-		// 对于含+未精确匹配的收件人，获取基础地址账号
+		// Resolve unmatched plus addresses to their base accounts
 		const plusEmails = receiveEmail.filter(
 			e => e.includes('+') && !accountList.some(a => a.email === e)
 		);
@@ -663,19 +464,19 @@ const emailService = {
 			}
 		}
 
-		// 合并精确匹配和基础地址匹配的账号用于权限查询
+		// Combine exact and base-address matches for permission checks
 		const allAccounts = [...accountList, ...baseAccounts];
 
-		//查询所有收件人权限身份
+		//Look up recipient roles
 		const userIds = allAccounts.map(accountRow => accountRow.userId);
 		let roleList = await roleService.selectByUserIds(c, userIds);
 
-		//封装数据库准备保存到数据库
+		//Prepare received message records
 		const emailDataList = [];
 
 		for (const email of receiveEmail) {
 
-			//把发件人邮件改成收件
+			//Prepare a received copy of the sent message
 			const emailValues = {...sendEmailData}
 			emailValues.status = emailConst.status.RECEIVE;
 			emailValues.type = emailConst.type.RECEIVE;
@@ -685,16 +486,16 @@ const emailService = {
 
 			let accountRow = allAccounts.find(accountRow => accountRow.email === email);
 
-			// 精确匹配不到时回退到主地址（去掉 +tag）
+			// Fall back to the base address when there is no exact plus-address match
 			if (!accountRow && email.includes('+')) {
 				const baseEmail = emailUtils.getBaseEmail(email);
 				accountRow = allAccounts.find(accountRow => accountRow.email === baseEmail);
 			}
 
-			//如果收件人存在就把邮件信息改成收件人的
+			//Assign existing recipients their received message copies
 			if (accountRow) {
 
-				//设置给收件人保存
+				//Set the recipient ownership fields
 				emailValues.userId = accountRow.userId;
 				emailValues.accountId = accountRow.accountId;
 				emailValues.type = emailConst.type.RECEIVE;
@@ -704,7 +505,7 @@ const emailService = {
 
 				let { banEmail, availDomain } = roleRow;
 
-				//如果收件人没有这个域名的使用权限和有邮件拦截，就把邮件改为拒收状态
+				//Bounce messages blocked by recipient domain permissions or sender rules
 				if (email !== c.env.admin) {
 
 					if (!roleService.hasAvailDomainPerm(availDomain, email)) {
@@ -721,13 +522,13 @@ const emailService = {
 
 			} else {
 
-				//设置无收件人邮件信息
+				//Prepare a message with no matching recipient
 				emailValues.userId = 0;
 				emailValues.accountId = 0;
 				emailValues.type = emailConst.type.RECEIVE;
 				emailValues.status = emailConst.status.NOONE;
 
-				//如果无人收件关闭改为拒收
+				//Bounce when accepting unmatched recipients is disabled
 				if (noRecipient === settingConst.noRecipient.CLOSE) {
 					emailValues.status = emailConst.status.BOUNCED;
 					emailValues.message = `Recipient not found: <${email}>`;
@@ -739,14 +540,14 @@ const emailService = {
 
 		}
 
-		//保存邮件
+		//Save the message
 		const receiveEmailList = emailDataList.filter(emailRow => emailRow.status === emailConst.status.RECEIVE || emailRow.status === emailConst.status.NOONE);
 
 		for (const emailData of receiveEmailList) {
 
 			const emailRow = await orm(c).insert(email).values(emailData).returning().get();
 
-			//设置附件保存
+			//Save attachment references for the received copy
 			for (const attRow of attList) {
 				const attValues = {...attRow};
 				attValues.emailId = emailRow.emailId;
@@ -763,7 +564,7 @@ const emailService = {
 
 		let status = emailConst.status.DELIVERED;
 		let message = ''
-		//如果有拒收邮件，就把发件人的邮件改成拒收
+		//Mark the sent message as bounced if a recipient rejected it
 		if (bouncedEmail) {
 			const messageJson = { message: bouncedEmail.message };
 			message = JSON.stringify(messageJson);
@@ -870,14 +671,6 @@ const emailService = {
 		await orm(c).delete(email).where(inArray(email.userId, userIds)).run();
 	},
 
-	updateEmailStatus(c, params) {
-		const { status, resendEmailId, message } = params;
-		return orm(c).update(email).set({
-			status: status,
-			message: message
-		}).where(eq(email.resendEmailId, resendEmailId)).returning().get();
-	},
-
 	async selectUserEmailCountList(c, userIds, type, del = isDel.NORMAL) {
 		const result = await orm(c)
 			.select({
@@ -931,7 +724,7 @@ const emailService = {
 			.leftJoin(user, eq(email.userId, user.userId))
 			.where(and(...filters));
 
-		// count 不搜用户时无需 join user
+		// Skip the user join when the count query has no user filter
 		const queryCount = userEmail
 			? orm(c).select({ total: count() })
 				.from(email)
@@ -1024,7 +817,7 @@ const emailService = {
 	},
 
 	async completeReceiveAll(c) {
-		// 用 EXISTS 走 status=6 部分索引 + account 主键；避免 IN (SELECT account_id FROM account) 触发全盘扫描
+		// Use EXISTS with the status=6 index and account primary key to avoid a full account scan
 		await c.env.db.prepare(
 			`UPDATE email
 			 SET status = ${emailConst.status.RECEIVE}
@@ -1048,7 +841,7 @@ const emailService = {
 
 		const cutoff = dayjs().subtract(days, 'day').format('YYYY-MM-DD HH:mm:ss');
 		const excludeEmails = String(autoCleanExclude || '')
-			.split(/[,，]/)
+			.split(/[,\uff0c]/)
 			.map(item => item.trim())
 			.filter(Boolean);
 

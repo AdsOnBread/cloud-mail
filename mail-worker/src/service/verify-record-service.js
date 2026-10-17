@@ -13,7 +13,7 @@ const verifyRecordService = {
 	},
 
 	async clearRecord(c) {
-		// 仅 UTC 0 点执行，便于配合每小时 cron
+		// Run only at midnight UTC, even when scheduled hourly
 		if (new Date().getUTCHours() !== 0) {
 			return;
 		}
