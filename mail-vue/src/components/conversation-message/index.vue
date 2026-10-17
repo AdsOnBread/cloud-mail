@@ -102,7 +102,7 @@
           Preview {{ file.filename }}
         </button>
       </div>
-      <div class="message-actions">
+      <div v-if="!replying" class="message-actions">
         <button v-perm="'email:send'" @click="$emit('reply', false)">
           <Icon icon="material-symbols:reply" width="18" />Reply
         </button>
@@ -147,6 +147,7 @@ const props = defineProps({
   message: Object,
   expanded: Boolean,
   beforeDelete: Function,
+  replying: Boolean,
 });
 const emit = defineEmits(["toggle", "reply", "deleted", "changed"]);
 const store = useEmailStore(),

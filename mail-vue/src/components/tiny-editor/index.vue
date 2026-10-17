@@ -1,5 +1,8 @@
 <template>
-  <div class="editor-box" :class="showLoading ? 'editor-box-loading' : ''">
+  <div
+    class="editor-box"
+    :class="{ 'editor-box-loading': showLoading, 'hide-toolbar': !showToolbar }"
+  >
     <loading class="loading" v-if="showLoading" />
     <textarea
       v-else
@@ -34,6 +37,9 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  showToolbar: { type: Boolean, default: true },
+  collapseQuote: Boolean,
+  showQuote: Boolean,
   editorId: {
     type: String,
     default: () => `editor-${crypto.randomUUID()}`,
@@ -94,6 +100,18 @@ watch(
   },
 );
 
+watch(
+  () => props.showQuote,
+  () => {
+    if (isInitialized.value)
+      editor.value?.dom.toggleClass(
+        editor.value.getBody(),
+        "show-reply-quote",
+        props.showQuote,
+      );
+  },
+);
+
 function clearEditor() {
   if (isInitialized.value && editor.value) {
     editor.value.setContent("");
@@ -130,7 +148,7 @@ function initEditor(initialContent) {
     content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:14px; } :root {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
-    }`,
+    } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
     toolbar:
       "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
@@ -147,6 +165,8 @@ function initEditor(initialContent) {
       editor.value = ed;
       ed.on("init", () => {
         ed.setContent(initialContent ?? props.defValue);
+        if (props.collapseQuote)
+          ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
         isInitialized.value = true;
         emit("change", ed.getContent(), ed.getContent({ format: "text" }));
       });
@@ -192,9 +212,14 @@ function initEditor(initialContent) {
   return pendingInit;
 }
 
-function focus() {
+function focus(start = false) {
   nextTick(() => {
     editor.value?.focus();
+    if (start && isInitialized.value)
+      editor.value.selection.setCursorLocation(
+        editor.value.getBody().firstChild,
+        0,
+      );
   });
 }
 
@@ -214,6 +239,9 @@ function destroyEditor() {
 </script>
 
 <style lang="scss" scoped>
+.hide-toolbar :deep(.tox-editor-header) {
+  display: none;
+}
 .editor-box {
   height: 100%;
   width: 100%;

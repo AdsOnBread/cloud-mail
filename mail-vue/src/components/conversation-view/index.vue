@@ -47,6 +47,7 @@
         :key="message.emailId"
         :message="message"
         :before-delete="save"
+        :replying="activeTarget === message.emailId"
         :expanded="expanded.has(message.emailId)"
         @toggle="toggle(message)"
         @reply="reply(message, $event)"

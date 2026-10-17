@@ -87,6 +87,7 @@ const button = {
 };
 function composer(props = {}) {
   return mount(Composer, {
+    attachTo: document.body,
     props,
     global: {
       components: { ElButton: button },
@@ -277,7 +278,11 @@ describe("shared inline replies", () => {
     const wrapper = composer({ inline: true });
     await wrapper.vm.openReplyAll(original);
     await flushPromises();
-    expect(wrapper.text()).toContain("Alias <alias@example.com>");
+    expect(
+      wrapper.get('[aria-label="Edit reply recipients"]').text(),
+    ).toContain("Sender (sender@example.net) +2");
+    expect(wrapper.find(".from-row").exists()).toBe(false);
+    expect(wrapper.find('[aria-label="Subject"]').exists()).toBe(false);
     expect(wrapper.text()).toContain("sender@example.net");
     expect(wrapper.text()).toContain("other@example.net");
     expect(wrapper.find('[aria-label="Bcc recipients"]').exists()).toBe(false);
@@ -300,6 +305,147 @@ describe("shared inline replies", () => {
     );
     expect(wrapper.emitted("sent")).toHaveLength(1);
     wrapper.unmount();
+  });
+  it("shows recipient editing only when the name is clicked and commits pending Cc/Bcc", async () => {
+    vi.spyOn(useEmailStore(), "ensureDetail").mockResolvedValue(original);
+    vi.mocked(emailSend).mockResolvedValue([{ emailId: 22 }]);
+    const wrapper = composer({ inline: true });
+    await wrapper.vm.openReply(original);
+    await flushPromises();
+    expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(false);
+    await wrapper.get('[aria-label="Edit reply recipients"]').trigger("click");
+    expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(true);
+    expect(wrapper.find('[aria-label="Subject"]').exists()).toBe(false);
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Cc")
+      .trigger("click");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Bcc")
+      .trigger("click");
+    await wrapper
+      .get('[aria-label="Cc recipients"]')
+      .setValue("extra@example.net");
+    await wrapper
+      .get('[aria-label="Bcc recipients"]')
+      .setValue("private@example.net");
+    await wrapper.get('[aria-label="Edit reply recipients"]').trigger("click");
+    expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(false);
+    expect(
+      wrapper.get('[aria-label="Edit reply recipients"]').text(),
+    ).toContain("+2");
+    await wrapper
+      .get('[aria-label="Message body"]')
+      .setValue("<p>My reply</p>");
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Send")
+      .trigger("click");
+    await flushPromises();
+    expect(emailSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cc: ["extra@example.net"],
+        bcc: ["private@example.net"],
+        subject: "Re: Report",
+      }),
+      expect.any(Function),
+    );
+    wrapper.unmount();
+  });
+  it("keeps older reply drafts compatible while folding their original quote", async () => {
+    const wrapper = composer({ inline: true });
+    wrapper.vm.openDraft({
+      draftId: 15,
+      sendType: "reply",
+      emailId: 10,
+      subject: "Re: Report",
+      receiveEmail: ["sender@example.net"],
+      content:
+        "<p>My saved reply</p><div>Yesterday Sender wrote:</div><blockquote><p>Original</p></blockquote>",
+    });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="Message body"]').element.value).toContain(
+      "My saved reply",
+    );
+    expect(wrapper.get('[aria-label="Show quoted text"]').exists()).toBe(true);
+    await wrapper.vm.saveAndClose();
+    expect(state.drafts.get(15).content).toContain("Original");
+    expect(state.drafts.get(15).content).toContain("cloudmail-reply-quote");
+    wrapper.unmount();
+  });
+  it("reveals hidden recipient fields when validation fails", async () => {
+    const wrapper = composer({ inline: true });
+    wrapper.vm.openDraft({
+      draftId: 2,
+      sendType: "reply",
+      emailId: 10,
+      subject: "Re: Report",
+      receiveEmail: ["invalid"],
+      content: "Reply",
+    });
+    await flushPromises();
+    expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(false);
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Send")
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(true);
+    expect(wrapper.get('[role="alert"]').text()).toContain("Invalid email");
+    expect(emailSend).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+  it("keeps quoted content and compact recipient names through draft restoration and sending", async () => {
+    vi.spyOn(useEmailStore(), "ensureDetail").mockResolvedValue(original);
+    const wrapper = composer({ inline: true });
+    await wrapper.vm.openReply(original);
+    await flushPromises();
+    expect(
+      wrapper
+        .get('[aria-label="Show quoted text"]')
+        .attributes("aria-expanded"),
+    ).toBe("false");
+    await wrapper.get('[aria-label="Show quoted text"]').trigger("click");
+    expect(
+      wrapper
+        .get('[aria-label="Hide quoted text"]')
+        .attributes("aria-expanded"),
+    ).toBe("true");
+    const body = wrapper.get('[aria-label="Message body"]');
+    await body.setValue("<p>My reply</p>" + body.element.value);
+    expect(await wrapper.vm.saveAndClose()).toBe(true);
+    const draft = [...state.drafts.entries()][0];
+    wrapper.unmount();
+    const restored = composer({ inline: true });
+    restored.vm.openDraft({ ...draft[1], draftId: draft[0] });
+    await flushPromises();
+    expect(
+      restored.get('[aria-label="Edit reply recipients"]').text(),
+    ).toContain("Sender (sender@example.net)");
+    expect(restored.get('[aria-label="To recipients"]').isVisible()).toBe(
+      false,
+    );
+    expect(restored.get('[aria-label="Message body"]').element.value).toContain(
+      "Original",
+    );
+    expect(
+      restored
+        .get('[aria-label="Show quoted text"]')
+        .attributes("aria-expanded"),
+    ).toBe("false");
+    vi.mocked(emailSend).mockResolvedValue([{ emailId: 22 }]);
+    await restored
+      .findAll("button")
+      .find((b) => b.text() === "Send")
+      .trigger("click");
+    await flushPromises();
+    expect(emailSend.mock.calls[0][0].content).toContain(
+      "cloudmail-reply-quote",
+    );
+    expect(emailSend.mock.calls[0][0].content).toContain("Original");
+    expect(emailSend.mock.calls[0][0].content).not.toContain("display:none");
+    restored.unmount();
   });
   it("uses owned mailbox metadata and excludes every owned address without mailbox-list permission", async () => {
     useUserStore().user.permKeys = ["email:send"];

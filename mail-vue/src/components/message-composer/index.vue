@@ -11,7 +11,39 @@
     aria-label="Compose message"
   >
     <div class="write-box" :aria-busy="sending">
-      <div class="compose-title">
+      <div v-if="inline" class="inline-reply-header">
+        <button
+          type="button"
+          class="inline-recipients"
+          aria-label="Edit reply recipients"
+          :aria-expanded="editingRecipients"
+          :title="replyRecipientTitle"
+          :disabled="sending || attaching"
+          @click="editReplyRecipients"
+        >
+          <Icon icon="material-symbols:reply" width="22" />
+          <Icon
+            :icon="
+              editingRecipients
+                ? 'material-symbols:expand-less'
+                : 'material-symbols:arrow-drop-down'
+            "
+            width="18"
+          />
+          <span>{{ replyRecipientSummary }}</span>
+        </button>
+        <button
+          type="button"
+          class="compose-tool inline-close"
+          aria-label="Close and save draft"
+          title="Save and close reply"
+          :disabled="sending || attaching"
+          @click="close"
+        >
+          <Icon icon="material-symbols:close" width="18" />
+        </button>
+      </div>
+      <div v-else class="compose-title">
         <button
           type="button"
           class="compose-caption"
@@ -66,8 +98,12 @@
         </div>
       </div>
       <div v-show="!minimized" class="compose-container">
-        <fieldset :disabled="sending || attaching" class="compose-fields">
-          <div class="from-row">
+        <fieldset
+          v-show="!inline || editingRecipients"
+          :disabled="sending || attaching"
+          class="compose-fields"
+        >
+          <div v-if="!inline" class="from-row">
             <span>From</span
             ><span :title="form.sendEmail"
               >{{ form.name }} &lt;{{ form.sendEmail }}&gt;</span
@@ -123,6 +159,7 @@
             @contacts="openContacts('bcc')"
           />
           <input
+            v-if="!inline"
             v-model="form.subject"
             class="subject-input"
             aria-label="Subject"
@@ -130,8 +167,36 @@
             maxlength="998"
           />
         </fieldset>
-        <div class="compose-editor" :class="{ 'editor-disabled': sending }">
-          <tinyEditor :def-value="defValue" ref="editor" @change="change" />
+        <div
+          class="compose-editor"
+          :class="{
+            'editor-disabled': sending,
+            'formatting-open': inline && showFormatting,
+            'quote-open': inline && quoteExpanded,
+          }"
+        >
+          <tinyEditor
+            :def-value="defValue"
+            :show-toolbar="!inline || showFormatting"
+            :collapse-quote="inline"
+            :show-quote="quoteExpanded"
+            ref="editor"
+            @change="change"
+          />
+        </div>
+        <div v-if="inline && hasQuotedContent" class="quote-actions">
+          <button
+            type="button"
+            class="quote-toggle"
+            :aria-label="
+              quoteExpanded ? 'Hide quoted text' : 'Show quoted text'
+            "
+            :aria-expanded="quoteExpanded"
+            :disabled="sending"
+            @click="quoteExpanded = !quoteExpanded"
+          >
+            •••
+          </button>
         </div>
         <div v-if="form.attachments.length" class="compose-attachments">
           <div
@@ -162,6 +227,18 @@
             @click="sendEmail"
             >{{ sending ? "Sending…" : "Send" }}</el-button
           >
+          <button
+            v-if="inline"
+            type="button"
+            class="compose-tool formatting-toggle"
+            aria-label="Formatting options"
+            :aria-pressed="showFormatting"
+            title="Formatting options"
+            :disabled="sending"
+            @click="showFormatting = !showFormatting"
+          >
+            Aa
+          </button>
           <button
             type="button"
             class="compose-tool"
@@ -286,6 +363,27 @@ const toField = ref();
 const ccField = ref();
 const bccField = ref();
 const show = ref(false);
+const editingRecipients = ref(false);
+const showFormatting = ref(false);
+const quoteExpanded = ref(false);
+const hasQuotedContent = computed(() =>
+  /\bcloudmail-reply-quote\b/.test(form.content),
+);
+const replyRecipientTitle = computed(() =>
+  [...form.receiveEmail, ...form.cc, ...form.bcc].join(", "),
+);
+const replyRecipientSummary = computed(() => {
+  const recipients = [...form.receiveEmail, ...form.cc, ...form.bcc];
+  const address = recipients[0];
+  if (!address) return "Add recipients";
+  const name = form.replyRecipientNames?.[address.toLowerCase()];
+  return `${name && name.toLowerCase() !== address.toLowerCase() ? `${name} (${address})` : address}${recipients.length > 1 ? ` +${recipients.length - 1}` : ""}`;
+});
+function editReplyRecipients() {
+  commitRecipients();
+  editingRecipients.value = !editingRecipients.value;
+  if (editingRecipients.value) nextTick(() => toField.value?.focus());
+}
 const showCc = ref(false);
 const showBcc = ref(false);
 const minimized = ref(false);
@@ -327,6 +425,9 @@ function resetForm() {
   Object.keys(form).forEach((key) => delete form[key]);
   Object.assign(form, emptyForm());
   [toField, ccField, bccField].forEach((field) => field.value?.clear());
+  editingRecipients.value = false;
+  showFormatting.value = false;
+  quoteExpanded.value = false;
   recipientErrors.value = {};
   sendError.value = "";
   showCc.value = false;
@@ -360,7 +461,9 @@ function reveal() {
   showBcc.value = form.bcc.length > 0;
   show.value = true;
   minimized.value = false;
-  nextTick(() => toField.value?.focus());
+  nextTick(() => {
+    if (!props.inline) toField.value?.focus();
+  });
 }
 function open() {
   if (show.value) {
@@ -376,8 +479,32 @@ function openDraft(draft) {
   if (!available()) return;
   resetForm();
   Object.assign(form, restoreDraft(draft));
+  if (props.inline && form.sendType === "reply")
+    form.content = foldLegacyReplyQuote(form.content || "");
   defValue.value = form.content || "";
   reveal();
+  if (props.inline)
+    nextTick(async () => {
+      await editor.value?.ready?.();
+      editor.value?.focus?.(true);
+    });
+}
+// Older reply drafts stored the generated quote directly after the editable body.
+function foldLegacyReplyQuote(content) {
+  if (/\bcloudmail-reply-quote\b/.test(content)) return content;
+  const doc = new DOMParser().parseFromString(content, "text/html");
+  const quote = [...doc.body.children].find(
+    (node) =>
+      node.tagName === "BLOCKQUOTE" &&
+      node.previousElementSibling?.textContent.trim().endsWith("wrote:"),
+  );
+  if (!quote) return content;
+  const attribution = quote.previousElementSibling;
+  const wrapper = doc.createElement("div");
+  wrapper.className = "cloudmail-reply-quote";
+  doc.body.insertBefore(wrapper, attribution);
+  wrapper.append(attribution, quote);
+  return doc.body.innerHTML;
 }
 const escapeHTML = (value) =>
   String(value || "").replace(
@@ -437,12 +564,32 @@ async function prepareMessage(message, mode, all = false) {
               bcc: [],
             },
       );
-      form.content = `<div><br></div><div>${escapeHTML(formatDetailDate(email.createTime))} ${escapeHTML(email.name)} &lt;${escapeHTML(email.sendEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${html}</blockquote>`;
+      const quote = `<div>${escapeHTML(formatDetailDate(email.createTime))} ${escapeHTML(email.name)} &lt;${escapeHTML(email.sendEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${html}</blockquote>`;
+      form.content = `<div><br></div>${props.inline ? `<div class="cloudmail-reply-quote">${quote}</div>` : quote}`;
+      if (props.inline) {
+        form.replyRecipientNames = {};
+        for (const list of [email.recipient, email.cc]) {
+          try {
+            for (const recipient of typeof list === "string"
+              ? JSON.parse(list || "[]")
+              : list || []) {
+              if (recipient.address && recipient.name)
+                form.replyRecipientNames[recipient.address.toLowerCase()] =
+                  recipient.name;
+            }
+          } catch {
+            /* Legacy messages may not have structured recipient names. */
+          }
+        }
+        if (email.sendEmail && email.name)
+          form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
+      }
     } else form.content = html;
     defValue.value = form.content;
     reveal();
     await nextTick();
     await editor.value?.ready?.();
+    if (props.inline) editor.value?.focus?.(true);
     // TinyMCE normalizes HTML; compare against its actual representation after loading.
     baseline = draftFingerprint(form);
   } catch (error) {
@@ -587,7 +734,13 @@ async function sendEmail() {
   recipientErrors.value = recipients.errors;
   if (!recipients.receiveEmail.length)
     recipientErrors.value.receiveEmail = "Enter at least one To recipient.";
-  if (Object.keys(recipientErrors.value).length) return;
+  if (Object.keys(recipientErrors.value).length) {
+    if (props.inline) {
+      editingRecipients.value = true;
+      nextTick(() => toField.value?.focus());
+    }
+    return;
+  }
   recipientFields.forEach((field) => {
     form[field] = recipients[field];
   });
@@ -819,14 +972,6 @@ defineExpose({
   max-width: none;
   z-index: auto;
   margin-top: 20px;
-}
-.inline .write-box {
-  border: 1px solid var(--compose-divider);
-  border-radius: 12px;
-  box-shadow: none;
-}
-.inline .compose-container {
-  height: 460px;
 }
 .write-box {
   background: var(--mail-surface);
@@ -1065,6 +1210,112 @@ defineExpose({
   .minimized .write-box,
   .minimized .compose-title {
     height: 40px;
+  }
+}
+
+.inline .write-box {
+  border: 1px solid var(--compose-divider);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 3px #0002,
+    0 2px 8px #0001;
+}
+.inline-reply-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 16px 0 20px;
+}
+.inline-recipients {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--regular-text-color);
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+}
+.inline-recipients > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-recipients svg {
+  flex-shrink: 0;
+}
+.inline-close {
+  flex-shrink: 0;
+}
+.inline .compose-container {
+  height: auto;
+  padding: 0 20px;
+}
+.inline .compose-fields {
+  max-height: 220px;
+}
+.inline .compose-editor {
+  flex: none;
+  height: 140px;
+  min-height: 140px;
+  padding-top: 8px;
+}
+.inline .compose-editor.formatting-open {
+  height: 190px;
+}
+.inline .compose-editor.quote-open {
+  height: 260px;
+}
+.inline .compose-footer {
+  min-height: 64px;
+  gap: 8px;
+}
+.inline .compose-footer .el-button {
+  height: 40px;
+  min-width: 96px;
+  font-weight: 500;
+}
+.formatting-toggle {
+  font:
+    20px Arial,
+    sans-serif;
+  letter-spacing: -1px;
+}
+.formatting-toggle[aria-pressed="true"] {
+  background: var(--mail-selected);
+}
+.quote-actions {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+.quote-toggle {
+  border-radius: 8px;
+  background: var(--mail-hover);
+  color: var(--regular-text-color);
+  font:
+    bold 12px/12px Arial,
+    sans-serif;
+  letter-spacing: 1px;
+  padding: 0 5px 2px;
+  cursor: pointer;
+}
+@media (max-width: 767px) {
+  .inline .write-box {
+    height: auto;
+    border-radius: 16px;
+  }
+  .inline-reply-header {
+    padding-left: 16px;
+    padding-right: 12px;
+  }
+  .inline .compose-container {
+    padding: 0 16px;
+  }
+  .inline .draft-status {
+    font-size: 10px;
   }
 }
 </style>
