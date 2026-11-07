@@ -107,13 +107,13 @@ describe('Recoverable Trash',()=>{
 });
 const fetchWorker=(path,options={})=>worker.fetch(new Request('https://mail.example.com'+path,options),bindings(),createExecutionContext());
 const cookies=headers=>headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
-async function connect(scope='mail:read mail:drafts mail:send mail:delete offline_access') {
+async function connect(scope='mail:read mail:drafts mail:send mail:delete offline_access',approvedScope=scope) {
  const registration=await fetchWorker('/oauth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'Test MCP',redirect_uris:['https://client.example/callback'],token_endpoint_auth_method:'none'})});
  expect(registration.status).toBe(201);const client=await registration.json();
  const verifier='a'.repeat(64);const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));const challenge=btoa(String.fromCharCode(...hash)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
  const params=new URLSearchParams({client_id:client.client_id,redirect_uri:'https://client.example/callback',response_type:'code',scope,state:'state123',code_challenge:challenge,code_challenge_method:'S256',resource:'https://mail.example.com/mcp'});
  const page=await fetchWorker('/oauth/authorize?'+params);expect(page.status).toBe(200);const cookie=cookies(page.headers);const html=await page.text();const handle=html.match(/name="handle" value="([^"]+)"/)[1];
- const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});for(const value of scope.split(' '))form.append('scope',value);
+ const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});for(const value of approvedScope.split(' '))form.append('scope',value);
  const approved=await fetchWorker('/oauth/authorize',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded',Origin:'https://mail.example.com'},body:form});
  expect(approved.status).toBe(302);const callback=new URL(approved.headers.get('Location'));expect(callback.searchParams.get('state')).toBe('state123');
  const token=await fetchWorker('/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:client.client_id,redirect_uri:'https://client.example/callback',code:callback.searchParams.get('code'),code_verifier:verifier,resource:'https://mail.example.com/mcp'})});
@@ -125,8 +125,65 @@ async function rpc(token,method,params={}) {
 }
 describe('Hosted OAuth MCP',()=>{
  it('advertises discovery and challenges before installation unlock',async()=>{
-   expect((await fetchWorker('/.well-known/oauth-authorization-server')).status).toBe(200);
+   const authorization=await fetchWorker('/.well-known/oauth-authorization-server');expect(authorization.status).toBe(200);
+   expect((await authorization.json()).scopes_supported).toContain('mail:send');
+   const resource=await (await fetchWorker('/.well-known/oauth-protected-resource/mcp')).json();
+   expect(resource.scopes_supported).toEqual(['mail:read']);
    const challenge=await fetchWorker('/mcp');expect(challenge.status).toBe(401);expect(challenge.headers.get('WWW-Authenticate')).toContain('resource_metadata');
+ });
+ it('declares tool permissions and challenges every send operation without side effects',async()=>{
+   const token=await connect('mail:read');
+   const listed=(await rpc(token.access_token,'tools/list')).data.result.tools;
+   expect(listed.every(t=>t._meta.securitySchemes.length>0)).toBe(true);
+   expect(listed.find(t=>t.name==='list_mailboxes')._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['mail:read']}]);
+   for(const name of ['send_email','send_draft','reply_email','forward_email']) {
+     expect(listed.find(t=>t.name===name)._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['mail:read','mail:send']}]);
+     const result=(await rpc(token.access_token,'tools/call',{name,arguments:{accountId:1,draftId:1,version:1,emailId:1,idempotencyKey:'scope-check-only'}})).data.result;
+     expect(result.isError).toBe(true);expect(result.structuredContent.code).toBe(403);
+     const challenge=result._meta['mcp/www_authenticate'][0];
+     expect(challenge).toContain('error="insufficient_scope"');expect(challenge).toContain('error_description=');
+     expect(challenge).toContain('scope="mail:read mail:send"');
+     expect(challenge).toContain('resource_metadata="https://mail.example.com/.well-known/oauth-protected-resource/mcp"');
+     expect(challenge).not.toContain('mail:delete');
+   }
+   expect((await env.db.prepare('SELECT COUNT(*) total FROM send_attempts').first()).total).toBe(0);
+   expect((await env.db.prepare('SELECT COUNT(*) total FROM email').first()).total).toBe(0);
+ });
+ it('requires explicit send consent and preserves ownership after reauthorization',async()=>{
+   const declined=await connect('mail:read mail:send','mail:read');expect(declined.scope.split(' ')).not.toContain('mail:send');
+   const denied=(await rpc(declined.access_token,'tools/call',{name:'send_email',arguments:{accountId:2,idempotencyKey:'declined-send-scope'}})).data.result;
+   expect(denied._meta['mcp/www_authenticate'][0]).toContain('mail:send');
+   const approved=await connect('mail:read mail:send');expect(approved.scope.split(' ')).toContain('mail:send');
+   const foreign=(await rpc(approved.access_token,'tools/call',{name:'send_email',arguments:{accountId:2,idempotencyKey:'approved-scope-foreign'}})).data.result;
+   expect(foreign.structuredContent.code).toBe(404);expect(foreign._meta).toBeUndefined();
+   // A separate grant does not silently upgrade the existing read-only token.
+   const stillDenied=(await rpc(declined.access_token,'tools/call',{name:'send_email',arguments:{accountId:1,idempotencyKey:'old-token-still-read'}})).data.result;
+   expect(stillDenied._meta['mcp/www_authenticate'][0]).toContain('mail:send');
+ });
+ it('challenges draft files and mutations, but does not relink for ordinary access errors',async()=>{
+   const token=await connect('mail:read');
+   for(const [name,args,scope] of [
+     ['create_draft',{accountId:1},'mail:drafts'],
+     ['get_attachment',{attachmentId:crypto.randomUUID()},'mail:drafts'],
+     ['delete_emails',{emailIds:[1]},'mail:delete']
+   ]) {
+     const result=(await rpc(token.access_token,'tools/call',{name,arguments:args})).data.result;
+     expect(result._meta['mcp/www_authenticate'][0]).toContain(`scope="mail:read ${scope}"`);
+   }
+   const missing=(await rpc(token.access_token,'tools/call',{name:'read_email',arguments:{emailId:999}})).data.result;
+   expect(missing.structuredContent.code).toBe(404);expect(missing._meta).toBeUndefined();
+ });
+ it('does not ask for OAuth again when the Cloudmail role forbids sending',async()=>{
+   const token=await connect('mail:read mail:send');
+   await env.db.prepare("UPDATE user SET email='restricted@example.com',type=999 WHERE user_id=1").run();
+   const denied=(await rpc(token.access_token,'tools/call',{name:'send_email',arguments:{accountId:1,idempotencyKey:'role-denied-send'}})).data.result;
+   expect(denied.structuredContent.code).toBe(403);expect(denied._meta).toBeUndefined();
+   expect((await env.db.prepare('SELECT COUNT(*) total FROM send_attempts').first()).total).toBe(0);
+ });
+ it('cannot add send permission by refreshing a read-only grant',async()=>{
+   const token=await connect('mail:read offline_access');
+   const refresh=await fetchWorker('/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',client_id:token.client.client_id,refresh_token:token.refresh_token,resource:'https://mail.example.com/mcp',scope:'mail:read mail:send'})});
+   expect(refresh.status).toBe(200);expect((await refresh.json()).scope.split(' ')).not.toContain('mail:send');
  });
  it('signs in through browser-bound consent, lists tools, enforces scopes and revokes immediately',async()=>{
    const token=await connect('mail:read');

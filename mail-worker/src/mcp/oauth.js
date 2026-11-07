@@ -69,6 +69,7 @@ export async function oauthFetch(req,env,ctx,fallback) {
   const provider=new OAuthProvider({apiRoute:'/mcp',apiHandler:{fetch:mcpFetch},
     defaultHandler:{fetch:(request,bindings,context)=>new URL(request.url).pathname==='/oauth/authorize'?authorize(request,bindings):fallback(request,bindings,context)},
     authorizeEndpoint:'/oauth/authorize',tokenEndpoint:'/oauth/token',clientRegistrationEndpoint:'/oauth/register',
+    // Discovery names the minimum scopes; tools request additional scopes on demand.
     scopesSupported:scopes,requiredScopes:['mail:read'],accessTokenTTL:3600,refreshTokenTTL:30*86400,
     clientIdMetadataDocumentEnabled:true,resourceMetadata:{resource:canonical.href,authorization_servers:[canonical.origin]}});
   return provider.fetch(req,env,ctx);

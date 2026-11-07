@@ -166,3 +166,11 @@ The iOS client uses `/api/mobile/v1`. All routes require the installation secret
 Conversation membership is scoped to a user. RFC references and local reply links take priority over the subject/participant fallback. Outgoing provider IDs are not RFC message IDs; the provider controls external Message-ID headers. Historical or incomplete headers can therefore leave some messages separate or require the documented 14-day subject/participant heuristic.
 
 The change log is retained without pruning in version one so offline clients do not lose deletion markers. Monitor D1 growth before introducing retention and a cursor-reset protocol.
+
+## Adding permissions to an existing MCP connection
+
+Protected-resource discovery advertises `mail:read` as the minimum access needed to connect. The authorization server advertises the full scope catalogue. Individual tools publish their required scopes in `_meta.securitySchemes`; if a token lacks a tool's permission, the tool returns an error with `_meta["mcp/www_authenticate"]`, including `insufficient_scope`, the complete required scope set, and the protected-resource metadata URL. ChatGPT can use this challenge to start an authorization flow for that permission. Draft attachment downloads request `mail:drafts`; message attachments use `mail:read`.
+
+After deploying a permission-flow update, refresh the custom MCP connection's tool definitions in ChatGPT. When an explicitly requested operation asks you to reconnect, sign in to the intended Cloudmail account and review the requested permissions. Sending requires approving `mail:send`; it does not require granting `mail:delete`. If the client cannot handle incremental authorization, reconnect using its OAuth settings with `mail:read mail:send` (and `offline_access` if a refresh token is wanted). If the consent page shows only read access, the client has not requested send access; reconnecting with the same requested scope will not add it.
+
+An existing token or refresh grant is never upgraded automatically. Refreshing a token cannot add permissions outside its approved grant. Cloudmail role denials, ownership errors, and disabled accounts remain separate from OAuth scope errors and do not trigger a misleading reconnect prompt. Reauthorization itself sends no email; sending still requires a separately authorized tool call.
