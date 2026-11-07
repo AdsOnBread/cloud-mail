@@ -159,6 +159,8 @@ export async function sendMessage(binding, message) {
 	} catch (error) {
 		console.error('Cloudflare email send failed', { code: error.code, message: error.message });
 		const [message, code] = providerErrors[error.code] || ['Cloudflare could not accept the message. Check Cloudflare email activity before trying again.', 502];
-		throw new BizError(message, code);
+		const failure=new BizError(message, code);
+		failure.definitelyRejected=!!providerErrors[error.code] && code>=400 && code<500;
+		throw failure;
 	}
 }

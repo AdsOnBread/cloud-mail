@@ -60,7 +60,7 @@ const starService = {
 					eq(star.userId, userId),
 					eq(email.userId, userId),
 					mailSearchFilter(params.q),
-					eq(email.isDel, isDel.NORMAL),
+					eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`,
 					emailId ? lt(star.emailId, emailId) : undefined))
 			.orderBy(desc(star.emailId))
 			.limit(size)

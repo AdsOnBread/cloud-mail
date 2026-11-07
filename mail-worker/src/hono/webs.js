@@ -20,4 +20,6 @@ import '../api/public-api'
 import '../api/telegram-api'
 import '../api/oauth-api'
 import '../api/mobile-api'
+import '../api/cloud-api';
+import '../api/connections-api';
 export default app;

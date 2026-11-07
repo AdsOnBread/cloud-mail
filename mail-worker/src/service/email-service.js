@@ -113,7 +113,7 @@ const emailService = {
 			and(
 				eq(email.userId, userId),
 				eq(email.type, type),
-				eq(email.isDel, isDel.NORMAL),
+				eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`,
 				allReceive ? undefined : eq(email.accountId, accountId)
 			))
 			.orderBy(desc(email.emailId)).limit(1).get();
@@ -160,7 +160,7 @@ const emailService = {
 		const conditions = [
 			eq(email.userId, userId),
 			eq(email.type, type),
-			eq(email.isDel, isDel.NORMAL),
+			eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`,
 			eq(account.isDel, isDel.NORMAL),
 			mailSearchFilter(q),
 		];
@@ -185,7 +185,7 @@ const emailService = {
 			.innerJoin(account, eq(account.accountId, email.accountId))
 			.leftJoin(star, and(eq(star.emailId, email.emailId), eq(star.userId, userId)))
 			.where(and(eq(email.emailId, id), eq(email.userId, userId),
-				eq(account.userId, userId), eq(email.isDel, isDel.NORMAL), eq(account.isDel, isDel.NORMAL))).get();
+				eq(account.userId, userId), eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`, eq(account.isDel, isDel.NORMAL))).get();
 		if (!row) throw new BizError('Message not found.', 404);
 		await this.emailAddAtt(c, [row]);
 		return row;
@@ -239,26 +239,8 @@ const emailService = {
 	},
 
 	async delete(c, params, userId) {
-		const { emailIds } = params;
-		const emailIdList = emailIds.split(',').map(Number);
-		const { syncDelete } = await settingService.query(c);
-
-		if (syncDelete === settingConst.syncDelete.OPEN) {
-			const owned = await orm(c).select({ emailId: email.emailId }).from(email)
-				.where(and(eq(email.userId, userId), inArray(email.emailId, emailIdList)))
-				.all();
-			const ownedIds = owned.map(row => row.emailId);
-			if (ownedIds.length) {
-				await this.physicsDelete(c, { emailIds: ownedIds.join(',') });
-			}
-			return;
-		}
-
-		await orm(c).update(email).set({ isDel: isDel.DELETE }).where(
-			and(
-				eq(email.userId, userId),
-				inArray(email.emailId, emailIdList)))
-			.run();
+		const { trash } = await import('../cloud/mail');
+		return trash(c,userId,String(params.emailIds || '').split(',').map(Number));
 	},
 
 	receive(c, params, cidAttList, r2domain) {
@@ -267,7 +249,7 @@ const emailService = {
 	},
 
 	//Send email
-	async send(c, params, userId) {
+	async send(c, params, userId, hooks = {}) {
 
 		let {
 			accountId, //Sender account ID
@@ -370,7 +352,7 @@ const emailService = {
 		//Load the original message when replying
 		if (sendType === 'reply') {
 
-			emailRow = await this.selectById(c, emailId);
+			emailRow = await this.detail(c, emailId, userId);
 
 			if (!emailRow || emailRow.userId !== userId) {
 				throw new BizError(t('notExistEmailReply'));
@@ -390,6 +372,7 @@ const emailService = {
 			attachments: [...imageDataList, ...attachments],
 			sendType, messageId: emailRow.messageId, references
 		});
+		await hooks.beforeDispatch?.();
 		const sendResult = allInternal ? null : await sendMessage(c.env.email, message);
 
 		imageDataList = imageDataList.map(item => ({...item, contentId: `<${item.contentId}>`}))
@@ -653,7 +636,7 @@ const emailService = {
 	selectById(c, emailId) {
 		return orm(c).select().from(email).where(
 			and(eq(email.emailId, emailId),
-				eq(email.isDel, isDel.NORMAL)))
+				eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`))
 			.get();
 	},
 
@@ -675,7 +658,7 @@ const emailService = {
 				and(
 					gt(email.emailId, emailId),
 					eq(email.userId, userId),
-					eq(email.isDel, isDel.NORMAL),
+					eq(email.isDel, isDel.NORMAL), sql`${email.trashedAt} IS NULL`,
 					eq(account.isDel, isDel.NORMAL),
 					allReceive ? undefined : eq(email.accountId, accountId),
 					eq(email.type, emailConst.type.RECEIVE)
@@ -890,7 +873,7 @@ const emailService = {
 		const batchSize = 95;
 
 		while (true) {
-			const conditions = [lt(email.createTime, cutoff)];
+			const conditions = [lt(email.createTime, cutoff), sql`${email.trashedAt} IS NULL`, eq(email.isDel,isDel.NORMAL)];
 			if (excludeUserIds.length) {
 				conditions.push(notInArray(email.userId, excludeUserIds));
 			}
@@ -907,7 +890,7 @@ const emailService = {
 			}
 
 			const emailIds = rows.map(row => row.emailId);
-			await this.physicsDelete(c, { emailIds: emailIds.join(',') });
+			await orm(c).update(email).set({trashedAt:sql`CURRENT_TIMESTAMP`}).where(inArray(email.emailId,emailIds)).run();
 
 			if (rows.length < batchSize) {
 				break;

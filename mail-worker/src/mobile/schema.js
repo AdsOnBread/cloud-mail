@@ -20,14 +20,15 @@ export async function migrateMobile(db) {
 		db.prepare(`INSERT OR IGNORE INTO mobile_thread_state(user_id) SELECT DISTINCT user_id FROM email WHERE user_id > 0`),
 	]);
 	const statements = [];
-	const visible = r => `${r}.is_del=0 AND ${r}.status NOT IN (6,7) AND ${r}.user_id>0`;
+	const visible = r => `${r}.is_del=0 AND ${r}.trashed_at IS NULL AND ${r}.status NOT IN (6,7) AND ${r}.user_id>0`;
 	const dirty = r => `INSERT INTO mobile_thread_state(user_id,revision) VALUES (${r}.user_id,1)
 		ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;`;
 	for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
 		const r = event === 'DELETE' ? 'OLD' : 'NEW';
 		const newMail = event === 'INSERT'
-			? `CASE WHEN NEW.type=0 AND NEW.status=0 AND NEW.is_del=0 THEN 1 ELSE 0 END`
-			: event === 'UPDATE' ? `CASE WHEN OLD.status=6 AND NEW.status=0 AND NEW.type=0 AND NEW.is_del=0 THEN 1 ELSE 0 END` : '0';
+			? `CASE WHEN NEW.type=0 AND NEW.status=0 AND NEW.is_del=0 AND NEW.trashed_at IS NULL THEN 1 ELSE 0 END`
+			: event === 'UPDATE' ? `CASE WHEN OLD.status=6 AND NEW.status=0 AND NEW.type=0 AND NEW.is_del=0 AND NEW.trashed_at IS NULL THEN 1 ELSE 0 END` : '0';
+		statements.push(db.prepare(`DROP TRIGGER IF EXISTS mobile_email_${event.toLowerCase()}`));
 		statements.push(db.prepare(`CREATE TRIGGER IF NOT EXISTS mobile_email_${event.toLowerCase()} AFTER ${event} ON email BEGIN
 			INSERT INTO mobile_changes(user_id,entity,entity_id,operation,new_mail,previous_thread_id)
 			VALUES (${r}.user_id,'message',${r}.email_id,${event === 'DELETE' ? "'delete'" : `CASE WHEN ${visible('NEW')} THEN 'upsert' ELSE 'delete' END`},${newMail},(SELECT thread_id FROM mobile_thread_members WHERE email_id=${r}.email_id));

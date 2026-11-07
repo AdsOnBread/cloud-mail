@@ -8,9 +8,9 @@ export default defineWorkersConfig({
 			workers: {
 				miniflare: {
 					compatibilityDate: '2025-03-10',
-					compatibilityFlags: ['nodejs_compat'],
+					compatibilityFlags: ['nodejs_compat','global_fetch_strictly_public'],
 					d1Databases: ['db'],
-					kvNamespaces: ['kv'],
+					kvNamespaces: ['kv','OAUTH_KV'],
 					r2Buckets: ['r2'],
 					bindings: {
 						domain: ['example.com'],

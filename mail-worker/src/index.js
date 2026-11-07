@@ -1,4 +1,6 @@
 import app from './hono/webs';
+import { oauthFetch } from './mcp/oauth';
+import { purgeExpired } from './cloud/mail';
 import { email } from './email/email';
 import userService from './service/user-service';
 import verifyRecordService from './service/verify-record-service';
@@ -7,8 +9,8 @@ import kvObjService from './service/kv-obj-service';
 import oauthService from './service/oauth-service';
 import analysisService from './service/analysis-service';
 import { accessGate, allowedOrigin } from './security/app-access';
-export default {
-	 async fetch(req, env, ctx) {
+const worker = {
+	 async appFetch(req, env, ctx) {
 
 		const url = new URL(req.url)
 		const gate = await accessGate(req, env);
@@ -40,6 +42,7 @@ export default {
 
 		return env.assets.fetch(req);
 	},
+	fetch(req,env,ctx) { return oauthFetch(req,env,ctx,(r,e,c)=>worker.appFetch(r,e,c)); },
 	email: email,
 	async scheduled(c, env, ctx) {
 		if (c.cron === '*/30 * * * *') {
@@ -52,7 +55,10 @@ export default {
 		await userService.resetDaySendCount({ env })
 		await emailService.completeReceiveAll({ env })
 		await emailService.autoClean({ env })
+		await purgeExpired({ env })
 		await analysisService.refreshEchartsCache({ env })
 		await oauthService.clearNoBindOathUser({ env })
 	},
 };
+
+export default worker;

@@ -3,7 +3,7 @@ import r2Service from '../service/r2-service';
 import BizError from '../error/biz-error';
 
 export const camel = row => row && Object.fromEntries(Object.entries(row).map(([k,v]) => [k.replace(/_([a-z])/g, (_,l) => l.toUpperCase()),v]));
-const visible = 'e.is_del=0 AND e.status NOT IN (6,7) AND a.is_del=0';
+const visible = 'a.user_id=e.user_id AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0';
 const limitOf = n => Math.min(100, Math.max(1, Number(n) || 30));
 function threadStatement(db, userId, p = {}) {
 	const filter = ['1=1']; const args = [userId];

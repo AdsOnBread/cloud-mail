@@ -1,7 +1,7 @@
 name = "${NAME}"
 main = "src/index.js"
 compatibility_date = "2026-10-17"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
 [[send_email]]
 name = "email"
@@ -22,6 +22,10 @@ database_id = "${D1_DATABASE_ID}"
 binding = "kv"
 id = "${KV_NAMESPACE_ID}"
 
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "${OAUTH_KV_NAMESPACE_ID}"
+
 [[r2_buckets]]
 binding = "r2"
 bucket_name = "${R2_BUCKET_NAME}"
@@ -40,6 +44,7 @@ crons = ["0 * * * *"]	#Run hourly; resetDaySendCount takes effect only at midnig
 
 
 [vars]
+mcp_public_url = "https://${CUSTOM_DOMAIN}/mcp"
 ai_model = "${AI_MODEL}"
 analysis_cache = "${ANALYSIS_CACHE}"
 #orm_log = false

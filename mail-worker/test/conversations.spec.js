@@ -133,12 +133,12 @@ describe('Web conversations', () => {
 		expect(after.threadId).not.toBe(before.threadId);
 		expect((await action('read', [anchor.email_id])).messageCount).toBe(3);
 	});
-	it('retains the configured permanent-delete behavior', async () => {
+	it('moves messages to Trash even when legacy permanent deletion is configured', async () => {
 		const root = await insert();
 		await env.db.prepare('UPDATE setting SET sync_delete=0').run();
 		await settingService.refresh(context());
 		await action('delete', [root.email_id]);
-		expect(await env.db.prepare('SELECT * FROM email WHERE email_id=?').bind(root.email_id).first()).toBeNull();
+		expect((await env.db.prepare('SELECT * FROM email WHERE email_id=?').bind(root.email_id).first()).trashed_at).toBeTruthy();
 	});
 	it('applies read/delete/star to every member beyond a page, preserving another user', async () => {
 		const root = await insert({ message_id: '<long@external.com>' });

@@ -199,7 +199,7 @@ const loginService = {
 		return { type: regKeyRow.roleId, regKeyId: regKeyRow.regKeyId };
 	},
 
-	async login(c, params, noVerifyPwd = false) {
+	async authenticate(c, params, noVerifyPwd = false) {
 
 		const { email, password } = params;
 
@@ -225,6 +225,11 @@ const loginService = {
 			throw new BizError(t('IncorrectPwd'));
 		}
 
+		return userRow;
+	},
+
+	async login(c, params, noVerifyPwd = false) {
+		const userRow = await this.authenticate(c,params,noVerifyPwd);
 		const uuid = uuidv4();
 		const jwt = await JwtUtils.generateToken(c,{ userId: userRow.userId, token: uuid });
 

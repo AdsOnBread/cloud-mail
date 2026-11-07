@@ -48,7 +48,7 @@ export async function ensureThreads(db, userId) {
 	if (!state || state.indexed_revision === state.revision) return;
 	const [rows, accounts] = await db.batch([
 		db.prepare(`SELECT e.email_id,e.user_id,e.message_id,e.in_reply_to,e.relation,e.reply_to_email_id,e.subject,e.send_email,e.recipient,e.cc,e.create_time
-			FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.user_id=? AND e.is_del=0 AND e.status NOT IN (6,7) AND a.is_del=0`).bind(userId),
+			FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.user_id=? AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0`).bind(userId),
 		db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId)
 	]);
 	const groups = groupThreads(rows.results, accounts.results.map(a => a.email));

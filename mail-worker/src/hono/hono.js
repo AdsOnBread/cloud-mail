@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 const app = new Hono();
 
 import result from '../model/result';
 import { cors } from 'hono/cors';
 import { allowedOrigin } from '../security/app-access';
 
+app.use('*', bodyLimit({maxSize:10*1024*1024,onError:c=>c.json(result.fail('Request is too large.',413),413)}));
 app.use('*', cors({ origin: (origin, c) => allowedOrigin(c.req.raw, c.env) ? origin : '', credentials: true }));
 
 app.onError((err, c) => {
@@ -32,7 +34,7 @@ app.onError((err, c) => {
 	}
 
 	const status = Number.isInteger(err.code) && err.code >= 400 && err.code <= 599 ? err.code : 500;
-	return c.json(result.fail(err.message, err.code), c.req.path.startsWith('/mobile/v1/') ? status : 200);
+	return c.json({...result.fail(err.message, err.code), ...(err.current ? {current:err.current}: {})}, c.req.path.startsWith('/mobile/v1/') || c.req.path.startsWith('/v1/') ? status : 200);
 });
 
 export default app;

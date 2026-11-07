@@ -4,7 +4,7 @@ import BizError from '../error/biz-error';
 import emailService from './email-service';
 import starService from './star-service';
 
-const visible = 'e.user_id=? AND a.user_id=e.user_id AND a.is_del=0 AND e.is_del=0 AND e.status NOT IN (6,7)';
+const visible = 'e.user_id=? AND a.user_id=e.user_id AND a.is_del=0 AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)';
 const limitOf = (value) => Math.min(100, Math.max(1, Math.floor(Number(value)) || 30));
 const validId = (value) => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 async function resolve(db, userId, anchor) {
