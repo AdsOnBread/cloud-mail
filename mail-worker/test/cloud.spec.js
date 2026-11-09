@@ -129,34 +129,63 @@ async function rpc(token,method,params={}) {
  const text=await response.text();let data;try{data=JSON.parse(text);}catch{data=JSON.parse(text.split('\n').find(l=>l.startsWith('data: ')).slice(6));}return {response,data};
 }
 describe('Hosted OAuth MCP',()=>{
- it('offers unchecked sending on read-only reconnect and grants it only when selected',async()=>{
+ it('offers every supported permission by default while honoring narrowed approval and existing grants',async()=>{
+   const allScopes=['mail:read','mail:drafts','mail:send','mail:delete','offline_access'];
    const inspect=html=>{
      const {document}=parseHTML(html);
-     const send=document.querySelector('input[name="scope"][value="mail:send"]');
-     expect(send).not.toBeNull();expect(send.hasAttribute('checked')).toBe(false);
-     expect(send.parentNode.textContent).toContain('optional');
-     expect(document.querySelector('input[value="mail:read"]').hasAttribute('checked')).toBe(true);
-     expect(document.querySelector('input[value="mail:delete"]')).toBeNull();
+     const choices=[...document.querySelectorAll('input[name="scope"]')];
+     expect(choices.map(input=>input.getAttribute('value'))).toEqual(allScopes);
+     expect(choices.every(input=>input.hasAttribute('checked'))).toBe(true);
+     expect(html).toContain('uncheck any you do not want');
+     expect(document.querySelector('button[value="approve"]').textContent).toBe('Sign in and Allow selected permissions');
    };
    const readOnly=await connect('mail:read','mail:read',inspect);expect(readOnly.scope).toBe('mail:read');
-   const optedIn=await connect('mail:read','mail:read mail:send',inspect);
-   expect(optedIn.scope.split(' ')).toEqual(['mail:read','mail:send']);
+   const full=await connect('mail:read',allScopes.join(' '),inspect);
+   expect(full.scope.split(' ')).toEqual(allScopes);expect(full.refresh_token).toBeTruthy();
    const records=(await env.db.prepare('SELECT scopes FROM connected_apps ORDER BY rowid').all()).results;
-   expect(records.map(row=>JSON.parse(row.scopes))).toEqual([['mail:read'],['mail:read','mail:send']]);
-   const oldToken=(await rpc(readOnly.access_token,'tools/call',{name:'send_email',arguments:{accountId:1,idempotencyKey:'old-grant-unchanged'}})).data.result;
-   expect(oldToken._meta['mcp/www_authenticate'][0]).toContain('mail:send');
-   const ownedOnly=(await rpc(optedIn.access_token,'tools/call',{name:'send_email',arguments:{accountId:2,idempotencyKey:'optional-send-owner'}})).data.result;
-   expect(ownedOnly.structuredContent.code).toBe(404);expect(ownedOnly._meta).toBeUndefined();
+   expect(records.map(row=>JSON.parse(row.scopes))).toEqual([['mail:read'],allScopes]);
+   for(const [name,args,scope] of [
+     ['list_drafts',{},'mail:drafts'],
+     ['send_email',{accountId:1,idempotencyKey:'old-grant-unchanged'},'mail:send'],
+     ['delete_emails',{emailIds:[1]},'mail:delete']
+   ]) {
+     const denied=(await rpc(readOnly.access_token,'tools/call',{name,arguments:args})).data.result;
+     expect(denied._meta['mcp/www_authenticate'][0]).toContain(scope);
+   }
  });
- it('leaves sending unchecked even when requested by the client',async()=>{
-   const token=await connect('mail:read mail:send','mail:read',html=>{
-     const {document}=parseHTML(html);
-     expect(document.querySelectorAll('input[value="mail:send"]')).toHaveLength(1);
-     expect(document.querySelector('input[value="mail:send"]').hasAttribute('checked')).toBe(false);
-   });
-   expect(token.scope).toBe('mail:read');
+ it('supports read, draft, send, delete, and offline access after one explicit full approval',async()=>{
+   const full=await connect('mail:read','mail:read mail:drafts mail:send mail:delete offline_access');
+   const call=async(name,args={})=>{
+     const result=(await rpc(full.access_token,'tools/call',{name,arguments:args})).data.result;
+     expect(result.isError).not.toBe(true);return result.structuredContent;
+   };
+   expect((await call('list_mailboxes')).mailboxes).toHaveLength(2);
+   const d=await call('create_draft',{accountId:1,subject:'Local test only',text:'Draft',content:'<p>Draft</p>',receiveEmail:['person@example.com']});
+   expect((await call('list_drafts')).drafts).toHaveLength(1);
+   expect((await call('get_draft',{draftId:d.draftId})).subject).toBe('Local test only');
+   expect((await call('send_draft',{draftId:d.draftId,version:d.version,idempotencyKey:'full-consent-local-send'})).state).toBe('sent');
+   const original=await message();
+   for(const name of ['delete_emails','restore_emails','delete_emails','permanently_delete_emails']) {
+     expect((await call(name,{emailIds:[original.email_id]})).messageCount).toBe(1);
+   }
+   const refresh=await fetchWorker('/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',client_id:full.client.client_id,refresh_token:full.refresh_token,resource:'https://mail.example.com/mcp'})});
+   expect(refresh.status).toBe(200);expect((await refresh.json()).scope.split(' ')).toEqual(full.scope.split(' '));
  });
- it.each(['secret','password'])('preserves explicit send selection after an incorrect %s without granting access',async field=>{
+ it('keeps mailbox, message, and draft ownership enforced with all permissions',async()=>{
+   const full=await connect();const foreign=await message({user_id:2,account_id:2});
+   const foreignDraft=await drafts.save(c(),2,{accountId:2,subject:'Private draft'});
+   for(const [name,args] of [
+     ['read_email',{emailId:foreign.email_id}],
+     ['delete_emails',{emailIds:[foreign.email_id]}],
+     ['create_draft',{accountId:2,subject:'Forbidden'}],
+     ['get_draft',{draftId:foreignDraft.draftId}],
+     ['send_email',{accountId:2,idempotencyKey:'all-scopes-foreign-send'}]
+   ]) {
+     const denied=(await rpc(full.access_token,'tools/call',{name,arguments:args})).data.result;
+     expect(denied.structuredContent.code).toBe(404);expect(denied._meta).toBeUndefined();
+   }
+ });
+ it.each(['secret','password'])('preserves selected and unchecked permissions after an incorrect %s without granting access',async field=>{
    const {cookie,handle}=await startConnection('mail:read');
    const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});
    form.append('scope','mail:read');form.append('scope','mail:send');form.set(field,'incorrect');
@@ -165,7 +194,7 @@ describe('Hosted OAuth MCP',()=>{
    expect((await env.db.prepare('SELECT COUNT(*) total FROM connected_apps').first()).total).toBe(0);
    const html=await retry.text(),{document}=parseHTML(html);
    expect(document.querySelector('input[value="mail:send"]').hasAttribute('checked')).toBe(true);
-   expect(document.querySelector('input[value="mail:delete"]')).toBeNull();
+   expect(document.querySelector('input[value="mail:delete"]').hasAttribute('checked')).toBe(false);
    const nextHandle=document.querySelector('input[name="handle"]').getAttribute('value');
    expect(nextHandle).not.toBe(handle);
    form.set('handle',nextHandle);form.set(field,field==='secret'?'test-installation-secret':'test-password');
@@ -222,12 +251,21 @@ describe('Hosted OAuth MCP',()=>{
    const missing=(await rpc(token.access_token,'tools/call',{name:'read_email',arguments:{emailId:999}})).data.result;
    expect(missing.structuredContent.code).toBe(404);expect(missing._meta).toBeUndefined();
  });
- it('does not ask for OAuth again when the Cloudmail role forbids sending',async()=>{
-   const token=await connect('mail:read mail:send');
+ it('keeps Cloudmail role restrictions despite all OAuth permissions',async()=>{
+   const token=await connect();
    await env.db.prepare("UPDATE user SET email='restricted@example.com',type=999 WHERE user_id=1").run();
-   const denied=(await rpc(token.access_token,'tools/call',{name:'send_email',arguments:{accountId:1,idempotencyKey:'role-denied-send'}})).data.result;
-   expect(denied.structuredContent.code).toBe(403);expect(denied._meta).toBeUndefined();
+   for(const [name,args] of [['send_email',{accountId:1,idempotencyKey:'role-denied-send'}],['delete_emails',{emailIds:[1]}]]) {
+     const denied=(await rpc(token.access_token,'tools/call',{name,arguments:args})).data.result;
+     expect(denied.structuredContent.code).toBe(403);expect(denied._meta).toBeUndefined();
+   }
    expect((await env.db.prepare('SELECT COUNT(*) total FROM send_attempts').first()).total).toBe(0);
+ });
+ it('rejects unsupported permissions before creating a grant',async()=>{
+   const {cookie,handle}=await startConnection('mail:read');
+   const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});
+   form.append('scope','mail:read');form.append('scope','mail:admin');
+   const denied=await fetchWorker('/oauth/authorize',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded',Origin:'https://mail.example.com'},body:form});
+   expect(denied.status).toBe(400);expect((await env.db.prepare('SELECT COUNT(*) total FROM connected_apps').first()).total).toBe(0);
  });
  it('cannot add send permission by refreshing a read-only grant',async()=>{
    const token=await connect('mail:read offline_access');

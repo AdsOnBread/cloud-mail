@@ -8,8 +8,8 @@ const escape=s=>String(s||'').replace(/[&<>"']/g,c=>`&#${c.charCodeAt(0)};`);
 async function consentPage(req,env,authRequest,message='',selectedScopes) {
   const oauth=env.OAUTH_PROVIDER;
   const info=await oauth.describeConsent(authRequest),transaction=await oauth.beginConsent(authRequest);
-  const offeredScopes=[...new Set([...info.scope,'mail:send'])];
-  const checkedScopes=new Set(selectedScopes??info.scope.filter(scope=>scope!=='mail:send'));
+  const offeredScopes=scopes;
+  const checkedScopes=new Set(selectedScopes??scopes);
   const unlocked=await hasAppAccess(req,env);
   transaction.headers.set('Content-Type','text/html; charset=utf-8');transaction.headers.set('Cache-Control','no-store');
   transaction.headers.set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
@@ -20,8 +20,9 @@ async function consentPage(req,env,authRequest,message='',selectedScopes) {
   <p class="error" role="alert">${escape(message)}</p><form method="post"><input type="hidden" name="handle" value="${escape(transaction.handle)}">
   ${unlocked?'':'<label>Installation secret<input type="password" name="secret" autocomplete="off" required></label>'}
   <label>Cloudmail email<input name="email" type="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label>
-  ${offeredScopes.map(scope=>`<label><input type="checkbox" name="scope" value="${escape(scope)}"${checkedScopes.has(scope)?' checked':''}> ${escape({'mail:read':'Read messages and files','mail:drafts':'Read, create, edit, and discard cloud drafts','mail:send':'Send, reply, and forward email (optional)','mail:delete':'Move mail to Trash, restore, and permanently delete it',offline_access:'Stay connected until access expires or is revoked'}[scope]||scope)}</label>`).join('')}
-  <button name="decision" value="approve">Sign in and Allow</button><button name="decision" value="deny" formnovalidate>Deny</button></form><small>Manage or revoke this connection in Cloudmail Settings.</small></html>`,{headers:transaction.headers});
+  <p>All supported permissions are available below and selected on a new connection. Review them and uncheck any you do not want before allowing access.</p>
+  ${offeredScopes.map(scope=>`<label><input type="checkbox" name="scope" value="${escape(scope)}"${checkedScopes.has(scope)?' checked':''}> ${escape({'mail:read':'Read messages and files','mail:drafts':'Read, create, edit, and discard cloud drafts','mail:send':'Send, reply, and forward email','mail:delete':'Move mail to Trash, restore mail, and permanently delete trashed mail',offline_access:'Stay connected until access expires or is revoked'}[scope]||scope)}</label>`).join('')}
+  <button name="decision" value="approve">Sign in and Allow selected permissions</button><button name="decision" value="deny" formnovalidate>Deny</button></form><small>Manage or revoke this connection in Cloudmail Settings.</small></html>`,{headers:transaction.headers});
 }
 async function authorize(req,env) {
   const oauth=env.OAUTH_PROVIDER;
