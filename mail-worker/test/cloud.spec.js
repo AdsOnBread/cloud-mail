@@ -9,6 +9,7 @@ import settingService from '../src/service/setting-service';
 import cryptoUtils from '../src/utils/crypto-utils';
 import worker from '../src/index';
 import loginService from '../src/service/login-service';
+import {parseHTML} from 'linkedom';
 const bindings=()=>({...env,app_access_secret:'test-installation-secret',init_secret:'test-init',mcp_public_url:'https://mail.example.com/mcp'});
 const c=()=>({env:bindings(),get:k=>k==='user'?{userId:1,email:'admin@example.com'}:undefined,set:()=>{},req:{header:()=>undefined},text:s=>s});
 const message=async(extra={})=>{const row={user_id:1,account_id:1,subject:'Original',send_email:'outside@example.net',recipient:'[{"address":"admin@example.com"},{"address":"copy@example.net"}]',cc:'[{"address":"cc@example.net"}]',bcc:'[{"address":"hidden@example.net"}]',text:'Original body',content:'<p>Original body</p>',message_id:'<original@example.net>',...extra};return env.db.prepare(`INSERT INTO email(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')}) RETURNING *`).bind(...Object.values(row)).first();};
@@ -107,12 +108,16 @@ describe('Recoverable Trash',()=>{
 });
 const fetchWorker=(path,options={})=>worker.fetch(new Request('https://mail.example.com'+path,options),bindings(),createExecutionContext());
 const cookies=headers=>headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
-async function connect(scope='mail:read mail:drafts mail:send mail:delete offline_access',approvedScope=scope) {
+async function startConnection(scope) {
  const registration=await fetchWorker('/oauth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'Test MCP',redirect_uris:['https://client.example/callback'],token_endpoint_auth_method:'none'})});
  expect(registration.status).toBe(201);const client=await registration.json();
  const verifier='a'.repeat(64);const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));const challenge=btoa(String.fromCharCode(...hash)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
  const params=new URLSearchParams({client_id:client.client_id,redirect_uri:'https://client.example/callback',response_type:'code',scope,state:'state123',code_challenge:challenge,code_challenge_method:'S256',resource:'https://mail.example.com/mcp'});
  const page=await fetchWorker('/oauth/authorize?'+params);expect(page.status).toBe(200);const cookie=cookies(page.headers);const html=await page.text();const handle=html.match(/name="handle" value="([^"]+)"/)[1];
+ return {client,verifier,cookie,html,handle};
+}
+async function connect(scope='mail:read mail:drafts mail:send mail:delete offline_access',approvedScope=scope,inspectConsent=()=>{}) {
+ const {client,verifier,cookie,html,handle}=await startConnection(scope);inspectConsent(html);
  const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});for(const value of approvedScope.split(' '))form.append('scope',value);
  const approved=await fetchWorker('/oauth/authorize',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded',Origin:'https://mail.example.com'},body:form});
  expect(approved.status).toBe(302);const callback=new URL(approved.headers.get('Location'));expect(callback.searchParams.get('state')).toBe('state123');
@@ -124,6 +129,50 @@ async function rpc(token,method,params={}) {
  const text=await response.text();let data;try{data=JSON.parse(text);}catch{data=JSON.parse(text.split('\n').find(l=>l.startsWith('data: ')).slice(6));}return {response,data};
 }
 describe('Hosted OAuth MCP',()=>{
+ it('offers unchecked sending on read-only reconnect and grants it only when selected',async()=>{
+   const inspect=html=>{
+     const {document}=parseHTML(html);
+     const send=document.querySelector('input[name="scope"][value="mail:send"]');
+     expect(send).not.toBeNull();expect(send.hasAttribute('checked')).toBe(false);
+     expect(send.parentNode.textContent).toContain('optional');
+     expect(document.querySelector('input[value="mail:read"]').hasAttribute('checked')).toBe(true);
+     expect(document.querySelector('input[value="mail:delete"]')).toBeNull();
+   };
+   const readOnly=await connect('mail:read','mail:read',inspect);expect(readOnly.scope).toBe('mail:read');
+   const optedIn=await connect('mail:read','mail:read mail:send',inspect);
+   expect(optedIn.scope.split(' ')).toEqual(['mail:read','mail:send']);
+   const records=(await env.db.prepare('SELECT scopes FROM connected_apps ORDER BY rowid').all()).results;
+   expect(records.map(row=>JSON.parse(row.scopes))).toEqual([['mail:read'],['mail:read','mail:send']]);
+   const oldToken=(await rpc(readOnly.access_token,'tools/call',{name:'send_email',arguments:{accountId:1,idempotencyKey:'old-grant-unchanged'}})).data.result;
+   expect(oldToken._meta['mcp/www_authenticate'][0]).toContain('mail:send');
+   const ownedOnly=(await rpc(optedIn.access_token,'tools/call',{name:'send_email',arguments:{accountId:2,idempotencyKey:'optional-send-owner'}})).data.result;
+   expect(ownedOnly.structuredContent.code).toBe(404);expect(ownedOnly._meta).toBeUndefined();
+ });
+ it('leaves sending unchecked even when requested by the client',async()=>{
+   const token=await connect('mail:read mail:send','mail:read',html=>{
+     const {document}=parseHTML(html);
+     expect(document.querySelectorAll('input[value="mail:send"]')).toHaveLength(1);
+     expect(document.querySelector('input[value="mail:send"]').hasAttribute('checked')).toBe(false);
+   });
+   expect(token.scope).toBe('mail:read');
+ });
+ it.each(['secret','password'])('preserves explicit send selection after an incorrect %s without granting access',async field=>{
+   const {cookie,handle}=await startConnection('mail:read');
+   const form=new URLSearchParams({handle,decision:'approve',secret:'test-installation-secret',email:'admin@example.com',password:'test-password'});
+   form.append('scope','mail:read');form.append('scope','mail:send');form.set(field,'incorrect');
+   const retry=await fetchWorker('/oauth/authorize',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded',Origin:'https://mail.example.com'},body:form});
+   expect(retry.status).toBe(200);expect(retry.headers.get('Location')).toBeNull();
+   expect((await env.db.prepare('SELECT COUNT(*) total FROM connected_apps').first()).total).toBe(0);
+   const html=await retry.text(),{document}=parseHTML(html);
+   expect(document.querySelector('input[value="mail:send"]').hasAttribute('checked')).toBe(true);
+   expect(document.querySelector('input[value="mail:delete"]')).toBeNull();
+   const nextHandle=document.querySelector('input[name="handle"]').getAttribute('value');
+   expect(nextHandle).not.toBe(handle);
+   form.set('handle',nextHandle);form.set(field,field==='secret'?'test-installation-secret':'test-password');
+   const approved=await fetchWorker('/oauth/authorize',{method:'POST',headers:{Cookie:cookies(retry.headers),'Content-Type':'application/x-www-form-urlencoded',Origin:'https://mail.example.com'},body:form});
+   expect(approved.status).toBe(302);
+   expect(JSON.parse((await env.db.prepare('SELECT scopes FROM connected_apps').first()).scopes)).toEqual(['mail:read','mail:send']);
+ });
  it('advertises discovery and challenges before installation unlock',async()=>{
    const authorization=await fetchWorker('/.well-known/oauth-authorization-server');expect(authorization.status).toBe(200);
    expect((await authorization.json()).scopes_supported).toContain('mail:send');

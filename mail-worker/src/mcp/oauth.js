@@ -5,9 +5,11 @@ import loginService from '../service/login-service';
 
 export const scopes=['mail:read','mail:drafts','mail:send','mail:delete','offline_access'];
 const escape=s=>String(s||'').replace(/[&<>"']/g,c=>`&#${c.charCodeAt(0)};`);
-async function consentPage(req,env,authRequest,message='') {
+async function consentPage(req,env,authRequest,message='',selectedScopes) {
   const oauth=env.OAUTH_PROVIDER;
   const info=await oauth.describeConsent(authRequest),transaction=await oauth.beginConsent(authRequest);
+  const offeredScopes=[...new Set([...info.scope,'mail:send'])];
+  const checkedScopes=new Set(selectedScopes??info.scope.filter(scope=>scope!=='mail:send'));
   const unlocked=await hasAppAccess(req,env);
   transaction.headers.set('Content-Type','text/html; charset=utf-8');transaction.headers.set('Cache-Control','no-store');
   transaction.headers.set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
@@ -18,7 +20,7 @@ async function consentPage(req,env,authRequest,message='') {
   <p class="error" role="alert">${escape(message)}</p><form method="post"><input type="hidden" name="handle" value="${escape(transaction.handle)}">
   ${unlocked?'':'<label>Installation secret<input type="password" name="secret" autocomplete="off" required></label>'}
   <label>Cloudmail email<input name="email" type="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label>
-  ${info.scope.map(scope=>`<label><input type="checkbox" name="scope" value="${escape(scope)}" checked> ${escape({'mail:read':'Read messages and files','mail:drafts':'Read, create, edit, and discard cloud drafts','mail:send':'Send, reply, and forward email','mail:delete':'Move mail to Trash, restore, and permanently delete it',offline_access:'Stay connected until access expires or is revoked'}[scope]||scope)}</label>`).join('')}
+  ${offeredScopes.map(scope=>`<label><input type="checkbox" name="scope" value="${escape(scope)}"${checkedScopes.has(scope)?' checked':''}> ${escape({'mail:read':'Read messages and files','mail:drafts':'Read, create, edit, and discard cloud drafts','mail:send':'Send, reply, and forward email (optional)','mail:delete':'Move mail to Trash, restore, and permanently delete it',offline_access:'Stay connected until access expires or is revoked'}[scope]||scope)}</label>`).join('')}
   <button name="decision" value="approve">Sign in and Allow</button><button name="decision" value="deny" formnovalidate>Deny</button></form><small>Manage or revoke this connection in Cloudmail Settings.</small></html>`,{headers:transaction.headers});
 }
 async function authorize(req,env) {
@@ -32,13 +34,13 @@ async function authorize(req,env) {
     const form=await req.formData();const handle=String(form.get('handle')||'');
     if(form.get('decision')!=='approve') {const denied=await oauth.denyConsent(req,handle);return new Response(null,{status:302,headers:denied.headers});}
     const approved=await oauth.approveConsent(req,handle,{scope:form.getAll('scope').map(String)});
-    if(!await hasAppAccess(req,env)&&!await equalSecret(String(form.get('secret')||''),env.app_access_secret))return consentPage(req,env,approved.request,'Incorrect installation secret.');
+    if(!await hasAppAccess(req,env)&&!await equalSecret(String(form.get('secret')||''),env.app_access_secret))return consentPage(req,env,approved.request,'Incorrect installation secret.',approved.request.scope);
     let userId;
     try {
       const c={env,req:{header:k=>req.headers.get(k)},set:()=>{},get:()=>undefined};
       const user=await loginService.authenticate(c,{email:String(form.get('email')||''),password:String(form.get('password')||'')});
       userId=user.userId;
-    } catch {return consentPage(req,env,approved.request,'Sign-in failed. Check your email and password.');}
+    } catch {return consentPage(req,env,approved.request,'Sign-in failed. Check your email and password.',approved.request.scope);}
     const connectionId=crypto.randomUUID(),info=await oauth.describeConsent(approved.request);
     await env.db.prepare('INSERT INTO connected_apps(grant_id,user_id,client_id,name,scopes) VALUES(?,?,?,?,?)').bind(connectionId,userId,approved.request.clientId,info.clientName,JSON.stringify(approved.request.scope)).run();
     const {redirectTo}=await oauth.completeAuthorization({request:approved.request,userId:String(userId),metadata:{connectionId,name:info.clientName},scope:approved.request.scope,props:{userId,connectionId}});
