@@ -250,7 +250,7 @@
             <Icon icon="material-symbols:attach-file" width="22" />
           </button>
           <span class="draft-status">{{
-            form.draftId ? "Saved to Drafts" : ""
+            form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
           }}</span>
           <button
             type="button"
@@ -303,6 +303,7 @@
   </section>
 </template>
 <script setup>
+import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft } from "@/services/cloud-drafts";
 import { inlineDataHTML } from "@/utils/private-files";
 import tinyEditor from "@/components/tiny-editor/index.vue";
 import RecipientField from "@/components/recipient-field/index.vue";
@@ -318,7 +319,6 @@ import {
 } from "vue";
 import { Icon } from "@iconify/vue";
 import { useUserStore } from "@/store/user.js";
-import { emailSend } from "@/request/email.js";
 import { useAccountStore } from "@/store/account.js";
 import { useEmailStore } from "@/store/email.js";
 import { fileToBase64, formatBytes } from "@/utils/file-utils.js";
@@ -452,6 +452,7 @@ function setSender() {
   const account = accountStore.currentAccount?.email
     ? accountStore.currentAccount
     : userStore.user.account;
+  form.ownerEmail=userStore.user.email;
   form.sendEmail = account.email;
   form.accountId = account.accountId;
   form.name = account.name || userStore.user.name || "";
@@ -479,6 +480,7 @@ function openDraft(draft) {
   if (!available()) return;
   resetForm();
   Object.assign(form, restoreDraft(draft));
+  form.ownerEmail=userStore.user.email;
   if (props.inline && form.sendType === "reply")
     form.content = foldLegacyReplyQuote(form.content || "");
   defValue.value = form.content || "";
@@ -616,27 +618,35 @@ function change(content, text) {
 function snapshot() {
   return restoreDraft(toRaw(form));
 }
-async function persistDraft() {
+let saveQueue=Promise.resolve();
+function persistDraft() {
+  const operation=saveQueue.catch(()=>{}).then(persistDraftNow);
+  saveQueue=operation;return operation;
+}
+async function persistDraftNow() {
   const draft = snapshot();
   const { attachments, draftId, ...data } = draft;
   if (props.inline && form.sendType === "reply") data.inlineReply = true;
   data.createTime =
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
-  await db.value.transaction("rw", db.value.draft, db.value.att, async () => {
-    if (draftId) await db.value.draft.put({ ...data, draftId });
-    else form.draftId = await db.value.draft.add(data);
-    await db.value.att.put({ draftId: form.draftId, attachments });
-  });
-  draftStore.refreshList++;
+  const saved=await saveLocalDraft({...data,draftId,attachments});
+  Object.assign(form,{draftId:saved.draftId,clientId:saved.clientId,cloudDraftId:saved.cloudDraftId,cloudVersion:saved.cloudVersion,syncState:saved.syncState});
+  return saved;
 }
 async function removeSavedDraft() {
-  if (!form.draftId) return;
-  await db.value.transaction("rw", db.value.draft, db.value.att, async () => {
-    await db.value.draft.delete(form.draftId);
-    await db.value.att.delete(form.draftId);
-  });
-  draftStore.refreshList++;
+  if(form.draftId)await removeLocalDraft(form.draftId);
 }
+let cloudSaveTimer;
+watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.sendType,form.emailId]),()=>{
+  if(preparing||sending.value||!show.value||!hasDraftContent(form))return;
+  clearTimeout(cloudSaveTimer);
+  const localSave=persistDraft().catch(()=>{form.syncState="offline";});
+  cloudSaveTimer=setTimeout(async()=>{
+    try {await localSave;const synced=await syncCloudDrafts();if(synced?.conflicts?.[form.draftId])form.draftId=synced.conflicts[form.draftId];const saved=await db.value.draft.get(form.draftId);if(saved)Object.assign(form,{cloudDraftId:saved.cloudDraftId,cloudVersion:saved.cloudVersion,syncState:saved.syncState});}
+    catch {form.syncState='offline';}
+  },1000);
+},{deep:true});
+
 async function saveAndClose() {
   if (sending.value || attaching.value || preparing) return false;
   if (!show.value) return true;
@@ -649,6 +659,7 @@ async function saveAndClose() {
     )
       await persistDraft();
     else await removeSavedDraft();
+    syncCloudDrafts().catch(()=>{});
     show.value = false;
     resetForm();
     emit("closed");
@@ -659,6 +670,7 @@ async function saveAndClose() {
   }
 }
 async function close() {
+  clearTimeout(cloudSaveTimer);
   if (props.inline) return saveAndClose();
   if (!show.value || sending.value || attaching.value || showContacts.value)
     return;
@@ -704,6 +716,7 @@ async function close() {
       }
     }
     await persistDraft();
+    syncCloudDrafts().catch(()=>{});
     show.value = false;
     resetForm();
   } catch {
@@ -752,13 +765,14 @@ async function sendEmail() {
     sendError.value = "Enter a message body.";
     return;
   }
+  clearTimeout(cloudSaveTimer);
   sending.value = true;
   sendError.value = "";
   try {
     await editor.value?.ready?.();
     // Save first so authentication/network failures cannot lose a message or its Bcc recipients.
     await persistDraft();
-    const sent = await emailSend(snapshot(), () => {});
+    const sent = await sendCloudDraft(form.draftId);
     sent.forEach((message) => emailStore.sendScroll?.addItem?.(message));
     emailStore.conversationRevision++;
     const recent = recipientFields.flatMap((field) => form[field]);
@@ -786,6 +800,10 @@ async function sendEmail() {
   } catch (error) {
     sendError.value = `${error.message || "Could not send your message."} Your message is kept here. Check Sent before retrying if the connection failed.`;
   } finally {
+    if(form.draftId) {
+      const saved=await db.value.draft.get(form.draftId).catch(()=>null);
+      if(saved)Object.assign(form,{cloudDraftId:saved.cloudDraftId,cloudVersion:saved.cloudVersion,syncState:saved.syncState});
+    }
     sending.value = false;
   }
 }
@@ -935,6 +953,7 @@ onMounted(() => {
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  clearTimeout(cloudSaveTimer);
   releaseModal();
   window.removeEventListener("keydown", keydown);
   window.removeEventListener("resize", resize);

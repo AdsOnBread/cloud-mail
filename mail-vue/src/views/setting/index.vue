@@ -30,6 +30,7 @@
         </div>
       </div>
     </div>
+    <ConnectedApps />
     <div class="del-email" v-perm="'my:delete'">
       <div class="title">{{$t('deleteUser')}}</div>
       <div style="color: var(--regular-text-color);">
@@ -49,6 +50,7 @@
   </div>
 </template>
 <script setup>
+import ConnectedApps from "@/components/connected-apps/index.vue";
 import {reactive, ref, defineOptions} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";

@@ -30,6 +30,7 @@
           <Icon icon="material-symbols:star-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('starred')}}</span>
         </el-menu-item>
+        <el-menu-item @click="router.push({name:'trash'})" index="trash" aria-label="Trash" title="Trash" :class="activeFolder==='trash'?'choose-item':''"><Icon icon="material-symbols:delete-outline" width="20"/><span class="menu-name" style="margin-left:16px">Trash</span></el-menu-item>
         <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" title="Settings" index="setting"
                       :class="activeFolder === 'setting' ? 'choose-item' : ''">
           <Icon icon="fluent:settings-48-regular" width="20" height="20" />

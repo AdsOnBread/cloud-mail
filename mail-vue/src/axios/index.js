@@ -8,13 +8,14 @@ let http = axios.create({
 });
 
 http.interceptors.request.use(config => {
-    config.headers.Authorization = `${localStorage.getItem('token')}`
+    config.headers.Authorization ??= `${localStorage.getItem('token')}`
     config.headers['accept-language'] = 'en'
     return config
 })
 
 http.interceptors.response.use((res) => {
 
+        if(res.config.responseType==='blob')return res.data;
         return new Promise((resolve, reject) => {
 
             const noMsg = res.config.noMsg;
@@ -75,7 +76,8 @@ http.interceptors.response.use((res) => {
             return Promise.reject(error);
         }
 
-        const noMsg = error.config.noMsg;
+        if(error.response?.data?.code)return Promise.reject(error.response.data);
+        const noMsg = error.config?.noMsg;
 
         if (noMsg) {
             return Promise.reject(error)

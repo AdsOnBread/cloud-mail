@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../src/db/db.js", () => {
   const table = (map) => ({
+    get:vi.fn(async id=>map.get(id)),
     add: vi.fn(async (value) => {
       const id = state.next++;
       map.set(id, structuredClone(value));
@@ -37,6 +38,22 @@ vi.mock("../src/db/db.js", () => {
     },
   };
 });
+// Composer tests isolate persistence/networking; synchronization has separate integration tests.
+vi.mock("../src/services/cloud-drafts.js",()=>({
+  saveLocalDraft:async input=>{
+    const {default:database}=await import("../src/db/db.js");
+    const {attachments,draftId,...data}=input;
+    let id=draftId;
+    await database.value.transaction("rw",database.value.draft,database.value.att,async()=>{
+      if(id)await database.value.draft.put({...data,draftId:id});else id=await database.value.draft.add(data);
+      await database.value.att.put({draftId:id,attachments});
+    });
+    return {...data,draftId:id,attachments};
+  },
+  removeLocalDraft:async id=>{await db.value.draft.delete(id);await db.value.att.delete(id);},
+  syncCloudDrafts:async()=>{},
+  sendCloudDraft:async id=>emailSend({...state.drafts.get(id),attachments:state.attachments.get(id)?.attachments||[]},()=>{}),
+}));
 vi.mock("../src/request/email.js", () => ({
   emailSend: vi.fn(),
   emailDetail: vi.fn(),
@@ -512,10 +529,9 @@ describe("shared inline replies", () => {
     await wrapper
       .get('[aria-label="Message body"]')
       .setValue("<p>Unsaved reply</p>");
-    vi.spyOn(db.value, "transaction").mockRejectedValueOnce(
-      new Error("Storage full"),
-    );
+    const storageFailure=vi.spyOn(db.value, "transaction").mockRejectedValue(new Error("Storage full"));
     expect(await wrapper.vm.saveAndClose()).toBe(false);
+    storageFailure.mockRestore();
     expect(wrapper.get('[role="alert"]').text()).toContain("Could not save");
     expect(wrapper.get('[aria-label="Message body"]').element.value).toBe(
       "<p>Unsaved reply</p>",

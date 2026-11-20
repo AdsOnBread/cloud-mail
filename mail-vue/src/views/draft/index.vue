@@ -23,6 +23,9 @@
 </template>
 
 <script setup>
+import { removeLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
+import { onActivated } from "vue";
+onActivated(()=>syncCloudDrafts().catch(()=>{}));
 import emailScroll from "@/components/email-scroll/index.vue"
 import {emailDelete} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
@@ -52,16 +55,13 @@ watch(() => draftStore.refreshList, async () => {
 function getEmailList() {
   return new Promise((resolve, reject) => {
     db.value.draft.orderBy('createTime').reverse().toArray().then(list => {
-      resolve({list})
+      resolve({list:list.filter(row=>!row.deleted)})
     })
   })
 }
 
 async function deleteDraft(draftIds) {
-  await db.value.transaction('rw', db.value.draft, db.value.att, async () => {
-    await db.value.draft.bulkDelete(draftIds);
-    await db.value.att.bulkDelete(draftIds);
-  });
+  for(const id of draftIds)await removeLocalDraft(id);
   draftStore.refreshList++
 }
 

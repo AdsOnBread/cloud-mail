@@ -11,6 +11,7 @@ const routes = [
         redirect: '/inbox',
         component: () => import('@/layout/index.vue'),
         children: [
+            {path:'/trash',name:'trash',component:()=>import('@/views/trash/index.vue'),meta:{title:'Trash',name:'trash',menu:true}},
             {
                 path: '/inbox',
                 name: 'email',

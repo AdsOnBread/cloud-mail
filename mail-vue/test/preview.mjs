@@ -31,8 +31,11 @@ rows[0].messageId='<ideas@example.net>';
 rows.push({...rows[0],emailId:101,type:1,status:2,unread:1,name:'Alex Morgan',sendEmail:'alex@example.com',recipient:'[{"address":"maya@example.net"}]',subject:'Re: A few ideas for the next chapter',text:'These are great ideas. I added a few notes.',content:'<p>These are great ideas. I added a few notes.</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 rows.push({...rows[0],emailId:102,subject:'Re: A few ideas for the next chapter',text:'Thanks! The first option is my favorite. What do you think?',content:'<p>Thanks! The first option is my favorite. What do you think?</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 for(let i=40;i<75;i++)rows.push({...rows[0],emailId:i,messageId:`<archive-${i}@example.net>`,replyToEmailId:i===40?0:40,subject:'Release planning archive',text:`Planning update ${i-39}`,content:`<p>Planning update ${i-39}</p>`,unread:1});
+const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
+function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:['sent','deleted'].includes(draft.state)?'delete':'upsert',draft:['sent','deleted'].includes(draft.state)?null:structuredClone(draft)});}
+function previewSend(form){const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts.find(a=>a.accountId===form.accountId)?.email||accounts[0].email,name:user.name,recipient:JSON.stringify((form.receiveEmail||[]).map(address=>({address}))),cc:JSON.stringify((form.cc||[]).map(address=>({address}))),bcc:JSON.stringify((form.bcc||[]).map(address=>({address}))),listText:form.text||form.content,trashedAt:null};rows.unshift(row);return [row];}
 function grouped(){
- const groups=groupThreads(rows.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/[A-Z]/g,l=>'_'+l.toLowerCase()),value]))),accounts.map(account=>account.email));
+ const groups=groupThreads(rows.filter(row=>!row.trashedAt).map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/[A-Z]/g,l=>'_'+l.toLowerCase()),value]))),accounts.map(account=>account.email));
  return groups.reduce((map,member)=>{const thread=map.get(member.threadId)||[];thread.push(rows.find(row=>row.emailId===member.emailId));map.set(member.threadId,thread);return map;},new Map());
 }
 function threadFor(id){return [...grouped().values()].find(thread=>thread.some(row=>row.emailId===Number(id)))||[];}
@@ -42,7 +45,29 @@ const api=createHTTPServer(async(req,res)=>{
  if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
  let body='';for await(const chunk of req) body+=chunk;
  let data={};const path=url.pathname.replace(/^\/api/,'');
- if(path==='/setting/websiteConfig')data=settings;
+ if(path.startsWith('/v1/drafts/attachments/')){
+   const id=path.split('/')[4],file=[...cloudDrafts.values()].flatMap(d=>d.attachments).find(f=>f.attachmentId===id);
+   if(!file){res.writeHead(404);res.end();return;}
+   res.setHeader('Content-Type',file.mimeType||'application/octet-stream');res.end(Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64'));return;
+ }
+ if(path==='/v1/connections')data={connections:[]};
+ else if(path==='/v1/drafts/changes')data={changes:draftEvents.filter(e=>e.seq>Number(url.searchParams.get('after')||0)),cursor:draftEvents.length,hasMore:false};
+ else if(path==='/v1/drafts'&&req.method==='POST'){
+   const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);
+   if(!draft){draft={...input,draftId:nextDraft++,version:1,state:'draft',createTime:new Date().toISOString(),attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:Buffer.from(f.content.replace(/^data:[^,]*;base64,/,''),'base64').length}))};cloudDrafts.set(draft.draftId,draft);recordDraft(draft);}
+   data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
+ }else if(path.startsWith('/v1/drafts/')){
+   const id=Number(path.split('/')[3]),draft=cloudDrafts.get(id),input=body?JSON.parse(body):{};
+   if(!draft){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Draft not found.'}));return;}
+   if(path.endsWith('/send')){data=sendAttempts.get(input.idempotencyKey);if(!data){data={state:'sent',attemptId:input.idempotencyKey,messages:previewSend(draft)};sendAttempts.set(input.idempotencyKey,data);draft.state='sent';draft.version++;recordDraft(draft);}}
+   else if(req.method==='DELETE'){draft.state='deleted';draft.version++;recordDraft(draft);data={deleted:true};}
+   else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
+   else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
+ }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
+ else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
+ else if(path.startsWith('/v1/messages/'))data=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));
+ else if(path==='/setting/websiteConfig')data=settings;
  else if(path==='/my/loginUserInfo')data=user;
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;
  else if(path==='/email/conversations'){
@@ -56,12 +81,12 @@ const api=createHTTPServer(async(req,res)=>{
    data={threadId:'t-'+Math.min(...members.map(row=>row.emailId)),ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
-   if(operation==='delete'){for(let i=rows.length-1;i>=0;i--)if(ids.has(rows[i].emailId))rows.splice(i,1);}
+   if(operation==='delete'){rows.filter(row=>ids.has(row.emailId)).forEach(row=>row.trashedAt=new Date().toISOString());}
    else if(operation==='read')rows.filter(row=>ids.has(row.emailId)).forEach(row=>row.unread=p.unread??1);
    else if(operation==='star')for(const id of p.emailIds){const members=threadFor(id);if(p.starred)members.toSorted((a,b)=>b.emailId-a.emailId)[0].isStar=1;else members.forEach(row=>row.isStar=0);}
  }else if(path==='/email/list'||path==='/star/list'){
    const q=(url.searchParams.get('q')||'').toLowerCase(),cursor=Number(url.searchParams.get('emailId'))||0;
-   let list=rows.filter(row=>path==='/star/list'?row.isStar:row.type===Number(url.searchParams.get('type')||0));
+   let list=rows.filter(row=>!row.trashedAt).filter(row=>path==='/star/list'?row.isStar:row.type===Number(url.searchParams.get('type')||0));
    list=list.filter(row=>!q||[row.name,row.sendEmail,row.subject,row.text,row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].some(value=>value.toLowerCase().includes(q)));
    const total=list.length;const ascending=Number(url.searchParams.get('timeSort'))===1;
    list=list.filter(row=>!cursor||(ascending?row.emailId>cursor:row.emailId<cursor)).sort((a,b)=>ascending?a.emailId-b.emailId:b.emailId-a.emailId).slice(0,Number(url.searchParams.get('size'))||50);
