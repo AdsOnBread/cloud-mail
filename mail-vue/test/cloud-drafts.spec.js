@@ -64,3 +64,11 @@ describe('Cloud draft synchronization',()=>{
  });
 
 });
+
+it('advances the displayed date when an old draft is edited locally', async () => {
+  const old = await saveLocalDraft({accountId:1,subject:'First',content:'<p>Original</p>',createTime:'2020-01-01 08:00:00',updatedAt:'2020-01-01 08:00:00'});
+  const updated = await saveLocalDraft({...old, content:'<p>Edited</p>'});
+  expect(Date.parse(updated.updatedAt)).toBeGreaterThan(Date.parse(old.createTime));
+  const {userDraftStore} = await import('../src/store/draft.js');
+  expect(userDraftStore().items[0]).toMatchObject({draftId:old.draftId,preview:'Edited'});
+});

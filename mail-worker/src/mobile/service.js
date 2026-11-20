@@ -1,3 +1,4 @@
+import { filedConversations, inboxMember } from '../service/conversation-filing';
 import { ensureThreads } from './threads';
 import r2Service from '../service/r2-service';
 import BizError from '../error/biz-error';
@@ -6,8 +7,8 @@ export const camel = row => row && Object.fromEntries(Object.entries(row).map(([
 const visible = 'a.user_id=e.user_id AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0';
 const limitOf = n => Math.min(100, Math.max(1, Number(n) || 30));
 function threadStatement(db, userId, p = {}) {
-	const filter = ['1=1']; const args = [userId];
-	if (p.folder === 'inbox') filter.push('e.type=0 AND e.status=0');
+	const filter = ['1=1']; const args = [userId,userId,userId];
+	if (p.folder === 'inbox') filter.push('e.inbox_member');
 	if (p.folder === 'sent') filter.push('e.type=1');
 	if (p.folder === 'starred') filter.push('s.star_id IS NOT NULL');
 	if (Number(p.accountId)) { filter.push('e.account_id=?'); args.push(Number(p.accountId)); }
@@ -18,14 +19,15 @@ function threadStatement(db, userId, p = {}) {
 	const outer = [];
 	if (p.before) { outer.push('g.last_email_id < ?'); }
 	if (p.ids?.length) outer.push(`g.thread_id IN (${p.ids.map(() => '?').join(',')})`);
-	const query = `WITH base AS (
-		SELECT e.*,m.thread_id,s.star_id FROM email e JOIN account a ON a.account_id=e.account_id
+	const query = `WITH ${filedConversations}, base AS (
+		SELECT e.*,m.thread_id,s.star_id,${inboxMember} inbox_member FROM email e JOIN account a ON a.account_id=e.account_id
 		JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
+		LEFT JOIN filed f ON f.thread_id=m.thread_id
 		LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE e.user_id=? AND ${visible}
 	), grouped AS (
 		SELECT m.thread_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
 		SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
-		SUM(CASE WHEN e.type=0 AND e.status=0 THEN 1 ELSE 0 END) inbox_count,
+		SUM(CASE WHEN e.inbox_member THEN 1 ELSE 0 END) inbox_count,
 		SUM(CASE WHEN e.type=1 THEN 1 ELSE 0 END) sent_count,
 		MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
 		GROUP_CONCAT(DISTINCT e.account_id) account_ids,
@@ -45,7 +47,10 @@ function threadStatement(db, userId, p = {}) {
 const threadPage = (rows, limit) => ({ threads: rows.slice(0,limit).map(camel), hasMore: rows.length>limit,
 	nextCursor: rows.length>limit ? rows[limit-1].last_email_id : null });
 const mailboxStatement = (db,userId) => db.prepare('SELECT * FROM account WHERE user_id=? AND is_del=0 ORDER BY sort DESC,account_id').bind(userId);
-const unreadStatement = (db,userId) => db.prepare(`SELECT COUNT(*) total FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.user_id=? AND ${visible} AND e.type=0 AND e.unread=0`).bind(userId);
+const unreadStatement = (db,userId) => db.prepare(`WITH ${filedConversations}
+	SELECT COUNT(*) total FROM email e JOIN account a ON a.account_id=e.account_id
+	JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
+	LEFT JOIN filed f ON f.thread_id=m.thread_id WHERE e.user_id=? AND ${visible} AND e.type=0 AND e.unread=0 AND ${inboxMember}`).bind(userId,userId,userId);
 
 export async function bootstrap(db,userId,p={}) {
 	await ensureThreads(db,userId);
@@ -73,7 +78,12 @@ export async function changes(db,userId,p) {
 	const after=Number(p.after);
 	if (!Number.isSafeInteger(after) || after<0) throw new BizError('Invalid synchronization cursor.',400);
 	const limit=limitOf(p.limit);
-	const [eventsResult,mailboxes,unread] = await db.batch([
+	const [,,eventsResult,mailboxes,unread] = await db.batch([
+		db.prepare(`WITH ${filedConversations}
+			INSERT INTO mobile_changes(user_id,entity,entity_id,operation,previous_thread_id)
+			SELECT ?,'message',email_id,'upsert',thread_id FROM filed
+			WHERE notified=0 AND wake_at>0 AND wake_at<=unixepoch()`).bind(userId,userId,userId),
+		db.prepare('UPDATE conversation_filing SET notified=1 WHERE user_id=? AND notified=0 AND wake_at>0 AND wake_at<=unixepoch()').bind(userId),
 		db.prepare('SELECT * FROM mobile_changes WHERE user_id=? AND seq>? ORDER BY seq ASC LIMIT ?').bind(userId,after,limit+1),
 		mailboxStatement(db,userId),unreadStatement(db,userId)
 	]);

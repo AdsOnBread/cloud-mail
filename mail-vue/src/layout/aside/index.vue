@@ -1,19 +1,20 @@
 <template>
   <el-scrollbar class="scroll">
     <div>
-      <div class="mailbox-selector">
-        <el-popover v-if="hasPerm('account:query') && settingStore.settings.manyEmail === 0" v-model:visible="uiStore.accountShow" trigger="click" placement="right-start" :width="340" popper-class="mailbox-popover">
-          <template #reference><button type="button" class="mailbox-button" :title="accountStore.currentAccount.email" aria-label="Choose mailbox" :aria-expanded="uiStore.accountShow"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span><Icon class="mailbox-chevron" icon="material-symbols:expand-more" width="18" /></button></template>
-          <Account />
-        </el-popover>
-        <div v-else class="mailbox-button" :title="accountStore.currentAccount.email"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span></div>
-      </div>
       <button v-perm="'email:send'" type="button" class="compose-button" title="Compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
-      <el-menu :collapse="false"  style="margin-top: 10px">
+      <el-menu :collapse="false"  >
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" title="Inbox"
                       :class="activeFolder === 'email' ? 'choose-item' : ''">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span>
+        </el-menu-item>
+        <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" title="Starred"
+                      :class="activeFolder === 'star' ? 'choose-item' : ''">
+          <Icon icon="material-symbols:star-outline" width="20" height="20" />
+          <span class="menu-name" style="margin-left: 16px">{{$t('starred')}}</span>
+        </el-menu-item>
+        <el-menu-item @click="router.push({name:'snoozed'})" index="snoozed" aria-label="Snoozed" title="Snoozed" :class="{'choose-item':activeFolder==='snoozed'}">
+          <Icon icon="material-symbols:schedule-outline" width="20"/><span class="menu-name" style="margin-left:16px">Snoozed</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'send'})" index="send" aria-label="Sent" title="Sent" v-perm="'email:send'"
                       :class="activeFolder === 'send' ? 'choose-item' : ''">
@@ -23,12 +24,10 @@
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" title="Drafts" v-perm="'email:send'"
                       :class="activeFolder === 'draft' ? 'choose-item' : ''">
           <Icon icon="material-symbols:draft-outline" width="19" height="19" />
-          <span class="menu-name" style="margin-left: 17px">{{$t('drafts')}}</span>
+          <span class="menu-name" style="margin-left: 17px">{{$t('drafts')}}</span><span v-if="drafts.items.length" class="menu-name draft-count">{{ drafts.items.length }}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" title="Starred"
-                      :class="activeFolder === 'star' ? 'choose-item' : ''">
-          <Icon icon="material-symbols:star-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('starred')}}</span>
+        <el-menu-item @click="router.push({name:'archived'})" index="archived" aria-label="Archived" title="Archived" :class="{'choose-item':activeFolder==='archived'}">
+          <Icon icon="material-symbols:archive-outline" width="20"/><span class="menu-name" style="margin-left:16px">Archived</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name:'trash'})" index="trash" aria-label="Trash" title="Trash" :class="activeFolder==='trash'?'choose-item':''"><Icon icon="material-symbols:delete-outline" width="20"/><span class="menu-name" style="margin-left:16px">Trash</span></el-menu-item>
         <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" title="Settings" index="setting"
@@ -70,11 +69,19 @@
           <span class="menu-name" style="margin-left: 17px">{{$t('SystemSettings')}}</span>
         </el-menu-item>
       </el-menu>
+      <div class="mailbox-selector">
+        <el-popover v-if="hasPerm('account:query') && settingStore.settings.manyEmail === 0" v-model:visible="uiStore.accountShow" trigger="click" placement="right-start" :width="340" popper-class="mailbox-popover">
+          <template #reference><button type="button" class="mailbox-button" :title="accountStore.currentAccount.email" aria-label="Choose mailbox" :aria-expanded="uiStore.accountShow"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span><Icon class="mailbox-chevron" icon="material-symbols:expand-more" width="18" /></button></template>
+          <Account />
+        </el-popover>
+        <div v-else class="mailbox-button" :title="accountStore.currentAccount.email"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span></div>
+      </div>
     </div>
   </el-scrollbar>
 </template>
 
 <script setup>
+import { userDraftStore } from '@/store/draft';
 import Account from '@/layout/account/index.vue';
 import { useAccountStore } from '@/store/account.js';
 import { useUiStore } from '@/store/ui.js';
@@ -86,6 +93,7 @@ import { useMailSearchStore } from '@/store/mail-search.js';
 import {Icon} from "@iconify/vue";
 import {useSettingStore} from "@/store/setting.js";
 
+const drafts = userDraftStore();
 const settingStore = useSettingStore();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
@@ -97,12 +105,12 @@ const uiStore = useUiStore();
 
 <style scoped>
 .scroll { height:100%; }
-.mailbox-selector { padding:0 12px 8px; }
+.mailbox-selector { padding:12px 12px 8px; }
 .mailbox-button { width:100%; height:36px; display:flex; align-items:center; gap:10px; color:var(--regular-text-color); cursor:pointer; padding:0 12px; border-radius:18px; font-size:12px; }
 .mailbox-button:hover { background:var(--mail-hover); }
 .mailbox-button svg { flex-shrink:0; }
 .mailbox-button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left; }
-.compose-button { margin:0 0 12px 12px; padding:0 24px; height:56px; display:flex; align-items:center; gap:16px; color:var(--mail-on-compose); background:var(--mail-compose); border-radius:16px; cursor:pointer; font-weight:500; box-shadow:0 1px 2px #0001; }
+.compose-button { margin:8px 0 12px 8px; padding:0 24px; height:56px; display:flex; align-items:center; gap:16px; color:var(--mail-on-compose); background:var(--mail-compose); border-radius:16px; cursor:pointer; font-weight:500; box-shadow:0 1px 2px #0001; }
 .compose-button:hover { box-shadow:0 2px 5px #0003; }
 .el-menu { border:0; background:transparent; width:100%; }
 .el-menu-item { height:32px; line-height:32px; margin:0 12px 0 0; padding:0 24px !important; border-radius:0 18px 18px 0; color:var(--el-text-color-primary); }
@@ -110,6 +118,7 @@ const uiStore = useUiStore();
 .el-menu-item:hover { background:var(--mail-hover); }
 .choose-item { background:var(--mail-selected) !important; font-weight:600; }
 .menu-name { font-size:14px; }
+.draft-count { margin-left:auto; font-size:12px; font-weight:600; }
 .manage-title { padding:24px 24px 8px; font-size:12px; color:var(--regular-text-color); }
 :global(.mail-layout:not(.nav-expanded) .mail-sidebar .menu-name), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .manage-title), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .mailbox-button span), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .mailbox-chevron), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .compose-button span) { display:none; }
 :global(.mail-layout:not(.nav-expanded) .mail-sidebar .el-menu-item) { padding:0 24px !important; margin-right:8px; height:40px; border-radius:0 20px 20px 0; }

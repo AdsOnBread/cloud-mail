@@ -1,3 +1,4 @@
+import { draftSummary, newestDraft } from '@/utils/draft-summary';
 import { useUserStore } from '@/store/user';
 import db from '@/db/db.js';
 import http from '@/axios/index.js';
@@ -39,12 +40,16 @@ export async function saveLocalDraft(input) {
   const database=db.value;
   if(input.ownerEmail&&input.ownerEmail!==useUserStore().user.email)throw new Error('The signed-in user changed. Your previous draft was not moved.');
   const current=input.draftId?await database.draft.get(input.draftId):null;
-  const row={...input,sendAttemptId:current?.sendAttemptId,sendFingerprint:current?.sendFingerprint,clientId:current?.clientId||input.clientId||crypto.randomUUID(),dirty:true,editToken:crypto.randomUUID(),syncState:navigator.onLine?'saving':'offline',localRevision:(current?.localRevision||0)+1};
+  const row={...input,updatedAt:new Date().toISOString(),sendAttemptId:current?.sendAttemptId,sendFingerprint:current?.sendFingerprint,clientId:current?.clientId||input.clientId||crypto.randomUUID(),dirty:true,editToken:crypto.randomUUID(),syncState:navigator.onLine?'saving':'offline',localRevision:(current?.localRevision||0)+1};
   // Retain the revision the composer actually edited; stale editors must conflict on the server.
   row.cloudVersion=input.cloudVersion??current?.cloudVersion;
   row.cloudDraftId=input.cloudDraftId??current?.cloudDraftId;
   if(!row.draftId) {delete row.draftId;row.draftId=await database.draft.add({...row,attachments:undefined});}
-  await put(database,row,input.attachments||[]);userDraftStore().refreshList++;
+  await put(database,row,input.attachments||[]);
+  if (db.value === database) {
+    const store=userDraftStore();
+    store.items=[draftSummary(row), ...store.items.filter(item=>item.draftId!==row.draftId)].sort(newestDraft);
+  }
   return row;
 }
 async function push(database,row,api) {
@@ -60,7 +65,7 @@ async function push(database,row,api) {
       if(latest.localRevision!==version)throw {code:409,current:remote};
       await database.draft.delete(row.draftId);await database.att.delete(row.draftId);return;
     }
-    await database.draft.put({...latest,cloudDraftId:remote.draftId,cloudVersion:remote.version,dirty:latest.localRevision!==version,syncState:latest.localRevision===version?(latest.conflictCopy?'conflict':'saved'):'saving'});
+    await database.draft.put({...latest,cloudDraftId:remote.draftId,cloudVersion:remote.version,updatedAt:latest.localRevision===version ? (remote.updatedAt || latest.updatedAt) : latest.updatedAt,dirty:latest.localRevision!==version,syncState:latest.localRevision===version?(latest.conflictCopy?'conflict':'saved'):'saving'});
   } catch(raw) {
     const error=apiError(raw);
     if(error.code===409||(error.code===404&&row.cloudDraftId)) {

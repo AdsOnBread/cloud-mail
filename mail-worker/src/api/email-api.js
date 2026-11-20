@@ -3,7 +3,7 @@ import emailService from '../service/email-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
-import { conversationList, conversationMessages, conversationAction } from '../service/conversation-service';
+import { conversationList, conversationMessages, conversationAction, draftThreads } from '../service/conversation-service';
 
 app.get('/email/list', async (c) => {
 	const data = await emailService.list(c, c.req.query(), userContext.getUserId(c));
@@ -47,7 +47,8 @@ app.use('/email/conversation*', async (c, next) => {
 });
 app.get('/email/conversations', async c => c.json(result.ok(await conversationList(c, c.req.query(), userContext.getUserId(c)))));
 app.get('/email/conversation/messages', async c => c.json(result.ok(await conversationMessages(c, c.req.query(), userContext.getUserId(c)))));
-for (const action of ['read', 'delete', 'star']) {
+app.post('/email/conversation/draft-threads', async c => c.json(result.ok(await draftThreads(c, (await c.req.json()).emailIds, userContext.getUserId(c)))));
+for (const action of ['read', 'delete', 'star', 'archive', 'snooze', 'inbox']) {
 	app.post(`/email/conversation/${action}`, async c =>
 		c.json(result.ok(await conversationAction(c, await c.req.json(), userContext.getUserId(c), action))));
 }

@@ -1,130 +1,220 @@
 <template>
   <section class="conversation-list" aria-label="Conversations">
-    <div class="list-toolbar">
-      <input
-        type="checkbox"
-        aria-label="Select loaded conversations"
-        :checked="rows.length > 0 && selected.length === rows.length"
-        @change="selectAll($event.target.checked)"
-      />
-      <button
-        aria-label="Refresh conversations"
-        :disabled="loading"
-        @click="refresh"
-      >
-        <Icon icon="material-symbols:refresh" width="21" />
-      </button>
-      <button
-        :aria-label="ascending ? 'Sort newest first' : 'Sort oldest first'"
-        @click="ascending = !ascending"
-      >
-        <Icon
-          :icon="
-            ascending
-              ? 'material-symbols:arrow-upward'
-              : 'material-symbols:arrow-downward'
-          "
-          width="21"
+    <div class="mail-toolbar">
+      <label class="check-target" data-tip="Select">
+        <input
+          type="checkbox"
+          aria-label="Select loaded conversations"
+          :checked="rows.length > 0 && selected.length === rows.length"
+          :indeterminate="selected.length > 0 && selected.length < rows.length"
+          @change="selectAll($event.target.checked)"
         />
+      </label>
+      <el-dropdown
+        trigger="click"
+        placement="bottom-start"
+        @command="selectMatching"
+      >
+        <button
+          class="mail-icon select-options"
+          aria-label="Selection options"
+          data-tip="Select"
+        >
+          <Icon icon="material-symbols:arrow-drop-down" width="16" />
+        </button>
+        <template #dropdown
+          ><el-dropdown-menu
+            ><el-dropdown-item
+              v-for="option in [
+                'All',
+                'None',
+                'Read',
+                'Unread',
+                'Starred',
+                'Unstarred',
+              ]"
+              :key="option"
+              :command="option"
+              >{{ option }}</el-dropdown-item
+            ></el-dropdown-menu
+          ></template
+        >
+      </el-dropdown>
+      <template v-if="!selected.length">
+        <button
+          class="mail-icon"
+          data-tip="Refresh"
+          aria-label="Refresh conversations"
+          :disabled="loading"
+          @click="refresh"
+        >
+          <Icon icon="material-symbols:refresh" width="20" />
+        </button>
+        <el-dropdown trigger="click">
+          <button
+            class="mail-icon"
+            data-tip="More"
+            aria-label="More mailbox options"
+          >
+            <Icon icon="material-symbols:more-vert" width="20" />
+          </button>
+          <template #dropdown
+            ><el-dropdown-menu
+              ><el-dropdown-item @click="ascending = !ascending">{{
+                ascending ? "Sort newest first" : "Sort oldest first"
+              }}</el-dropdown-item></el-dropdown-menu
+            ></template
+          >
+        </el-dropdown>
+      </template>
+      <template v-else>
+        <button
+          class="mail-icon"
+          :data-tip="filingLabel"
+          :aria-label="filingLabel"
+          :disabled="busy"
+          @click="mutate(filingAction)"
+        >
+          <Icon :icon="filingIcon" width="20" />
+        </button>
+        <button
+          class="mail-icon"
+          v-perm="'email:delete'"
+          data-tip="Delete"
+          aria-label="Delete conversations"
+          :disabled="busy"
+          @click="remove()"
+        >
+          <Icon icon="material-symbols:delete-outline" width="20" />
+        </button>
+        <button
+          class="mail-icon"
+          :data-tip="selectedUnread ? 'Mark as read' : 'Mark as unread'"
+          :aria-label="
+            selectedUnread
+              ? 'Mark conversations read'
+              : 'Mark conversations unread'
+          "
+          :disabled="busy"
+          @click="mutate('read', selectedUnread ? {} : { unread: 0 })"
+        >
+          <Icon :icon="readIcon(selectedUnread)" width="20" />
+        </button>
+        <button
+          class="mail-icon"
+          data-tip="Snooze"
+          aria-label="Snooze conversations"
+          :disabled="busy"
+          @click="chooseSnooze(selected)"
+        >
+          <Icon icon="material-symbols:schedule-outline" width="20" />
+        </button>
+      </template>
+      <span class="total">{{
+        total && rows.length
+          ? offset + 1 + "–" + (offset + rows.length) + " of " + total
+          : ""
+      }}</span>
+      <button
+        class="mail-icon pager"
+        data-tip="Previous page"
+        aria-label="Previous page"
+        :disabled="!history.length || loading || busy"
+        @click="previousPage"
+      >
+        <Icon icon="material-symbols:chevron-left" width="20" />
       </button>
       <button
-        v-if="selected.length"
-        aria-label="Mark conversations read"
-        :disabled="busy"
-        @click="mutate('read')"
+        class="mail-icon pager"
+        data-tip="Next page"
+        aria-label="Next page"
+        :disabled="!hasMore || loading || busy"
+        @click="nextPage"
       >
-        <Icon icon="material-symbols:mark-email-read-outline" width="21" />
+        <Icon icon="material-symbols:chevron-right" width="20" />
       </button>
-      <button
-        v-if="selected.length"
-        aria-label="Mark conversations unread"
-        :disabled="busy"
-        @click="mutate('read', { unread: 0 })"
-      >
-        <Icon icon="material-symbols:mark-email-unread-outline" width="21" />
-      </button>
-      <button
-        v-if="selected.length"
-        v-perm="'email:delete'"
-        aria-label="Delete conversations"
-        :disabled="busy"
-        @click="remove"
-      >
-        <Icon icon="material-symbols:delete-outline" width="21" />
-      </button>
-      <span class="total"
-        >{{ total }} conversation{{ total === 1 ? "" : "s" }}</span
-      >
     </div>
     <p v-if="error" role="alert" class="list-status">
-      {{ error }} <button @click="load(false)">Retry</button>
+      {{ error }} <button @click="refresh">Retry</button>
     </p>
     <div v-bind="containerProps" class="conversation-scroll">
       <div v-bind="wrapperProps">
-        <div
-          v-for="{ data: row, index } in virtualRows"
+        <MailRow
+          v-for="{ data: row } in virtualRows"
           :key="row.threadId"
-          class="conversation-row"
-          :class="{
-            unread: row.unreadCount,
-            selected: selected.includes(row.lastEmailId),
-          }"
+          :participants="row.participants"
+          :count="row.messageCount"
+          :subject="row.subject"
+          :preview="replies(row)[0]?.preview || row.preview"
+          :draft-count="replies(row).length"
+          :date="mailboxDate(rowDate(row))"
+          :date-title="formatDetailDate(rowDate(row))"
+          :selected="selected.includes(row.lastEmailId)"
+          :starred="Boolean(row.starred)"
+          :unread="Boolean(row.unreadCount)"
+          :busy="busy"
+          :open-label="`Open ${row.subject || '(no subject)'}, ${row.messageCount} messages${replies(row).length ? ', draft' : ''}`"
+          @open="open(row)"
+          @select="toggle(row.lastEmailId)"
+          @star="star(row)"
           @contextmenu.prevent="openContext(row)"
           @keydown.shift.f10.prevent="openContext(row)"
         >
-          <input
-            type="checkbox"
-            :aria-label="`Select ${row.subject}`"
-            :checked="selected.includes(row.lastEmailId)"
-            @change="toggle(row.lastEmailId)"
-          />
-          <button
-            :aria-label="
-              row.starred ? 'Unstar conversation' : 'Star conversation'
-            "
-            :disabled="busy"
-            @click="star(row)"
-          >
-            <Icon
+          <template v-if="folder === 'sent'" #status
+            ><Icon
               :icon="
-                row.starred
-                  ? 'fluent-color:star-16'
-                  : 'material-symbols:star-outline'
+                row.status === 2
+                  ? 'material-symbols:done-all'
+                  : row.status >= 3
+                    ? 'material-symbols:error-outline'
+                    : 'material-symbols:send-outline'
               "
-              width="20"
-            />
-          </button>
-          <button
-            class="conversation-open"
-            @click="open(row)"
-            :aria-label="`Open ${row.subject}, ${row.messageCount} messages`"
-          >
-            <span class="participants"
-              >{{ row.participants }}
-              <small v-if="row.messageCount > 1"
-                >({{ row.messageCount }})</small
-              ></span
-            >
-            <span class="summary"
-              ><span class="subject">{{ row.subject || "(no subject)" }}</span
-              ><span class="preview"> — {{ row.preview }}</span></span
-            >
-            <span
-              v-if="folder === 'sent'"
-              class="delivery-state"
-              :title="deliveryState(row.status)"
               :aria-label="deliveryState(row.status)"
-              ><Icon
-                :icon="
-                  row.status === 2
-                    ? 'material-symbols:done-all'
-                    : row.status >= 3
-                      ? 'material-symbols:error-outline'
-                      : 'material-symbols:send-outline'
-                "
-                width="16" /></span
-            ><time>{{ fromNow(row.lastDate) }}</time>
-          </button>
+              width="16"
+          /></template>
+          <template #actions>
+            <button
+              class="mail-icon"
+              :data-tip="filingLabel"
+              :aria-label="filingLabel"
+              :disabled="busy"
+              @click="mutate(filingAction, {}, [row.lastEmailId])"
+            >
+              <Icon :icon="filingIcon" width="20" />
+            </button>
+            <button
+              class="mail-icon"
+              v-perm="'email:delete'"
+              data-tip="Delete"
+              aria-label="Delete conversation"
+              :disabled="busy"
+              @click="remove([row.lastEmailId])"
+            >
+              <Icon icon="material-symbols:delete-outline" width="20" />
+            </button>
+            <button
+              class="mail-icon"
+              :data-tip="row.unreadCount ? 'Mark as read' : 'Mark as unread'"
+              :aria-label="row.unreadCount ? 'Mark as read' : 'Mark as unread'"
+              :disabled="busy"
+              @click="
+                mutate('read', { unread: row.unreadCount ? 1 : 0 }, [
+                  row.lastEmailId,
+                ])
+              "
+            >
+              <Icon :icon="readIcon(row.unreadCount)" width="20" />
+            </button>
+            <button
+              class="mail-icon"
+              data-tip="Snooze"
+              aria-label="Snooze"
+              :disabled="busy"
+              @click="chooseSnooze([row.lastEmailId])"
+            >
+              <Icon icon="material-symbols:schedule-outline" width="20" />
+            </button>
+          </template>
           <el-dropdown
             ref="contextDropdown"
             v-if="context === row.lastEmailId"
@@ -155,7 +245,7 @@
               </el-dropdown-menu></template
             >
           </el-dropdown>
-        </div>
+        </MailRow>
       </div>
       <p v-if="loading" role="status" class="list-status">
         Loading conversations…
@@ -167,10 +257,35 @@
             : "No conversations here."
         }}
       </p>
-      <button v-if="hasMore && !loading" class="load-more" @click="load(true)">
-        Load more conversations
-      </button>
     </div>
+    <el-dialog
+      v-model="snoozeOpen"
+      title="Snooze until"
+      width="340px"
+      append-to-body
+    >
+      <div class="snooze-options">
+        <button
+          v-for="option in snoozeOptions"
+          :key="option.label"
+          @click="applySnooze(option.date)"
+        >
+          <span>{{ option.label }}</span
+          ><small>{{ option.detail }}</small>
+        </button>
+        <label
+          >Pick a date and time<input
+            type="datetime-local"
+            v-model="customTime"
+        /></label>
+        <el-button
+          type="primary"
+          :disabled="!(new Date(customTime) > new Date())"
+          @click="applySnooze(new Date(customTime))"
+          >Save</el-button
+        >
+      </div>
+    </el-dialog>
   </section>
 </template>
 <script setup>
@@ -192,7 +307,10 @@ import { useEmailStore } from "@/store/email";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useSettingStore } from "@/store/setting";
 import { conversationList, conversationAction } from "@/request/conversation";
-import { fromNow } from "@/utils/day";
+import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
+import MailRow from "@/components/mail-row/index.vue";
+import { userDraftStore } from "@/store/draft";
+const drafts = userDraftStore();
 const props = defineProps({ folder: String });
 const account = useAccountStore(),
   emailStore = useEmailStore(),
@@ -222,7 +340,8 @@ const {
 });
 let generation = 0,
   active = true,
-  timer;
+  timer,
+  wakeTimer;
 const key = computed(() =>
   [
     props.folder,
@@ -255,34 +374,114 @@ function params() {
     limit: 50,
   };
 }
-async function load(more = false, preserve = false) {
-  if (more && loading.value) return;
-  const request = ++generation,
-    filter = key.value;
+const history = ref([]);
+const pageCursor = ref(null);
+const offset = ref(0);
+const selectedUnread = computed(() =>
+  rows.value.some(
+    (row) => selected.value.includes(row.lastEmailId) && row.unreadCount,
+  ),
+);
+const filingAction = computed(() =>
+  ["archived", "snoozed"].includes(props.folder) ? "inbox" : "archive",
+);
+const filingLabel = computed(() =>
+  filingAction.value === "archive" ? "Archive" : "Move to Inbox",
+);
+const filingIcon = computed(() =>
+  filingAction.value === "archive"
+    ? "material-symbols:archive-outline"
+    : "material-symbols:move-to-inbox-outline",
+);
+const readIcon = (unread) =>
+  unread ? "material-symbols:drafts-outline" : "material-symbols:mail-outline";
+const rowDate = (row) => {
+  if (props.folder === "snoozed" && row.wakeAt)
+    return new Date(row.wakeAt * 1000);
+  const draftDate = replies(row)[0]?.lastDate || 0;
+  if (draftDate || row.activityTime)
+    return new Date(
+      Math.max(
+        draftDate,
+        row.activityTime
+          ? row.activityTime * 1000
+          : tzDayjs(row.lastDate).valueOf(),
+      ),
+    );
+  return row.lastDate;
+};
+const replies = (row) =>
+  drafts.replies[row.threadId] ||
+  drafts.replies["anchor-" + row.lastEmailId] ||
+  [];
+const snoozeOpen = ref(false),
+  snoozeIds = ref([]),
+  customTime = ref(""),
+  snoozeOptions = ref([]);
+function chooseSnooze(ids) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(8, 0, 0, 0);
+  const nextWeek = new Date(tomorrow);
+  nextWeek.setDate(nextWeek.getDate() + ((8 - nextWeek.getDay()) % 7));
+  const option = (label, date) => ({
+    label,
+    date,
+    detail: date.toLocaleString(undefined, {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  });
+  snoozeOptions.value = [option("Tomorrow", tomorrow)];
+  if (nextWeek > tomorrow)
+    snoozeOptions.value.push(option("Next week", nextWeek));
+  snoozeIds.value = [...ids];
+  customTime.value = "";
+  snoozeOpen.value = true;
+}
+function applySnooze(date) {
+  if (!(date > new Date())) return;
+  snoozeOpen.value = false;
+  return mutate(
+    "snooze",
+    { wakeAt: Math.floor(date.getTime() / 1000) },
+    snoozeIds.value,
+  );
+}
+async function load(
+  target = { cursor: pageCursor.value, offset: offset.value },
+  prior = history.value,
+) {
+  const request = ++generation;
   loading.value = true;
   error.value = "";
-  const target = preserve ? Math.max(rows.value.length, 50) : 50;
   try {
-    const loaded = [];
-    let next = more ? cursor.value : null;
-    let data;
-    do {
-      data = await conversationList({ ...params(), cursor: next });
-      if (request !== generation || filter !== key.value) return;
-      loaded.push(...data.threads);
-      next = data.nextCursor;
-    } while (preserve && data.hasMore && loaded.length < target);
-    rows.value = more
-      ? [
-          ...rows.value,
-          ...loaded.filter(
-            (item) => !rows.value.some((old) => old.threadId === item.threadId),
-          ),
-        ]
-      : loaded;
+    const data = await conversationList({ ...params(), cursor: target.cursor });
+    if (request !== generation) return;
+    if (target.cursor && data.total !== total.value)
+      return await load({ cursor: null, offset: 0 }, []);
+    if (!data.threads.length && prior.length)
+      return await load(prior.at(-1), prior.slice(0, -1));
+    if (target.cursor !== pageCursor.value)
+      containerProps.ref.value?.scrollTo?.(0, 0);
+    rows.value = data.threads;
     total.value = data.total;
+    clearTimeout(wakeTimer);
+    if (data.nextWakeAt && ["inbox", "snoozed"].includes(props.folder)) {
+      const delay = Math.min(
+        2147483647,
+        Math.max(1000, data.nextWakeAt * 1000 - Date.now() + 500),
+      );
+      wakeTimer = setTimeout(() => {
+        if (active) refresh();
+      }, delay);
+    }
     hasMore.value = data.hasMore;
     cursor.value = data.nextCursor;
+    pageCursor.value = target.cursor;
+    offset.value = target.offset;
+    history.value = prior;
     selected.value = selected.value.filter((id) =>
       rows.value.some((row) => row.lastEmailId === id),
     );
@@ -294,12 +493,27 @@ async function load(more = false, preserve = false) {
   }
 }
 function refresh() {
-  return load(false, true);
+  return load();
+}
+function nextPage() {
+  return load(
+    { cursor: cursor.value, offset: offset.value + rows.value.length },
+    [...history.value, { cursor: pageCursor.value, offset: offset.value }],
+  );
+}
+function previousPage() {
+  return load(history.value.at(-1), history.value.slice(0, -1));
 }
 watch(
   key,
   () => {
     generation++;
+    snoozeOpen.value = false;
+    history.value = [];
+    pageCursor.value = null;
+    offset.value = 0;
+    hasMore.value = false;
+    total.value = 0;
     rows.value = [];
     selected.value = [];
     cursor.value = null;
@@ -311,13 +525,26 @@ watch(
 watch(
   () => emailStore.conversationRevision,
   () => {
-    if (active) refresh();
+    if (active && !busy.value) refresh();
   },
 );
 function toggle(id) {
   if (selected.value.includes(id))
     selected.value = selected.value.filter((value) => value !== id);
   else if (selected.value.length < 95) selected.value.push(id);
+}
+function selectMatching(option) {
+  const matches = {
+    All: () => true,
+    None: () => false,
+    Read: (r) => !r.unreadCount,
+    Unread: (r) => r.unreadCount,
+    Starred: (r) => r.starred,
+    Unstarred: (r) => !r.starred,
+  };
+  selected.value = rows.value
+    .filter(matches[option])
+    .map((row) => row.lastEmailId);
 }
 function selectAll(checked) {
   selected.value = checked
@@ -332,8 +559,18 @@ async function openContext(row) {
     : contextDropdown.value
   )?.handleOpen?.();
 }
-function open(row, reply) {
+async function open(row, reply) {
   context.value = 0;
+  const draft = replies(row)[0];
+  if (draft && !reply) {
+    try {
+      const { openSavedDraft } = await import("@/services/draft-list");
+      await openSavedDraft(draft.draftId, router, props.folder);
+    } catch (e) {
+      error.value = e.message || "Could not open draft.";
+    }
+    return;
+  }
   router.push({
     path: "/mail",
     query: {
@@ -348,6 +585,7 @@ async function mutate(action, extra = {}, ids = selected.value) {
   busy.value = true;
   try {
     await conversationAction(action, ids, extra);
+    selected.value = selected.value.filter((id) => !ids.includes(id));
     emailStore.conversationRevision++;
     await refresh();
   } catch (e) {
@@ -378,10 +616,11 @@ function star(row) {
 }
 onActivated(() => {
   active = true;
-  if (rows.value.length) refresh();
+  if (!loading.value) refresh();
 });
 onDeactivated(() => {
   active = false;
+  snoozeOpen.value = false;
 });
 timer = setInterval(
   () => {
@@ -401,6 +640,7 @@ timer = setInterval(
 onUnmounted(() => {
   generation++;
   clearInterval(timer);
+  clearTimeout(wakeTimer);
 });
 defineExpose({ refresh });
 </script>
@@ -411,160 +651,61 @@ defineExpose({ refresh });
   flex-direction: column;
   min-width: 0;
 }
-.list-toolbar {
-  height: 48px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-}
-.list-toolbar button,
-.conversation-row > button {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  cursor: pointer;
-  color: var(--regular-text-color);
-}
-button:hover {
-  background: var(--mail-hover);
-}
-input[type="checkbox"] {
-  accent-color: var(--el-color-primary);
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.total {
-  margin-left: auto;
-  color: var(--regular-text-color);
-  font-size: 12px;
-}
 .conversation-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto !important;
-}
-.conversation-row {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--light-border-color);
-  background: var(--mail-read);
-}
-.conversation-row.unread {
-  background: var(--mail-surface);
-  font-weight: 600;
-}
-.conversation-row:hover {
-  box-shadow:
-    inset 0 -1px var(--light-border-color),
-    0 1px 4px #0002;
-  position: relative;
-}
-.conversation-row.selected {
-  background: var(--mail-selected);
-}
-.conversation-open {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  height: 100%;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  font-size: 14px;
-}
-.participants {
-  width: 180px;
-  flex-shrink: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.participants small {
-  font-weight: 400;
-}
-.summary {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.preview {
-  font-weight: 400;
-  color: var(--regular-text-color);
-}
-.delivery-state {
-  display: flex;
-  align-items: center;
-  color: var(--regular-text-color);
-  flex-shrink: 0;
-}
-time {
-  flex-shrink: 0;
-  font-size: 12px;
 }
 .list-status {
   padding: 32px;
   text-align: center;
   color: var(--regular-text-color);
 }
-.list-status button,
-.load-more {
+.list-status button {
   color: var(--el-color-primary);
   cursor: pointer;
 }
-.load-more {
-  display: block;
-  margin: 20px auto 80px;
-  padding: 12px 20px;
-  border-radius: 24px;
+.select-options {
+  width: 18px;
+  height: 28px;
+  border-radius: 4px;
+  margin-left: -8px;
+  margin-right: 8px;
 }
-@media (max-width: 767px) {
-  .conversation-row {
-    height: 84px;
-    gap: 8px;
-    padding: 0 12px;
+.pager:disabled {
+  opacity: 0.32;
+}
+.snooze-options {
+  display: grid;
+  gap: 8px;
+}
+.snooze-options > button:not(.el-button),
+.snooze-options label {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  gap: 8px;
+}
+.snooze-options > button:not(.el-button):hover {
+  cursor: pointer;
+  background: var(--mail-hover);
+}
+.snooze-options label {
+  flex-direction: column;
+}
+.snooze-options input {
+  color: inherit;
+  background: var(--mail-surface);
+  border: 1px solid var(--light-border-color);
+  padding: 8px;
+}
+@media (max-width: 480px) {
+  .mail-toolbar {
+    gap: 0;
+    padding: 0 4px;
   }
-  .conversation-open {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 8px;
-    padding: 12px 0;
-  }
-  .participants {
-    width: auto;
-  }
-  .summary {
-    grid-column: 1/-1;
-    grid-row: 2;
-  }
-  .preview {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .delivery-state {
-    display: none;
-  }
-  .total {
-    font-size: 11px;
-  }
-  .list-toolbar {
-    padding: 0 12px;
-    gap: 4px;
+  .mail-toolbar .total {
+    padding: 0 2px;
   }
 }
 </style>

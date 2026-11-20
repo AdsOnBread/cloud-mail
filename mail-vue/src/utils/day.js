@@ -40,3 +40,11 @@ export function tzDayjs(time) {
 export function toUtc(time) {
     return dayjs(time).utc()
 }
+
+
+export function mailboxDate(value) {
+    const date = tzDayjs(value);
+    if (!value || !date.isValid()) return '';
+    if (date.isSame(dayjs(), 'day')) return date.format('h:mm A');
+    return date.format(date.year() === dayjs().year() ? 'MMM D' : 'M/D/YY');
+}

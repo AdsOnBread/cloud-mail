@@ -5,11 +5,14 @@
     <button v-if="uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main"><Main /></main>
     <writer ref="writerRef" />
+    <MailTooltip />
     <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
+import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
+import MailTooltip from '@/components/mail-tooltip/index.vue';
 import Aside from '@/layout/aside/index.vue';
 import Header from '@/layout/header/index.vue';
 import Main from '@/layout/main/index.vue';
@@ -22,7 +25,7 @@ const uiStore = useUiStore();
 const route = useRoute();
 const writerRef = ref();
 const isMobile = ref(window.innerWidth < 768);
-let stopDraftSync;
+let stopDraftSync, stopDraftList;
 let size = window.innerWidth >= 1024 ? 'desktop' : window.innerWidth >= 768 ? 'tablet' : 'mobile';
 function resize() {
   isMobile.value = window.innerWidth < 768;
@@ -30,8 +33,8 @@ function resize() {
   if (next !== size) { uiStore.asideShow = next === 'desktop'; size = next; }
 }
 watch(() => route.name, () => { if (isMobile.value) uiStore.asideShow = false; });
-onMounted(() => { stopDraftSync=startDraftSync(); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
-onBeforeUnmount(() => { stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
+onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync(); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
+onBeforeUnmount(() => { stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
 </script>
 <style scoped>
 .mail-layout { --nav-width:72px; position:fixed; inset:0; display:grid; grid-template-columns:var(--nav-width) minmax(0,1fr); grid-template-rows:64px minmax(0,1fr); background:var(--mail-canvas); }

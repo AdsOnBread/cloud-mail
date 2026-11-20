@@ -1,5 +1,6 @@
 name = "${NAME}"
 main = "src/index.js"
+upload_source_maps = true
 compatibility_date = "2026-10-17"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 

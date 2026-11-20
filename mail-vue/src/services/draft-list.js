@@ -1,0 +1,121 @@
+import { watch } from "vue";
+import db from "@/db/db";
+import { userDraftStore } from "@/store/draft";
+import { useEmailStore } from "@/store/email";
+import { useUiStore } from "@/store/ui";
+import http from "@/axios";
+import { draftSummary, newestDraft } from "@/utils/draft-summary";
+
+export function startDraftList() {
+  const store = userDraftStore(),
+    email = useEmailStore();
+  let cache = new Map();
+  const stopList = watch(
+    [db, () => store.refreshList],
+    async ([database], old, onCleanup) => {
+      let active = true;
+      onCleanup(() => {
+        active = false;
+      });
+      if (database !== old?.[0]) {
+        store.items = [];
+        store.threads = {};
+        cache = new Map();
+      }
+      try {
+        const rows = await database.draft.toArray();
+        if (!active) return;
+        const next = new Map();
+        for (const row of rows) {
+          if (row.deleted) continue;
+          const revision = [
+            row.editToken,
+            row.cloudVersion,
+            row.localRevision,
+            row.updatedAt,
+          ].join("|");
+          const cached = cache.get(row.draftId);
+          next.set(
+            row.draftId,
+            cached?.revision === revision
+              ? cached
+              : { revision, item: draftSummary(row) },
+          );
+        }
+        cache = next;
+        store.items = [...next.values()]
+          .map((entry) => entry.item)
+          .sort(newestDraft);
+        store.listError = "";
+      } catch (error) {
+        if (active) store.listError = error.message || "Could not load drafts.";
+      }
+    },
+    { immediate: true },
+  );
+  const anchors = () =>
+    [
+      ...new Set(
+        store.items.filter((d) => d.reply && d.emailId).map((d) => d.emailId),
+      ),
+    ]
+      .sort((a, b) => a - b)
+      .join(",");
+  const stopThreads = watch(
+    [db, anchors, () => email.conversationRevision, () => store.refreshList],
+    async ([database, ids], old, onCleanup) => {
+      // A cloud refresh can change thread membership even when the set of drafts is identical.
+      if (!ids) {
+        store.threads = {};
+        return;
+      }
+      let active = true;
+      onCleanup(() => {
+        active = false;
+      });
+      const threads = {};
+      try {
+        const list = ids.split(",").map(Number);
+        for (let i = 0; i < list.length; i += 95) {
+          const rows = await http.post(
+            "/email/conversation/draft-threads",
+            { emailIds: list.slice(i, i + 95) },
+            { noMsg: true },
+          );
+          if (!active || db.value !== database) return;
+          for (const row of rows) threads[row.emailId] = row.threadId;
+        }
+        store.threads = threads;
+      } catch {
+        /* Offline drafts remain available in Drafts. The next sync retries this lookup. */
+      }
+    },
+    { immediate: true },
+  );
+  return () => {
+    stopList();
+    stopThreads();
+  };
+}
+
+export async function openSavedDraft(draftId, router, folder) {
+  const database = db.value;
+  const [draft, files] = await Promise.all([
+    database.draft.get(draftId),
+    database.att.get(draftId),
+  ]);
+  if (db.value !== database || !draft || draft.deleted)
+    throw new Error("This draft is no longer available.");
+  const restored = { ...draft, attachments: files?.attachments || [] };
+  if (
+    (draft.inlineReply || (folder && folder !== "draft")) &&
+    draft.sendType === "reply" &&
+    draft.emailId
+  ) {
+    useEmailStore().pendingReplyDraft = restored;
+    await router.push({
+      path: "/mail",
+      query: { emailId: draft.emailId, ...(folder ? { folder } : {}) },
+    });
+  } else useUiStore().writerRef.openDraft(restored);
+}

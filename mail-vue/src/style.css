@@ -307,3 +307,13 @@ html.dark .el-button--primary { --el-button-text-color:#062e6f; --el-button-hove
 .mailbox-popover .account-box .item .opt svg { color:var(--regular-text-color); }
 .mailbox-popover .account-box .item .opt .send-email { margin:0; }
 html .el-button { border-radius:20px; }
+
+/* Shared mailbox controls keep the hit area larger than the glyph. */
+:root { --mail-draft:#b3261e; --mail-row-shadow:inset 1px 0 #dadce0,inset -1px 0 #dadce0,0 1px 2px #3c40434d,0 1px 3px 1px #3c404326; }
+html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1px 3px #0008; }
+.mail-icon,.check-target { width:32px; height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; cursor:pointer; color:var(--regular-text-color); flex-shrink:0; }
+.mail-icon:hover:not(:disabled),.check-target:hover { background:color-mix(in srgb,currentColor 10%,transparent); }
+.mail-icon:active:not(:disabled) { background:color-mix(in srgb,currentColor 16%,transparent); }
+.check-target input { width:15px; height:15px; margin:0; accent-color:var(--el-color-primary); cursor:pointer; }
+.mail-toolbar { display:flex; align-items:center; gap:4px; padding:0 12px 0 8px; height:48px; flex-shrink:0; }
+.mail-toolbar .total { margin-left:auto; font-size:12px; color:var(--regular-text-color); padding:0 8px; white-space:nowrap; }

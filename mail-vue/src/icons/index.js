@@ -1,4 +1,7 @@
 import {addCollection} from "@iconify/vue";
+// Material Symbols by Google, licensed under Apache-2.0.
+import mailSymbols from './mail-symbols.json';
+addCollection(mailSymbols);
 addCollection({
     "prefix": "hugeicons",
     "lastModified": 1757879391,

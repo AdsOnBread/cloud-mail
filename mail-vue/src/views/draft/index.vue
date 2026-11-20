@@ -1,82 +1,212 @@
 <template>
-  <emailScroll ref="scroll"
-               :allow-star="false"
-               :getEmailList="getEmailList"
-               :emailDelete="emailDelete"
-               :star-add="starAdd"
-               :star-cancel="starCancel"
-               @jump="jumpContent"
-               actionLeft="6px"
-               :show-account-icon="false"
-               :show-first-loading="false"
-               :showStar="false"
-               @delete-draft="deleteDraft"
-               :type="'draft'"
-  >
-    <template #name="props">
-      <span class="send-email">{{ [...(props.email.receiveEmail || []), ...(props.email.cc || []), ...(props.email.bcc || [])].join(', ') || '(' + $t('noRecipient') + ')' }}</span>
-    </template>
-    <template #subject="props">
-      {{ props.email.subject || '(' + $t('noSubject') + ')' }}
-    </template>
-  </emailScroll>
+  <section class="draft-list" aria-label="Drafts">
+    <div class="mail-toolbar">
+      <label class="check-target" data-tip="Select"
+        ><input
+          type="checkbox"
+          aria-label="Select drafts"
+          :checked="page.length > 0 && selected.length === page.length"
+          :indeterminate="selected.length > 0 && selected.length < page.length"
+          @change="
+            selected = $event.target.checked ? page.map((d) => d.draftId) : []
+          "
+      /></label>
+      <button
+        v-if="selected.length"
+        class="mail-icon"
+        data-tip="Discard drafts"
+        aria-label="Discard selected drafts"
+        :disabled="busy"
+        @click="discard(selected)"
+      >
+        <Icon icon="material-symbols:delete-outline" width="20" />
+      </button>
+      <button
+        v-else
+        class="mail-icon"
+        data-tip="Refresh"
+        aria-label="Refresh drafts"
+        :disabled="busy"
+        @click="refresh"
+      >
+        <Icon icon="material-symbols:refresh" width="20" />
+      </button>
+      <span class="total">{{
+        filtered.length
+          ? offset + 1 + "–" + (offset + page.length) + " of " + filtered.length
+          : ""
+      }}</span>
+      <button
+        class="mail-icon"
+        data-tip="Previous page"
+        aria-label="Previous page"
+        :disabled="!offset"
+        @click="offset -= 50"
+      >
+        <Icon icon="material-symbols:chevron-left" width="20" />
+      </button>
+      <button
+        class="mail-icon"
+        data-tip="Next page"
+        aria-label="Next page"
+        :disabled="offset + page.length >= filtered.length"
+        @click="offset += 50"
+      >
+        <Icon icon="material-symbols:chevron-right" width="20" />
+      </button>
+    </div>
+    <p v-if="error || drafts.listError" role="alert">
+      {{ error || drafts.listError }} <button @click="refresh">Retry</button>
+    </p>
+    <div class="draft-scroll">
+      <MailRow
+        v-for="draft in page"
+        :key="draft.draftId"
+        draft-only
+        :draft-count="1"
+        :participants="draft.recipients"
+        :subject="draft.subject"
+        :preview="draft.preview"
+        :date="mailboxDate(draft.lastDate)"
+        :date-title="formatDetailDate(draft.lastDate)"
+        :open-label="`Open draft: ${draft.subject || '(no subject)'}`"
+        :selected="selected.includes(draft.draftId)"
+        @select="toggle(draft.draftId)"
+        @open="open(draft.draftId)"
+      >
+        <template #actions
+          ><button
+            class="mail-icon"
+            data-tip="Discard draft"
+            aria-label="Discard draft"
+            :disabled="busy"
+            @click="discard([draft.draftId])"
+          >
+            <Icon icon="material-symbols:delete-outline" width="20" /></button
+        ></template>
+      </MailRow>
+      <p v-if="!filtered.length && !drafts.listError">
+        {{ search.query ? "No drafts match your search." : "No saved drafts." }}
+      </p>
+    </div>
+  </section>
 </template>
-
 <script setup>
+import { computed, onActivated, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { Icon } from "@iconify/vue";
+import { ElMessageBox } from "element-plus";
+import { userDraftStore } from "@/store/draft";
+import { useMailSearchStore } from "@/store/mail-search";
 import { removeLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
-import { onActivated } from "vue";
-onActivated(()=>syncCloudDrafts().catch(()=>{}));
-import emailScroll from "@/components/email-scroll/index.vue"
-import {emailDelete} from "@/request/email.js";
-import {starAdd, starCancel} from "@/request/star.js";
-import {defineOptions, ref, watch, toRaw} from "vue";
-import {useUiStore} from "@/store/ui.js";
-import {userDraftStore} from "@/store/draft.js";
-import db from "@/db/db.js"
-
-defineOptions({
-  name: 'draft'
-})
-
-import router from '@/router';
-import { useEmailStore } from '@/store/email';
-const emailStore=useEmailStore();
-const draftStore = userDraftStore();
-const uiStore = useUiStore();
-const scroll = ref({})
-
-watch(() => draftStore.refreshList, async () => {
-  const {list} = await getEmailList();
-    scroll.value.emailList.length = 0
-    scroll.value.handleList(list);
-    scroll.value.emailList.push(...list)
-})
-
-function getEmailList() {
-  return new Promise((resolve, reject) => {
-    db.value.draft.orderBy('createTime').reverse().toArray().then(list => {
-      resolve({list:list.filter(row=>!row.deleted)})
-    })
-  })
+import { openSavedDraft } from "@/services/draft-list";
+import { mailboxDate, formatDetailDate } from "@/utils/day";
+import MailRow from "@/components/mail-row/index.vue";
+defineOptions({ name: "draft" });
+const drafts = userDraftStore(),
+  search = useMailSearchStore(),
+  router = useRouter();
+const selected = ref([]),
+  offset = ref(0),
+  error = ref(""),
+  busy = ref(false);
+const filtered = computed(() => {
+  const query = search.query.toLowerCase();
+  return drafts.items.filter(
+    (draft) =>
+      !query ||
+      [draft.subject, draft.recipients, draft.preview].some((value) =>
+        value.toLowerCase().includes(query),
+      ),
+  );
+});
+const page = computed(() =>
+  filtered.value.slice(offset.value, offset.value + 50),
+);
+watch(
+  () => search.query,
+  () => {
+    offset.value = 0;
+  },
+);
+watch(page, (rows) => {
+  if (!rows.length && offset.value)
+    offset.value = Math.max(
+      0,
+      Math.floor((filtered.value.length - 1) / 50) * 50,
+    );
+  selected.value = selected.value.filter((id) =>
+    rows.some((d) => d.draftId === id),
+  );
+});
+function toggle(id) {
+  selected.value = selected.value.includes(id)
+    ? selected.value.filter((old) => old !== id)
+    : [...selected.value, id];
 }
-
-async function deleteDraft(draftIds) {
-  for(const id of draftIds)await removeLocalDraft(id);
-  draftStore.refreshList++
+async function refresh() {
+  busy.value = true;
+  try {
+    error.value = "";
+    await syncCloudDrafts();
+    drafts.refreshList++;
+  } catch (e) {
+    error.value = e.message || "Could not refresh drafts.";
+  } finally {
+    busy.value = false;
+  }
 }
-
-async function jumpContent(email) {
-  const att = await db.value.att.get(email.draftId)
-  email.attachments = att?.attachments || []
-  if(email.inlineReply && email.sendType==='reply' && email.emailId) {
-    emailStore.pendingReplyDraft={...email};
-    await router.push({path:'/mail',query:{emailId:email.emailId}});
-  } else uiStore.writerRef.openDraft(email);
+onActivated(() => {
+  syncCloudDrafts().catch(() => {});
+});
+async function open(id) {
+  try {
+    error.value = "";
+    await openSavedDraft(id, router, "draft");
+  } catch (e) {
+    error.value = e.message || "Could not open draft.";
+  }
 }
-
+async function discard(ids) {
+  if (busy.value) return;
+  try {
+    await ElMessageBox.confirm(
+      ids.length === 1 ? "Discard this draft?" : "Discard these drafts?",
+      { confirmButtonText: "Discard", cancelButtonText: "Cancel" },
+    );
+  } catch {
+    return;
+  }
+  busy.value = true;
+  try {
+    error.value = "";
+    for (const id of ids) await removeLocalDraft(id);
+  } catch (e) {
+    error.value = e.message || "Could not discard draft.";
+  } finally {
+    busy.value = false;
+    drafts.refreshList++;
+  }
+}
 </script>
-<style>
-.send-email {
-  font-weight: normal;
+<style scoped>
+.draft-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.draft-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+p {
+  text-align: center;
+  padding: 32px;
+  color: var(--regular-text-color);
+}
+p button {
+  color: var(--el-color-primary);
+  cursor: pointer;
 }
 </style>

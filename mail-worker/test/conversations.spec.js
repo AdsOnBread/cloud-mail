@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { dbInit } from '../src/init/init';
 import { conversationList, conversationMessages, conversationAction } from '../src/service/conversation-service';
+import * as cloudMail from '../src/cloud/mail';
 import emailService from '../src/service/email-service';
 import settingService from '../src/service/setting-service';
 import * as mobile from '../src/mobile/service';
@@ -91,6 +92,56 @@ describe('Web conversations', () => {
 		expect((await list({ q: 'hidden' })).total).toBe(0);
 		expect((await list({ folder: 'sent', q: 'hidden' })).total).toBe(1);
 		expect((await messages(root.email_id)).messages.map((m) => m.bcc)).toEqual(['[]', '[{"address":"hidden@external.com"}]']);
+	});
+	it('keeps filing consistent across web, mobile sync and cloud inboxes, including member deletion and new mail', async () => {
+		const first=await insert({message_id:'<filed@example.com>'});
+		const latest=await insert({in_reply_to:'<filed@example.com>'});
+		const before=await mobile.bootstrap(env.db,1);
+		await action('archive',[latest.email_id]);
+		expect((await list()).total).toBe(0);
+		expect((await mobile.changes(env.db,1,{after:before.cursor})).threads[0].inboxCount).toBe(0);
+		expect((await mobile.bootstrap(env.db,1)).unreadTotal).toBe(0);
+		expect((await cloudMail.list(context(),1,{folder:'inbox'})).messages).toHaveLength(0);
+		await cloudMail.trash(context(),1,[latest.email_id]);
+		expect((await list({folder:'archived'})).threads[0].lastEmailId).toBe(first.email_id);
+		expect((await list()).total).toBe(0);
+		await insert({in_reply_to:'<filed@example.com>'});
+		expect((await list()).total).toBe(1);
+		expect((await list({folder:'archived'})).total).toBe(0);
+		expect((await cloudMail.list(context(),1,{folder:'inbox'})).messages).toHaveLength(2);
+	});
+	it('brings due snoozes to the top and pages by reminder time with a stable ID tie-break', async () => {
+		const older=await insert({subject:'Old',create_time:'2020-01-01 00:00:00'});
+		const newer=await insert({subject:'Recent',create_time:'2021-01-01 00:00:00'});
+		await action('snooze',[older.email_id],{wakeAt:Math.floor(Date.now()/1000)+60});
+		expect((await list({folder:'snoozed'})).threads[0].subject).toBe('Old');
+		expect((await list()).threads[0].subject).toBe('Recent');
+		const before=await mobile.bootstrap(env.db,1);
+		await env.db.prepare('UPDATE conversation_filing SET wake_at=unixepoch()-1 WHERE user_id=1').run();
+		expect((await mobile.changes(env.db,1,{after:before.cursor})).threads[0].inboxCount).toBe(1);
+		const first=await list({limit:1});
+		expect(first.threads[0].lastEmailId).toBe(older.email_id);
+		expect((await list({limit:1,cursor:first.nextCursor})).threads[0].lastEmailId).toBe(newer.email_id);
+		expect((await list({folder:'snoozed'})).total).toBe(0);
+	});
+	it('syncs an expired reminder after the newest snoozed member was trashed and synchronized', async () => {
+		const first=await insert({message_id:'<wake@example.com>'});
+		const last=await insert({in_reply_to:'<wake@example.com>'});
+		await action('snooze',[last.email_id],{wakeAt:Math.floor(Date.now()/1000)+120});
+		await cloudMail.trash(context(),1,[last.email_id]);
+		const before=await mobile.bootstrap(env.db,1);
+		await env.db.prepare('UPDATE conversation_filing SET wake_at=unixepoch()-1 WHERE user_id=1').run();
+		const changed=await mobile.changes(env.db,1,{after:before.cursor});
+		expect(changed.threads).toHaveLength(1);
+		expect(changed.threads[0]).toMatchObject({inboxCount:1,lastEmailId:first.email_id});
+	});
+	it('keeps a sent-only snooze when another outgoing reply joins and can move it to Inbox', async () => {
+		const first=await insert({type:1,message_id:'<sent-only@example.com>'});
+		await action('snooze',[first.email_id],{wakeAt:Math.floor(Date.now()/1000)+3600});
+		const last=await insert({type:1,in_reply_to:'<sent-only@example.com>'});
+		expect((await list({folder:'snoozed'})).threads[0].lastEmailId).toBe(last.email_id);
+		await action('inbox',[last.email_id]);
+		expect((await list()).threads[0].lastEmailId).toBe(last.email_id);
 	});
 	it('has consistent totals and cursors in both sort orders', async () => {
 		const ids = [];

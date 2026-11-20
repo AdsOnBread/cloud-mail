@@ -29,7 +29,7 @@
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
     <div ref="scroll" class="conversation-body">
-      <h1>{{ messages.at(-1)?.subject || "Conversation" }}</h1>
+      <h1>{{ threadSubject || "(no subject)" }}</h1>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
       </p>
@@ -102,6 +102,7 @@ const accountStore = useAccountStore();
 const route = useRoute(),
   router = useRouter(),
   store = useEmailStore();
+const threadSubject = ref("");
 const messages = ref([]),
   expanded = ref(new Set()),
   activeTarget = ref(0),
@@ -150,6 +151,7 @@ async function load(older = false) {
           ),
         ]
       : data.messages;
+    threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
     hasMore.value = data.hasMore;
     cursor.value = data.nextCursor;
@@ -184,6 +186,7 @@ watch(
   () => route.query.emailId,
   () => {
     handledReply = false;
+    threadSubject.value = "";
     activeTarget.value = 0;
     expanded.value = new Set();
     messages.value = [];
@@ -244,13 +247,7 @@ async function sent() {
 function back() {
   if (window.history.state.back) router.back();
   else
-    router.push(
-      route.query.folder === "sent"
-        ? "/sent"
-        : route.query.folder === "starred"
-          ? "/starred"
-          : "/inbox",
-    );
+    router.push(({ sent:'/sent', starred:'/starred', draft:'/drafts', archived:'/archived', snoozed:'/snoozed' })[route.query.folder] || '/inbox');
 }
 async function mutate(action, extra = {}) {
   if (busy.value || !(await save())) return;

@@ -125,17 +125,28 @@ describe("conversation lists", () => {
     expect(conversationAction).toHaveBeenCalledWith("read", [22], {});
     wrapper.unmount();
   });
+  it("applies hover actions only to their row even with another row selected", async () => {
+    conversationList.mockResolvedValue(page([row(1,"One"),row(2,"Two")]));
+    const wrapper=mountList();
+    await flushPromises();
+    await wrapper.get('[aria-label="Select One"]').setValue(true);
+    await wrapper.findAll('.conversation-row')[1].get('[aria-label="Archive"]').trigger('click');
+    await flushPromises();
+    expect(conversationAction).toHaveBeenCalledWith('archive',[2],{});
+    expect(wrapper.get('[aria-label="Select One"]').element.checked).toBe(true);
+    wrapper.unmount();
+  });
   it("pages conversations, preserves user-wide Starred scope and aggregate stars", async () => {
     conversationList
       .mockResolvedValueOnce(
         page([row(22, "First")], { hasMore: true, nextCursor: 22, total: 2 }),
       )
-      .mockResolvedValue(page([{ ...row(10, "Second"), starred: 1 }]));
+      .mockResolvedValue(page([{ ...row(10, "Second"), starred: 1 }], {total:2}));
     const wrapper = mountList("starred");
     await flushPromises();
-    await wrapper.get(".load-more").trigger("click");
+    await wrapper.get('[aria-label="Next page"]').trigger("click");
     await flushPromises();
-    expect(wrapper.text()).toContain("First");
+    expect(wrapper.text()).not.toContain("First");
     expect(wrapper.text()).toContain("Second");
     expect(conversationList.mock.calls[1][0]).toMatchObject({
       folder: "starred",

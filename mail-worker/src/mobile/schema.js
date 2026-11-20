@@ -1,3 +1,5 @@
+import { filingSchema } from '../service/conversation-filing';
+
 // Additive and repeatable: the existing installation initializer calls this after legacy upgrades.
 export async function migrateMobile(db) {
 	const columns = (await db.prepare('PRAGMA table_info(email)').all()).results;
@@ -19,7 +21,7 @@ export async function migrateMobile(db) {
 			user_id INTEGER PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 1, indexed_revision INTEGER NOT NULL DEFAULT 0)`),
 		db.prepare(`INSERT OR IGNORE INTO mobile_thread_state(user_id) SELECT DISTINCT user_id FROM email WHERE user_id > 0`),
 	]);
-	const statements = [];
+	const statements = filingSchema().map(query => db.prepare(query));
 	const visible = r => `${r}.is_del=0 AND ${r}.trashed_at IS NULL AND ${r}.status NOT IN (6,7) AND ${r}.user_id>0`;
 	const dirty = r => `INSERT INTO mobile_thread_state(user_id,revision) VALUES (${r}.user_id,1)
 		ON CONFLICT(user_id) DO UPDATE SET revision=revision+1;`;

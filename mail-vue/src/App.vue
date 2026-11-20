@@ -5,5 +5,4 @@
 </template>
 <script setup>
 import en from 'element-plus/es/locale/lang/en';
-import('@/icons/index.js')
 </script>

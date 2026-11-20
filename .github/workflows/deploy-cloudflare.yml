@@ -24,6 +24,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || vars.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
       D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID || vars.D1_DATABASE_ID }}
+      OAUTH_KV_NAMESPACE_ID: ${{ secrets.OAUTH_KV_NAMESPACE_ID || vars.OAUTH_KV_NAMESPACE_ID }}
       KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID || vars.KV_NAMESPACE_ID }}
       R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || vars.R2_BUCKET_NAME }}
       PROJECT_LINK: ${{ secrets.PROJECT_LINK || vars.PROJECT_LINK }}
@@ -161,6 +162,21 @@ jobs:
           sed -i "s|\${KV_NAMESPACE_ID}|$KV_ID|g" "$CONFIG_FILE"
           echo "✅ Setup completed."
 
+      - name: Set up MCP OAuth storage
+        working-directory: ./mail-worker
+        run: |
+          OAUTH_ID="$OAUTH_KV_NAMESPACE_ID"
+          if [ -z "$OAUTH_ID" ]; then
+            OAUTH_TITLE="${NAME}-oauth"
+            OAUTH_ID=$(pnpm wrangler kv namespace list | jq -r --arg title "$OAUTH_TITLE" '.[] | select(.title == $title) | .id')
+            if [ -z "$OAUTH_ID" ]; then
+              pnpm wrangler kv namespace create "$OAUTH_TITLE"
+              OAUTH_ID=$(pnpm wrangler kv namespace list | jq -r --arg title "$OAUTH_TITLE" '.[] | select(.title == $title) | .id')
+            fi
+          fi
+          test -n "$OAUTH_ID"
+          sed -i "s|\${OAUTH_KV_NAMESPACE_ID}|${OAUTH_ID}|g" wrangler-action.toml
+
       - name: 🐬 Set up D1 database
         working-directory: ./mail-worker
         run: |
@@ -199,22 +215,20 @@ jobs:
           sed -i "s|\${D1_DATABASE_ID}|$D1_ID|g" "$CONFIG_FILE"
           echo "✅ Setup completed."
 
+      - name: Prepare mailbox filing before switching traffic
+        working-directory: ./mail-worker
+        run: node scripts/prepare-mailbox.mjs wrangler-action.toml
+
       - name: 🚀 Start deployment
         id: deploy
         working-directory: ./mail-worker
         run: |
           echo "🚀 Starting deployment..."
-          pnpm wrangler deploy -c wrangler-action.toml 2>&1 \
-            | tee deploy.log \
-            | grep -v "https://.*\.workers\.dev" \
-            | sed -E 's/env\.domain .*/env.domain (***)/' \
-            || true
-          
-          DEPLOY_EXIT_CODE=${PIPESTATUS[0]}
-          if [ $DEPLOY_EXIT_CODE -ne 0 ]; then
+          if ! pnpm wrangler deploy -c wrangler-action.toml > deploy.log 2>&1; then
+            sed -E 's/env\.domain .*/env.domain (***)/; /https:.*workers\.dev/d' deploy.log
             exit 1
           fi
-          
+
           WORKER_URL=$(grep -o "https://.*\.workers\.dev" deploy.log || echo "")
           
           if [ -n "$WORKER_URL" ]; then

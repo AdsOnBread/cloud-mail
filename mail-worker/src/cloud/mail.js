@@ -1,3 +1,5 @@
+import { ensureThreads } from '../mobile/threads';
+import { filedConversations, inboxMember } from '../service/conversation-filing';
 import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
 import { camel } from '../mobile/service';
@@ -11,7 +13,7 @@ export async function list(c,userId,p={}) {
   const folder=p.folder||'inbox';
   if(!['inbox','sent','all','starred','trash'].includes(folder)) throw new BizError('Invalid folder.',400);
   filters.push(folder==='trash'?'e.trashed_at IS NOT NULL':'e.trashed_at IS NULL');
-  if(folder==='inbox') filters.push('e.type=0 AND e.status=0');
+  if(folder==='inbox') { await ensureThreads(c.env.db,userId); args.unshift(userId,userId); filters.push(inboxMember); }
   if(folder==='sent') filters.push('e.type=1');
   if(folder==='starred') filters.push('s.star_id IS NOT NULL');
   if(p.accountId) {filters.push('e.account_id=?');args.push(positive(p.accountId));}
@@ -22,9 +24,10 @@ export async function list(c,userId,p={}) {
     args.push(...Array(8).fill(term));
   }
   const limit=pageSize(p.limit);
-  const rows=(await c.env.db.prepare(`SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
+  const rows=(await c.env.db.prepare(`${folder==='inbox' ? `WITH ${filedConversations}` : ''} SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
     e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
     FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
+    ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}
     WHERE ${filters.join(' AND ')} ORDER BY e.email_id DESC LIMIT ?`).bind(...args,limit+1).all()).results;
   return {messages:rows.slice(0,limit).map(camel),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
 }
