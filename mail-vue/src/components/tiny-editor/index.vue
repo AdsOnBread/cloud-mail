@@ -11,6 +11,7 @@
       ref="editorRef"
     ></textarea>
     <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
+    <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.open(link, true)" />
     <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
   </div>
 </template>
@@ -29,6 +30,8 @@ import {hasFiles,hasRichSelection} from "../message-composer/files";
 import {plainBodyText, plainMarkup} from "../message-composer/plain-text";
 import {fonts, formattingShortcut} from "./format-options";
 import ComposeFormat from "./compose-format.vue";
+import ComposePhoto from "./compose-photo.vue";
+import { defaultPhotoWidth, defaultPhotoHeight } from "./photo-size";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
 import { useUiStore } from "@/store/ui.js";
@@ -78,8 +81,8 @@ async function ready() {
   } while (current !== pendingInit);
 }
 const editor = shallowRef(null);
-const linkPanel = ref();
-function openLink() { linkPanel.value?.open(); }
+const linkPanel = ref(), photoPanel = ref();
+function openLink() { photoPanel.value?.close(); linkPanel.value?.open(); }
 function setSignature(item, beforeQuote, reply, manual = true) {
   const ed = editor.value;
   if (!ed?.initialized || ed.removed) return;
@@ -115,7 +118,8 @@ function insertPhotos(photos) {
     const image = ed.getDoc().createElement("img");
     image.src = photo.src;
     image.alt = photo.name;
-    image.style.maxWidth = "100%";
+    image.style.maxWidth = defaultPhotoWidth;
+    image.style.maxHeight = defaultPhotoHeight;
     return image.outerHTML;
   }).join("");
   ed.insertContent(html);
@@ -181,6 +185,7 @@ function writeContent(ed, html) {
 }
 function clearEditor() {
   linkPanel.value?.close();
+  photoPanel.value?.close();
   if (isInitialized.value && editor.value) {
     writeContent(editor.value, "");
   }
@@ -235,6 +240,7 @@ function initEditor(initialContent) {
   pendingInit = window.tinymce.init({
     selector: `#${props.editorId}`,
     statusbar: false,
+    body_class: props.mailCompose ? "mail-compose-body" : "",
     height: "100%",
 
     //relative_urls: false,  //Keep image URLs absolute when they share the site domain
@@ -288,6 +294,12 @@ function initEditor(initialContent) {
           }
         }, true);
         ed.on("click", event => {
+          if (props.mailCompose && event.target.nodeName === "IMG" && !event.altKey && !event.metaKey && !event.ctrlKey) {
+            event.preventDefault();
+            linkPanel.value?.close();
+            photoPanel.value?.open(event.target);
+            return;
+          }
           const link = ed.dom.getParent(event.target, "a[href]");
           if (link && !event.altKey && !event.metaKey && !event.ctrlKey) {
             event.preventDefault();
@@ -295,6 +307,14 @@ function initEditor(initialContent) {
           }
         });
       }
+      if (props.mailCompose && !props.plainText) ed.on("keydown", event => {
+        if (event.key !== "Enter" || !event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+        const image = ed.selection.getNode();
+        if (image?.nodeName !== "IMG") return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        linkPanel.value?.close();
+        photoPanel.value?.open(image,true);
+      }, true);
       if (props.mailCompose) ed.on("keydown", event => emit("compose-keydown", event), true);
       const messageText = () => props.plainText ? plainBodyText(ed.getBody()) : ed.getContent({format:"text"});
       ed.on("init", () => {
@@ -393,6 +413,7 @@ function getContent() {
 
 function destroyEditor() {
   linkPanel.value?.close();
+  photoPanel.value?.close();
   isInitialized.value = false;
   if (editor.value) {
     editor.value.remove();

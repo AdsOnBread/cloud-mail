@@ -111,7 +111,7 @@ const attService = {
 
 			const hasInlineWidth = img.hasAttribute('width');
 			const style = img.getAttribute('style') || '';
-			const hasStyleWidth = /(^|\s)width\s*:\s*[^;]+/.test(style);
+			const hasStyleWidth = /(?:^|;)\s*(?:max-)?width\s*:\s*[^;]+/i.test(style);
 
 			if (!hasInlineWidth && !hasStyleWidth) {
 				const newStyle = (style ? style.trim().replace(/;$/, '') + '; ' : '') + 'max-width: 100%;';

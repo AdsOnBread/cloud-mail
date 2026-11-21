@@ -2,10 +2,12 @@
     margin: 0 !important;
 }
 
-img {
+body:not(.mail-compose-body) img {
     max-width: 100% !important;
     height: auto !important;
 }
+
+.mail-compose-body img { max-width: 100%; height: auto; }
 
 p {
     margin: 0 !important;
