@@ -838,6 +838,7 @@ async function openDraft(draft) {
   try {
     resetForm();
     Object.assign(form, restoreDraft(draft), { subject: draft.subject ?? "" });
+    if(draft.deliveryError)sendError.value=draft.deliveryError;
     if(draft.schedulingError)sendError.value="Scheduling failed. "+draft.schedulingError;
     form.ownerEmail = userStore.user.email;
     if (!form.sendEmail) {

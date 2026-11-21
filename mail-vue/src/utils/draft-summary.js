@@ -42,7 +42,7 @@ export function draftSummary(draft) {
     starred: Boolean(draft.mailboxStarred),
     reply: draft.sendType === "reply",
     subject: draft.subject || "",
-    preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : snippet.slice(0,180),
+    preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : draft.deliveryError ? 'Send status: '+draft.deliveryError : snippet.slice(0,180),
     lastDate: tzDayjs(draft.updatedAt || draft.createTime).valueOf(),
     recipients: [
       ...addresses(draft.receiveEmail),

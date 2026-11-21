@@ -587,6 +587,10 @@ function heldDelivery(receipt, database, api, id) {
           throw new Error(status.message || 'Delivery failed. Your message is in Drafts.');
         }
         if (!['sending','holding'].includes(status.state)) {
+          if(status.state==='uncertain' && status.message) {
+            await syncCloudDrafts();
+            await database.meta.delete(receiptKey(receipt.attemptId));
+          }
           throw new Error(status.message || 'Delivery has not been confirmed. Check Sent before retrying.');
         }
         await wait(1000);

@@ -9,6 +9,7 @@ import { camel } from '../mobile/service';
 const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui','labelIds'];
 function normalize(input,previous={}) {
   const value={...previous};
+  delete value.deliveryError;
   for(const key of fields) if(Object.hasOwn(input,key)) value[key]=input[key];
   for(const key of ['subject','content','text','name']) {
     value[key]??='';

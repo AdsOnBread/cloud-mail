@@ -151,7 +151,7 @@ async function dispatch(c,userId,key,draft,scheduled,loadPayload,claim) {
     const result={state,attemptId:key,message:known?error.message:'Delivery may have occurred. Check Sent and provider activity before sending another copy.'};
     await c.env.db.batch([
       c.env.db.prepare('UPDATE send_attempts SET state=?,result=? WHERE user_id=? AND idempotency_key=?').bind(state,JSON.stringify(result),userId,key),
-      ...(draft?[c.env.db.prepare(`UPDATE cloud_drafts SET state=?,data=CASE WHEN ? THEN json_set(data,'$.scheduleError',?) ELSE json_remove(data,'$.undoSendKey') END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND state='sending'`).bind(known?(scheduled?'schedule_failed':'draft'):'uncertain',scheduled?1:0,result.message,userId,draft.draftId)]:[])
+      ...(draft?[c.env.db.prepare(`UPDATE cloud_drafts SET state=?,data=CASE WHEN ? THEN json_set(data,'$.scheduleError',?) WHEN json_extract(data,'$.undoSendKey') IS NOT NULL THEN json_set(json_remove(data,'$.undoSendKey'),'$.deliveryError',?) ELSE data END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND state='sending'`).bind(known?(scheduled?'schedule_failed':'draft'):'uncertain',scheduled?1:0,result.message,result.message,userId,draft.draftId)]:[])
     ]);
     console.log(JSON.stringify({event:'send_attempt',attemptId:key,userId,state}));
     return result;
@@ -180,6 +180,22 @@ export async function dispatchHeld(c,userId,key) {
 }
 
 export async function recoverHeld(c) {
+  // A terminated request after the provider fence is ambiguous. Surface it
+  // for inspection without dispatching again, even if the browser never returns.
+  const db=c.env.db, cutoff=Date.now()-15*60000;
+  const stale=await db.prepare(`SELECT d.user_id,d.draft_id,a.idempotency_key FROM cloud_drafts d
+    JOIN send_attempts a ON a.user_id=d.user_id AND a.idempotency_key=json_extract(d.data,'$.undoSendKey')
+    WHERE d.state='sending' AND a.state='dispatching' AND json_extract(a.result,'$.startedAt')<? LIMIT 20`).bind(cutoff).all();
+  for (const row of stale.results) {
+    const receipt={state:'uncertain',attemptId:row.idempotency_key,message:'Delivery could not be confirmed. Check Sent before sending another copy.'};
+    await db.batch([
+      db.prepare("UPDATE send_attempts SET state='uncertain',result=? WHERE user_id=? AND idempotency_key=? AND state='dispatching'")
+        .bind(JSON.stringify(receipt),row.user_id,row.idempotency_key),
+      db.prepare(`UPDATE cloud_drafts SET state='uncertain',data=json_set(json_remove(data,'$.undoSendKey'),'$.deliveryError',?),
+        version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND state='sending' AND json_extract(data,'$.undoSendKey')=?`)
+        .bind(receipt.message,row.user_id,row.draft_id,row.idempotency_key),
+    ]);
+  }
   const {results} = await c.env.db.prepare(`SELECT d.user_id, a.idempotency_key FROM cloud_drafts d
     JOIN send_attempts a ON a.user_id=d.user_id AND a.idempotency_key=json_extract(d.data,'$.undoSendKey')
     WHERE d.state='sending' AND a.state='holding' AND json_extract(a.result,'$.undoUntil')<=?
