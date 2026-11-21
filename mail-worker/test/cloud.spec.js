@@ -506,6 +506,32 @@ describe('Scheduled send',()=>{
    expect((await drafts.get(c(),1,d.draftId))).toMatchObject({state:'draft',content:d.content});
    expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('upsert');
  });
+ it('sets read state atomically without disturbing a queued delivery or carrying unread state back to Drafts',async()=>{
+   const {schedule,scheduledList,setScheduledRead,cancel}=await import('../src/cloud/scheduled');
+   const sendAt=Math.floor(Date.now()/1000)+3600;
+   const messages=[];
+   for (const subject of ['First','Second']) {
+     const d=await draft({subject});
+     messages.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+   }
+   const unread=()=>scheduledList(c(),1,1,{isUnread:'1'});
+   const set=(user,messages,unread)=>setScheduledRead(c(),user,{messages,unread});
+   expect(await unread()).toEqual([]);
+   await expect(set(2,messages,true)).rejects.toMatchObject({code:409});
+   await expect(set(1,[messages[0],messages[0]],true)).rejects.toMatchObject({code:400});
+   await expect(set(1,[messages[0],{...messages[1],version:999}],true)).rejects.toMatchObject({code:409});
+   expect(await unread()).toEqual([]);
+   expect(await set(1,messages,true)).toEqual({updated:2});
+   expect(await unread()).toMatchObject(messages.map(({draftId,version})=>({draftId,version,unread:1,sendAt})));
+   await set(1,[messages[1]],false);
+   expect(await scheduledList(c(),1,1,{countOnly:'1',isUnread:'1'})).toEqual({count:2});
+   expect((await unread()).map(d=>d.draftId)).toEqual([messages[0].draftId]);
+   const {draftId,version}=messages[0];
+   await cancel(c(),1,draftId,version);
+   await expect(set(1,messages,true)).rejects.toMatchObject({code:409});
+   await schedule(c(),1,draftId,{version:version+1,sendAt});
+   expect(await unread()).toEqual([]);
+ });
  it('keeps filing choices through cancellation, edits and delivery, on the sender copy only',async()=>{
    const {schedule,scheduledList,cancel,setScheduledMark}=await import('../src/cloud/scheduled');
    const draftRow=await draft(),id=draftRow.draftId,sendAt=Math.floor(Date.now()/1000)+3600;

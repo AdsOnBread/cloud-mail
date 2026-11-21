@@ -4,7 +4,7 @@ import userContext from '../security/user-context';
 import { activeUser,permission } from '../cloud/auth';
 import * as drafts from '../cloud/drafts';
 import * as mail from '../cloud/mail';
-import {schedule,scheduledList,setScheduledMark,cancel} from '../cloud/scheduled';
+import {schedule,scheduledList,setScheduledRead,setScheduledMark,cancel} from '../cloud/scheduled';
 import { send } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
 import { moveFromTrash,setTrashRead } from '../cloud/trash-actions';
@@ -30,6 +30,7 @@ app.get(root+'/scheduled/:id',async c=>{
   if(!row.scheduledAt)return c.json({code:404,message:'Scheduled message not found.'},404);
   return c.json(result.ok(row));
 });
+app.post(root+'/scheduled/read',async c=>c.json(result.ok(await setScheduledRead(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/:id/mark',async c=>c.json(result.ok(await setScheduledMark(c,uid(c),c.req.param('id'),await c.req.json()))));
 app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,uid(c),c.req.param('id'),(await c.req.json()).version))));
 app.get(root+'/search/people',async c=>c.json(result.ok(await mail.searchPeople(c,uid(c),c.req.query()))));
