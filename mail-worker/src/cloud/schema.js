@@ -7,7 +7,7 @@ export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_se
   user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1,
   undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)),
   keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)),
-  hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)))`;
+  hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)), text_style TEXT)`;
 export const lastScheduleSchema = `CREATE TABLE IF NOT EXISTS mail_last_schedule (
   user_id INTEGER PRIMARY KEY, send_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1)`;
 export const contactSchema = `CREATE TABLE IF NOT EXISTS mailbox_contacts (
@@ -30,10 +30,15 @@ export async function ensureEmailColumn(readColumns,addColumn,name) {
 // Older installations already have the preferences table. Two initializers may race.
 export async function ensureGeneralPreferenceColumns(readColumns, execute) {
   const existing = new Set((await readColumns()).map(column => column.name));
-  for (const [name, initial] of [['keyboard_shortcuts', 0], ['hover_actions', 1]]) {
+  const definitions = {
+    keyboard_shortcuts:'INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1))',
+    hover_actions:'INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1))',
+    text_style:'TEXT',
+  };
+  for (const [name, definition] of Object.entries(definitions)) {
     if (existing.has(name)) continue;
     try {
-      await execute(`ALTER TABLE mail_general_settings ADD COLUMN ${name} INTEGER NOT NULL DEFAULT ${initial} CHECK(${name} IN (0,1))`);
+      await execute(`ALTER TABLE mail_general_settings ADD COLUMN ${name} ${definition}`);
     } catch (error) {
       if (!(await readColumns()).some(column => column.name === name)) throw error;
     }
