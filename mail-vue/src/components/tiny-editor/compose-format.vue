@@ -48,37 +48,21 @@
       >
         <Icon :icon="icon(a)" width="19" />
       </button>
-      <el-popover
-        v-model:visible="colorOpen"
-        trigger="click"
-        placement="top"
-        :show-arrow="false"
-        width="min(326px, calc(100vw - 16px))"
-        popper-class="format-palette compose-format-popup"
-        @show="openColors"
+      <FormatPopup
+        v-model="colorOpen"
+        label="Text color"
+        role="dialog"
+        panel-label="Text and background colors"
+        panel-class="format-palette"
+        @open="openColors"
+        @ready="focusColors"
       >
-        <template #reference
-          ><button
-            ref="colorButton"
-            aria-label="Text color"
-            aria-haspopup="dialog"
-            :aria-expanded="colorOpen"
-            data-tip="Text color"
-            @mousedown.prevent
-            @keydown.down.prevent="colorOpen = true"
-          >
-            <Icon icon="material-symbols:format-color-text" width="19" /><Icon
-              icon="material-symbols:arrow-drop-down"
-              width="14"
-            /></button
-        ></template>
-        <div
-          ref="palette"
-          class="palette-columns"
-          role="dialog"
-          aria-label="Text and background colors"
-          @keydown.esc.stop.prevent="dismissColors"
-        >
+        <template #trigger
+          ><Icon icon="material-symbols:format-color-text" width="19" /><Icon
+            icon="material-symbols:arrow-drop-down"
+            width="14"
+        /></template>
+        <div ref="palette" class="palette-columns">
           <div v-for="group in colorGroups" :key="group.command">
             <div class="palette-heading">{{ group.label }}</div>
             <div
@@ -118,6 +102,7 @@
               </div>
             </div>
             <button
+              :aria-label="'Default ' + group.label.toLowerCase()"
               class="default-color"
               @mousedown.prevent
               @click="chooseColor(group.command, null)"
@@ -126,7 +111,7 @@
             </button>
           </div>
         </div>
-      </el-popover>
+      </FormatPopup>
     </div>
     <div v-if="showLists" class="group">
       <FormatPicker
@@ -152,41 +137,22 @@
         <Icon :icon="icon(a)" width="18" />
       </button>
     </div>
-    <el-dropdown
-      trigger="click"
-      placement="top-end"
-      :show-arrow="false"
-      popper-class="mail-action-menu compose-format-popup format-more-menu"
-      @visible-change="opened"
-      @command="(command) => apply(command)"
-    >
-      <button
-        aria-label="More formatting options"
-        data-tip="More formatting options"
-        @mousedown.prevent
-      >
-        <Icon icon="material-symbols:more-horiz" width="18" />
-      </button>
-      <template #dropdown
-        ><el-dropdown-menu>
-          <el-dropdown-item
-            v-for="a in overflow"
-            :key="a.command"
-            :command="a.command"
-            :disabled="history.includes(a) && !active[a.command]"
-          >
-            <Icon :icon="icon(a)" width="18" /><span>{{ a.label }}</span
-            ><small v-if="a.shortcut">{{ shortcut(a) }}</small>
-          </el-dropdown-item>
-        </el-dropdown-menu></template
-      >
-    </el-dropdown>
+    <FormatPicker
+      label="More formatting options"
+      :choices="overflowChoices"
+      actions
+      :icons-only="showIndent"
+      @open="opened(true)"
+      @choose="(command) => apply(command)"
+      ><Icon icon="material-symbols:more-horiz" width="18"
+    /></FormatPicker>
   </div>
 </template>
 <script setup>
 import { computed, nextTick, ref, watch } from "vue";
 import { useElementSize } from "@vueuse/core";
 import { Icon } from "@iconify/vue";
+import FormatPopup from "./format-popup.vue";
 import FormatPicker from "./format-picker.vue";
 import {
   colorRows,
@@ -198,7 +164,6 @@ import {
 const props = defineProps({ editor: Object });
 const strip = ref(null),
   palette = ref(null),
-  colorButton = ref(null),
   colorOpen = ref(false);
 const { width } = useElementSize(computed(() => strip.value?.parentElement));
 const showLists = computed(() => width.value >= 395),
@@ -320,6 +285,15 @@ const alignmentChoices = alignments.map((a) => ({
   icon: icon(a),
   tooltip: tip(a),
 }));
+const overflowChoices = computed(() =>
+  overflow.value.map((a) => ({
+    name: a.label,
+    value: a.command,
+    icon: icon(a),
+    tooltip: tip(a),
+    disabled: history.includes(a) && !active.value[a.command],
+  })),
+);
 const colorGroups = [
   { label: "Background color", command: "HiliteColor" },
   { label: "Text color", command: "ForeColor" },
@@ -369,8 +343,16 @@ function readColors(ed) {
 }
 function remember() {
   const ed = props.editor;
-  if (ed?.initialized && !ed.removed)
-    bookmark = ed.selection.getBookmark(2, true);
+  if (!ed?.initialized || ed.removed) return;
+  // TinyMCE's normalized bookmarks omit its temporary caret character. Keep the
+  // live DOM range so changing another format immediately after typing stays put.
+  const range = ed.selection.getRng().cloneRange();
+  bookmark = {
+    range,
+    start: range.startContainer,
+    end: range.endContainer,
+    fallback: ed.selection.getBookmark(2, true),
+  };
 }
 function opened(visible) {
   if (visible) {
@@ -400,7 +382,12 @@ function editingSelection() {
   const saved = bookmark;
   bookmark = null;
   ed.focus();
-  if (saved) ed.selection.moveToBookmark(saved);
+  if (saved) {
+    const body = ed.getBody();
+    if (body.contains(saved.start) && body.contains(saved.end))
+      ed.selection.setRng(saved.range, saved.fallback.forward);
+    else ed.selection.moveToBookmark(saved.fallback);
+  }
   return ed;
 }
 function apply(command, value) {
@@ -410,7 +397,7 @@ function apply(command, value) {
   ed.nodeChanged();
   update();
 }
-async function openColors() {
+function openColors() {
   opened(true);
   if (!props.editor?.initialized || props.editor.removed) return;
   readColors(props.editor);
@@ -419,15 +406,13 @@ async function openColors() {
     positions.value[command] =
       index >= 0 ? index : command === "ForeColor" ? 0 : 7;
   }
+}
+async function focusColors() {
   await nextTick();
   if (colorOpen.value)
     palette.value
       ?.querySelector('[role="gridcell"][tabindex="0"]')
       ?.focus({ preventScroll: true });
-}
-function dismissColors() {
-  colorOpen.value = false;
-  colorButton.value?.focus({ preventScroll: true });
 }
 function chooseColor(command, color) {
   colorOpen.value = false;
@@ -526,16 +511,9 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-:global(.format-more-menu .el-dropdown-menu) {
-  max-height: min(440px, 55vh);
-  overflow: auto;
-}
-:global(.format-more-menu .el-dropdown-menu__item) {
-  gap: 8px;
-}
-.format-more-menu small {
-  margin-left: auto;
-  color: var(--secondary-text-color);
+:global(.format-palette.format-popup) {
+  width: min(326px, calc(100vw - 12px));
+  padding: 10px;
 }
 .palette-columns {
   display: grid;
