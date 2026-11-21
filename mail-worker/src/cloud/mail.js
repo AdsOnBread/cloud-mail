@@ -25,7 +25,7 @@ export async function searchPeople(c,userId,params) {
     if (!term) return [];
     const projection=`SELECT e.email_id,e.name,e.send_email sendEmail,e.type,e.recipient,e.cc,
       CASE WHEN e.type=1 THEN e.bcc ELSE '' END bcc
-      FROM candidates c JOIN email e ON e.email_id=c.id JOIN account a ON a.account_id=e.account_id
+      FROM candidates c CROSS JOIN email e ON e.email_id=c.id JOIN account a ON a.account_id=e.account_id
       WHERE ${visibleMail(c)} AND e.account_id=? AND e.trashed_at IS NULL ORDER BY e.email_id DESC`;
     const read=async (ids,args)=>(await c.env.db.prepare(`WITH candidates(id) AS MATERIALIZED (${ids}) ${projection}`)
       .bind(...args,userId,mailbox).all()).results;
