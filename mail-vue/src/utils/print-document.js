@@ -22,6 +22,15 @@ export function copyBody(source, target, doc) {
       element = doc.createElement('img');
       element.src = src;
       element.alt = node.getAttribute('alt') || '';
+      for (const dimension of ['width','height']) {
+        const attribute=node.getAttribute(dimension);
+        if (/^\d+$/.test(attribute || '')) element.setAttribute(dimension,attribute);
+        const length=node.style?.getPropertyValue(dimension);
+        if (length) element.style.setProperty(dimension,length);
+      }
+      const maxWidth=node.style?.maxWidth;
+      if (maxWidth && CSS.supports('max-width','min(100%, '+maxWidth+')')) element.style.maxWidth='min(100%, '+maxWidth+')';
+      if (node.style?.maxHeight) element.style.maxHeight=node.style.maxHeight;
     } else {
       element = doc.createElement(tag === 'a' ? 'u' : allowed.has(tag) ? tag : 'span');
       for (const prop of styles) {

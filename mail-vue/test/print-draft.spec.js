@@ -33,3 +33,12 @@ it('prints visible message content and keeps private delivery metadata separate 
  expect(envelope.body.textContent).toContain('Delivered to: envelope@example.org');
  expect(envelope.body.textContent).not.toContain('To: envelope@');
 });
+
+it('preserves inline photo dimensions when printing a message or draft',()=>{
+ const doc=document.implementation.createHTMLDocument();
+ renderDraft(doc,{content:'<img src="data:image/png;base64,AA==" width="48" height="24" style="width:48px;height:24px">',attachments:[]});
+ const image=doc.querySelector('img');
+ expect(image.getAttribute('width')).toBe('48');
+ expect(image.getAttribute('height')).toBe('24');
+ expect(image.style.width).toBe('48px');expect(image.style.height).toBe('24px');
+});
