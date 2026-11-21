@@ -3,6 +3,7 @@
     v-model:visible="open"
     trigger="click"
     placement="bottom-start"
+    role="dialog"
     :width="240"
     :show-arrow="false"
     popper-class="label-picker"
@@ -14,6 +15,7 @@
         class="mail-icon"
         :aria-expanded="open"
         aria-label="Move to"
+        aria-haspopup="dialog"
         data-tip="Move to"
         :disabled="disabled"
       >

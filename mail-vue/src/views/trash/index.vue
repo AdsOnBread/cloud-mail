@@ -1,5 +1,5 @@
 <template>
-  <section class="trash-view" aria-label="Trash">
+  <section ref="root" class="trash-view" aria-label="Trash">
     <div v-if="!messageId" class="filter-row" aria-label="Filter Trash">
       <SearchOptions chips field="from" /><SearchOptions chips field="days" />
       <button class="filter-chip" :aria-pressed="Boolean(search.filters.hasAttachment)" @click="toggleFilter('hasAttachment')">Has attachment</button>
@@ -209,7 +209,7 @@
   </section>
 </template>
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
@@ -232,6 +232,7 @@ const route = useRoute(),
   router = useRouter(),
   search = useMailSearchStore(),
   mail = useEmailStore();
+const root=ref();
 const account = useAccountStore();
 const labels = useMailLabels();
 const mailbox = computed(() =>
@@ -405,6 +406,7 @@ async function act(action, ids, destination) {
     ? account.currentAccount.email
     : "all your mailboxes";
   const request = revision;
+  const selectedIndex = ids?.length ? messages.value.findIndex(message=>ids.includes(message.emailId)) : 0;
   try {
     if (!ids) {
       ids = [];
@@ -446,7 +448,7 @@ async function act(action, ids, destination) {
         count + (destination ? " moved to " + destination.name + "." : action === "purge" ? " permanently deleted." : " restored."),
       );
   } catch (e) {
-    if (e !== "cancel" && e !== "close") {
+    if (!disposed && request===revision && e !== "cancel" && e !== "close") {
       error.value =
         (changed ? changed + " messages updated. " : "") +
         (e.message || "Could not update Trash.");
@@ -457,7 +459,16 @@ async function act(action, ids, destination) {
       if (!disposed && request===revision) {
         const originalError = error.value;
         if (messageId.value) back();
-        else await load();
+        else {
+          await load();
+          await nextTick();
+          // The destination menu and selected toolbar disappear with the moved rows.
+          if (root.value && (!document.activeElement || document.activeElement===document.body || !document.activeElement.getClientRects().length)) {
+            const buttons=root.value.querySelectorAll('.conversation-open');
+            const next=buttons[Math.min(Math.max(0,selectedIndex),buttons.length-1)];
+            (next || root.value.querySelector('.select-options'))?.focus();
+          }
+        }
         if (originalError) error.value = originalError;
       }
     }
