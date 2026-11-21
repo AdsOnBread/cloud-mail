@@ -532,6 +532,50 @@ describe('Scheduled send',()=>{
    await schedule(c(),1,draftId,{version:version+1,sendAt});
    expect(await unread()).toEqual([]);
  });
+ it('moves and archives a queue selection independently of send time, unread state and account scope',async()=>{
+   const {schedule,scheduledList,setScheduledRead,setScheduledInbox,cancel}=await import('../src/cloud/scheduled');
+   const when=Math.floor(Date.now()/1000)+3600;
+   const rows=[];
+   for (const subject of ['First','Second']) {
+     const d=await draft({subject});
+     rows.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt:when}));
+   }
+   const file=(messages,inbox)=>setScheduledInbox(c(),1,{messages,inbox});
+   const inbox=()=>scheduledList(c(),1,1,{mark:'inbox'});
+   expect(await inbox()).toEqual([]);
+   await expect(setScheduledInbox(c(),2,{messages:rows,inbox:true})).rejects.toMatchObject({code:409});
+   await expect(file([rows[0],{...rows[1],version:999}],true)).rejects.toMatchObject({code:409});
+   expect(await inbox()).toEqual([]);
+   await file(rows,true);
+   await setScheduledRead(c(),1,{messages:[rows[1]],unread:true});
+   expect(await inbox()).toMatchObject(rows.map(row=>({...row,inbox:1})));
+   expect(await scheduledList(c(),1,3,{mark:'inbox'})).toEqual([]);
+   expect(await scheduledList(c(),1,1,{countOnly:'1',includeInboxUnread:'1'})).toEqual({count:2,inboxUnread:1});
+   expect((await scheduledList(c(),1,1,{mark:'inbox',isUnread:'1'})).map(r=>r.draftId)).toEqual([rows[1].draftId]);
+   await file([rows[0]],false);
+   expect((await inbox()).map(r=>r.draftId)).toEqual([rows[1].draftId]);
+   expect(await scheduledList(c(),1,1)).toMatchObject(rows);
+   await cancel(c(),1,rows[1].draftId,rows[1].version);
+   await schedule(c(),1,rows[1].draftId,{version:rows[1].version+1,sendAt:when});
+   expect(await inbox()).toEqual([]);
+ });
+ it('retains Inbox on the delivered conversation without filing the recipient’s mailbox',async()=>{
+   const {schedule,setScheduledInbox,deliverDue}=await import('../src/cloud/scheduled');
+   const {conversationList,conversationAction}=await import('../src/service/conversation-service');
+   const original=await message();
+   await conversationAction(c(),{emailIds:[original.email_id]},1,'archive');
+   const d=await draft({subject:'Re: Original',sendType:'reply',emailId:original.email_id,
+     receiveEmail:['person@example.com']});
+   const row=await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+60});
+   await setScheduledInbox(c(),1,{messages:[row],inbox:true});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());
+   expect((await drafts.get(c(),1,d.draftId,true)).state).toBe('sent');
+   const box=await conversationList(c(),{folder:'inbox',accountId:1},1);
+   expect(box.threads).toHaveLength(1);
+   expect(box.threads[0].messageCount).toBe(2);
+   expect((await env.db.prepare('SELECT * FROM conversation_filing WHERE user_id!=1').all()).results).toEqual([]);
+ });
  it('keeps filing choices through cancellation, edits and delivery, on the sender copy only',async()=>{
    const {schedule,scheduledList,cancel,setScheduledMark}=await import('../src/cloud/scheduled');
    const draftRow=await draft(),id=draftRow.draftId,sendAt=Math.floor(Date.now()/1000)+3600;
