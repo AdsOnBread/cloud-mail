@@ -46,6 +46,7 @@ const routes = [
                 }
             },
             {path:'/settings/accounts',name:'account-settings',component:()=>import('@/views/setting/accounts.vue'),meta:{title:'Accounts',name:'setting',menu:true}},
+            {path:'/settings/filters',name:'filter-settings',component:()=>import('@/views/setting/filters.vue'),meta:{title:'Filters',name:'setting',menu:true}},
             {path:'/settings/labels',name:'label-settings',component:()=>import('@/views/setting/labels.vue'),meta:{title:'Labels',name:'setting',menu:true}},
             {
                 path: '/settings',

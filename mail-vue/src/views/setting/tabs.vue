@@ -5,6 +5,7 @@
       <router-link to="/settings" exact-active-class="current">General</router-link>
       <router-link to="/settings/labels" exact-active-class="current">Labels</router-link>
       <router-link to="/settings/accounts" exact-active-class="current">Accounts</router-link>
+      <router-link to="/settings/filters" exact-active-class="current">Filters</router-link>
     </nav>
   </header>
 </template>

@@ -138,6 +138,7 @@
               </template>
               <el-dropdown-item :divided="canRespond" :disabled="busy || loading" @click="setRead([detail.emailId],targetUnread)"><Icon :icon="readIcon(targetUnread)"/>{{readLabel(targetUnread)}}</el-dropdown-item>
               <el-dropdown-item divided :disabled="printing" @click="printMail"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
+              <el-dropdown-item v-if="detail?.sendEmail && !detail.scheduledDraftId" @click="messageFilters.fromMessage(detail.sendEmail)"><Icon icon="material-symbols:filter-alt-outline"/>Filter messages like these</el-dropdown-item>
               <DownloadMessage :message="detail"/>
             </el-dropdown-menu></template>
           </el-dropdown>
@@ -240,6 +241,8 @@ import TrashResponses from "./responses.vue";
 import {hasReplyAll} from "@/utils/recipients";
 import ReaderWindowLink from "@/components/reader-window-link.vue";
 import SenderAvatar from "@/components/sender-avatar.vue";
+import {useMessageFilters} from '@/store/message-filters';
+const messageFilters=useMessageFilters();
 import DownloadMessage from "@/components/download-message.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import {labelStyle} from "@/components/mail-labels/colors";

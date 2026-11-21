@@ -66,6 +66,7 @@
       <SearchCalendar v-if="calendarOpen" ref="calendar" v-model:cursor="cursor" :today="today" :selected="parsedDate" :style="calendarStyle" @pick="pickDate"/>
       <div class="option-actions">
         <button type="button" @click="clear">Clear</button>
+        <button type="button" :disabled="!ruleCriteria" @click="createFilter">Create filter</button>
         <button type="submit">Search</button>
       </div>
     </form>
@@ -76,6 +77,7 @@
 import {computed,inject,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
 import {Icon} from '@iconify/vue';
 import {advancedSearchOpenerKey,useMailSearchStore} from '@/store/mail-search';
+import {useMessageFilters} from '@/store/message-filters';
 import {useMailLabels} from '@/store/mail-labels';
 import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
@@ -107,6 +109,18 @@ const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'}
 const scope=computed(()=>store.folder==='label' ? 'label:'+store.labelId : store.folder);
 const supportsUnread=computed(()=>form.value.scope!=='draft');
 const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.dateBefore!=null);
+const filtersEditor=useMessageFilters();
+const ruleCriteria=computed(()=>{
+  const f=form.value;
+  if(!f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
+    f.from.filter(v=>v.trim()).length>1 || f.to.filter(v=>v.trim()).length>1)return null;
+  const result={from:f.from.find(v=>v.trim()) || '',to:f.to.find(v=>v.trim()) || '',subject:f.subject,words:f.q,excluded:f.excluded,hasAttachment:f.hasAttachment};
+  return Object.values(result).some(v=>typeof v==='string' ? v.trim() : v) ? result : null;
+});
+function createFilter(){
+  if(!stillCurrent() || !ruleCriteria.value)return;
+  const criteria={...ruleCriteria.value};dismiss();filtersEditor.open(criteria,null,'actions');
+}
 function reset() {
   const f=store.filters, preset=f.olderThan || f.days;
   const search=props.queryText == null ? {query:store.query,excluded:f.excluded} : readSearchBar(props.queryText);
@@ -210,6 +224,17 @@ function listen(visible) {
   window[method]('resize',place);window[method]('scroll',place,true);
   window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
 }
+watch(()=>filtersEditor.senderRequest,async request=>{
+  if(!request)return;
+  const identityAtOpen=identity.value;
+  opener.value=trigger.value;
+  await nextTick();
+  if (request!==filtersEditor.senderRequest || identityAtOpen!==identity.value || !stillCurrent())return;
+  filtersEditor.senderRequest=null;
+  form.value={from:[request.sender],to:[''],q:'',excluded:'',subject:'',scope:'all',hasAttachment:false,isUnread:false,
+    sizeValue:'',sizeUnit:'MB',sizeOperator:'larger',time:'center:1d',date:''};
+  panel.value?.querySelector('input')?.focus({preventScroll:true});place();
+});
 watch(opener,origin=>{
   listen(Boolean(origin));
   closeCalendar();dateError.value='';sizeError.value='';
@@ -245,6 +270,7 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
 .checks input {width:16px;height:16px;margin:0;accent-color:var(--el-color-primary);}
 .option-actions {display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-top:18px;flex-shrink:0;}
 .option-actions button {cursor:pointer;height:36px;border-radius:18px;padding:0 18px;color:var(--el-color-primary);font-weight:500;}
+.option-actions button:disabled {opacity:.45;cursor:default;}
 .option-actions button[type=submit] {background:var(--el-color-primary);color:var(--mail-surface);}
 @media(max-width:620px) {.options-form{padding:16px;}.criterion{grid-template-columns:minmax(60px,22%) minmax(0,1fr);gap:10px;}.date-fields,.size-fields{gap:8px;}}
 @container (max-width:300px) {

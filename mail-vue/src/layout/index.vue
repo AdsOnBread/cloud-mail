@@ -8,10 +8,14 @@
     <MailTooltip />
     <MailFeedback />
     <LabelEditor /><QuickSettings />
+    <FilterEditor v-if="filters.editor" :key="filters.editor.id" :rule="filters.editor"/>
     <button v-if="!conversationWindow && route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" :inert="composeModal" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
+import {useMessageFilters} from '@/store/message-filters';
+import FilterEditor from '@/components/mail-filters/filter-editor.vue';
+import {useAccountStore} from '@/store/account';
 import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
 import QuickSettings from "@/components/quick-settings/index.vue";
@@ -39,7 +43,9 @@ const shellStyle=computed(()=>{
 });
 import {useUserStore} from '@/store/user';
 const user=useUserStore();
-const labels=useMailLabels();
+const labels=useMailLabels(), filters=useMessageFilters(), filterAccount=useAccountStore();
+watch(()=>[user.authenticatedToken,user.user.userId,filterAccount.currentAccountId],()=>{filters.editor=null;filters.senderRequest=null},{flush:'sync'});
+onBeforeUnmount(()=>{filters.editor=null;filters.senderRequest=null;});
 const pointerInRail=ref(false),keyboardInRail=ref(false);
 const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));
 let railTimer;
