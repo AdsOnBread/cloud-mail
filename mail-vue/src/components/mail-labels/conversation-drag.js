@@ -5,8 +5,8 @@ export const dropTarget = ref(null);
 export const draggingConversations = ref(false);
 let drag;
 
-export function endConversationDrag(source) {
-  if (drag?.source !== source) return;
+export function endConversationDrag(source, element) {
+  if (!drag || drag.source !== source || (element && drag.element !== element)) return;
   drag = undefined;
   draggingConversations.value = false;
   dropTarget.value = null;
@@ -16,7 +16,7 @@ export function startConversationDrag(event, source, accepts, move) {
   const token = crypto.randomUUID();
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData(type, token);
-  drag = { source, accepts, move, token };
+  drag = { source, element:event.currentTarget, accepts, move, token };
   dropTarget.value = null;
   draggingConversations.value = true;
 }

@@ -4,7 +4,7 @@
     :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips, 'hover-actions': user.hoverActions }"
   >
     <span v-if="canDrag" class="drag-grip" aria-hidden="true" draggable="true"
-      @dragstart="$emit('start-move', $event)" @dragend="$emit('end-move')"></span>
+      @dragstart="startMove" @dragend="endMove"></span>
     <label class="check-target" data-tip="Select">
       <input
         type="checkbox"
@@ -35,7 +35,7 @@
     <button
       class="conversation-open"
       :draggable="canDrag || undefined"
-      @dragstart="canDrag && $emit('start-move', $event)" @dragend="canDrag && $emit('end-move')"
+      @dragstart="startMove" @dragend="endMove"
       :aria-description="[senders?.map(person=>person.name).join(', '), dateTitle].filter(Boolean).join('. ')"
       :aria-label="openLabel + (attachmentCount ? ', has attachment' : '')"
       @click="$emit('open')"
@@ -80,7 +80,7 @@ import { Icon } from "@iconify/vue";
 import {senderLine} from "./senders";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
-import {computed,ref} from "vue";
+import {computed,onBeforeUnmount,ref} from "vue";
 import {useUserStore} from "@/store/user";
 import {useUiStore} from "@/store/ui";
 import FilePreview from "@/components/mail-attachments/preview.vue";
@@ -119,7 +119,19 @@ function fileColor(file){
   if(/\.(csv|xlsx?)$/i.test(file.filename))return 'sheet';
   return 'document';
 }
-defineEmits(["start-move", "end-move", "select", "star", "open", "importance"]);
+const emit = defineEmits(["start-move", "end-move", "select", "star", "open", "importance"]);
+let dragElement;
+function startMove(event) {
+  if (!props.canDrag) return;
+  dragElement = event.currentTarget;
+  emit("start-move", event);
+}
+function endMove() {
+  if (dragElement) emit("end-move", dragElement);
+  dragElement = undefined;
+}
+// A virtualized row can disappear before its browser dragend event.
+onBeforeUnmount(endMove);
 </script>
 <style scoped>
 .conversation-row {

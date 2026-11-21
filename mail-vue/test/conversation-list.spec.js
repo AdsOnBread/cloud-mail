@@ -8,6 +8,8 @@ import {
 } from "../src/request/conversation";
 import { useMailSearchStore } from "../src/store/mail-search";
 import { useAccountStore } from "../src/store/account";
+import { useUserStore } from "../src/store/user";
+import { draggingConversations } from "../src/components/mail-labels/conversation-drag";
 const push = vi.hoisted(() => vi.fn());
 vi.mock("vue-router", async () => ({
   ...(await vi.importActual("vue-router")),
@@ -82,6 +84,24 @@ beforeEach(() => {
   push.mockClear();
 });
 describe("conversation lists", () => {
+  it.each([".conversation-open", ".drag-grip"])("releases an active drag if its row disappears (%s)", async selector => {
+    localStorage.setItem("token", "fixture-token");
+    useUserStore().authenticatedToken = "fixture-token";
+    conversationList.mockResolvedValue(page([row(9, "Old row")]));
+    const wrapper = mountList();
+    try {
+      await flushPromises();
+      await wrapper.get(selector).trigger("dragstart", {dataTransfer:{setData:vi.fn()}});
+      expect(draggingConversations.value).toBe(true);
+      conversationList.mockResolvedValue(page([row(11, "New row")]));
+      await wrapper.vm.refresh();
+      await flushPromises();
+      expect(draggingConversations.value).toBe(false);
+    } finally {
+      wrapper.unmount();
+      localStorage.removeItem("token");
+    }
+  });
   it("rejects stale search responses and resets selection and pagination", async () => {
     let oldResolve, currentResolve;
     conversationList

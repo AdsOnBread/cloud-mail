@@ -212,7 +212,7 @@
           :busy="busy"
           :open-label="rowOpenLabel(row)"
           :can-drag="width >= 768 && !busy"
-          @start-move="startMove($event, row)" @end-move="endConversationDrag(dragSource)"
+          @start-move="startMove($event, row)" @end-move="endConversationDrag(dragSource, $event)"
           @open="open(row)"
           @select="toggle(row.lastEmailId)"
           @star="star(row)"
