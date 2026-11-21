@@ -35,6 +35,8 @@ import { useUiStore } from "@/store/ui.js";
 defineExpose({
   clearEditor,
   focus,
+  rememberSelection,
+  resumeDraft,
   getContent,
   toPlain: () => plainMarkup(editor.value.getBody().innerHTML),
   ready,
@@ -301,6 +303,31 @@ function initEditor(initialContent) {
   return pendingInit;
 }
 
+function rememberSelection() {
+  const ed = editor.value;
+  if (!ed?.initialized || ed.removed) return;
+  const bookmark = ed.selection.getBookmark(2, true);
+  return () => {
+    if (editor.value !== ed || ed.removed) return;
+    ed.focus();
+    ed.selection.moveToBookmark(bookmark);
+  };
+}
+function resumeDraft() {
+  const ed = editor.value;
+  if (!ed?.initialized || ed.removed) return;
+  ed.focus();
+  const body = ed.getBody();
+  const boundary = Array.from(body.children).find(node => node.matches(".cloudmail-signature,.cloudmail-reply-quote"));
+  const last = boundary ? boundary.previousSibling : body.lastChild;
+  const range = body.ownerDocument.createRange();
+  if (last) {
+    range.selectNodeContents(last);
+    if (last.lastChild?.nodeName === "BR") range.setEndBefore(last.lastChild);
+  } else range.setStart(body, 0);
+  range.collapse(false);
+  ed.selection.setRng(range);
+}
 function focus(start = false) {
   nextTick(() => {
     editor.value?.focus();

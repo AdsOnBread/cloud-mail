@@ -64,16 +64,13 @@
           <button
             v-if="!inline"
             type="button"
-            :aria-label="expanded ? 'Exit full screen' : 'Expand compose'"
-            :data-tip="expanded ? 'Exit full screen' : 'Full screen'"
-            @click="
-              expanded = !expanded;
-              minimized = false;
-            "
+            :aria-label="(expanded && !minimized) ? 'Exit full screen' : 'Expand compose'"
+            :data-tip="(expanded && !minimized) ? 'Exit full screen' : 'Full screen'"
+            @click="toggleFullScreen"
           >
             <Icon
               :icon="
-                expanded
+                expanded && !minimized
                   ? 'material-symbols:close-fullscreen'
                   : 'material-symbols:open-in-full'
               "
@@ -96,6 +93,7 @@
           v-show="!inline || editingRecipients"
           :disabled="sending || attaching"
           class="compose-fields"
+          @focusin="rememberInput"
         >
           <button
             v-if="!inline && !addressExpanded"
@@ -186,7 +184,7 @@
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
             ref="editor"
-            @focus="collapseAddresses"
+            @focus="focusBody"
             @compose-keydown="addressShortcut"
             @change="change"
           />
@@ -462,10 +460,42 @@ const showSender = computed(() => {
   return canChooseMailbox && (!accountStore.loaded || accountStore.accounts.length > 1);
 });
 
+let lastInput;
+let restoreFocus;
+function rememberInput(event) {
+  if (event.target.matches("input")) lastInput = event.target;
+}
+function focusBody() {
+  lastInput = null;
+  collapseAddresses();
+}
+function restoreCompose() {
+  if (!minimized.value) return;
+  minimized.value = false;
+  nextTick(() => {
+    if (show.value && !minimized.value) restoreFocus?.();
+    restoreFocus = null;
+  });
+}
 function toggleMinimized() {
+  if (minimized.value) return restoreCompose();
   subjectCaption.value = form.subject.trim();
-  minimized.value = !minimized.value;
-  if (minimized.value) nextTick(() => composeRoot.value?.querySelector(".compose-caption")?.focus());
+  const input = lastInput;
+  if (input?.isConnected) {
+    const start = input.selectionStart, end = input.selectionEnd, direction = input.selectionDirection;
+    restoreFocus = () => {
+      input.focus();
+      if (start !== null) input.setSelectionRange(start, end, direction);
+    };
+  } else restoreFocus = editor.value?.rememberSelection?.();
+  minimized.value = true;
+  nextTick(() => composeRoot.value?.querySelector(".compose-caption")?.focus());
+}
+function toggleFullScreen() {
+  if (minimized.value) {
+    expanded.value = true;
+    restoreCompose();
+  } else expanded.value = !expanded.value;
 }
 function collapseAddresses() {
   if (!props.inline) addressExpanded.value = false;
@@ -595,6 +625,8 @@ function startSignatureDefault(){
   })();
 }
 function resetForm() {
+  lastInput = null;
+  restoreFocus = null;
   signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
   selectedSignature.value="";signatureError.value="";managingSignatures.value=false;
   Object.keys(form).forEach((key) => delete form[key]);
@@ -615,7 +647,7 @@ function resetForm() {
 }
 function available() {
   if (show.value || preparing.value) {
-    minimized.value = false;
+    restoreCompose();
     ElMessage.info(
       "Your current message is open. Save or discard it before starting another.",
     );
@@ -647,7 +679,7 @@ function reveal() {
 }
 function open() {
   if (show.value) {
-    minimized.value = false;
+    restoreCompose();
     return;
   }
   if (preparing.value) return;
@@ -661,7 +693,7 @@ async function openDraft(draft) {
   preparing.value = true;
   try {
     resetForm();
-    Object.assign(form, restoreDraft(draft));
+    Object.assign(form, restoreDraft(draft), { subject: draft.subject ?? "" });
     if(draft.schedulingError)sendError.value="Scheduling failed. "+draft.schedulingError;
     form.ownerEmail = userStore.user.email;
     if (!form.sendEmail) {
@@ -685,7 +717,7 @@ async function openDraft(draft) {
   await nextTick();
   if (props.inline || replyRecipientTitle.value) {
     collapseAddresses();
-    editor.value?.focus?.(true);
+    editor.value?.resumeDraft?.();
   } else toField.value?.focus();
 }
 // Older reply drafts stored the generated quote directly after the editable body.
@@ -1166,8 +1198,10 @@ watch(modal, async (active) => {
         blocked.push([node, node.inert]);
         node.inert = true;
       });
-    await nextTick();
-    composeRoot.value?.querySelector("button")?.focus();
+    if (!restoreFocus) {
+      await nextTick();
+      composeRoot.value?.querySelector("button")?.focus();
+    }
   } else previousFocus?.isConnected && previousFocus.focus();
 });
 function containFocus(event) {

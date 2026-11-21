@@ -292,6 +292,21 @@ describe("composer persistence and sending", () => {
     expect(alias.get(".from-row").text()).toContain("alias@example.com");
     alias.unmount();
   });
+  it("restores a subject selection from the minimized caption", async () => {
+    const wrapper = composer();
+    wrapper.vm.open();
+    await flushPromises();
+    const subject = wrapper.get('[aria-label="Subject"]');
+    subject.element.focus();
+    await subject.setValue("Subject line");
+    subject.element.setSelectionRange(1, 5);
+    await wrapper.get('[aria-label="Minimize compose"]').trigger("click");
+    await wrapper.get(".compose-caption").trigger("click");
+    await flushPromises();
+    expect(document.activeElement).toBe(subject.element);
+    expect([subject.element.selectionStart, subject.element.selectionEnd]).toEqual([1, 5]);
+    wrapper.unmount();
+  });
   it("updates the docked caption on blur and keeps recipient shortcuts usable from a collapsed header", async () => {
     const wrapper = composer();
     wrapper.vm.open();
@@ -337,6 +352,7 @@ describe("composer persistence and sending", () => {
     const another = composer();
     another.vm.openDraft({
       draftId: 13,
+      subject: null,
       receiveEmail: ["one@example.com"],
       cc: ["copy@example.com"],
       bcc: ["private@example.com"],
