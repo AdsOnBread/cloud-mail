@@ -364,6 +364,21 @@ function initEditor(initialContent) {
         }, true);
       }
       if (props.mailCompose || props.signatureEditor) {
+        // Track native caret movement after its default action. SelectionChange
+        // covers a held arrow key before the final keyup.
+        let navigating = false;
+        const followCaret = () => { if (!spelling.value) linkPanel.value?.followCaret(); };
+        ed.on("keydown", event => { navigating = !event.isComposing && linkPanel.value?.navigationKey(event.key); });
+        ed.on("SelectionChange", () => { if (navigating) followCaret(); });
+        ed.on("keyup", event => {
+          if (navigating && linkPanel.value?.navigationKey(event.key)) followCaret();
+          navigating = false;
+        });
+        ed.on("blur mousedown", () => { navigating = false; });
+        ed.on("input", event => {
+          if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|delete)/.test(event.inputType)) followCaret();
+        });
+        ed.on("compositionend", followCaret);
         ed.on("keydown", event => {
           if (!props.plainText && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();

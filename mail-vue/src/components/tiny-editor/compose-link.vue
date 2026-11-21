@@ -3,7 +3,7 @@
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
     @keydown.esc.stop.prevent="close(true)" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
-      <span v-if="canVisit">Go to link:</span>
+      <span v-if="canVisit">Go to link: </span>
       <a v-if="canVisit" :href="safeUrl" :aria-label="destination" :title="destination" target="_blank" rel="noopener noreferrer">{{ previewText }}</a>
       <span v-else class="address" :title="destination">{{ previewText }}</span>
       <span aria-hidden="true">|</span>
@@ -13,11 +13,11 @@
     </template>
     <form v-else :class="{'image-link':panel.imageLink}" @submit.prevent="apply">
       <label v-if="!panel.imageLink && !panel.selectedText">
-        <Icon icon="material-symbols:short-text" width="18" aria-hidden="true" />
+        <Icon icon="material-symbols:short-text" width="20" aria-hidden="true" />
         <input ref="textField" v-model="panel.text" aria-label="Anchor Text" placeholder="Text" autocomplete="off" />
       </label>
       <label>
-        <Icon icon="material-symbols:link" width="18" aria-hidden="true" />
+        <Icon icon="material-symbols:link" width="20" aria-hidden="true" />
         <input ref="urlField" v-model="panel.url" aria-label="Link" placeholder="Type or paste a link" autocomplete="off" />
       </label>
       <button v-if="panel.imageLink && panel.existing" class="remove-link" type="button" @click="remove">Remove link</button>
@@ -62,11 +62,13 @@ function position() {
     return;
   }
   const edge = 3;
-  const x = frameRect.left - bounds.left + frame.clientLeft + line.left;
+  const preview = panel.value.preview;
+  const gap = preview ? 1 : edge;
+  const x = frameRect.left - bounds.left + frame.clientLeft + line.left - (preview ? 1 : 0);
   const top = frameRect.top - bounds.top + frame.clientTop + line.top;
-  const below = Math.min(frameRect.bottom - bounds.top, top + line.height) + edge;
+  const below = Math.min(frameRect.bottom - bounds.top, top + line.height) + gap;
   const maxTop = bounds.height - card.offsetHeight - edge;
-  const above = top - card.offsetHeight - edge;
+  const above = top - card.offsetHeight - gap;
   card.style.left = Math.max(edge, Math.min(x, bounds.width - card.offsetWidth - edge)) + "px";
   card.style.top = Math.max(edge, Math.min(below <= maxTop ? below : above, maxTop)) + "px";
 }
@@ -87,8 +89,42 @@ function leaveCard(event) {
 function insideEditor() {
   close(false);
 }
+const navigationKey = key => /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(key);
+function fragmentAt(link, point) {
+  return Math.max(0, Array.from(link.getClientRects()).findIndex(rect =>
+    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom));
+}
+function followCaret() {
+  const ed = props.editor;
+  if (!ed?.initialized || ed.removed || !ed.hasFocus() || (panel.value && !panel.value.preview)) return;
+  const selection = ed.selection.getRng();
+  const link = ed.dom.getParent(selection.commonAncestorContainer, "a[href]");
+  if (!link || !link.textContent.trim() || link.closest('[contenteditable="false"]')) {
+    if (panel.value?.preview) close();
+    return;
+  }
+  // Use the moving end of a backwards selection to choose the line of a wrapped link.
+  const native = ed.getDoc().getSelection();
+  if (!native?.focusNode || !link.contains(native.focusNode)) return;
+  const caret = ed.dom.createRng();
+  caret.setStart(native.focusNode, native.focusOffset);
+  caret.collapse(true);
+  const line = caret.getBoundingClientRect();
+  const point = {x:line.left, y:line.top + line.height / 2};
+  if (anchor !== link || !panel.value) {
+    open(link, true, point);
+    return;
+  }
+  range = selection.cloneRange();
+  bookmark = ed.selection.getBookmark(2, true);
+  fragment = fragmentAt(link, point);
+  originalText = panel.value.text = link.textContent;
+  position();
+}
 function editorKey(event) {
   if (!panel.value?.preview || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (navigationKey(event.key) || event.isComposing || event.key.length === 1 ||
+      ["Backspace","Delete","Enter","Shift"].includes(event.key)) return;
   if (event.key === "Tab" && !event.shiftKey) {
     event.preventDefault();
     box.value?.querySelector("a[href],button")?.focus();
@@ -112,8 +148,7 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   owner = ed;
   anchor = existing || ed.dom.getParent(ed.selection.getNode(), "a[href]");
   range = ed.selection.getRng().cloneRange();
-  fragment = anchor && pointer ? Math.max(0, Array.from(anchor.getClientRects()).findIndex(rect =>
-    pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : null;
+  fragment = anchor && pointer ? fragmentAt(anchor, pointer) : null;
   bookmark = ed.selection.getBookmark(2, true);
   originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
   const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
@@ -203,7 +238,7 @@ function remove() {
   });
 }
 onBeforeUnmount(() => close());
-defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
+defineExpose({ open, close, followCaret, navigationKey, openPhoto: link => open(link, false, null, true) });
 </script>
 <style scoped>
 .link-card {
@@ -212,7 +247,7 @@ defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
   z-index:8;
   width:324px;
   max-width:calc(100% - 6px);
-  background:var(--mail-surface);
+  background:var(--el-bg-color);
   color:var(--regular-text-color);
   border-radius:12px;
   padding:16px;
@@ -221,11 +256,11 @@ defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
 }
 form { display:grid; grid-template-columns:minmax(0,1fr) 64px; align-items:center; gap:8px 12px; }
 label {
-  display:flex; align-items:center; gap:18px; min-width:0; height:32px;
+  display:flex; align-items:center; gap:16px; min-width:0; height:32px;
   grid-column:1; padding:0 15px 0 7px; box-sizing:border-box; cursor:text;
-  border:1px solid var(--secondary-text-color); border-radius:4px;
+  border:1px solid var(--send-outline); border-radius:4px;
 }
-label:focus-within { border-color:var(--el-color-primary); box-shadow:inset 0 0 0 1px var(--el-color-primary); }
+label:focus-within { border-color:var(--send-blue); box-shadow:inset 0 0 0 1px var(--send-blue); }
 label svg { flex:none; }
 input {
   width:100%; min-width:0; padding:0; color:inherit; background:transparent;
@@ -234,7 +269,7 @@ input {
 button { font:inherit; cursor:pointer; }
 .apply-link {
   grid-column:2; grid-row:2; height:32px; padding:0 12px; border-radius:16px;
-  font-weight:500; color:var(--el-color-primary);
+  font-weight:500; color:var(--send-blue);
 }
 .selection-link { width:334px; padding:18px 16px; }
 .selection-link .apply-link { grid-row:1; }
@@ -242,16 +277,21 @@ button { font:inherit; cursor:pointer; }
 .remove-link { grid-row:2;justify-self:start;color:var(--el-color-primary); }
 .remove-link:hover { text-decoration:underline; }
 .apply-link:disabled { color:var(--secondary-text-color); opacity:0.65; cursor:default; }
-.apply-link:hover:enabled { background:var(--mail-hover); }
+.apply-link:hover:enabled { background:color-mix(in srgb, var(--send-blue) 8%, transparent); }
 .link-preview {
-  display:flex; align-items:center; gap:5px; width:max-content; border-radius:2px;
-  padding:5px 10px; font:13px/18px Arial,sans-serif;
+  display:flex; align-items:center; width:max-content; border-radius:2px;
+  padding:6px 10px; border:1px solid #bbb; border-bottom-color:#a8a8a8;
+  box-shadow:0 1px 3px rgb(0 0 0 / 20%); color:#222; font:13px/16.5px Arial,sans-serif;
+  --preview-link:#15c;
 }
-.link-preview span,.link-preview button { flex:none; white-space:nowrap; }
-.link-preview [aria-hidden] {margin-inline:2px;}
+.link-preview span,.link-preview button { flex:none; white-space:pre; }
+.link-preview [aria-hidden] {margin-inline:6px;}
 .link-preview a,.link-preview .address { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.link-preview a,.link-preview button { padding:0; color:var(--el-color-primary); text-decoration:none; }
+.link-preview a,.link-preview button { padding:0; color:var(--preview-link); text-decoration:none; }
 .link-preview a:hover,.link-preview button:hover { text-decoration:underline; }
+:global(html.dark .link-card.link-preview) {
+  --preview-link:var(--send-blue); color:var(--regular-text-color); border-color:var(--send-outline);
+}
 @media (forced-colors:active) {
   .link-card {outline:1px solid CanvasText;}
   label:focus-within {outline:2px solid Highlight;}
