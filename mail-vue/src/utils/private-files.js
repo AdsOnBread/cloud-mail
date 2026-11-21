@@ -3,11 +3,11 @@ export function downloadablePart(file) {
   return Number(file.type || 0)===0 && (disposition==='attachment' || (!file.contentId && disposition!=='inline'));
 }
 // Credentials are attached only to this installation's API, never to message-supplied URLs.
-export async function privateFile(key,signal) {
+export async function privateFile(key,signal,token) {
   const base = new URL(import.meta.env.VITE_BASE_URL || '/api', location.origin);
   const url = new URL(base.pathname.replace(/\/$/, '') + '/mobile/v1/attachment-by-key', base.origin);
   url.searchParams.set('key', key);
-  const response = await fetch(url, { signal, credentials: 'include', headers: { Authorization: localStorage.getItem('token') || '' } });
+  const response = await fetch(url, { signal, credentials: 'include', headers: { Authorization: token ?? (localStorage.getItem('token') || '') } });
   if (!response.ok) {
     throw new Error('The attachment is unavailable. Sign in again and retry.');
   }

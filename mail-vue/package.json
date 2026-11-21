@@ -75,6 +75,7 @@
     "@vue/test-utils": "^2.5.1",
     "jsdom": "^26.1.0",
     "less": "^4.2.2",
+    "postal-mime": "2.7.6",
     "sass": "^1.82.0",
     "terser": "^5.39.0",
     "unplugin-auto-import": "^19.3.0",
