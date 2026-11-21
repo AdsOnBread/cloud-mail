@@ -319,26 +319,8 @@
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <el-dialog
-      v-model="snoozeOpen"
-      title="Pick date &amp; time"
-      class="mail-dialog"
-      width="340px"
-      append-to-body
-    >
-      <div class="snooze-options">
-        <label
-          >Pick a date and time<input
-            type="datetime-local"
-            v-model="customTime"
-        /></label>
-        <el-button
-          type="primary"
-          :disabled="!(new Date(customTime) > new Date())"
-          @click="applySnooze(new Date(customTime))"
-          >Save</el-button
-        >
-      </div>
+    <el-dialog v-model="snoozeOpen" title="Pick date &amp; time" class="mail-dialog" width="492px" append-to-body align-center destroy-on-close @opened="snoozePicker?.focus()">
+      <MailDateTime v-if="snoozeOpen" ref="snoozePicker" :initial="snoozeOptions[0].date" action="Save" @choose="applySnooze" @cancel="snoozeOpen=false"/>
     </el-dialog>
   </section>
 </template>
@@ -372,6 +354,7 @@ import { conversationList, conversationAction } from "@/request/conversation";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import InboxTabs from "@/components/inbox-tabs.vue";
 import {inboxCategories} from "@/utils/inbox-categories";
+import MailDateTime from "@/components/mail-date-time/index.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
 const drafts = userDraftStore();
@@ -496,7 +479,7 @@ const replies = (row) =>
   [];
 const snoozeOpen = ref(false),
   snoozeIds = ref([]),
-  customTime = ref(""),
+  snoozePicker = ref(),
   snoozeOptions = ref([]);
 const snoozeAnchor = ref(null),
   snoozeMenu = ref(null),
@@ -526,7 +509,6 @@ async function chooseSnooze(ids, event, row = 0) {
   if (nextWeek > tomorrow)
     snoozeOptions.value.push(option("Next week", nextWeek));
   snoozeIds.value = [...ids];
-  customTime.value = "";
   await nextTick();
   snoozeMenu.value?.handleOpen();
 }
@@ -765,25 +747,6 @@ defineExpose({ refresh });
 }
 .pager:disabled {
   opacity: 0.32;
-}
-.snooze-options {
-  display: grid;
-  gap: 8px;
-}
-.snooze-options label {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px;
-  gap: 8px;
-}
-.snooze-options label {
-  flex-direction: column;
-}
-.snooze-options input {
-  color: inherit;
-  background: var(--mail-surface);
-  border: 1px solid var(--light-border-color);
-  padding: 8px;
 }
 :global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:none; }
 @media (max-width: 480px) {
