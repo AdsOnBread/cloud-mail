@@ -1,7 +1,7 @@
 <template>
-  <div class="mail-layout" :style="{'--mail-row-height':uiStore.rowHeight+'px'}" :class="{ 'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings }">
+  <div class="mail-layout" :style="shellStyle" :class="{ 'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings,'photo-theme':!!theme.active.image,'nav-compact':!uiStore.asideShow && !peek,'nav-peek':peek && !uiStore.asideShow && !isMobile }">
     <header class="mail-header"><Header /></header>
-    <aside class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
+    <aside @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main"><Main /></main>
     <writer ref="writerRef" />
@@ -23,10 +23,28 @@ import Header from '@/layout/header/index.vue';
 import Main from '@/layout/main/index.vue';
 import writer from '@/layout/write/index.vue';
 import { Icon } from '@iconify/vue';
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/store/ui.js';
-const uiStore = useUiStore();
+import { useMailTheme } from '@/store/mail-theme';
+const theme=useMailTheme(),uiStore = useUiStore();
+const shellStyle=computed(()=>{
+  const active=theme.active;
+  return {'--mail-row-height':uiStore.rowHeight+'px',
+    '--mail-canvas':!['light','dark'].includes(active.id) && !uiStore.dark ? active.color : undefined,
+    '--theme-image': active.image?'url("'+active.image+'")':undefined};
+});
+const pointerInRail=ref(false),keyboardInRail=ref(false);
+const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value));
+let railTimer;
+function enterRail(e){
+  clearTimeout(railTimer);
+  if(e.pointerType==='mouse' && !isMobile.value && !uiStore.asideShow)railTimer=setTimeout(()=>{pointerInRail.value=true;},150);
+}
+function leaveRail(){clearTimeout(railTimer);pointerInRail.value=false;}
+function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible');}
+function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
+watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
 const writerRef = ref();
 const isMobile = ref(window.innerWidth < 768);
@@ -39,10 +57,18 @@ function resize() {
 }
 watch(() => route.path, () => { if (isMobile.value) uiStore.asideShow = false; });
 onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync(); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
-onBeforeUnmount(() => { stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
+onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
 </script>
 <style scoped>
 .mail-layout { --nav-width:72px; position:fixed; inset:0; display:grid; grid-template-columns:var(--nav-width) minmax(0,1fr); grid-template-rows:64px minmax(0,1fr); background:var(--mail-canvas); }
+.photo-theme {background:linear-gradient(#15191fd9,#15191f52 100%),var(--theme-image) center/cover no-repeat}
+.photo-theme .mail-header :deep(.header-brand),.photo-theme .mail-header :deep(.toolbar > .icon-button){--regular-text-color:white;--mail-hover:#ffffff26}
+.photo-theme .mail-header :deep(.page-title){color:white}
+@media(min-width:768px){.photo-theme .mail-sidebar{--regular-text-color:white;--el-text-color-primary:white;--mail-hover:#ffffff29;--mail-selected:#ffffff3b;color:white}
+.photo-theme .mail-sidebar :deep(.mail-icon){color:white}.photo-theme .mail-sidebar :deep(.el-menu){--el-menu-text-color:white}
+.nav-peek .mail-sidebar{width:256px;position:relative;z-index:105;background:var(--mail-canvas);box-shadow:4px 4px 12px #0003;border-radius:0 16px 16px 0}
+.photo-theme.nav-peek .mail-sidebar{background:#242830}
+}
 .nav-expanded { --nav-width:256px; }
 .mail-header { grid-column:1/-1; min-width:0; }
 .mail-sidebar { grid-column:1; grid-row:2; min-height:0; overflow:hidden; }

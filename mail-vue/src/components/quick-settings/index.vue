@@ -38,30 +38,27 @@
       </label>
     </fieldset>
     <fieldset>
-      <legend>Theme</legend>
+      <legend class="theme-heading">Theme <button class="view-all" :disabled="!theme.ready" @click="picker.open()">View all</button></legend>
       <div class="themes">
-        <button
-          v-for="option in ['Light', 'Dark']"
-          :key="option"
-          :aria-pressed="ui.dark === (option === 'Dark')"
-          @click="ui.setDark(option === 'Dark')"
-        >
-          <span
-            class="theme-preview"
-            :class="option.toLowerCase()"
-            aria-hidden="true"
-            ><i /></span
-          >{{ option }}
+        <button v-for="item in shortcuts" :key="item.id" :disabled="!theme.ready" :aria-pressed="theme.active.id===item.id" @click="apply(item.id)">
+          <span class="theme-preview" :class="item.id" :style="{backgroundColor:item.color,backgroundImage:item.image?'url('+item.image+')':undefined}" aria-hidden="true"><i v-if="!item.image"/></span>{{item.id==='light'?'Light':item.name}}
         </button>
       </div>
+      <p v-if="error" role="alert">{{error}}</p>
     </fieldset>
   </dialog>
+  <ThemePicker ref="picker"/>
 </template>
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useUiStore } from "@/store/ui";
+import ThemePicker from './theme-picker.vue';
+import { themes,useMailTheme } from '@/store/mail-theme';
+const picker=ref(),theme=useMailTheme(),error=ref('');
+const shortcuts=computed(()=>[themes.find(t=>t.id==='light'),themes.find(t=>t.id==='dark'),theme.active.image || !['light','dark'].includes(theme.active.id)?theme.active:themes[0]]);
+async function apply(id){try{error.value='';await theme.apply(id);}catch(e){error.value=e.message||'Could not save this theme.';}}
 const ui = useUiStore(),
   router = useRouter(),
   panel = ref();
@@ -186,7 +183,7 @@ input {
 .density-preview.comfortable {
   gap: 3px;
 }
-.themes {
+.theme-heading{display:flex;align-items:center;justify-content:space-between}.view-all{color:var(--el-color-primary);cursor:pointer;border-radius:12px;padding:4px 8px}.view-all:hover{background:var(--mail-hover)}.theme-preview{background-size:cover;background-position:center}.themes {
   clear: both;
   display: flex;
   gap: 12px;

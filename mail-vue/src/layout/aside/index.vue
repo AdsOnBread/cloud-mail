@@ -165,7 +165,7 @@ const uiStore = useUiStore();
 .label-row a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .label-options { opacity:0; }
 .label-row:hover .label-options,.label-row:focus-within .label-options { opacity:1; }
-:global(.mail-layout:not(.nav-expanded)) .label-row .el-dropdown { display:none; }
+:global(.mail-layout.nav-compact) .label-row .el-dropdown { display:none; }
 .labels-error { margin:8px 24px; color:var(--el-color-primary); }
 .scroll { height:100%; }
 .mailbox-selector { padding:12px 12px 8px; }
@@ -183,9 +183,9 @@ const uiStore = useUiStore();
 .menu-name { font-size:14px; }
 .draft-count { margin-left:auto; font-size:12px; font-weight:600; }
 .manage-title { padding:24px 24px 8px; font-size:12px; color:var(--regular-text-color); }
-:global(.mail-layout:not(.nav-expanded) .mail-sidebar .menu-name), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .manage-title), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .mailbox-button span), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .mailbox-chevron), :global(.mail-layout:not(.nav-expanded) .mail-sidebar .compose-button span) { display:none; }
-:global(.mail-layout:not(.nav-expanded) .mail-sidebar .el-menu-item) { padding:0 24px !important; margin-right:8px; height:40px; border-radius:0 20px 20px 0; }
-:global(.mail-layout:not(.nav-expanded) .mail-sidebar .compose-button) { width:48px; padding:0 12px; margin-left:12px; height:48px; }
-:global(.mail-layout:not(.nav-expanded) .mail-sidebar .mailbox-button) { padding:0 12px; }
+:global(.mail-layout.nav-compact .mail-sidebar .menu-name), :global(.mail-layout.nav-compact .mail-sidebar .manage-title), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button span), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-chevron), :global(.mail-layout.nav-compact .mail-sidebar .compose-button span) { display:none; }
+:global(.mail-layout.nav-compact .mail-sidebar .el-menu-item) { padding:0 24px !important; margin-right:8px; height:40px; border-radius:0 20px 20px 0; }
+:global(.mail-layout.nav-compact .mail-sidebar .compose-button) { width:48px; padding:0 12px; margin-left:12px; height:48px; }
+:global(.mail-layout.nav-compact .mail-sidebar .mailbox-button) { padding:0 12px; }
 @media (max-width:767px) { .el-menu-item { height:40px; } }
 </style>
