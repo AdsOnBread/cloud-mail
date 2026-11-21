@@ -578,7 +578,9 @@ describe('Scheduled send',()=>{
    await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
    await deliverDue(c());
    expect((await drafts.get(c(),1,d.draftId,true)).state).toBe('sent');
+   expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries WHERE user_id=1').first('n')).toBe(1);
    const box=await conversationList(c(),{folder:'inbox',accountId:1},1);
+   expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(0);
    expect(box.threads).toHaveLength(1);
    expect(box.threads[0].messageCount).toBe(2);
    expect((await env.db.prepare('SELECT * FROM conversation_filing WHERE user_id!=1').all()).results).toEqual([]);

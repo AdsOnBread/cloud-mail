@@ -46,9 +46,36 @@ export function groupThreads(messages, ownAddresses) {
 
 export const threadColumns = 'e.email_id,e.user_id,e.message_id,e.in_reply_to,e.relation,e.reply_to_email_id,e.subject,e.send_email,e.recipient,e.cc,e.create_time';
 
+// Resolving placement after indexing keeps confirmed mail out of the delivery retry path.
+async function fileDeliveredInbox(db,userId) {
+  const fresh="EXISTS(SELECT 1 FROM mobile_thread_state WHERE user_id=p.user_id AND revision=indexed_revision)";
+  await db.batch([
+    db.prepare(`INSERT OR REPLACE INTO conversation_filing(user_id,email_id,wake_at)
+      SELECT DISTINCT e.user_id,e.email_id,0 FROM scheduled_inbox_deliveries p
+      JOIN mobile_thread_members sent ON sent.user_id=p.user_id AND sent.email_id=p.email_id
+      JOIN email copy ON copy.email_id=p.email_id AND copy.user_id=p.user_id AND copy.is_del=0 AND copy.trashed_at IS NULL
+      JOIN account sender ON sender.account_id=copy.account_id AND sender.user_id=p.user_id AND sender.is_del=0
+      JOIN mobile_thread_members m ON m.user_id=sent.user_id AND m.thread_id=sent.thread_id
+      JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
+      JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0
+      WHERE p.user_id=? AND ${fresh} AND e.email_id<=p.email_id AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)`).bind(userId),
+    db.prepare(`INSERT INTO mobile_changes(user_id,entity,entity_id,operation)
+      SELECT p.user_id,'message',p.email_id,'upsert' FROM scheduled_inbox_deliveries p
+      WHERE p.user_id=? AND ${fresh} AND EXISTS(SELECT 1 FROM email e JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0
+        WHERE e.user_id=p.user_id AND e.email_id=p.email_id AND e.is_del=0 AND e.trashed_at IS NULL)`).bind(userId),
+    db.prepare(`DELETE FROM scheduled_inbox_deliveries AS p WHERE p.user_id=? AND ${fresh}`).bind(userId),
+  ]);
+}
+
 export async function ensureThreads(db, userId) {
-	const state = await db.prepare('SELECT * FROM mobile_thread_state WHERE user_id=?').bind(userId).first();
-	if (!state || state.indexed_revision === state.revision) return;
+  const state = await db.prepare(`SELECT s.*,EXISTS(SELECT 1 FROM scheduled_inbox_deliveries p WHERE p.user_id=s.user_id) pending
+    FROM mobile_thread_state s WHERE s.user_id=?`).bind(userId).first();
+  if (!state) return;
+  if (state.indexed_revision!==state.revision) await indexThreads(db,userId,state.revision);
+  if (state.pending) await fileDeliveredInbox(db,userId);
+}
+
+async function indexThreads(db,userId,revision) {
 	const [rows, accounts] = await db.batch([
 		db.prepare(`SELECT ${threadColumns}
 			FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.user_id=? AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0`).bind(userId),
@@ -60,5 +87,5 @@ export async function ensureThreads(db, userId) {
 			ON CONFLICT(email_id) DO UPDATE SET thread_id=excluded.thread_id,user_id=excluded.user_id WHERE thread_id!=excluded.thread_id OR user_id!=excluded.user_id`).bind(m.emailId,m.userId,m.threadId)));
 	}
 	// Preserve a concurrent writer's newer revision so the next request reindexes it.
-	await db.prepare('UPDATE mobile_thread_state SET indexed_revision=? WHERE user_id=?').bind(state.revision,userId).run();
+	await db.prepare('UPDATE mobile_thread_state SET indexed_revision=? WHERE user_id=?').bind(revision,userId).run();
 }

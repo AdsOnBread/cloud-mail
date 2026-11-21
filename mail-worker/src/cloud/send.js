@@ -1,5 +1,4 @@
 import BizError from '../error/biz-error';
-import {ensureThreads} from '../mobile/threads';
 import emailService from '../service/email-service';
 import emailUtils from '../utils/email-utils';
 import { permission,mailbox,positive,conflict } from './auth';
@@ -85,9 +84,6 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
   }
   let dispatched=false;
   try {
-    // Filing can change without incrementing the draft version. Read it after claiming delivery.
-    const placeInInbox=scheduled && draft && await c.env.db.prepare("SELECT json_extract(data,'$.scheduledInbox') AS inbox FROM cloud_drafts WHERE user_id=? AND draft_id=? AND state='sending'")
-      .bind(userId,draft.draftId).first('inbox');
     const messages=await emailService.send(c,payload,userId,{beforeDispatch:()=>{dispatched=true;}});
     const result={state:'sent',attemptId:key,messages};
     const filing = [];
@@ -96,16 +92,10 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
       const sender = `FROM cloud_drafts d JOIN email e ON e.user_id=d.user_id AND e.account_id=d.account_id
         WHERE d.user_id=? AND d.draft_id=? AND d.state='sending' AND e.email_id=? AND e.type=1`;
       const ids = [userId,draft.draftId,messages[0].emailId];
-      if (placeInInbox) {
-        await ensureThreads(c.env.db,userId);
-        // Standard Inbox filing uses wake_at=0 on all visible members of this conversation.
-        filing.push(c.env.db.prepare(`INSERT OR REPLACE INTO conversation_filing(user_id,email_id,wake_at)
-          SELECT e.user_id,e.email_id,0 FROM mobile_thread_members sent
-          JOIN mobile_thread_members member ON member.user_id=sent.user_id AND member.thread_id=sent.thread_id
-          JOIN email e ON e.email_id=member.email_id AND e.user_id=member.user_id
-          JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0
-          WHERE sent.user_id=? AND sent.email_id=? AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)`)
-          .bind(userId,messages[0].emailId));
+      if (scheduled) {
+        // Commit placement with the send receipt. Normal mailbox indexing resolves its conversation.
+        filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO scheduled_inbox_deliveries(user_id,email_id)
+          SELECT d.user_id,e.email_id ${sender} AND json_extract(d.data,'$.scheduledInbox')=1`).bind(...ids));
       }
       if (draft.labelIds?.length) {
         filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)

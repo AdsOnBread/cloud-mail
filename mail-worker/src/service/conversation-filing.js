@@ -2,9 +2,11 @@ import { importanceSchema } from './mail-importance.js';
 import { categorySchema } from './inbox-categories.js';
 import { labelSchema } from './mailbox-labels.js';
 // A filing follows the latest received message. A new reply therefore reopens the thread.
+export const scheduledInboxSchema = `CREATE TABLE IF NOT EXISTS scheduled_inbox_deliveries (
+  user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, PRIMARY KEY(user_id,email_id))`;
 export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 	const statements = [
-		...labelSchema, categorySchema, importanceSchema,
+		...labelSchema, categorySchema, importanceSchema, scheduledInboxSchema,
 		`CREATE TABLE IF NOT EXISTS conversation_filing (
 			user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, wake_at INTEGER, notified INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (user_id,email_id))`,
