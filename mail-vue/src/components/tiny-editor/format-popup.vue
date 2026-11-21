@@ -71,7 +71,7 @@ function position() {
     maxHeight: Math.max(0, bottom - top - 12) + "px",
     maxWidth: Math.max(0, right - left - 12) + "px",
     left: Math.max(left + 6, Math.min(x, right - box.width - 6)) + "px",
-    top: Math.max(top + 6, y) + "px",
+    top: Math.max(top + 6, Math.min(y, bottom - box.height - 6)) + "px",
   };
 }
 function closeToTrigger() {
