@@ -89,12 +89,14 @@
         ></template>
       </MailRow>
       <p v-if="!filtered.length && !drafts.listError">
-        {{ search.query ? "No drafts match your search." : "No saved drafts." }}
+        {{ search.query || Object.keys(search.filters).length ? "No drafts match your search." : "No saved drafts." }}
       </p>
     </div>
   </section>
 </template>
 <script setup>
+import {draftSearchMatcher} from '@/utils/draft-summary';
+import {useAccountStore} from '@/store/account';
 import {useMailLabels} from "@/store/mail-labels";
 import { computed, onActivated, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -112,26 +114,17 @@ const feedback = useMailFeedback(), ui = useUiStore();
 const drafts = userDraftStore(),
   search = useMailSearchStore(),
   router = useRouter();
-const labels=useMailLabels();
+const labels=useMailLabels(), account=useAccountStore();
 const selected = ref([]),
   offset = ref(0),
   error = ref(""),
   busy = ref(false);
-const filtered = computed(() => {
-  const query = search.query.toLowerCase();
-  return drafts.items.filter(
-    (draft) =>
-      !query ||
-      [draft.subject, draft.recipients, draft.preview].some((value) =>
-        value.toLowerCase().includes(query),
-      ),
-  );
-});
+const filtered=computed(()=>drafts.items.filter(draftSearchMatcher(search.query,search.filters,account.accounts)));
 const page = computed(() =>
   filtered.value.slice(offset.value, offset.value + 50),
 );
 watch(
-  () => search.query,
+  [() => search.query, () => search.filters],
   () => {
     offset.value = 0;
   },

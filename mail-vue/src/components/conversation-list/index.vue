@@ -347,8 +347,7 @@
   </section>
 </template>
 <script setup>
-import {peopleTerms,matchesPeople} from "../../../../shared/mail-search-people";
-import {searchDateBounds,withinDateBounds} from "../../../../shared/mail-search-date";
+import {draftSearchMatcher} from "@/utils/draft-summary";
 import http from "@/axios";
 import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
@@ -476,16 +475,11 @@ function params() {
 const history = ref([]);
 const filedDrafts = computed(() => {
   if (offset.value || !["label","starred"].includes(props.folder) || search.filters.isUnread) return [];
-  const f=search.filters, bounds=searchDateBounds(f);
-  const from=peopleTerms(f,'from'), to=peopleTerms(f,'to');
-  const includes=(value,term)=>!term || (value || "").toLowerCase().includes(term.toLowerCase());
+  const matches=draftSearchMatcher(search.query,search.filters,account.accounts);
   return drafts.items.filter(draft => {
     if (props.folder==="starred" ? !draft.starred : !draft.labelIds?.includes(props.labelId)) return false;
     if (props.folder==="label" && !account.currentAccount.allReceive && draft.accountId!==account.currentAccountId) return false;
-    if (f.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
-    const sender=draft.sender || account.accounts.find(a=>a.accountId===draft.accountId)?.email;
-    return matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) && includes(draft.subject,f.subject) &&
-      [draft.subject,draft.searchBody,sender,draft.recipients].some(text=>includes(text,search.query));
+    return matches(draft);
   });
 });
 async function openFiledDraft(draft) {

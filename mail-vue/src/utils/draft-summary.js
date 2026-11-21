@@ -1,3 +1,5 @@
+import {searchDateBounds,withinDateBounds} from '../../../shared/mail-search-date';
+import {matchesPeople,peopleTerms} from '../../../shared/mail-search-people';
 import { addresses } from "./recipients";
 import { tzDayjs } from "./day";
 
@@ -30,7 +32,8 @@ export function draftSummary(draft) {
     hasFiles: Boolean(draft.hasFiles),
     accountId: draft.accountId,
     sender: draft.sendEmail || "",
-    searchBody: draft.labelIds?.length || draft.mailboxStarred ? draft.text || bodyText(draft,false) : "",
+    senderName: draft.name || "",
+    searchBody: draft.text || bodyText(draft,false),
     labelIds: draft.labelIds || [],
     starred: Boolean(draft.mailboxStarred),
     reply: draft.sendType === "reply",
@@ -46,3 +49,17 @@ export function draftSummary(draft) {
 }
 export const newestDraft = (a, b) =>
   b.lastDate - a.lastDate || b.draftId - a.draftId;
+
+export function draftSearchMatcher(query, filters, accounts) {
+  const bounds=searchDateBounds(filters);
+  const from=peopleTerms(filters,'from'), to=peopleTerms(filters,'to');
+  const words=(query || '').toLowerCase(), subject=(filters.subject || '').toLowerCase();
+  return draft=>{
+    if (filters.isUnread || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
+    const account=accounts.find(mailbox=>mailbox.accountId===draft.accountId);
+    const sender={address:draft.sender || account?.email,name:draft.senderName || account?.name};
+    return matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) &&
+      (draft.subject || '').toLowerCase().includes(subject) && (!words ||
+        [draft.subject,draft.searchBody,draft.preview,sender.address,sender.name,draft.recipients].some(value=>value?.toLowerCase().includes(words)));
+  };
+}
