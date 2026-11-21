@@ -62,28 +62,45 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(canonical({draftId: draftId||null,mode:mode||null,input}))))),b=>b.toString(16).padStart(2,'0')).join('');
   const prior=await c.env.db.prepare('SELECT * FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(userId,key).first();
   if(prior) return replay(prior,hash);
+  const undoSeconds = input.undoSeconds;
+  if (undoSeconds !== undefined && (!draftId || scheduled || ![5, 10, 20, 30].includes(undoSeconds)))
+    throw new BizError('Choose a supported cancellation period.', 400);
   const sourceState=scheduled?'scheduled':'draft';
   let draft,payload;
   if(draftId) {
     draft=await drafts.get(c,userId,positive(draftId),scheduled);
     if(input.version!==draft.version||draft.state!==sourceState)throw conflict(draft);
-    payload=await drafts.payload(c,userId,draft);
+    if (!undoSeconds) payload=await drafts.payload(c,userId,draft);
   } else payload=await prepare(c,userId,input,mode);
-  // The unique attempt and draft claim are committed together, before any delivery can occur.
-  const statements=[c.env.db.prepare(`INSERT OR IGNORE INTO send_attempts(user_id,idempotency_key,request_hash,draft_id,state)
-    SELECT ?,?,?,?,'prepared' ${draft?"WHERE EXISTS(SELECT 1 FROM cloud_drafts WHERE user_id=? AND draft_id=? AND version=? AND state=?)":''}`)
-    .bind(userId,key,hash,draft?.draftId||null,...(draft?[userId,draft.draftId,draft.version,sourceState]:[]))];
-  if(draft)statements.push(c.env.db.prepare(`UPDATE cloud_drafts SET state='sending',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=? AND state=?
-    AND EXISTS(SELECT 1 FROM send_attempts WHERE user_id=? AND idempotency_key=? AND request_hash=?)`).bind(userId,draft.draftId,draft.version,sourceState,userId,key,hash));
+  const hold = undoSeconds ? {state:'holding', attemptId:key, draftId:draft.draftId,
+    version:draft.version + 1, undoUntil:Date.now() + undoSeconds * 1000} : null;
+  // Keep the durable receipt and the exact draft revision in the same transaction.
+  const statements=[c.env.db.prepare(`INSERT OR IGNORE INTO send_attempts(user_id,idempotency_key,request_hash,draft_id,state,result)
+    SELECT ?,?,?,?,?,? ${draft?"WHERE EXISTS(SELECT 1 FROM cloud_drafts WHERE user_id=? AND draft_id=? AND version=? AND state=?)":''}`)
+    .bind(userId,key,hash,draft?.draftId||null,hold?'holding':'prepared',hold?JSON.stringify(hold):null,...(draft?[userId,draft.draftId,draft.version,sourceState]:[]))];
+  if(draft)statements.push(c.env.db.prepare(`UPDATE cloud_drafts SET state='sending',version=version+1,updated_at=CURRENT_TIMESTAMP,
+    data=CASE WHEN ? THEN json_set(data,'$.undoSendKey',?) ELSE data END WHERE user_id=? AND draft_id=? AND version=? AND state=?
+    AND EXISTS(SELECT 1 FROM send_attempts WHERE user_id=? AND idempotency_key=? AND request_hash=?)`)
+    .bind(hold?1:0,key,userId,draft.draftId,draft.version,sourceState,userId,key,hash));
   await c.env.db.batch(statements);
+  if (hold) {
+    const receipt = await c.env.db.prepare('SELECT * FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(userId,key).first();
+    if (receipt) return replay(receipt,hash);
+    throw conflict(await drafts.get(c,userId,draft.draftId,true));
+  }
   const attempt=await c.env.db.prepare("UPDATE send_attempts SET state='dispatching' WHERE user_id=? AND idempotency_key=? AND state='prepared' AND request_hash=? RETURNING *").bind(userId,key,hash).first();
   if(!attempt) {
     const existing=await c.env.db.prepare('SELECT * FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(userId,key).first();
     if(existing)return replay(existing,hash);
     throw conflict(await drafts.get(c,userId,draft.draftId,true));
   }
+  return dispatch(c,userId,key,draft,scheduled,async () => payload);
+}
+
+async function dispatch(c,userId,key,draft,scheduled,loadPayload) {
   let dispatched=false;
   try {
+    const payload = await loadPayload();
     const messages=await emailService.send(c,payload,userId,{beforeDispatch:()=>{dispatched=true;}});
     const result={state:'sent',attemptId:key,messages};
     const filing = [];
@@ -128,7 +145,7 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
     const result={state,attemptId:key,message:known?error.message:'Delivery may have occurred. Check Sent and provider activity before sending another copy.'};
     await c.env.db.batch([
       c.env.db.prepare('UPDATE send_attempts SET state=?,result=? WHERE user_id=? AND idempotency_key=?').bind(state,JSON.stringify(result),userId,key),
-      ...(draft?[c.env.db.prepare(`UPDATE cloud_drafts SET state=?,data=CASE WHEN ? THEN json_set(data,'$.scheduleError',?) ELSE data END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=?`).bind(known?(scheduled?'schedule_failed':'draft'):'uncertain',scheduled?1:0,result.message,userId,draft.draftId)]:[])
+      ...(draft?[c.env.db.prepare(`UPDATE cloud_drafts SET state=?,data=CASE WHEN ? THEN json_set(data,'$.scheduleError',?) ELSE json_remove(data,'$.undoSendKey') END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND state='sending'`).bind(known?(scheduled?'schedule_failed':'draft'):'uncertain',scheduled?1:0,result.message,userId,draft.draftId)]:[])
     ]);
     console.log(JSON.stringify({event:'send_attempt',attemptId:key,userId,state}));
     return result;
@@ -137,4 +154,43 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
 function replay(row,hash) {
   if(row.request_hash!==hash)throw new BizError('This idempotency key was already used for different content.',409);
   return row.result?JSON.parse(row.result):{state:'uncertain',attemptId:row.idempotency_key,message:'This send was started. Check Sent and provider activity; it will not be automatically repeated.'};
+}
+
+// Both the request's background task and the minute timer may wake up for a
+// message. Only the caller that claims the held receipt may contact the provider.
+export async function dispatchHeld(c,userId,key) {
+  const attempt=await c.env.db.prepare(`UPDATE send_attempts SET state='dispatching',result=NULL
+    WHERE user_id=? AND idempotency_key=? AND state='holding' AND json_extract(result,'$.undoUntil')<=?
+    RETURNING draft_id`).bind(userId,key,Date.now()).first();
+  if (!attempt) return;
+  const draft = {draftId:attempt.draft_id};
+  return dispatch(c,userId,key,draft,false,async () => {
+    await permission(c,userId,'email:send');
+    Object.assign(draft,await drafts.get(c,userId,draft.draftId,true));
+    if (draft.state !== 'sending' || draft.undoSendKey !== key) throw new BizError('This delivery changed.',409);
+    return drafts.payload(c,userId,draft);
+  });
+}
+
+export async function recoverHeld(c) {
+  const {results} = await c.env.db.prepare(`SELECT d.user_id, a.idempotency_key FROM cloud_drafts d
+    JOIN send_attempts a ON a.user_id=d.user_id AND a.idempotency_key=json_extract(d.data,'$.undoSendKey')
+    WHERE d.state='sending' AND a.state='holding' AND json_extract(a.result,'$.undoUntil')<=?
+    ORDER BY d.updated_at LIMIT 20`).bind(Date.now()).all();
+  for (const row of results) await dispatchHeld(c,row.user_id,row.idempotency_key);
+}
+
+export async function undoSend(c,userId,key) {
+  const now = Date.now();
+  const db = c.env.db;
+  await db.batch([
+    db.prepare(`UPDATE send_attempts SET state='canceled',result=json_set(result,'$.state','canceled')
+      WHERE user_id=? AND idempotency_key=? AND state='holding' AND json_extract(result,'$.undoUntil')>?`).bind(userId,key,now),
+    db.prepare(`UPDATE cloud_drafts SET state='draft',data=json_remove(data,'$.undoSendKey'),version=version+1,updated_at=CURRENT_TIMESTAMP
+      WHERE user_id=? AND state='sending' AND json_extract(data,'$.undoSendKey')=? AND draft_id=(
+        SELECT draft_id FROM send_attempts WHERE user_id=? AND idempotency_key=? AND state='canceled')`).bind(userId,key,userId,key),
+  ]);
+  const receipt = await db.prepare('SELECT result,state FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(userId,key).first();
+  if (!receipt || receipt.state !== 'canceled') throw new BizError('The cancellation period has ended. Check Sent for this message.',409);
+  return JSON.parse(receipt.result);
 }

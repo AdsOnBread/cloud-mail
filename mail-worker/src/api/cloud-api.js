@@ -6,7 +6,7 @@ import * as drafts from '../cloud/drafts';
 import * as mail from '../cloud/mail';
 import {trashScheduled,undoScheduledTrash} from '../cloud/scheduled-trash';
 import {schedule,scheduledList,snoozeScheduled,setScheduledLabels,setScheduledInbox,setScheduledRead,setScheduledMark,cancel} from '../cloud/scheduled';
-import { send } from '../cloud/send';
+import { send, dispatchHeld, undoSend } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
 import { moveFromTrash,setTrashRead,setTrashLabels } from '../cloud/trash-actions';
 import {systemLabels,setSystemLabel} from '../cloud/system-labels';
@@ -23,7 +23,17 @@ app.get(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.get(c,uid(c),c
 app.post(root+'/drafts',async c=>c.json(result.ok(await drafts.save(c,uid(c),await c.req.json()))));
 app.put(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.save(c,uid(c),await c.req.json(),c.req.param('id')))));
 app.delete(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.remove(c,uid(c),c.req.param('id'),Number(c.req.query('version'))))));
-app.post(root+'/drafts/:id/send',async c=>c.json(result.ok(await send(c,uid(c),await c.req.json(),{draftId:c.req.param('id')}))));
+app.post(root+'/drafts/:id/send',async c=>{
+  const userId=uid(c);
+  const receipt=await send(c,userId,await c.req.json(),{draftId:c.req.param('id')});
+  if (receipt.state==='holding') {
+    const job=new Promise(resolve=>setTimeout(resolve,Math.max(0,receipt.undoUntil-Date.now())))
+      .then(()=>dispatchHeld({env:c.env},userId,receipt.attemptId));
+    c.executionCtx.waitUntil(job);
+  }
+  return c.json(result.ok(receipt));
+});
+app.post(root+'/send-attempts/:id/undo',async c=>c.json(result.ok(await undoSend(c,uid(c),c.req.param('id')))));
 app.post(root+'/drafts/:id/schedule',async c=>c.json(result.ok(await schedule(c,uid(c),c.req.param('id'),await c.req.json()))));
 app.get(root+'/scheduled',async c=>c.json(result.ok(await scheduledList(c,uid(c),c.req.query('accountId'),c.req.query()))));
 app.get(root+'/scheduled/:id',async c=>{

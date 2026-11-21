@@ -1,6 +1,7 @@
 import app from './hono/webs';
 import { oauthFetch } from './mcp/oauth';
 import {indexWordBatch} from './service/mail-word-index';
+import {recoverHeld} from './cloud/send';
 import {deliverDue} from './cloud/scheduled';
 import { purgeExpired } from './cloud/mail';
 import { email } from './email/email';
@@ -47,7 +48,7 @@ const worker = {
 	fetch(req,env,ctx) { return oauthFetch(req,env,ctx,(r,e,c)=>worker.appFetch(r,e,c)); },
 	email: email,
 	async scheduled(c, env, ctx) {
-		if (c.cron === '* * * * *') { await deliverDue({env}); await indexWordBatch(env.db); return; }
+		if (c.cron === '* * * * *') { await recoverHeld({env}); await deliverDue({env}); await indexWordBatch(env.db); return; }
 		if (c.cron === '*/30 * * * *') {
 			await analysisService.refreshEchartsCache({ env });
 			return;
