@@ -57,3 +57,16 @@ it('preserves safe direction and link targets when expanding a right-to-left rep
  const wrapper=mount(MessageContent,{props:{html}});await flushPromises();await wrapper.get('button').trigger('click');await flushPromises();
  const link=wrapper.get('.natural-flow a');expect(link.attributes('rel')).toBe('noopener noreferrer');expect(link.element.closest('[dir=rtl]').lang).toBe('ar');wrapper.unmount();
 });
+
+it('keeps nested history inside a forward and uses each adjacent quote marker once',()=>{
+ const forward='<div class="cloudmail-reply-quote"><p>Original message</p>'+quote+'</div>';
+ expect(messageParts({html:forward,subject:'Re: Budget'})).toEqual([{html:forward}]);
+ const parts=messageParts({html:'<div>New</div><div class="gmail_quote">On Tuesday, Pat wrote:</div><div class="gmail_quote">Earlier</div>'});
+ expect(content(parts)).toEqual([[false,'New'],[true,'On Tuesday, Pat wrote:'],[true,'Earlier']]);
+});
+it('groups wrapped plain-text date and address lines with their quoted text',()=>{
+ const header='On Tue, 10 Nov 2026 at 15:44,\r\nPat & Co <pat@example.org> wrote:\r\n';
+ const text='My answer.\r\n'+header+'> Old reply\r\nNext answer';
+ const parts=messageParts({text});
+ expect(parts.map(p=>[!!p.quote,p.text])).toEqual([[false,'My answer.\r\n'],[true,header+'> Old reply\r\n'],[false,'Next answer']]);
+});
