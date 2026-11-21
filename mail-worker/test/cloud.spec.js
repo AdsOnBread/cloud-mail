@@ -1,3 +1,4 @@
+import {readContact,setContact} from '../src/cloud/contacts';
 import {saveFilter,previewFilter,listFilters,deleteFilter} from '../src/cloud/message-filters';
 import {env,createExecutionContext} from 'cloudflare:test';
 import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
@@ -24,6 +25,19 @@ beforeEach(async()=>{
  await env.db.prepare('UPDATE setting SET send=0').run();await settingService.refresh(c());
 });
 afterEach(()=>vi.restoreAllMocks());
+it('keeps saved contacts with the sending mailbox and includes their names in autocomplete',async()=>{
+  const person={accountId:1,email:'Person@Example.net',name:'Casey Rivera',saved:true};
+  const search={accountId:1,field:'any',folder:'compose',q:'Rivera'};
+  await setContact(c(),1,person);
+  expect(await readContact(c(),1,{...person,email:'person@example.net'})).toEqual({email:person.email,name:person.name});
+  expect(await mail.searchPeople(c(),1,search)).toEqual([{email:person.email,name:person.name}]);
+  expect(await mail.searchPeople(c(),1,{...search,accountId:3})).toEqual([]);
+  expect(await mail.searchPeople(c(),2,search)).toEqual([]);
+  await expect(setContact(c(),2,person)).rejects.toThrow('Mailbox not found');
+  await setContact(c(),1,{...person,saved:false});
+  expect(await readContact(c(),1,person)).toBeNull();
+  expect(await mail.searchPeople(c(),1,search)).toEqual([]);
+});
 describe('Incoming mail filters',()=>{
  const db=env.db;
  const create=(criteria,actions,extra={})=>saveFilter(db,1,crypto.randomUUID(),{version:0,criteria,actions,...extra});

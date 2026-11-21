@@ -1,3 +1,4 @@
+import {savedContactSuggestions} from './contacts';
 import {prepareExcludedSearch} from '../service/mail-word-index';
 import { mailboxAttachments } from '../service/mailbox-attachments';
 import {maxPeople,maxPersonTerm} from '../../../shared/mail-search-people';
@@ -30,8 +31,12 @@ export async function searchPeople(c,userId,params) {
       WHERE ${visibleMail(c)} AND e.account_id=? AND e.trashed_at IS NULL ORDER BY e.email_id DESC`;
     const read=async (ids,args)=>(await c.env.db.prepare(`WITH candidates(id) AS MATERIALIZED (${ids}) ${projection}`)
       .bind(...args,userId,mailbox).all()).results;
-    const recent=await read('SELECT email_id FROM email WHERE user_id=? AND account_id=? ORDER BY email_id DESC LIMIT 96',[userId,mailbox]);
-    const limit=picker ? 50 : 8+maxPeople, matches=peopleSuggestions(recent,'any',term,limit);
+    const limit=picker ? 50 : 8+maxPeople;
+    const [saved,recent]=await Promise.all([
+      c.mailScopes ? [] : savedContactSuggestions(c.env.db,userId,mailbox,term,limit),
+      read('SELECT email_id FROM email WHERE user_id=? AND account_id=? ORDER BY email_id DESC LIMIT 96',[userId,mailbox]),
+    ]);
+    const matches=peopleSuggestions([...saved,...recent],'any',term,limit);
     const tokens=term.match(/[\p{L}\p{M}\p{N}]+/gu);
     if (matches.length>=limit || !tokens || term.length<2) return matches;
     // Search older indexed headers. Subject-only matches are rejected by peopleSuggestions.
@@ -44,7 +49,7 @@ export async function searchPeople(c,userId,params) {
       AND hit.user_id=? AND hit.account_id=? AND hit.is_del=0 AND hit.status NOT IN (6,7) AND hit.trashed_at IS NULL
       ORDER BY mail_word_index.rowid DESC LIMIT 192`,
       [prefix,recent.at(-1)?.email_id ?? Number.MAX_SAFE_INTEGER,userId,mailbox,userId,mailbox]);
-    return peopleSuggestions([...recent,...older],'any',term,limit);
+    return peopleSuggestions([...saved,...recent,...older],'any',term,limit);
   }
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
   const filters=[visibleMail(c)], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';

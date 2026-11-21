@@ -10,6 +10,9 @@ export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_se
   hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)))`;
 export const lastScheduleSchema = `CREATE TABLE IF NOT EXISTS mail_last_schedule (
   user_id INTEGER PRIMARY KEY, send_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1)`;
+export const contactSchema = `CREATE TABLE IF NOT EXISTS mailbox_contacts (
+  user_id INTEGER NOT NULL,account_id INTEGER NOT NULL,address_key TEXT NOT NULL,
+  email TEXT NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL,PRIMARY KEY(user_id,account_id,address_key))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
@@ -51,6 +54,7 @@ export async function migrateCloud(db) {
   await db.batch([
     ...scheduledTrashSchema.map(sql=>db.prepare(sql)),
     ...mailWordSchema().map(sql=>db.prepare(sql)),
+    db.prepare(contactSchema),
     db.prepare(signatureSchema),
     db.prepare(lastScheduleSchema),
     db.prepare(systemLabelSchema),

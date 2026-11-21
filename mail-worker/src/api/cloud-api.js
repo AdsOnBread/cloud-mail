@@ -1,3 +1,4 @@
+import {readContact,setContact} from '../cloud/contacts';
 import {listFilters,previewFilter,saveFilter,deleteFilter} from '../cloud/message-filters';
 import app from '../hono/hono';
 import result from '../model/result';
@@ -57,6 +58,8 @@ app.post(root+'/scheduled/inbox',async c=>c.json(result.ok(await setScheduledInb
 app.post(root+'/scheduled/read',async c=>c.json(result.ok(await setScheduledRead(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/:id/mark',async c=>c.json(result.ok(await setScheduledMark(c,uid(c),c.req.param('id'),await c.req.json()))));
 app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,uid(c),c.req.param('id'),(await c.req.json()).version))));
+app.get(root+'/contacts',async c=>c.json(result.ok(await readContact(c,uid(c),c.req.query()))));
+app.put(root+'/contacts',async c=>c.json(result.ok(await setContact(c,uid(c),await c.req.json()))));
 app.get(root+'/search/people',async c=>c.json(result.ok(await mail.searchPeople(c,uid(c),c.req.query()))));
 app.get(root+'/messages',async c=>c.json(result.ok(await mail.list(c,uid(c),c.req.query()))));
 app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c),c.req.param('id')))));
