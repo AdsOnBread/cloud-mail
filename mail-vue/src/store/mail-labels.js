@@ -36,20 +36,17 @@ export const useMailLabels = defineStore("mail-labels", {
     request: 0,
   }),
   actions: {
+    bindSession(owner,token) {
+      if (this.owner===owner && this.sessionToken===token)return;
+      // Only bind a new credential after loginUserInfo has identified its owner.
+      const next={request:this.request+1,systemRequest:this.systemRequest+1,colorRequest:this.colorRequest+1};
+      this.$reset();
+      this.$patch(next);
+      this.owner=owner;
+      this.sessionToken=token;
+    },
     async load(owner = this.owner) {
-      if (this.owner !== owner) {
-        this.items = [];
-        this.system = {}; this.systemReady=false; this.systemRequest++; this.systemError=""; this.moved=null;
-        this.optionsAnchor = null;
-        this.recentColors = [];
-        this.colorRequest++;
-        this.edit = null;
-        this.applied = null;
-        this.revealed = null;
-        this.displayChanged = null;
-        this.owner = owner;
-        this.sessionToken=owner ? localStorage.getItem("token") : null;
-      }
+      if(owner!==this.owner)return;
       const request = ++this.request;
       this.error = "";
       if (!owner) return;
@@ -97,7 +94,7 @@ export const useMailLabels = defineStore("mail-labels", {
         // The label can outlive a failed move. Keep its ID for a retry.
         this.edit = {...this.edit,destination:label,name:label.name,move};
         if (move.trash) await labelAPI(this).post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id,clientId:move.clientId});
-        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId},labelAPI(this));
+        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId},labelAPI(this));
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {
         this.edit = { ...this.edit, id: label.id, name: label.name };

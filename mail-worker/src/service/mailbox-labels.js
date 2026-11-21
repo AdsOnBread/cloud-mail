@@ -20,7 +20,10 @@ export const labelSchema = [
 	'CREATE INDEX IF NOT EXISTS idx_labels_for_email ON mailbox_label_members(user_id,email_id,label_id)',
   `CREATE TABLE IF NOT EXISTS mailbox_label_creations (
     user_id INTEGER NOT NULL, token TEXT NOT NULL, label_id INTEGER NOT NULL REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
-    leaf TEXT NOT NULL,parent_id INTEGER,moved_ids TEXT,PRIMARY KEY(user_id,token))`,
+    leaf TEXT NOT NULL,parent_id INTEGER,PRIMARY KEY(user_id,token))`,
+  `CREATE TABLE IF NOT EXISTS mailbox_label_moves (
+    user_id INTEGER NOT NULL, token TEXT NOT NULL,intent TEXT NOT NULL,result TEXT NOT NULL,
+    PRIMARY KEY(user_id,token),FOREIGN KEY(user_id,token) REFERENCES mailbox_label_creations(user_id,token) ON DELETE CASCADE)`,
 ];
 export async function listLabels(db, userId) {
 	const {results} = await db.prepare(`SELECT l.label_id AS id,l.name,c.background,c.foreground,d.sidebar,d.messages
@@ -51,7 +54,7 @@ function descendant(path, root) {
     AND substr(${path},length(${root})+2,1) NOT IN ('','/'))`;
 }
 
-export async function saveLabel(db, userId, name, id, parentId = null, token) {
+export async function saveLabel(db, userId, name, id, parentId = null, requestKey) {
 	if (typeof name !== 'string' || !name.trim() || (id === undefined && name.trim().length > 100))
 		throw new BizError('Enter a label name of up to 100 characters.', 400);
 	if (parentId !== null && (!Number.isSafeInteger(parentId) || parentId < 1))
@@ -65,17 +68,17 @@ export async function saveLabel(db, userId, name, id, parentId = null, token) {
 	const args=[leaf,parentId,leaf,userId,parentId];
 	try {
 		if (id === undefined) {
-			if (token!==undefined) {
-        if (typeof token!=='string' || !/^[a-zA-Z0-9-]{8,80}$/.test(token)) throw new BizError('Invalid label request.',400);
+			if (requestKey!==undefined) {
+        if (typeof requestKey!=='string' || !/^[a-zA-Z0-9-]{8,80}$/.test(requestKey)) throw new BizError('Invalid label request.',400);
         const [,,receipt]=await db.batch([
           db.prepare(`WITH ${target} INSERT INTO mailbox_labels(user_id,name) SELECT ?,path FROM destination
             WHERE NOT EXISTS (SELECT 1 FROM mailbox_label_creations WHERE user_id=? AND token=?)`)
-            .bind(...args,userId,userId,token),
+            .bind(...args,userId,userId,requestKey),
           db.prepare(`WITH ${target} INSERT INTO mailbox_label_creations(user_id,token,label_id,leaf,parent_id)
             SELECT ?,?,l.label_id,?,? FROM destination JOIN mailbox_labels l ON l.user_id=? AND l.name=destination.path
-            WHERE true ON CONFLICT(user_id,token) DO NOTHING`).bind(...args,userId,token,leaf,parentId,userId),
+            WHERE true ON CONFLICT(user_id,token) DO NOTHING`).bind(...args,userId,requestKey,leaf,parentId,userId),
           db.prepare(`SELECT l.label_id AS id,l.name,r.leaf,r.parent_id FROM mailbox_label_creations r JOIN mailbox_labels l
-            ON l.user_id=r.user_id AND l.label_id=r.label_id WHERE r.user_id=? AND r.token=?`).bind(userId,token)
+            ON l.user_id=r.user_id AND l.label_id=r.label_id WHERE r.user_id=? AND r.token=?`).bind(userId,requestKey)
         ]);
         const row=receipt.results[0];
         if (!row) throw new BizError('Parent label not found.',404);

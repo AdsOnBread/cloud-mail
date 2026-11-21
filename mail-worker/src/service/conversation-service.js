@@ -1,3 +1,4 @@
+import {withLabelMove} from './label-move.js';
 import { mailboxAttachments } from './mailbox-attachments';
 import { addMailFilters } from '../service/mail-search-filters';
 import { importanceFields, importanceJoin, importanceReason, setImportance } from "./mail-importance";
@@ -243,6 +244,12 @@ export async function conversationAction(c, p, userId, action) {
 	if (action === 'read' && ![0, 1].includes(p.unread ?? 1)) throw new BizError('Invalid read state.', 400);
 	if (action === 'importance' && typeof p.important !== 'boolean')throw new BizError('Invalid importance state.',400);
 	if (action === 'star' && typeof p.starred !== 'boolean') throw new BizError('Invalid star state.', 400);
+	const apply=record=>applyConversationAction(c,p,userId,action,anchors,record);
+	if (action==='move' && p.clientId!==undefined)
+		return withLabelMove(c.env.db,userId,p.clientId,p.labelId,['move',p.fromLabelId??0,[...anchors].sort((a,b)=>a-b)],apply);
+	return apply(null);
+}
+async function applyConversationAction(c,p,userId,action,anchors,record) {
 	const db = c.env.db;
 	await ensureThreads(db, userId);
 	// Resolve every anchor before performing mutations, then use only server-owned members.
@@ -309,6 +316,7 @@ export async function conversationAction(c, p, userId, action) {
 			statements.push(
 				db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) VALUES(?,'message',?,'upsert')").bind(userId, id),
 			);
+		if (record) statements.unshift(record({conversationCount:threads.size,messageCount:ids.length}));
 		await db.batch(statements);
 	} else if (action === 'delete') {
     const statements = [];

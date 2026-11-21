@@ -1,3 +1,4 @@
+import {useMailLabels} from '@/store/mail-labels';
 import {useUserStore} from "@/store/user.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
@@ -23,7 +24,7 @@ export async function init() {
     let setting = null;
 
     if (token) {
-        const userPromise = loginUserInfo().catch(e => {
+        const userPromise = loginUserInfo(token).catch(e => {
             console.error(e);
             return null;
         });
@@ -34,9 +35,10 @@ export async function init() {
         settingStore.domainList = setting.domainList;
         document.title = setting.title;
 
-        if (user) {
+        if (user && token===localStorage.getItem("token")) {
             accountStore.currentAccountId = user.account.accountId;
             accountStore.currentAccount = user.account;
+            useMailLabels().bindSession(user.email,token);
             userStore.user = user;
 
             const routers = permsToRouter(user.permKeys);

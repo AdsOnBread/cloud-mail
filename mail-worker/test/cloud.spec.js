@@ -154,6 +154,23 @@ describe('Recoverable Trash',()=>{
    expect(await move()).toEqual({messageCount:1});expect(await move()).toEqual({messageCount:1});
    await expect(moveFromTrash(env.db,1,[row.email_id+1],label.id,token)).rejects.toMatchObject({code:409});
  });
+ it('replays filing from Inbox without archiving later replies and isolates competing moves',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {conversationAction}=await import('../src/service/conversation-service');
+   const {moveFromTrash}=await import('../src/cloud/trash-actions');
+   const token='create-inbox-label',label=await saveLabel(env.db,1,'Filing',undefined,null,token);
+   const original=await message();
+   const move=()=>conversationAction(c(),{clientId:token,emailIds:[original.email_id],labelId:label.id},1,'move');
+   const result=await move();
+   const reply=await message({message_id:'<new@example.com>',in_reply_to:'<original@example.net>'});
+   expect(await move()).toEqual(result);
+   expect((await mail.list(c(),1,{folder:'inbox'})).messages.map(m=>m.emailId)).toContain(reply.email_id);
+   const other='create-trash-label',dest=await saveLabel(env.db,1,'Trash filing',undefined,null,other);
+   await mail.trash(c(),1,[original.email_id,reply.email_id]);
+   const actions=await Promise.allSettled([original,reply].map(m=>moveFromTrash(env.db,1,[m.email_id],dest.id,other)));
+   expect(actions.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+   expect((await mail.list(c(),1,{folder:'trash'})).messages).toHaveLength(1);
+ });
  it('purges only after 30 days and age-based cleanup enters Trash first',async()=>{
    const old=await message({create_time:'2020-01-01 00:00:00'});
    await env.db.prepare('UPDATE setting SET auto_clean_days=1').run();await settingService.refresh(c());
