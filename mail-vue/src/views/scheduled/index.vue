@@ -95,7 +95,8 @@ function who(row){
   const recipients=row.recipients?.length?row.recipients:[...(row.cc||[]),...(row.bcc||[])];
   return recipients.map(address=>account.ownAddresses.some(own=>own.toLowerCase()===address.toLowerCase())?'me':address.split('@')[0]).join(', ');
 }
-let generation=0,detailRequest=0,disposed=false;
+let generation=0,detailRequest=0,interaction=0,disposed=false;
+watch(()=>route.fullPath,()=>interaction++,{flush:"sync"});
 async function load(){
   const request=++generation;
   const identityAtStart=identity.value;
@@ -130,7 +131,7 @@ function back(){
 }
 function step(direction){
   if(item.value)return open(ordered.value[position.value+direction],true);
-  offset.value+=50*direction;selected.value=[];scroll.value?.scrollTo(0,0);
+  interaction++;offset.value+=50*direction;selected.value=[];scroll.value?.scrollTo(0,0);
 }
 function select(all){if(!busy.value)selected.value=all?page.value.map(row=>row.draftId):[];}
 function toggle(id){if(!busy.value)selected.value=selected.value.includes(id)?selected.value.filter(key=>key!==id):[...selected.value,id];}
@@ -139,6 +140,8 @@ async function cancel(batch){
   if(busy.value || !batch.length || batch.some(row=>!canCancel(row)))return;
   const database=db.value,owner=identity.value;
   const session=localStorage.getItem('token'),sameMailbox=()=>!disposed && db.value===database && identity.value===owner && localStorage.getItem('token')===session;
+  let context=interaction;
+  const origin=route.fullPath;
   busy.value=true;error.value='';
   const canceled=[];
   try{
@@ -153,12 +156,17 @@ async function cancel(batch){
     if(canceled.length){
       const notice=canceled.length===1?'Message returned to Drafts.':canceled.length+' messages returned to Drafts.';
       feedback.show(notice);
-      if(canceled.includes(messageId.value))await router.replace({name:'scheduled'});
+      let reopen=batch.length===1 && context===interaction && route.fullPath===origin;
+      if(reopen && canceled.includes(messageId.value)){
+        await router.replace({name:'scheduled'});
+        reopen=route.name==='scheduled' && !messageId.value && interaction===context+1;
+        context=interaction;
+      }
       drafts.scheduledRevision++;
       await syncCloudDrafts();
-      if(batch.length===1 && sameMailbox()){
+      if(reopen && context===interaction && sameMailbox()){
         const draft=await database.draft.where('cloudDraftId').equals(canceled[0]).first();
-        if(draft && sameMailbox())await openSavedDraft(draft.draftId,router,'draft');
+        if(draft && context===interaction && sameMailbox())await openSavedDraft(draft.draftId,router,'draft');
       }
     }else await load();
   }catch(e){if(sameMailbox())error.value=e.message || 'Could not reopen this draft.';}
@@ -169,9 +177,9 @@ watch([()=>user.user.email,scope,()=>account.currentAccountId],(_,old)=>{
   if(old?.[0] && old[2] && messageId.value)router.replace({name:'scheduled'});
   load();
 },{immediate:true,flush:'sync'});
-watch([()=>search.query,()=>search.filters],()=>{offset.value=0;selected.value=[];load();});
+watch([()=>search.query,()=>search.filters],()=>{interaction++;offset.value=0;selected.value=[];rows.value=[];load();},{flush:"sync"});
 watch(()=>drafts.scheduledRevision,load);
-watch(latestFirst,()=>{offset.value=0;selected.value=[];scroll.value?.scrollTo(0,0);});
+watch(latestFirst,()=>{interaction++;offset.value=0;selected.value=[];scroll.value?.scrollTo(0,0);});
 watch([messageId,()=>item.value?.draftId,()=>item.value?.version],()=>{
   if(position.value>=0)offset.value=Math.floor(position.value/50)*50;
   loadDetail();

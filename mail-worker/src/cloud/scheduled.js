@@ -54,7 +54,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     to: ['receiveEmail', 'cc', 'bcc'].map(key => `json_extract(d.data,'$.${key}')`),
     subject: ["json_extract(d.data,'$.subject')"],
   };
-  columns.q = [...columns.from, ...columns.to, ...columns.subject, "json_extract(d.data,'$.text')"];
+  columns.q = [...columns.from, ...columns.to, ...columns.subject, "json_extract(d.data,'$.text')", "json_extract(d.data,'$.content')"];
   for (const [field, choices] of Object.entries(columns)) {
     const term = filters[field]?.trim().slice(0, 200);
     if (!term) continue;
