@@ -125,3 +125,17 @@ it("describes the recipient summary and keeps Bcc private on a different sender'
   expect(wrapper.get(".recipient-details").text()).not.toContain("secret@example.net");
   wrapper.unmount();
 });
+
+it('shows the snippet when collapsed and the sender address and recipient control when expanded',async()=>{
+  vi.spyOn(useEmailStore(),"ensureDetail").mockImplementation(async m=>m);
+  const wrapper=card({message:{...message,listText:'See the revised copy.'}});
+  expect(wrapper.get('.snippet').text()).toBe('See the revised copy.');
+  expect(wrapper.find('.address').exists()).toBe(false);
+  await wrapper.get('.message-toggle').trigger('click');
+  expect(wrapper.emitted('toggle')).toHaveLength(1);
+  await wrapper.setProps({expanded:true});await flushPromises();
+  expect(wrapper.find('.snippet').exists()).toBe(false);
+  expect(wrapper.get('.address').text()).toContain('person@example.net');
+  expect(wrapper.get('.recipient-toggle').attributes('aria-description')).toBe('to me');
+  wrapper.unmount();
+});

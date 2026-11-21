@@ -21,7 +21,7 @@ const documentHTML = ref('')
 const paragraphs = ref(null), flow=shallowRef(null);
 const Flow=()=>flow.value;
 // Short, plain paragraphs can flow with the conversation using Vue's text escaping.
-// Everything with formatting, attributes, links or media uses the isolated document.
+// The text-element renderer handles supported formatting. Rich layouts keep their isolated document.
 function plainParagraphs(doc) {
   if (doc.head.children.length || doc.body.attributes.length || doc.documentElement.attributes.length) return null
   const nodes = [...doc.body.childNodes].filter(node=>node.nodeType!==3 || node.textContent.trim())
@@ -69,17 +69,17 @@ watch(() => [props.html, props.naturalFlow, props.fileKey, props.resolveFileUrl,
   const lang=doc.body.lang || doc.documentElement.lang
   const direction=['rtl','ltr','auto'].includes(dir) ? ` dir="${dir}"` : ''
   const language=/^[a-z0-9-]{1,63}$/i.test(lang) ? ` lang="${lang}"` : ''
-  documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:${uiStore.dark ? '#8ab4f8' : '#1155cc'}}</style></head><body>${doc.body.innerHTML}</body></html>`
+  documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:13px/1.5 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:${uiStore.dark ? '#8ab4f8' : '#1155cc'}}</style></head><body>${doc.body.innerHTML}</body></html>`
 }, {immediate:true})
 onUnmounted(() => { generation++;images.clear() })
 </script>
 <style scoped>
-.natural-flow {font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere}
+.natural-flow {font:13px/1.5 Arial,Helvetica,sans-serif;overflow-wrap:anywhere}
 .natural-flow :deep(p) {margin:0 0 1em}
 .natural-flow :deep(p:last-child) {margin-bottom:0}
 .natural-flow :deep(a), .plain-paragraphs :deep(a) {color:var(--mail-reader-link,#1155cc);text-decoration:underline}
 .natural-flow :deep(blockquote) {margin:0 0 0 .8ex;border-inline-start:1px solid var(--light-border-color);padding-inline-start:1ex}
-.plain-paragraphs { font:14px/1.6 Arial,Helvetica,sans-serif; overflow-wrap:anywhere; }
+.plain-paragraphs { font:13px/1.5 Arial,Helvetica,sans-serif; overflow-wrap:anywhere; }
 .plain-paragraphs p { margin:0 0 1em; white-space:pre-line; }
 .plain-paragraphs p:last-child { margin-bottom:0; }
 iframe{display:block;width:100%;min-height:280px;border:0;background:transparent;border-radius:0}.remote-toggle{border:0;background:transparent;color:#007aff;padding:10px 0;cursor:pointer;font:inherit}

@@ -1,3 +1,4 @@
+import {readerTimestamp} from '../src/utils/day';
 import { describe, expect, it } from "vitest";
 import {
   calendarDate,
@@ -67,4 +68,14 @@ describe("mail date and time picker", () => {
         expect(times.every((time) => time > +now)).toBe(true);
       }
   });
+});
+
+it('shows recent message age, a compact label and the exact date for the reader',()=>{
+  const now=new Date(2026,10,21,15,5);
+  const minute=new Date(now.getTime()-60000);
+  expect(readerTimestamp(minute,now)).toMatchObject({label:'3:04 PM (1 minute ago)',compact:'3:04 PM',iso:minute.toISOString()});
+  expect(readerTimestamp(new Date(2026,10,20,10,5),now).label).toBe('Fri, Nov 20, 10:05 AM (1 day ago)');
+  expect(readerTimestamp(new Date(2025,10,20,10,5),now).full).toBe('Thu, Nov 20, 2025, 10:05 AM');
+  expect(readerTimestamp(new Date(now.getTime()+60000),now).label).toBe('3:06 PM');
+  expect(readerTimestamp('',now)).toBeNull();
 });

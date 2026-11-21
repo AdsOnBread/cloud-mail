@@ -52,7 +52,8 @@ it('retains one complete link and inline formatting across text nodes', async ()
     'Also www.例子.中国. <b>unlinked</b><br>example.org</div>';
   const reader = mount(MessageContent, { props: { html } });
   await flushPromises();
-  const doc = new DOMParser().parseFromString(reader.get('iframe').attributes('srcdoc'), 'text/html');
+  const doc = reader.get('.natural-flow').element;
+  expect(reader.find('iframe').exists()).toBe(false);
   const links = [...doc.querySelectorAll('a')];
   expect(links.map(link => link.textContent)).toEqual(['https://example.dev/billing', 'sales@example.app', 'www.例子.中国', 'example.org']);
   expect(links[0].querySelector('b').textContent).toBe('https://example.dev/');

@@ -180,6 +180,7 @@ async function remove() {
 </script>
 <style scoped>
 .message-card {
+  container:reader-message / inline-size;
   --avatar-size:40px;
   --header-gap:16px;
   padding:20px 0;
@@ -209,7 +210,8 @@ async function remove() {
 }
 .message-toggle strong,.address,.snippet {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .message-toggle strong {flex:0 1 auto;min-width:0}
-.message-toggle::after {content:'';position:absolute;inset:-20px 0;z-index:1}
+.message-toggle::after {content:'';position:absolute;inset:0;z-index:1}
+.collapsed .message-toggle::after {inset:-20px 0}
 .message-toggle:focus-visible {outline:0}
 .message-toggle:focus-visible::after {outline:2px solid var(--el-color-primary);outline-offset:-2px;border-radius:4px}
 .address,time {font:12px/20px Arial,sans-serif;color:var(--regular-text-color)}
@@ -228,10 +230,10 @@ time {margin-inline-end:10px;white-space:nowrap}
 .message-html,.attachments {margin-inline-start:calc(var(--avatar-size) + var(--header-gap))}
 .message-html {margin-top:8px}
 .delivery-status {padding:12px;color:var(--el-color-warning)}
-@media(max-width:900px){.full-time{display:none}.short-time{display:inline}}
+@container reader-message (max-width:650px){.full-time{display:none}.short-time{display:inline}}
 @media(max-width:767px){
   .message-card{--avatar-size:32px;--header-gap:8px;padding-block:16px}
-  .message-toggle::after{inset:-16px 0}
+  .collapsed .message-toggle::after{inset:-16px 0}
   .message-html,.attachments{margin-inline-start:0}
   .address{display:none}
   .icon-button{width:32px;height:36px}
