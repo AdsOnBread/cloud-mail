@@ -140,7 +140,7 @@ watch(()=>labels.moved,change=>{
   if(change && !change.trash && change.path===route.fullPath && change.ids.includes(Number(route.query.emailId)))back();
 });
 watch(()=>labels.applied,change=>{
-  if(change && !change.trash && change.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
+  if(change && !change.trash && change.anchors.includes(Number(route.query.emailId))) updateLabels({add:[change.labelId],remove:[]});
 });
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
 const importanceReason = ref(null);
@@ -311,17 +311,25 @@ function applyFiling(data) {
   labelIds.value=data.labelIds || [];
   filedAway.value=Boolean(data.filedAway);
 }
-watch(()=>labels.undoneMove, async()=>{
+let pendingFilingRead=null;
+function updateLabels({add,remove}) {
+  labelIds.value=[...new Set([...labelIds.value,...add])].filter(id=>!remove.includes(id));
+  filingVersion++;
+  if (pendingFilingRead!==null) refreshFiling();
+}
+async function refreshFiling() {
   const anchor=Number(route.query.emailId);
   if (route.name!=="content" || !anchor) return;
   const version=++filingVersion, current=readerCurrent();
+  pendingFilingRead=version;
   try {
     const data=await conversationMessages({emailId:anchor,limit:1});
     if (current() && version===filingVersion) applyFiling(data);
   } catch(e) {
     if (current() && version===filingVersion) error.value=e.message || "Could not refresh the conversation.";
-  }
-});
+  } finally { if (pendingFilingRead===version) pendingFilingRead=null; }
+}
+watch(()=>labels.undoneMove,refreshFiling);
 async function load(older = false) {
   if (older && (loading.value || expanding.value)) return;
   expandRun++;expanding.value=false;
@@ -587,7 +595,7 @@ async function mutate(action, extra = {}) {
       importanceRevision++;
       importanceReason.value = extra.important ? "user" : null;
     }
-    else if (action === "label") { filingVersion++; labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id)); }
+    else if (action === "label") updateLabels(extra);
     else {
       unreadCount.value=extra.unread===0?incoming.value:0;
       messages.value.forEach((message) => {

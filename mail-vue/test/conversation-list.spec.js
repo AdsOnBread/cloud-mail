@@ -8,6 +8,8 @@ import {
 } from "../src/request/conversation";
 import { useMailSearchStore } from "../src/store/mail-search";
 import { useAccountStore } from "../src/store/account";
+import MovePicker from "../src/components/mail-labels/move.vue";
+import {useMailLabels} from "../src/store/mail-labels";
 import { useUserStore } from "../src/store/user";
 import { draggingConversations } from "../src/components/mail-labels/conversation-drag";
 const push = vi.hoisted(() => vi.fn());
@@ -101,6 +103,24 @@ describe("conversation lists", () => {
       wrapper.unmount();
       localStorage.removeItem("token");
     }
+  });
+  it("discards a delayed move refresh when Undo has already restored the row", async () => {
+    const original=page([row(8,"Returned")]), delayed=deferred();
+    conversationList.mockResolvedValueOnce(original).mockReturnValueOnce(delayed.promise).mockResolvedValue(original);
+    const labels=useMailLabels();
+    vi.spyOn(labels,"moveConversations").mockResolvedValue({});
+    const wrapper=mountList();
+    await flushPromises();
+    await wrapper.get('[aria-label="Select Returned"]').setValue(true);
+    wrapper.getComponent(MovePicker).vm.$emit("move",{labelId:6},[8]);
+    await flushPromises();
+    expect(conversationList).toHaveBeenCalledTimes(2);
+    labels.undoneMove++;
+    await flushPromises();
+    delayed.resolve(page([]));
+    await flushPromises();
+    expect(wrapper.find('[aria-label="Select Returned"]').exists()).toBe(true);
+    wrapper.unmount();
   });
   it("rejects stale search responses and resets selection and pagination", async () => {
     let oldResolve, currentResolve;

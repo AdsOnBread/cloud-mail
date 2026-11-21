@@ -7,6 +7,7 @@ import { conversationMessages, conversationAction } from "../src/request/convers
 import { userDraftStore } from "../src/store/draft";
 import {useUiStore} from "../src/store/ui";
 import {useUserStore} from "../src/store/user";
+import {useMailLabels} from "../src/store/mail-labels";
 import { useEmailStore } from "../src/store/email";
 const state = vi.hoisted(() => ({
   save: vi.fn(async () => true),
@@ -80,7 +81,8 @@ async function setup(query = "emailId=10", attachTo) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: "/mail", component: ConversationView },
+      { path: "/mail", name:"content", component: ConversationView },
+      { path: "/label/:labelId", name:"label", component:{template:"<p>Label</p>"} },
       { path: "/drafts", component: {template:"<p>Drafts</p>"} },
       { path: "/inbox", component: { template: "<p>Inbox</p>" } },
     ],
@@ -115,6 +117,42 @@ beforeEach(() => {
   Element.prototype.scrollTo = vi.fn();
 });
 describe("conversation navigation and inline targets", () => {
+  it("refreshes filing after Undo without replacing the open inline reply", async () => {
+    const labels=useMailLabels();
+    labels.items=[{id:6,name:"Filed"}];
+    conversationMessages.mockResolvedValueOnce(page([message(9),message(10)],{labelIds:[6],filedAway:true}));
+    const {wrapper}=await setup();
+    expect(wrapper.get(".thread-label").text()).toBe("Filed");
+    await wrapper.findAll("button").find(button=>button.text()==="Reply to 9").trigger("click");
+    await flushPromises();
+    const input=wrapper.get('[aria-label="Reply body"]');
+    await input.setValue("Still writing");
+    conversationMessages.mockResolvedValueOnce(page([message(10)],{labelIds:[],filedAway:false}));
+    labels.undoneMove++;
+    await flushPromises();
+    expect(conversationMessages).toHaveBeenLastCalledWith({emailId:10,limit:1});
+    expect(wrapper.find(".thread-label").exists()).toBe(false);
+    expect(wrapper.findAll("article")).toHaveLength(2);
+    expect(wrapper.get('[aria-label="Reply body"]').element.value).toBe("Still writing");
+    wrapper.unmount();
+  });
+  it("rechecks Undo after another label is applied while its metadata is loading", async () => {
+    const labels=useMailLabels();
+    labels.items=[{id:6,name:"Filed"},{id:9,name:"Keep"}];
+    conversationMessages.mockResolvedValueOnce(page([message(10)],{labelIds:[6],filedAway:true}));
+    const {wrapper}=await setup();
+    let finish;
+    conversationMessages.mockReturnValueOnce(new Promise(resolve=>{finish=resolve}));
+    labels.undoneMove++;
+    await flushPromises();
+    conversationMessages.mockResolvedValueOnce(page([message(10)],{labelIds:[9],filedAway:false}));
+    labels.applied={anchors:[10],labelId:9};
+    await flushPromises();
+    finish(page([message(10)],{labelIds:[],filedAway:false}));
+    await flushPromises();
+    expect(wrapper.findAll(".thread-label").map(l=>l.text())).toEqual(["Keep"]);
+    wrapper.unmount();
+  });
   it("initially expands unread/latest cards and prepends older pages chronologically", async () => {
     conversationMessages
       .mockResolvedValueOnce(
