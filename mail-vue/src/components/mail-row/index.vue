@@ -43,7 +43,7 @@
         <span v-if="count > 1" class="thread-count">{{ count }}</span>
       </span>
       <span class="summary"
-        ><span class="subject">{{ subject || "(no subject)" }}</span
+        ><span v-for="label in labels" :key="label" class="row-label">{{ label }}</span><span class="subject">{{ subject || "(no subject)" }}</span
         ><span v-if="preview" class="preview"
           ><span class="separator"> - </span>{{ preview }}</span
         ></span
@@ -60,6 +60,7 @@
 import { Icon } from "@iconify/vue";
 defineProps({
   participants: String,
+  labels: Array,
   subject: String,
   preview: String,
   date: String,
@@ -154,6 +155,7 @@ defineEmits(["select", "star", "open"]);
   flex: 1;
   min-width: 0;
 }
+.row-label { display:inline-block; max-width:100px; margin-right:5px; padding:0 4px; overflow:hidden; text-overflow:ellipsis; vertical-align:text-bottom; background:var(--light-border-color); border-radius:4px; font:500 12px/17px Arial,sans-serif; }
 .preview,
 .row-date {
   color: var(--regular-text-color);

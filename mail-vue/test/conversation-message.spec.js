@@ -42,7 +42,10 @@ const card = (props = {}) =>
   mount(Message, {
     props: { message: { ...message }, expanded: false, ...props },
     global: {
-      stubs: { Icon: true, ElImageViewer: true },
+      stubs: { Icon: true, ElImageViewer: true,
+        ElPopover:{template:'<div><slot name="reference"/><slot/></div>'},
+        ElDropdown:{template:'<div><slot/><slot name="dropdown"/></div>'},
+        ElDropdownMenu:{template:'<div><slot/></div>'}, ElDropdownItem:{template:'<button><slot/></button>'} },
       directives: { perm: () => {} },
     },
   });

@@ -265,3 +265,25 @@ describe('Web conversations', () => {
 		expect((await denied.json()).code).toBe(403);
 	});
 });
+
+it('keeps label names, membership and folder results scoped to their owner', async () => {
+ const {saveLabel,listLabels,removeLabel}=await import('../src/service/mailbox-labels');
+ const root=await insert({message_id:'<label@example.com>'});
+ const reply=await insert({in_reply_to:'<label@example.com>'});
+ const tag=await saveLabel(env.db,1,'Projects'), other=await saveLabel(env.db,2,'Projects');
+ await expect(saveLabel(env.db,1,'projects')).rejects.toThrow(/exists/);
+ await expect(action('label',[root.email_id],{add:[other.id],remove:[]})).rejects.toThrow(/not found/);
+ await action('label',[root.email_id],{add:[tag.id],remove:[]});
+ expect((await list({folder:'label',labelId:tag.id})).threads[0]).toMatchObject({lastEmailId:reply.email_id,labelIds:[tag.id]});
+ expect((await messages(reply.email_id)).labelIds).toEqual([tag.id]);
+ await action('archive',[root.email_id]);
+ expect((await list({folder:'all'})).total).toBe(1);
+ await expect(removeLabel(env.db,2,tag.id)).rejects.toThrow(/not found/);
+ await saveLabel(env.db,1,'Filed',tag.id);
+ expect(await listLabels(env.db,1)).toEqual([{id:tag.id,name:'Filed'}]);
+ await action('label',[reply.email_id],{add:[],remove:[tag.id]});
+ expect((await list({folder:'label',labelId:tag.id})).total).toBe(0);
+ await action('label',[reply.email_id],{add:[tag.id],remove:[]});
+ await removeLabel(env.db,1,tag.id);
+ expect((await messages(reply.email_id)).labelIds).toEqual([]);
+});

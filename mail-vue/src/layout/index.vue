@@ -7,12 +7,14 @@
     <writer ref="writerRef" />
     <MailTooltip />
     <MailFeedback />
+    <LabelEditor />
     <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
 import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
+import LabelEditor from "@/components/mail-labels/editor.vue";
 import MailFeedback from '@/components/mail-feedback/index.vue';
 import MailTooltip from '@/components/mail-tooltip/index.vue';
 import Aside from '@/layout/aside/index.vue';
@@ -34,7 +36,7 @@ function resize() {
   const next = window.innerWidth >= 1024 ? 'desktop' : window.innerWidth >= 768 ? 'tablet' : 'mobile';
   if (next !== size) { uiStore.asideShow = next === 'desktop'; size = next; }
 }
-watch(() => route.name, () => { if (isMobile.value) uiStore.asideShow = false; });
+watch(() => route.path, () => { if (isMobile.value) uiStore.asideShow = false; });
 onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync(); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
 onBeforeUnmount(() => { stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
 </script>
@@ -53,4 +55,6 @@ onBeforeUnmount(() => { stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef 
  .nav-overlay { position:fixed; inset:64px 0 0; background:#0006; z-index:100; }
  .mobile-compose { display:flex; position:fixed; right:16px; bottom:24px; padding:16px 20px; align-items:center; gap:12px; border-radius:16px; background:var(--mail-compose); color:var(--mail-on-compose); box-shadow:0 3px 8px #0003; z-index:20; cursor:pointer; }
 }
+@media (min-width:768px) and (prefers-reduced-motion:no-preference) { .mail-layout { transition:grid-template-columns .16s cubic-bezier(.2,0,0,1); } }
+@media (prefers-reduced-motion:reduce) { .mail-sidebar { transition:none; } }
 </style>

@@ -19,8 +19,8 @@
       </button>
       <button type="button" class="icon-button notice" aria-label="Announcements" data-tip="Announcements" @click="openNotice"><Icon icon="material-symbols:campaign-outline" width="22" /></button>
       <button type="button" class="icon-button" aria-label="Settings" data-tip="Settings" @click="router.push('/settings')"><Icon icon="material-symbols:settings-outline" width="24" /></button>
-      <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
-        <button type="button" class="avatar" aria-label="Your account" data-tip="Your account" @click="userInfoHide" >
+      <el-dropdown trigger="click" placement="bottom-end" :show-arrow="false" :teleported="false" popper-class="detail-dropdown">
+        <button type="button" class="avatar" aria-label="Your account" data-tip="Your account" >
           <div class="avatar-text">
             <div>{{ formatName(userStore.user.email) }}</div>
           </div>
@@ -88,12 +88,12 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
-const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','trash'].includes(route.name));
+const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','trash','all','label'].includes(route.name));
 watch(() => route.name, name => { mailSearch.visit(name); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {
   mailSearch.query = searchText.value.trim();
-  if (route.name === 'content') router.push({ name: mailSearch.folder });
+  if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder});
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; }
 
@@ -101,8 +101,7 @@ const settingStore = useSettingStore();
 const userStore = useUserStore();
 const uiStore = useUiStore();
 const logoutLoading = ref(false)
-const userInfoShow = ref(false)
-const userinfoRef = ref({})
+
 
 const accountCount = computed(() => {
   return userStore.user.role.accountCount
@@ -165,14 +164,6 @@ const sendCount = computed(() => {
   return userStore.user.sendCount + '/' + userStore.user.role.sendCount
 })
 
-function userInfoHide(e) {
-    if (userInfoShow.value) {
-        userinfoRef.value.handleClose()
-    } else {
-        userinfoRef.value.handleOpen()
-    }
-}
-
 async function copyEmail(email) {
   try {
     await navigator.clipboard.writeText(email);
@@ -196,49 +187,11 @@ function openNotice() {
   uiStore.showNotice()
 }
 
-function openDark(e) {
-
-  const nextIsDark = !uiStore.dark
-  const root = document.documentElement
-
-  if (!document.startViewTransition) {
-    switchDark(nextIsDark, root);
-    return
-  }
-
-  const x = e.clientX
-  const y = e.clientY
-
-  const maxX = Math.max(x, window.innerWidth - x)
-  const maxY = Math.max(y, window.innerHeight - y)
-  const endRadius = Math.hypot(maxX, maxY)
-
-  // Set the transition target for CSS selectors
-  root.setAttribute('data-theme-to', nextIsDark ? 'dark' : 'light')
-  root.style.setProperty('--vt-x', `${x}px`)
-  root.style.setProperty('--vt-y', `${y}px`)
-  root.style.setProperty('--vt-end-radius', `${endRadius + 10}px`)
-
-  const transition = document.startViewTransition(() => {
-    switchDark(nextIsDark, root);
-  })
-
-  transition.finished.finally(() => {
-    // Clear the transition target
-    root.removeAttribute('data-theme-to')
-  })
-}
-
-function switchDark(nextIsDark, root) {
-  root.setAttribute('class', nextIsDark ? 'dark' : '')
-  const metaTag = document.getElementById('theme-color-meta');
-  const isMobile =  !window.matchMedia("(pointer: fine) and (hover: hover)").matches;
-  metaTag?.setAttribute('content', nextIsDark ? '#1b1b1f' : '#f6f8fc');
-  uiStore.dark = nextIsDark
-}
-
-function openSend() {
-  uiStore.writerRef.open()
+function openDark() {
+  const dark = !uiStore.dark;
+  document.documentElement.classList.toggle("dark", dark);
+  document.getElementById("theme-color-meta")?.setAttribute("content", dark ? "#1b1b1f" : "#f6f8fc");
+  uiStore.dark = dark;
 }
 
 function changeAside() {

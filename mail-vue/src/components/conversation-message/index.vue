@@ -35,17 +35,30 @@
           width="20"
         />
       </button>
+      <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" aria-label="Reply to message" data-tip="Reply" @click="$emit('reply',false)"><Icon icon="material-symbols:reply" width="20" /></button>
+      <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :show-arrow="false" popper-class="mail-action-menu">
+        <button class="icon-button" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20" /></button>
+        <template #dropdown><el-dropdown-menu>
+          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply', false)">Reply</el-dropdown-item>
+          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply', true)">Reply all</el-dropdown-item>
+          <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)">Forward</el-dropdown-item>
+          <el-dropdown-item divided @click="read">{{ message.unread === 0 ? "Mark read" : "Mark unread" }}</el-dropdown-item>
+          <el-dropdown-item v-perm="'email:delete'" @click="remove">Delete message</el-dropdown-item>
+        </el-dropdown-menu></template>
+      </el-dropdown>
     </div>
     <template v-if="expanded">
-      <button
+      <el-popover v-model:visible="recipientsOpen" trigger="click" placement="bottom-start" :show-arrow="false" :width="340" popper-class="recipient-popper">
+      <template #reference><button
         class="recipient-toggle" data-tip="Show details"
         :aria-expanded="recipientsOpen"
-        @click="recipientsOpen = !recipientsOpen"
+
       >
         to {{ addresses(message.recipient).join(", ") || email.toEmail }}
         <Icon icon="material-symbols:expand-more" width="16" />
       </button>
-      <div v-if="recipientsOpen" class="recipient-details">
+      </template>
+      <div class="recipient-details">
         <div><span>From</span>{{ message.sendEmail }}</div>
         <div><span>To</span>{{ addresses(message.recipient).join(", ") }}</div>
         <div v-if="addresses(message.cc).length">
@@ -62,6 +75,7 @@
         </div>
         <div><span>Date</span>{{ formatDetailDate(message.createTime) }}</div>
       </div>
+      </el-popover>
       <p v-if="loading" role="status">Loading message…</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load">Retry</button>
@@ -103,24 +117,7 @@
           Preview {{ file.filename }}
         </button>
       </div>
-      <div v-if="!replying" class="message-actions">
-        <button v-perm="'email:send'" @click="$emit('reply', false)">
-          <Icon icon="material-symbols:reply" width="18" />Reply
-        </button>
-        <button v-perm="'email:send'" @click="$emit('reply', true)">
-          <Icon icon="material-symbols:reply-all" width="18" />Reply all
-        </button>
-        <button
-          v-perm="'email:send'"
-          @click="ui.writerRef.openForward(message)"
-        >
-          Forward
-        </button>
-        <button @click="read">
-          {{ message.unread === 0 ? "Mark read" : "Mark unread" }}
-        </button>
-        <button v-perm="'email:delete'" @click="remove">Delete message</button>
-      </div>
+
     </template>
     <el-image-viewer
       v-if="previewURL"
@@ -311,10 +308,11 @@ time {
   color: var(--regular-text-color);
   flex: 1;
 }
-.icon-button {
+.icon-button { width:32px; height:32px; border-radius:50%; display:inline-grid; place-items:center; flex-shrink:0;
   color: var(--regular-text-color);
   cursor: pointer;
 }
+.icon-button:hover { background:var(--mail-hover); }
 .recipient-toggle {
   margin: 0 0 18px 48px;
   font-size: 12px;
@@ -327,10 +325,7 @@ time {
   cursor: pointer;
 }
 .recipient-details {
-  padding: 16px;
-  margin: 12px 0 24px 48px;
-  border: 1px solid var(--light-border-color);
-  border-radius: 8px;
+  padding: 4px;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -349,25 +344,6 @@ time {
   overflow-wrap: anywhere;
   font: 14px/1.6 Arial;
   padding-left: 48px;
-}
-.message-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 20px 0 0 48px;
-}
-.message-actions button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 7px 12px;
-  color: var(--regular-text-color);
-  border: 1px solid var(--light-border-color);
-  border-radius: 20px;
-}
-.message-actions button:hover {
-  background: var(--mail-hover);
 }
 .attachments {
   display: flex;
@@ -423,15 +399,11 @@ time {
   .snippet {
     display: none;
   }
-  .message-actions,
   .attachments,
   .recipient-details {
     margin-left: 0;
   }
-  .message-actions button {
-    font-size: 12px;
-    padding: 7px 10px;
-  }
+
   .message-text {
     padding-left: 0;
   }

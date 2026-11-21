@@ -109,7 +109,7 @@ export async function readSavedDraft(draftId) {
   return { ...draft, attachments: files?.attachments || [] };
 }
 
-export async function openSavedDraft(draftId, router, folder) {
+export async function openSavedDraft(draftId, router, folder, labelId) {
   const draft = await readSavedDraft(draftId);
   if (
     draftKey(draft) &&
@@ -119,7 +119,7 @@ export async function openSavedDraft(draftId, router, folder) {
   ) {
     await router.push({
       path: "/mail",
-      query: { emailId: draft.emailId, draft: draftKey(draft), folder },
+      query: { emailId: draft.emailId, draft: draftKey(draft), folder, labelId },
     });
   } else await useUiStore().writerRef.openDraft(draft);
 }

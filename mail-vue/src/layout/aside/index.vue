@@ -26,6 +26,13 @@
           <Icon icon="material-symbols:draft-outline" width="19" height="19" />
           <span class="menu-name" style="margin-left: 17px">{{$t('drafts')}}</span><span v-if="drafts.items.length" class="menu-name draft-count">{{ drafts.items.length }}</span>
         </el-menu-item>
+        <el-menu-item index="more" :aria-expanded="more" :aria-label="more ? 'Less' : 'More'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
+          <Icon :icon="more ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20" /><span class="menu-name folder-name">{{ more ? 'Less' : 'More' }}</span>
+        </el-menu-item>
+        <template v-if="more">
+          <el-menu-item index="all" aria-label="All Mail" data-tip="All Mail" :class="{'choose-item':activeFolder==='all'}" @click="router.push('/all')">
+            <Icon icon="material-symbols:all-inbox-outline" width="20" /><span class="menu-name folder-name">All Mail</span>
+          </el-menu-item>
         <el-menu-item @click="router.push({name:'archived'})" index="archived" aria-label="Archived" data-tip="Archived" :class="{'choose-item':activeFolder==='archived'}">
           <Icon icon="material-symbols:archive-outline" width="20"/><span class="menu-name" style="margin-left:16px">Archived</span>
         </el-menu-item>
@@ -35,6 +42,18 @@
           <Icon icon="fluent:settings-48-regular" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('settings')}}</span>
         </el-menu-item>
+        </template>
+        <div class="label-heading"><span class="menu-name">Labels</span><button class="mail-icon" aria-label="Create new label" data-tip="Create new label" @click="labels.edit={}"><Icon icon="material-symbols:add" width="20" /></button></div>
+        <div v-for="label in labels.items" :key="label.id" class="label-row" :class="{'selected-label':activeLabel===label.id}">
+          <router-link :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name">
+            <Icon icon="material-symbols:label-outline" width="20" /><span class="menu-name">{{ label.name }}</span>
+          </router-link>
+          <el-dropdown trigger="click" popper-class="mail-action-menu" :show-arrow="false" @command="cmd=>labels.edit={...label,remove:cmd==='remove'}">
+            <button class="mail-icon label-options" :aria-label="'Options for '+label.name"><Icon icon="material-symbols:more-vert" width="18" /></button>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item command="edit">Edit</el-dropdown-item><el-dropdown-item command="remove">Remove label</el-dropdown-item></el-dropdown-menu></template>
+          </el-dropdown>
+        </div>
+        <button v-if="labels.error" class="labels-error" @click="labels.load()">Retry loading labels</button>
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
@@ -48,10 +67,10 @@
           <Icon icon="si:user-alt-2-line" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('allUsers')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'all-email'})" aria-label="All mail" data-tip="All mail" index="all-email" v-perm="'all-email:query'"
+        <el-menu-item @click="router.push({name: 'all-email'})" aria-label="Manage all mail" data-tip="Manage all mail" index="all-email" v-perm="'all-email:query'"
                       :class="activeFolder === 'all-email' ? 'choose-item' : ''">
           <Icon icon="fluent:mail-list-28-regular" width="22" height="22" />
-          <span class="menu-name" style="margin-left: 15px">{{$t('allMail')}}</span>
+          <span class="menu-name" style="margin-left: 15px">Manage all mail</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'role'})" aria-label="Permissions" data-tip="Permissions" index="setting" v-perm="'role:query'"
                       :class="activeFolder === 'role' ? 'choose-item' : ''">
@@ -88,7 +107,9 @@ import { useUiStore } from '@/store/ui.js';
 import { hasPerm } from '@/perm/perm.js';
 import router from "@/router/index.js";
 import { useRoute } from 'vue-router';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useMailLabels } from '@/store/mail-labels';
+import { useUserStore } from '@/store/user';
 import { useMailSearchStore } from '@/store/mail-search.js';
 import {Icon} from "@iconify/vue";
 import {useSettingStore} from "@/store/setting.js";
@@ -98,12 +119,30 @@ const settingStore = useSettingStore();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const activeFolder = computed(() => route.name === 'content' ? mailSearch.folder : route.meta.name);
+const labels = useMailLabels(), user=useUserStore();
+const more=ref(false);
+const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
+watch(activeFolder,folder=>{if(["archived","trash","all","setting"].includes(folder))more.value=true;},{immediate:true});
+watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
 const accountStore = useAccountStore();
 const uiStore = useUiStore();
 
 </script>
 
 <style scoped>
+.folder-name { margin-left:16px; }
+.label-heading { height:48px; margin:10px 16px 0 24px; display:flex; align-items:center; justify-content:space-between; }
+.label-heading span { font-size:16px; font-weight:500; }
+.label-row { display:flex; align-items:center; margin-right:8px; height:32px; border-radius:0 16px 16px 0; }
+.label-row:hover { background:var(--mail-hover); }
+.label-row.selected-label { background:var(--mail-selected); font-weight:600; }
+.label-row a { display:flex; align-items:center; gap:16px; padding-left:24px; min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
+.label-row a svg { flex-shrink:0; }
+.label-row a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.label-options { opacity:0; }
+.label-row:hover .label-options,.label-row:focus-within .label-options { opacity:1; }
+:global(.mail-layout:not(.nav-expanded)) .label-row .el-dropdown { display:none; }
+.labels-error { margin:8px 24px; color:var(--el-color-primary); }
 .scroll { height:100%; }
 .mailbox-selector { padding:12px 12px 8px; }
 .mailbox-button { width:100%; height:36px; display:flex; align-items:center; gap:10px; color:var(--regular-text-color); cursor:pointer; padding:0 12px; border-radius:18px; font-size:12px; }

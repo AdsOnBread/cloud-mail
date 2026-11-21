@@ -4,21 +4,8 @@
       <button aria-label="Back to mail" data-tip="Back to mail" @click="back">
         <Icon icon="material-symbols:arrow-back" width="22" />
       </button>
-      <button
-        :disabled="busy || !messages.length"
-        aria-label="Mark conversation read"
-        data-tip="Mark conversation read"
-        @click="mutate('read')"
-      >
-        <Icon icon="material-symbols:mark-email-read-outline" width="22" />
-      </button>
-      <button
-        :disabled="busy || !messages.length"
-        aria-label="Mark conversation unread"
-        data-tip="Mark conversation unread"
-        @click="mutate('read', { unread: 0 })"
-      >
-        <Icon icon="material-symbols:mark-email-unread-outline" width="22" />
+      <button :disabled="busy || !messages.length" :aria-label="filingTitle" :data-tip="filingTitle" @click="mutate(filingAction)">
+        <Icon :icon="filingAction==='archive'?'material-symbols:archive-outline':'material-symbols:move-to-inbox-outline'" width="20" />
       </button>
       <button
         v-perm="'email:delete'"
@@ -29,6 +16,11 @@
       >
         <Icon icon="material-symbols:delete-outline" width="22" />
       </button>
+      <span class="toolbar-separator" aria-hidden="true"></span>
+      <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
+        <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
+      </button>
+      <LabelPicker :rows="[{lastEmailId:Number(route.query.emailId),labelIds}]" :disabled="busy || !messages.length" @apply="ops=>mutate('label',ops)" />
       <button
         v-if="threadDrafts.length"
         class="draft-jump"
@@ -44,7 +36,7 @@
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
     <div ref="scroll" class="conversation-body">
-      <h1>{{ threadSubject || "(no subject)" }}</h1>
+      <h1>{{ threadSubject || "(no subject)" }} <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
       </p>
@@ -111,6 +103,7 @@
           ><Icon icon="material-symbols:reply-all" width="20" />Reply
           all</el-button
         >
+        <el-button v-perm="'email:send'" round @click="ui.writerRef.openForward(messages.at(-1))"><Icon icon="material-symbols:forward" width="20"/>Forward</el-button>
       </div>
     </div>
   </section>
@@ -138,6 +131,15 @@ import { useAccountStore } from "@/store/account";
 import { userDraftStore } from "@/store/draft";
 import { draftKey } from "@/utils/draft-summary";
 import { mailboxDate } from "@/utils/day";
+import LabelPicker from "@/components/mail-labels/picker.vue";
+import { useMailLabels } from "@/store/mail-labels";
+import { useUiStore } from "@/store/ui";
+const labels=useMailLabels(), ui=useUiStore(), labelIds=ref([]);
+const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
+const hasUnread=computed(()=>messages.value.some(item=>item.type===0 && item.unread===0));
+const readTitle=computed(()=>hasUnread.value?"Mark conversation read":"Mark conversation unread");
+const filingAction=computed(()=>["archived","snoozed"].includes(route.query.folder)?"inbox":"archive");
+const filingTitle=computed(()=>filingAction.value==="archive"?"Archive":"Move to Inbox");
 const drafts = userDraftStore();
 const threadId = ref(null);
 const draftList = ref(null);
@@ -215,6 +217,7 @@ async function load(older = false) {
         ]
       : data.messages;
     threadId.value = data.threadId;
+    labelIds.value=data.labelIds || [];
     threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
     hasMore.value = data.hasMore;
@@ -252,6 +255,7 @@ watch(
     handledReply = false;
     threadSubject.value = "";
     threadId.value = null;
+    labelIds.value=[];
     closed();
     expanded.value = new Set();
     messages.value = [];
@@ -371,6 +375,8 @@ function back() {
   else
     router.push(
       {
+        all: "/all",
+        label: route.query.labelId ? "/label/"+route.query.labelId : "/all",
         sent: "/sent",
         starred: "/starred",
         draft: "/drafts",
@@ -380,13 +386,14 @@ function back() {
     );
 }
 async function mutate(action, extra = {}) {
-  if (busy.value || !(await save())) return;
+  if (busy.value || (action !== "label" && !(await save()))) return;
   busy.value = true;
   try {
     const result = await conversationAction(action, [Number(route.query.emailId)], extra);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
-    if (action === "delete") back();
+    if (["delete","archive","inbox"].includes(action)) back();
+    else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
     else
       messages.value.forEach((message) => {
         message.unread = extra.unread ?? 1;
@@ -451,6 +458,9 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
+.conversation-toolbar .toolbar-separator { flex:none; margin:0 6px; height:20px; width:1px; background:var(--light-border-color); }
+.thread-label { display:inline-block; font-size:12px; vertical-align:middle; line-height:18px; font-weight:500; text-decoration:none; color:var(--regular-text-color); background:var(--mail-hover); border-radius:4px; padding:0 6px; margin-right:4px; }
+
 .conversation-view {
   height: 100%;
   display: flex;

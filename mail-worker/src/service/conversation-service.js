@@ -1,3 +1,4 @@
+import { changeLabels } from './mailbox-labels';
 import { filedConversations, inboxMember } from './conversation-filing';
 import { ensureThreads } from '../mobile/threads';
 import { camel } from '../mobile/service';
@@ -38,8 +39,13 @@ export async function conversationList(c, p, userId) {
 	await ensureThreads(db, userId);
 	const filters = [];
 	const args = [userId];
-	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
-	if (p.folder === 'inbox') filters.push(inboxMember);
+	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
+	if (p.folder === 'label') {
+    if (!validId(p.labelId)) throw new BizError('Invalid label.',400);
+    filters.push('EXISTS (SELECT 1 FROM mailbox_label_members lm WHERE lm.user_id=e.user_id AND lm.email_id=e.email_id AND lm.label_id=?)');
+    args.push(Number(p.labelId));
+  }
+  if (p.folder === 'inbox') filters.push(inboxMember);
 	if (p.folder === 'archived') filters.push('f.email_id IS NOT NULL AND f.wake_at IS NULL');
 	if (p.folder === 'snoozed') filters.push('f.wake_at>unixepoch()');
 	if (p.folder === 'sent') filters.push('e.type=1');
@@ -76,7 +82,7 @@ export async function conversationList(c, p, userId) {
 	const bound = [userId, userId, ...args, userId];
 	const asc = Number(p.timeSort) === 1;
 	const limit = limitOf(p.limit);
-	const chronological = ['inbox', 'sent', 'starred'].includes(p.folder);
+	const chronological = ['inbox', 'sent', 'starred','all','label'].includes(p.folder);
 	// Older clients may submit a numeric cursor. The new opaque cursor also carries reminder time.
 	const parts = String(p.cursor || '').split(':');
 	const cursor = Number(parts.at(-1)) || 0;
@@ -95,7 +101,11 @@ export async function conversationList(c, p, userId) {
         JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
         JOIN mobile_thread_members m ON m.user_id=d.user_id AND m.email_id=json_extract(d.data,'$.emailId')
         WHERE d.user_id=? AND d.state='draft' AND json_extract(d.data,'$.sendType')='reply' GROUP BY m.thread_id)
-      SELECT g.*,sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
+      SELECT g.*,(SELECT json_group_array(DISTINCT lm.label_id) FROM mobile_thread_members tm
+        JOIN mailbox_label_members lm ON lm.email_id=tm.email_id AND lm.user_id=tm.user_id JOIN email member ON member.email_id=tm.email_id
+        JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0
+        WHERE tm.user_id=e.user_id AND tm.thread_id=g.thread_id AND member.is_del=0 AND member.trashed_at IS NULL AND member.status NOT IN (6,7)) label_ids,
+        sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
       SUBSTR(COALESCE(e.text,''),1,180) preview FROM grouped g JOIN email e ON e.email_id=g.last_email_id JOIN email first ON first.email_id=g.first_email_id LEFT JOIN email sent ON sent.email_id=g.last_sent_id LEFT JOIN filed f ON f.thread_id=g.thread_id LEFT JOIN draft_times d ON d.thread_id=g.thread_id
       ${cursor ? 'WHERE ' + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
 			)
@@ -106,7 +116,7 @@ export async function conversationList(c, p, userId) {
 	return {
 		threads: rows.map((row) => {
 			const { sent_recipients, first_email_id, last_sent_id, ...summary } = row;
-			return { ...camel(summary), participants: participants(row, p.folder) };
+			return { ...camel(summary), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
 		nextWakeAt: nextWake.results[0].wake,
 		total: count.results[0].total,
@@ -140,7 +150,7 @@ export async function conversationMessages(c, p, userId) {
 	const threadId = await resolve(db, userId, p.emailId);
 	const limit = limitOf(p.limit);
 	const before = Number(p.before) || 0;
-	const [count, page, accounts] = await db.batch([
+	const [count, page, accounts, labels] = await db.batch([
 		db
 			.prepare(
 				`SELECT COUNT(*) total, MIN(e.email_id) first_id, e.subject FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id WHERE ${visible} AND m.thread_id=?`,
@@ -157,11 +167,16 @@ export async function conversationMessages(c, p, userId) {
 			)
 			.bind(userId, threadId, ...(before ? [before] : []), limit + 1),
 		db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId),
+    db.prepare(`SELECT DISTINCT lm.label_id FROM email e JOIN account a ON a.account_id=e.account_id
+      JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
+      JOIN mailbox_label_members lm ON lm.email_id=e.email_id AND lm.user_id=e.user_id
+      WHERE ${visible} AND m.thread_id=?`).bind(userId,threadId),
 	]);
 	const rows = page.results.slice(0, limit);
 	return {
 		threadId,
 		subject: count.results[0].subject,
+		labelIds: labels.results.map(row=>row.label_id),
 		ownedAddresses: accounts.results.map((row) => row.email),
 		total: count.results[0].total,
 		messages: rows.reverse().map(camel),
@@ -199,7 +214,9 @@ export async function conversationAction(c, p, userId, action) {
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
-	if (['archive', 'snooze', 'inbox'].includes(action)) {
+	if (action === 'label') {
+    await changeLabels(db,userId,ids,p.add,p.remove);
+  } else if (['archive', 'snooze', 'inbox'].includes(action)) {
 		if (action === 'snooze' && (!Number.isSafeInteger(p.wakeAt) || p.wakeAt <= Math.floor(Date.now() / 1000) || p.wakeAt > 253402300799))
 			throw new BizError('Choose a future snooze time.', 400);
 		const wakeAt = action === 'archive' ? null : action === 'inbox' ? 0 : p.wakeAt;

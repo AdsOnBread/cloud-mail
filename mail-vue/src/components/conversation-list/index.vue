@@ -117,6 +117,7 @@
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
+        <LabelPicker :rows="rows.filter(row=>selected.includes(row.lastEmailId))" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
       </template>
       <span class="total">{{
         total && rows.length
@@ -153,6 +154,7 @@
           :participants="row.participants"
           :count="row.messageCount"
           :subject="row.subject"
+          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId).map(label=>label.name)"
           :preview="replies(row)[0]?.preview || row.preview"
           :draft-count="replies(row).length"
           :date="mailboxDate(rowDate(row))"
@@ -324,6 +326,9 @@
   </section>
 </template>
 <script setup>
+import LabelPicker from "@/components/mail-labels/picker.vue";
+import { useMailLabels } from "@/store/mail-labels";
+const labels = useMailLabels();
 import { useMailFeedback } from "@/store/mail-feedback";
 const feedback = useMailFeedback();
 import {
@@ -348,7 +353,7 @@ import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
 const drafts = userDraftStore();
-const props = defineProps({ folder: String });
+const props = defineProps({ folder: String, labelId: Number });
 const account = useAccountStore(),
   emailStore = useEmailStore(),
   search = useMailSearchStore(),
@@ -381,7 +386,7 @@ let generation = 0,
   wakeTimer;
 const key = computed(() =>
   [
-    props.folder,
+    props.folder, props.labelId,
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
     ascending.value,
@@ -404,6 +409,7 @@ function deliveryState(status) {
 function params() {
   return {
     folder: props.folder,
+    labelId: props.labelId,
     accountId: account.currentAccountId,
     allReceive: account.currentAccount.allReceive ? 1 : 0,
     timeSort: ascending.value ? 1 : 0,
@@ -617,7 +623,7 @@ async function open(row, reply) {
   if (draft && !reply) {
     try {
       const { openSavedDraft } = await import("@/services/draft-list");
-      await openSavedDraft(draft.draftId, router, props.folder);
+      await openSavedDraft(draft.draftId, router, props.folder, props.labelId);
     } catch (e) {
       error.value = e.message || "Could not open draft.";
     }
@@ -628,6 +634,7 @@ async function open(row, reply) {
     query: {
       emailId: row.lastEmailId,
       folder: props.folder,
+      ...(props.labelId ? {labelId:props.labelId} : {}),
       ...(reply ? { reply } : {}),
     },
   });
