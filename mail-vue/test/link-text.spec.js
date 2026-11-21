@@ -33,3 +33,11 @@ it("only links an entire explicit web address immediately", () => {
   expect(normalizeLinkUrl("orders/returns@example.org")).toBe("mailto:orders/returns@example.org");
   expect(normalizeLinkUrl("person@example.org")).toBe("mailto:person@example.org");
 });
+
+it("accepts display-form international domains and encodes spaces in web paths", () => {
+  expect(normalizeLinkUrl("例え.jp/秋 の便り")).toBe(new URL("https://例え.jp/秋 の便り").href);
+  expect(normalizeLinkUrl("Docs.Example.org:8443/Fall notes")).toBe("https://docs.example.org:8443/Fall%20notes");
+  for (const text of ["two hosts.example.org", "a.example.org:invalid", "javascript:run()", "file:///home/note"]) {
+    expect(normalizeLinkUrl(text)).toBe("");
+  }
+});

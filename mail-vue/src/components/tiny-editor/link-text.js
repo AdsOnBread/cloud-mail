@@ -1,12 +1,15 @@
 import {diffChars, diffWordsWithSpace} from "diff";
 
+// Domains can be entered as displayed, including international characters and
+// spaces in the path. URL handles encoding after the host has been identified.
+const domainLink = /^(?:[\p{L}\p{M}\p{N}_-]+[.。．｡])+[\p{L}\p{M}\p{N}_-]+(?::\d+)?(?:[/?#].*)?$/u;
 export function normalizeLinkUrl(value) {
   const raw = value?.trim();
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
   try {
     let candidate = raw;
     if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@]+@[^\s@/:]+\.[^\s@/:]+$/.test(raw)) candidate = "mailto:" + raw;
-    else if (/^[\w-]+(?:\.[\w-]+)+(?:[/?#:][^\s]*)?$/.test(raw)) candidate = "https://" + raw;
+    else if (domainLink.test(raw)) candidate = "https://" + raw;
     const url = new URL(candidate);
     return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)
       ? url.href

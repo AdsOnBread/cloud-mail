@@ -96,6 +96,11 @@ function editorKey(event) {
   }
   close(false);
 }
+function focusField() {
+  const field = textField.value || urlField.value;
+  field?.focus({preventScroll:true});
+  if (anchor && field === textField.value) field?.select();
+}
 async function open(existing = null, preview = false, pointer = null, photoAction = false) {
   close(false);
   const ed = props.editor;
@@ -140,13 +145,13 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   resize.observe(box.value);
   resize.observe(box.value.parentElement);
   resize.observe(ed.iframeElement);
-  if (!preview) (textField.value || urlField.value)?.focus({preventScroll:true});
+  if (!preview) focusField();
 }
 async function edit() {
   panel.value.preview = false;
   await nextTick();
   position();
-  (textField.value || urlField.value)?.focus({preventScroll:true});
+  focusField();
 }
 function change(fn) {
   if (!owner || owner !== props.editor || owner.removed) {
@@ -165,7 +170,7 @@ function apply() {
   if (!safeUrl.value) return;
   const imageLink = panel.value.imageLink;
   const href = safeUrl.value,
-    text = panel.value.text || href;
+    text = panel.value.text || panel.value.url.trim();
   change((ed) => {
     if (anchor?.isConnected) {
       ed.dom.setAttrib(anchor, "href", href);
