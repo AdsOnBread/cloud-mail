@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { editableLinkUrl, normalizeLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "../src/components/tiny-editor/link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "../src/components/tiny-editor/link-text";
 
 it.each([
   ["Read <b>these</b> <i>notes</i>", "Read those notes", "Read <b>those</b> <i>notes</i>"],
@@ -62,4 +62,17 @@ it("shows both ends of long destinations without splitting a Unicode code point"
   const head = "a".repeat(23) + "🐢", tail = "b".repeat(24);
   expect(shortenLinkDestination(head + tail)).toBe(head + tail);
   expect(shortenLinkDestination(head + "x" + tail)).toBe(head + "..." + tail);
+});
+
+it("links selected mailboxes and qualified web text in place", () => {
+  for (const [text, href] of [
+    ["notes+tag@example.org", "mailto:notes+tag@example.org"],
+    ["mailto:notes@example.org", "mailto:notes@example.org"],
+    ["www.example.org", "https://www.example.org/"],
+    ["example.org/path", "https://example.org/path"],
+    ["example.org?ref=1", "https://example.org/?ref=1"],
+    ["docs.example.org/q?who=notes@example.org", "https://docs.example.org/q?who=notes@example.org"],
+  ]) expect(selectedLinkUrl(text)).toBe(href);
+  for (const text of ["example.org", "some words", " notes@example.org", "name@", "tel:+12025550100", "file:///tmp", "javascript:run()"])
+    expect(selectedLinkUrl(text)).toBe("");
 });

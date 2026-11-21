@@ -28,7 +28,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { Icon } from "@iconify/vue";
-import { editableLinkUrl, normalizeLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "./link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, shortenLinkDestination, renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
@@ -118,7 +118,7 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
   const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
   const selectedText = !anchor && !imageLink && !range.collapsed && Boolean(originalText.trim());
-  const directUrl = selectedText && selectedWebUrl(originalText);
+  const directUrl = selectedText && selectedLinkUrl(originalText);
   if (directUrl && !range.cloneContents().querySelector("img,hr,table,br:not([data-mce-bogus]),audio,video,iframe,object,embed,svg,canvas,[contenteditable=false]")) {
     ed.undoManager.transact(() => ed.execCommand("mceInsertLink", false, {href:directUrl}));
     ed.nodeChanged();

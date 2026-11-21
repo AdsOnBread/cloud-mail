@@ -1,5 +1,6 @@
 import tlds from 'tlds';
 import {mailboxHref} from '@/utils/mailto';
+import {isEmail} from '@/utils/verify-utils';
 import {diffChars, diffWordsWithSpace} from "diff";
 
 // Domains can be entered as displayed, including international characters and
@@ -51,6 +52,22 @@ export function shortenLinkDestination(value) {
 export function selectedWebUrl(text) {
   if (!/^https?:\/\//i.test(text) || /\s/.test(text)) return "";
   return normalizeLinkUrl(text);
+}
+
+// Insert link also recognizes selected mailboxes and qualified bare web links.
+// Plain URL paste uses selectedWebUrl independently of this explicit command.
+export function selectedLinkUrl(text) {
+  if (!text || /\s/.test(text)) return "";
+  const href = normalizeLinkUrl(text);
+  if (!href) return "";
+  if (href.startsWith("mailto:")) {
+    const mailbox = /^mailto:/i.test(text) ? text.slice(7).split("?")[0] : text;
+    return isEmail(mailbox) ? href : "";
+  }
+  if (/^https?:\/\//i.test(text)) return href;
+  if (!domainLink.test(text)) return "";
+  const {hostname} = new URL(href);
+  return hostname.split(".").length > 2 || /[:/?#]/.test(text) ? href : "";
 }
 
 // Keep the existing inline elements, including styles on text between separate edits.
