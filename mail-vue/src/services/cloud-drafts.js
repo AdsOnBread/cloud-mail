@@ -148,7 +148,8 @@ async function push(database,row,api) {
       if (!latest || latest.deleted) return;
       const acknowledged = latest.editToken === row.editToken;
       if (!acknowledged && latest.uploadIntent?.id !== uploadId) return;
-      if (['deleted','sent'].includes(remote.state)) {
+      if (remote.state==='trashed' && remote.ui?.editToken!==row.editToken) throw {code:409,current:remote};
+      if (['deleted','sent','trashed'].includes(remote.state)) {
         if (!acknowledged) throw {code:409, current:remote};
         await database.draft.delete(row.draftId);
         await database.att.delete(row.draftId);
@@ -279,7 +280,7 @@ async function finishDiscard(database, row, api) {
     if (remote.version === 1 && remote.ui?.uploadId === row.uploadIntent.id && remote.state === 'draft') {
       cloudId = remote.draftId;
       version = remote.version;
-    } else if (!['sent','deleted'].includes(remote.state) && !remote.scheduledAt) {
+    } else if (!['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt) {
       const value = await downloadDraft(remote, api);
       await put(database, {...value, draftId:row.draftId}, value.attachments);
       return;
@@ -290,7 +291,7 @@ async function finishDiscard(database, row, api) {
       await api.delete('/v1/drafts/' + cloudId, {params:{version},noMsg:true});
     } catch (raw) {
       const error = apiError(raw), remote = error.current;
-      if (Number(error.code) === 409 && remote && !['sent','deleted'].includes(remote.state) && !remote.scheduledAt) {
+      if (Number(error.code) === 409 && remote && !['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt) {
         if (remote.state === 'draft' && row.uploadIntent && remote.version === version + 1 && remote.ui?.uploadId === row.uploadIntent.id) {
           await database.draft.put({...row, cloudDraftId:cloudId, cloudVersion:remote.version, uploadIntent:undefined});
           return finishDiscard(database, await database.draft.get(row.draftId), api);
@@ -299,7 +300,7 @@ async function finishDiscard(database, row, api) {
         await put(database, {...value, draftId:row.draftId}, value.attachments);
         return;
       }
-      if (Number(error.code) !== 404 && !(Number(error.code) === 409 && remote && (remote.scheduledAt || ['sent','deleted'].includes(remote.state)))) throw raw;
+      if (Number(error.code) !== 404 && !(Number(error.code) === 409 && remote && (remote.scheduledAt || ['sent','deleted','trashed'].includes(remote.state)))) throw raw;
     }
   }
   await database.transaction('rw', database.draft, database.att, async () => {

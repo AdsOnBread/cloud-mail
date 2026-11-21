@@ -105,6 +105,30 @@ describe('Cloud draft synchronization',()=>{
   expect([...state.rows.values()]).toMatchObject([{dirty:false,subject:'Latest typing'}]);
   expect([...state.remote.values()]).toMatchObject([{subject:'Latest typing'}]);
  });
+ it.each(['keep','discard'])('handles a queued message trashed elsewhere after an unacknowledged upload (%s)',async action=>{
+   const original=await saveLocalDraft(input());
+   const normal=http.post.getMockImplementation();
+   http.post.mockImplementationOnce(async(...args)=>{await normal(...args);throw new Error('Response lost');});
+   await expect(syncCloudDrafts()).rejects.toThrow('Response lost');
+   const remote=state.remote.get(1);
+   Object.assign(remote,{state:'trashed',version:3});
+   state.events=[{seq:1,draftId:1,operation:'delete'}];
+   if (action==='discard') {
+     const discarded=await discardDrafts([original.draftId]);await syncCloudDrafts();
+     expect(await db.value.draft.get(original.draftId)).toBeUndefined();
+     expect(state.remote.get(1).state).toBe('trashed');
+     await discarded.dispose();
+   } else {
+     const attachment={filename:'latest.txt',content:'YWJj',contentType:'text/plain'};
+     await saveLocalDraft({...original,text:'Later offline edit',attachments:[attachment]});
+     const result=await syncCloudDrafts();
+     expect(result.conflicts[original.draftId]).toBe(original.draftId);
+     await syncCloudDrafts();
+     expect(state.remote.get(1).state).toBe('trashed');
+     expect(await db.value.draft.get(original.draftId)).toMatchObject({text:'Later offline edit',conflictCopy:true});
+     expect((await db.value.att.get(original.draftId)).attachments).toEqual([attachment]);
+   }
+ });
  it('forks a stale second editor after the first editor loses its upload response',async()=>{
   const row=await saveLocalDraft(input());
   await syncCloudDrafts();

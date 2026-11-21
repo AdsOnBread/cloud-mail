@@ -538,11 +538,20 @@ async function trash(batch) {
   const owner=identity.value,token=user.authenticatedToken,navigation=navigations;
   const sameSession=()=>token && user.authenticatedToken===token && localStorage.getItem('token')===token;
   const current=()=>sameSession() && !disposed && identity.value===owner && navigations===navigation;
+  const focused=document.activeElement;
+  const focusId=Number(focused?.closest('[data-scheduled-id]')?.dataset.scheduledId);
+  const index=page.value.findIndex(row=>row.draftId===focusId);
   busy.value=true;
   error.value='';
   try {
     const messages=batch.map(({draftId,version})=>({draftId,version}));
-    const receipt=await http.post('/v1/scheduled/trash',{messages},{noMsg:true});
+    const payload={messages,edit:crypto.randomUUID()};
+    let receipt;
+    try { receipt=await http.post('/v1/scheduled/trash',payload,{noMsg:true}); }
+    catch(e) {
+      if (!sameSession() || !(e.request && !e.response || Number(e.response?.status || e.code)>=500)) throw e;
+      receipt=await http.post('/v1/scheduled/trash',payload,{noMsg:true});
+    }
     if (!sameSession()) return;
     feedback.trashed([],receipt.count,'message');
     feedback.restored++;
@@ -563,7 +572,12 @@ async function trash(batch) {
       rows.value=rows.value.filter(row=>!ids.has(row.draftId));
       selected.value=selected.value.filter(id=>!ids.has(id));
       if (ids.has(messageId.value)) back();
-      else nextTick(()=>focusList(0));
+      else if (ids.has(focusId) && (document.activeElement===focused || document.activeElement===document.body)) {
+        nextTick(()=>{
+          if (current() && document.activeElement===document.body)
+            focusList(page.value[Math.min(index,page.value.length-1)]?.draftId);
+        });
+      }
     }
   } catch(e) {
     if (current()) error.value=e.message || 'Could not move the message to Trash.';

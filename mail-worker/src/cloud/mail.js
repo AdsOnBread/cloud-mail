@@ -13,11 +13,15 @@ import emailService from '../service/email-service';
 import r2Service from '../service/r2-service';
 
 export const owned = 'e.user_id=? AND a.user_id=e.user_id AND a.is_del=0 AND e.is_del=0 AND e.status NOT IN (6,7)';
+// Undelivered drafts retain their draft grant even while presented in the Trash mailbox.
+function visibleMail(c) {
+  return c.mailScopes && !c.mailScopes.includes('mail:drafts') ? owned+' AND e.scheduled_draft_id IS NULL' : owned;
+}
 // A small address-only projection keeps autocomplete independent of message bodies and attachments.
 export async function searchPeople(c,userId,params) {
   const {field,accountId,folder}=params;
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
-  const filters=[owned], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';
+  const filters=[visibleMail(c)], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';
   if (accountId) { filters.push('e.account_id=?'); args.push(positive(accountId)); }
   const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
   addPeopleFilter({[field]:term}, field, field==='from' ? ['e.send_email','e.name'] : to, filters, args, true);
@@ -51,7 +55,7 @@ function messageFields(row) {
   return label_ids ? {...camel(message),labelIds:JSON.parse(label_ids)} : camel(message);
 }
 export async function list(c,userId,p={}) {
-  const filters=[owned]; const args=[userId];
+  const filters=[visibleMail(c)]; const args=[userId];
   const folder=p.folder||'inbox';
   if(!['inbox','sent','all','starred','trash'].includes(folder)) throw new BizError('Invalid folder.',400);
   filters.push(folder==='trash'?'e.trashed_at IS NOT NULL':'e.trashed_at IS NULL');
@@ -79,7 +83,7 @@ export async function list(c,userId,p={}) {
 }
 export async function detail(c,userId,emailId) {
   const row=await c.env.db.prepare(`SELECT e.*,CASE WHEN e.trashed_at IS NOT NULL THEN ${messageLabels} END AS label_ids,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
-    LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${owned} AND e.email_id=?`).bind(userId,positive(emailId)).first();
+    LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visibleMail(c)} AND e.email_id=?`).bind(userId,positive(emailId)).first();
   if(!row) throw new BizError('Message not found.',404);
   if(row.type!==1) row.bcc='[]';
   const files=(await c.env.db.prepare('SELECT * FROM attachments WHERE email_id=? AND user_id=?').bind(row.email_id,userId).all()).results;
@@ -87,7 +91,7 @@ export async function detail(c,userId,emailId) {
 }
 export async function attachment(c,userId,id,textSample=false) {
   const row=await c.env.db.prepare(`SELECT att.* FROM attachments att JOIN email e ON e.email_id=att.email_id JOIN account a ON a.account_id=e.account_id
-    WHERE ${owned} AND att.user_id=? AND att.att_id=?`).bind(userId,userId,positive(id)).first();
+    WHERE ${visibleMail(c)} AND att.user_id=? AND att.att_id=?`).bind(userId,userId,positive(id)).first();
   if(!row) throw new BizError('Attachment not found.',404);
   const object=await r2Service.getObj(c,row.key,textSample ? 1024 : undefined);
   if(!object) throw new BizError('Attachment unavailable.',404);
@@ -98,7 +102,7 @@ export async function trash(c,userId,ids,action='trash') {
   ids=[...new Set(ids.map(id=>positive(id)))];
   const placeholders=ids.map(()=>'?').join(',');
   const rows=(await c.env.db.prepare(`SELECT e.email_id,e.trashed_at FROM email e JOIN account a ON a.account_id=e.account_id
-    WHERE ${owned} AND e.email_id IN (${placeholders})`).bind(userId,...ids).all()).results;
+    WHERE ${visibleMail(c)} AND e.email_id IN (${placeholders})`).bind(userId,...ids).all()).results;
   if(rows.length!==ids.length) throw new BizError('Message not found.',404);
   if(action==='purge') {
     if(rows.some(r=>!r.trashed_at)) throw new BizError('Only messages in Trash can be permanently deleted.',400);
@@ -109,6 +113,7 @@ export async function trash(c,userId,ids,action='trash') {
   return {messageCount:ids.length};
 }
 export async function purgeExpired(c) {
+  await c.env.db.prepare("DELETE FROM scheduled_trash_operations WHERE created_at<=datetime('now','-30 days')").run();
   for(;;) {
     const rows=(await c.env.db.prepare("SELECT email_id FROM email WHERE trashed_at IS NOT NULL AND trashed_at<=datetime('now','-30 days') LIMIT 80").all()).results;
     if(!rows.length) break;

@@ -4,6 +4,10 @@ export const scheduleFields = "'$.scheduledAt','$.scheduleKey','$.scheduleError'
 const trashFields = "'$.trashEdit','$.trashSendAt','$.trashState','$.resumeSchedule'";
 
 export const scheduledTrashSchema = [
+  `CREATE TABLE IF NOT EXISTS scheduled_trash_operations (
+    user_id INTEGER NOT NULL, edit TEXT NOT NULL, nonce TEXT NOT NULL, selection TEXT NOT NULL,
+    resumed INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,edit))`,
+  'CREATE INDEX IF NOT EXISTS idx_trash_operation_age ON scheduled_trash_operations(created_at)',
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_trash ON email(user_id,scheduled_draft_id) WHERE scheduled_draft_id IS NOT NULL',
   `CREATE TRIGGER IF NOT EXISTS restore_scheduled_trash AFTER UPDATE OF trashed_at ON email
     WHEN OLD.scheduled_draft_id IS NOT NULL AND OLD.trashed_at IS NOT NULL AND NEW.trashed_at IS NULL BEGIN

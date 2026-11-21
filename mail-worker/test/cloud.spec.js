@@ -904,7 +904,10 @@ describe('Scheduled Trash',()=>{
    const d=await queue({sendType:'reply',emailId:original.email_id,labelIds:[label],bcc:['private@example.net'],
      content:'<b>Hello</b><img src="cid:photo">',attachments:[{filename:'notes.txt',content:'YWJj',contentType:'text/plain'},
        {filename:'photo.png',content:'aW1n',contentType:'image/png',contentId:'photo'}]});
-   const edit=await trashScheduled(c(),1,{messages:[d]});
+   const request={edit:crypto.randomUUID(),messages:[d]};
+   const edit=await trashScheduled(c(),1,request);
+   expect(await trashScheduled(c(),1,request)).toEqual(edit);
+   await expect(trashScheduled(c(),1,{...request,messages:[{...d,version:d.version+1}]})).rejects.toMatchObject({code:409});
    expect(await scheduledList(c(),1)).toEqual([]);
    expect((await drafts.list(c(),1)).drafts).toEqual([]);
    const [receipt]=(await mail.list(c(),1,{folder:'trash',hasAttachment:'1'})).messages;
@@ -927,6 +930,8 @@ describe('Scheduled Trash',()=>{
    await expect(moveFromTrash(env.db,1,[receipt.emailId],0)).rejects.toMatchObject({code:409});
    await setTrashLabels(env.db,1,[receipt.emailId],[],[label]);
    expect(await undoScheduledTrash(c(),1,edit)).toEqual({scheduled:1,drafts:0});
+   expect(await undoScheduledTrash(c(),1,edit)).toEqual({scheduled:1,drafts:0});
+   await expect(undoScheduledTrash(c(),1,null)).rejects.toMatchObject({code:409});
    const [again]=await scheduledList(c(),1);
    expect(again).toMatchObject({sendAt:d.sendAt,labelIds:[],attachmentCount:1});
    expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
@@ -938,6 +943,31 @@ describe('Scheduled Trash',()=>{
    expect(recovered.scheduledAt).toBeUndefined();
    expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
    await expect(undoScheduledTrash(c(),1,second)).rejects.toMatchObject({code:409});
+ });
+ it('preserves draft consent for connected apps after an unsent message enters Trash',async()=>{
+   const {trashScheduled}=await import('../src/cloud/scheduled-trash');
+   const d=await queue({bcc:['blind@example.net'],attachments:[{filename:'notes.txt',content:'YWJj',contentType:'text/plain'}]});
+   await trashScheduled(c(),1,{messages:[d]});
+   const [row]=(await mail.list(c(),1,{folder:'trash'})).messages;
+   const {access_token}=await connect('mail:read mail:delete');
+   const call=async(token,name,args)=>(await rpc(token,'tools/call',{name,arguments:args})).data.result.structuredContent;
+   expect((await call(access_token,'list_emails',{folder:'trash'})).messages).toEqual([]);
+   for (const [name,args] of [['read_email',{emailId:row.emailId}],['get_attachment',{attachmentId:row.attachments[0].attId}],
+      ['restore_emails',{emailIds:[row.emailId]}],['permanently_delete_emails',{emailIds:[row.emailId]}]]) {
+     expect((await call(access_token,name,args)).code).toBe(404);
+   }
+   const full=await connect();
+   expect((await call(full.access_token,'read_email',{emailId:row.emailId})).subject).toBe(d.subject);
+ });
+ it('returns the whole batch to Drafts when there is no space to resume delivery',async()=>{
+   const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');
+   const a=await queue(),b=await queue();
+   const receipt=await trashScheduled(c(),1,{messages:[a,b]});
+   await expect(undoScheduledTrash(c(),1,{...receipt,count:1})).rejects.toMatchObject({code:409});
+   await env.db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<99)
+     INSERT INTO cloud_drafts(user_id,account_id,client_id,data,state) SELECT 1,1,'capacity/'||i,json_object('scheduledAt',unixepoch()+3600),'scheduled' FROM n`).run();
+   expect(await undoScheduledTrash(c(),1,receipt)).toEqual({scheduled:0,drafts:2});
+   expect((await drafts.list(c(),1)).drafts.map(d=>d.draftId)).toEqual([a.draftId,b.draftId]);
  });
  it('fences dispatch and bulk changes, restores overdue mail as a draft and purges expired files',async()=>{
    const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');

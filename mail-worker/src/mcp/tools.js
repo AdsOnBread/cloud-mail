@@ -74,7 +74,7 @@ export async function mcpFetch(request,env,ctx) {
   const userId=positive(ctx.props?.userId);
   const connection=await env.db.prepare('SELECT revoked FROM connected_apps WHERE grant_id=? AND user_id=?').bind(ctx.props.connectionId,userId).first();
   if(!connection||connection.revoked)return new Response('This connection was revoked.',{status:401});
-  const c={env,get:k=>k==='user'?{userId}:undefined};
+  const c={env,mailScopes:ctx.auth.scope,get:k=>k==='user'?{userId}:undefined};
   try {
     await activeUser(c,userId);
     const response=await createMcpHandler(()=>createServer(c,userId,ctx.auth.scope),{route:'/mcp',allowedHostnames:[new URL(env.mcp_public_url).hostname]})(request,env,ctx);

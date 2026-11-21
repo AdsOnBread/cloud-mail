@@ -182,6 +182,6 @@ export async function deleteUserData(c,userIds) {
   for(const userId of userIds) {
     const rows=(await c.env.db.prepare('SELECT draft_id FROM cloud_drafts WHERE user_id=?').bind(userId).all()).results;
     for(const row of rows)await cleanFiles(c,userId,row.draft_id);
-    await c.env.db.batch(['scheduled_inbox_deliveries','cloud_drafts','draft_changes','send_attempts','connected_apps','mail_signatures','system_label_display','mailbox_label_creations'].map(table=>c.env.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(userId)));
+    await c.env.db.batch(['scheduled_trash_operations','scheduled_inbox_deliveries','cloud_drafts','draft_changes','send_attempts','connected_apps','mail_signatures','system_label_display','mailbox_label_creations'].map(table=>c.env.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(userId)));
   }
 }

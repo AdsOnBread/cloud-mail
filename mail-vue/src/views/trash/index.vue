@@ -544,8 +544,11 @@ function attachmentBlob(file) {
   });
 }
 function inlineKey(src) {
-  if (detail.value?.scheduledDraftId && src?.startsWith('cid:'))
-    return detail.value.attList.find(file=>file.contentId?.replace(/^<|>$/g,'')===src.slice(4))?.key;
+  if (detail.value?.scheduledDraftId) {
+    if (src?.startsWith('cid:')) return detail.value.attList.find(file=>file.contentId?.replace(/^<|>$/g,'')===src.slice(4))?.key;
+    const attachment=src?.match(/^\/api\/v1\/drafts\/attachments\/([^/]+)\/content$/);
+    if (attachment) return detail.value.attList.find(file=>file.related===attachment[1])?.key;
+  }
   return storedKey(src);
 }
 async function inlineFileURL(key) {
