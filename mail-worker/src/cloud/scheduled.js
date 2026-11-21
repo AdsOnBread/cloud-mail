@@ -34,22 +34,45 @@ export async function schedule(c, userId, id, input) {
 	return { draftId: id, sendAt, version: saved.version };
 }
 
-export async function scheduledList(c, userId, accountId) {
-	const db = c.env.db;
-	return (
-		await db
-			.prepare(
-				`SELECT d.draft_id AS draftId,d.version,CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
+export async function scheduledList(c, userId, accountId, filters = {}) {
+  const args = [userId];
+  const conditions = ["d.user_id=?", "json_extract(d.data,'$.scheduledAt') IS NOT NULL"];
+  if (accountId) {
+    conditions.push('d.account_id=?');
+    args.push(positive(accountId));
+  }
+  const from = 'FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0';
+  if (filters.countOnly === '1') {
+    return c.env.db.prepare(`SELECT COUNT(*) count ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
+  }
+  const fileCount = "(SELECT COUNT(*) FROM draft_files f WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='')";
+  const columns = {
+    from: ['a.email', 'a.name', "json_extract(d.data,'$.name')"],
+    to: ['receiveEmail', 'cc', 'bcc'].map(key => `json_extract(d.data,'$.${key}')`),
+    subject: ["json_extract(d.data,'$.subject')"],
+  };
+  columns.q = [...columns.from, ...columns.to, ...columns.subject, "json_extract(d.data,'$.text')"];
+  for (const [field, choices] of Object.entries(columns)) {
+    const term = filters[field]?.trim().slice(0, 200);
+    if (!term) continue;
+    conditions.push('(' + choices.map(column => `instr(lower(${column}),lower(?))>0`).join(' OR ') + ')');
+    args.push(...choices.map(() => term));
+  }
+  if (filters.hasAttachment === '1') conditions.push(fileCount + '>0');
+  const days = Number(filters.days);
+  if ([1,7,30,365].includes(days)) {
+    conditions.push("d.created_at>=datetime('now',?)");
+    args.push('-' + days + ' days');
+  }
+  const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
+    a.email AS senderEmail,COALESCE(NULLIF(json_extract(d.data,'$.name'),''),NULLIF(a.name,''),a.email) AS senderName,
+    CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
+    json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
-    json_extract(d.data,'$.scheduleError') AS error FROM cloud_drafts d
-    JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
-    WHERE d.user_id=? AND json_extract(d.data,'$.scheduledAt') IS NOT NULL ${accountId ? 'AND d.account_id=?' : ''}
-    ORDER BY sendAt,d.draft_id`,
-			)
-			.bind(userId, ...(accountId ? [positive(accountId)] : []))
-			.all()
-	).results.map((row) => ({ ...row, recipients: JSON.parse(row.recipients || '[]') }));
+    ${fileCount} attachmentCount,json_extract(d.data,'$.scheduleError') AS error
+    ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
+  return results.map(row => ({ ...row, recipients:JSON.parse(row.recipients || '[]'), cc:JSON.parse(row.cc || '[]'), bcc:JSON.parse(row.bcc || '[]') }));
 }
 
 export async function cancel(c, userId, id, version) {

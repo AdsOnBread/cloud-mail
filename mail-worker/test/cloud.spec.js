@@ -342,6 +342,11 @@ describe('Scheduled send',()=>{
    expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('delete');
    expect((await scheduledList(c(),1))[0]).toMatchObject({draftId:d.draftId,sendAt});
    expect(await scheduledList(c(),2)).toEqual([]);
+   expect(await scheduledList(c(),1,null,{countOnly:'1'})).toEqual({count:1});
+   expect(await scheduledList(c(),2,null,{countOnly:'1'})).toEqual({count:0});
+   const [summary]=await scheduledList(c(),1,d.accountId,{subject:d.subject,to:d.receiveEmail[0]});
+   expect(summary).toMatchObject({draftId:d.draftId,accountId:d.accountId,recipients:d.receiveEmail});
+   expect(await scheduledList(c(),1,null,{subject:'unknown'})).toEqual([]);
    await expect(cancel(c(),2,d.draftId,queued.version)).rejects.toMatchObject({code:404});
    await expect(send(c(),1,{version:queued.version,idempotencyKey:'manual-while-scheduled'},{draftId:d.draftId})).rejects.toMatchObject({code:404});
    await deliverDue(c());

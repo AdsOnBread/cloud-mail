@@ -17,7 +17,7 @@ app.put(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.save(c,uid(c),
 app.delete(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.remove(c,uid(c),c.req.param('id'),Number(c.req.query('version'))))));
 app.post(root+'/drafts/:id/send',async c=>c.json(result.ok(await send(c,uid(c),await c.req.json(),{draftId:c.req.param('id')}))));
 app.post(root+'/drafts/:id/schedule',async c=>c.json(result.ok(await schedule(c,uid(c),c.req.param('id'),await c.req.json()))));
-app.get(root+'/scheduled',async c=>c.json(result.ok(await scheduledList(c,uid(c),c.req.query('accountId')))));
+app.get(root+'/scheduled',async c=>c.json(result.ok(await scheduledList(c,uid(c),c.req.query('accountId'),c.req.query()))));
 app.get(root+'/scheduled/:id',async c=>{
   const row=await drafts.get(c,uid(c),c.req.param('id'),true);
   if(!row.scheduledAt)return c.json({code:404,message:'Scheduled message not found.'},404);
