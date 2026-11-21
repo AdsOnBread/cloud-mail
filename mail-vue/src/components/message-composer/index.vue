@@ -79,7 +79,7 @@
           </button>
           <button v-if="inline" type="button" class="compose-tool pop-reply" aria-label="Pop out reply" data-tip="Pop out reply"
             :disabled="sending || preparing || attaching" @click="responseCommand('pop')">
-            <Icon icon="material-symbols:open-in-new" width="18"/>
+            <Icon icon="material-symbols:open-in-new" width="20"/>
           </button>
         </div>
         <fieldset

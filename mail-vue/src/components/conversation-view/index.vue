@@ -475,7 +475,10 @@ async function reply(message, all, draft, forward=false) {
     // A restored draft may target a message older than the currently loaded page.
     if (!messages.value.some((item) => item.emailId === message.emailId)) {
       let detail;
-      try { detail=await store.ensureDetail(message); }
+      try {
+        detail=await store.ensureDetail(message);
+        if (detail?.emailId!==message.emailId) throw new Error("The original message is no longer available.");
+      }
       catch (e) {
         if (!draft) throw e;
         if (current()) await openWithoutConversation(draft,current);
