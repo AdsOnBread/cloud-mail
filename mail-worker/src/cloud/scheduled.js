@@ -1,3 +1,4 @@
+import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-words';
 import {addPeopleFilter,addSearchDates,addSizeFilter} from '../service/mail-search-filters';
 import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
@@ -156,27 +157,32 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
     ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
   const term=filters.q?.trim().slice(0,200).toLowerCase();
-  const missingText=[];
+  const phrases=excludedPhrases(filters.excluded), excluded=new Set(), missingText=[];
   const messages=results.map(({html_only,...row})=>{
     const message={...row,labelIds:JSON.parse(row.labelIds || '[]'),attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')};
-    if(term && html_only && ![message.senderName,message.senderEmail,message.subject,...message.recipients,...message.cc,...message.bcc]
-      .some(value=>value?.toLowerCase().includes(term)))missingText.push(message);
+    const headers=[message.senderName,message.senderEmail,message.subject,...message.recipients,...message.cc,...message.bcc];
+    if (containsExcluded(headers,phrases)) excluded.add(row.draftId);
+    else {
+      const needsPositive=Boolean(term && html_only && !headers.some(value=>value?.toLowerCase().includes(term)));
+      if (needsPositive || phrases.length) missingText.push({message,needsPositive});
+    }
     return message;
   });
-  const excluded=new Set();
-  // Bound peak memory when several HTML-only messages on the same page have large bodies.
+  // Read full searchable bodies in small batches only when the preview or headers cannot decide.
   for(let i=0;i<missingText.length;i+=4){
     const batch=missingText.slice(i,i+4);
-    const {results:bodies}=await c.env.db.prepare(`SELECT d.draft_id,d.version,json_extract(d.data,'$.content') AS html
+    const {results:bodies}=await c.env.db.prepare(`SELECT d.draft_id,d.version,${text} AS text,
+      CASE WHEN coalesce(trim(${text}),'')='' THEN json_extract(d.data,'$.content') END AS html
       FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
       WHERE d.user_id=? AND d.draft_id IN (${batch.map(()=>'?').join(',')}) AND json_extract(d.data,'$.scheduledAt') IS NOT NULL`)
-      .bind(userId,...batch.map(row=>row.draftId)).all();
-    batch.forEach(row=>{
-      const body=bodies.find(body=>body.draft_id===row.draftId && body.version===row.version);
-      const visible=emailUtils.htmlToText(body?.html).replace(/\s+/g,' ').trim();
-      if(visible.toLowerCase().includes(term))row.preview=visible.slice(0,180);
-      else excluded.add(row.draftId);
-    });
+      .bind(userId,...batch.map(({message})=>message.draftId)).all();
+    for (const {message,needsPositive} of batch) {
+      const body=bodies.find(body=>body.draft_id===message.draftId && body.version===message.version);
+      if (!body) {excluded.add(message.draftId);continue;}
+      const visible=body.text?.trim() || emailUtils.htmlToText(body.html).replace(/\s+/g,' ').trim();
+      if (containsExcluded([visible],phrases) || (needsPositive && !visible.toLowerCase().includes(term))) excluded.add(message.draftId);
+      else if (needsPositive) message.preview=visible.slice(0,180);
+    }
   }
   return messages.filter(row=>!excluded.has(row.draftId));
 }
