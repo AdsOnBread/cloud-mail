@@ -8,7 +8,7 @@
       @closed="remove(item)" @sent="remove(item)"/>
   </div>
   <div v-if="hidden.length && !layout.exclusive" class="dock-switcher" :style="{right:layout.right+'px'}">
-  <el-dropdown trigger="click" placement="top-start" :show-arrow="false" @command="switchTo">
+  <el-dropdown :key="menuVersion" trigger="click" placement="top-start" :show-arrow="false" @command="selectHidden">
     <button class="more-drafts" aria-label="More compose windows" data-tip="More compose windows"><Icon icon="material-symbols:more-horiz" width="20"/><span>{{hidden.length}}</span></button>
     <template #dropdown><el-dropdown-menu>
       <el-dropdown-item v-for="item in hidden" :key="item.key" :command="item.key">{{item.caption || 'New Message'}}</el-dropdown-item>
@@ -25,6 +25,7 @@ import {useMailFeedback} from '@/store/mail-feedback';
 import {dockLayout} from './dock';
 const feedback=useMailFeedback();
 const editors=new Map();
+const menuVersion=ref(0);
 let serial=0,usage=0;
 function empty(){return {key:++serial,used:0,open:false,minimized:false,expanded:false,caption:'',draftId:null};}
 const windows=ref([empty()]),active=ref(windows.value[0].key),viewport=ref(window.innerWidth);
@@ -53,6 +54,12 @@ function remove(item){
     if(next?.open) editors.get(next.key)?.resumeFocus();
     else if(item.origin?.isConnected) item.origin.focus({preventScroll:true});
   });
+}
+function selectHidden(key){
+  // Replacing this trigger prevents the closing menu's focus trap from taking
+  // keyboard focus back after the chosen editor restores its selection.
+  menuVersion.value++;
+  return switchTo(key);
 }
 async function switchTo(key){
   const item=windows.value.find(row=>row.key===key);

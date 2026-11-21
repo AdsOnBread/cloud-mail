@@ -380,6 +380,7 @@
 </template>
 <script setup>
 import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft, cancelScheduledReceipt } from "@/services/cloud-drafts";
+import {lockComposeBackground} from '@/layout/write/compose-modal';
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
@@ -1459,31 +1460,25 @@ function keydown(event) {
   event.preventDefault();
   close();
 }
-let previousFocus;
-let blocked = [];
-function releaseModal() {
-  blocked.forEach(([node, value]) => {
-    node.inert = value;
-  });
-  blocked = [];
+let previousFocus,unlockBackground;
+function releaseModal(){
+  unlockBackground?.();
+  unlockBackground=undefined;
 }
-watch(modal, async (active) => {
+watch(modal,async active=>{
   releaseModal();
-  if (active) {
-    previousFocus = document.activeElement;
-    document
-      .querySelectorAll(
-        ".mail-layout > .mail-header, .mail-layout > .mail-sidebar, .mail-layout > .mail-main, .mobile-compose, .nav-overlay",
-      )
-      .forEach((node) => {
-        blocked.push([node, node.inert]);
-        node.inert = true;
-      });
-    if (!restoreFocus) {
-      await nextTick();
-      composeRoot.value?.querySelector("button")?.focus();
-    }
-  } else if (!props.dockHidden && previousFocus?.isConnected) previousFocus.focus();
+  if(active){
+    previousFocus=document.activeElement;
+    unlockBackground=lockComposeBackground();
+    await nextTick();
+    if(modal.value && props.dockActive && !restoreFocus) composeRoot.value?.querySelector("button")?.focus();
+    return;
+  }
+  const origin=previousFocus;
+  await nextTick();
+  if(!mounted || props.dockHidden || document.querySelector('.send[aria-modal="true"]')) return;
+  if(origin?.isConnected && origin.getClientRects().length && !origin.closest('[inert]') &&
+      (document.activeElement===document.body || composeRoot.value?.contains(document.activeElement))) origin.focus();
 });
 function containFocus(event) {
   if (
