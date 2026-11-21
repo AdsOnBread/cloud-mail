@@ -121,6 +121,7 @@ onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync
 <style scoped>
 .mail-layout { --nav-width:72px; position:fixed; inset:0; display:grid; grid-template-columns:var(--nav-width) minmax(0,1fr); grid-template-rows:64px minmax(0,1fr); background:var(--mail-canvas); }
 .photo-theme {background:linear-gradient(#15191fd9,#15191f52 100%),var(--theme-image) center/cover no-repeat}
+.photo-theme .mail-header :deep(.header-brand){--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
 .photo-theme .mail-header :deep(.header-brand),.photo-theme .mail-header :deep(.toolbar > .icon-button){--regular-text-color:white;--mail-hover:#ffffff26}
 .photo-theme .mail-header :deep(.page-title){color:white}
 @media(min-width:768px){.photo-theme .mail-sidebar{--regular-text-color:white;--el-text-color-primary:white;--mail-hover:#ffffff29;--mail-selected:#ffffff3b;color:white}

@@ -39,7 +39,7 @@ export default defineConfig(({mode}) => {
                     name: env.VITE_PWA_NAME,
                     short_name: env.VITE_PWA_NAME,
                     background_color: '#FFFEF8',
-                    theme_color: '#103C33',
+                    theme_color: '#F5F6EE',
                     icons: [
                         {
                             src: 'mail-pwa.png',

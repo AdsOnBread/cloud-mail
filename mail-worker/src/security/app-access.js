@@ -92,7 +92,7 @@ function unlockPage() {
   :root{color-scheme:light dark;--paper:light-dark(#fffef8,#172722);--ink:light-dark(#173c35,#f5f4e8);--line:light-dark(#c9d6c9,#52665a);font:16px/1.5 system-ui,sans-serif;color:var(--ink);background:light-dark(#f5f6ee,#10241f)}
   body{min-height:100dvh;margin:0;display:grid;place-items:center}
   main{width:min(420px,calc(100% - 32px));box-sizing:border-box;padding:28px;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 34px #173c3514}
-  h1{display:flex;align-items:center;justify-content:center;margin:0 0 20px;padding:14px;background:#103c33;border-radius:6px;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
+  h1{display:flex;align-items:center;justify-content:center;margin:0 0 20px;padding-block:14px;--phooey-ink:var(--ink);--phooey-accent:light-dark(#bd522d,#ffae7c)}
   input,button{box-sizing:border-box;width:100%;font:inherit;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
   input{margin:6px 0 16px;background:var(--paper);color:var(--ink)}button{background:#28634a;color:white;border-color:#28634a;cursor:pointer;font-weight:600}
   :focus-visible{outline:2px solid #bd522d;outline-offset:3px}button:hover{background:#174e34}

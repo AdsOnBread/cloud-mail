@@ -806,5 +806,5 @@ function submitRegister() {
 
 .form-wrapper{inset:0;width:100%;background:transparent}
 .container{box-sizing:border-box;width:min(420px,calc(100% - 32px));height:auto;margin:0;max-height:100dvh;overflow:auto;padding:32px;border:1px solid var(--light-border-color);border-radius:12px;background:v-bind(loginOpacity);box-shadow:0 10px 34px #173c3514}
-.login-wordmark{display:flex;align-items:center;justify-content:center;padding:15px;border-radius:6px;background:#103c33;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c;color:#f5f4e8;margin-bottom:16px}
+.login-wordmark{display:flex;align-items:center;justify-content:center;padding-block:15px;color:var(--el-text-color-primary);margin-bottom:16px}
 </style>

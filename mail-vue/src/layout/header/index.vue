@@ -474,8 +474,4 @@ function formatName(email) {
 .search-label-suggestions button,.search-label-suggestions>div{display:flex;align-items:center;gap:16px;width:100%;padding:0 18px;min-height:36px;font:14px/20px Arial,sans-serif;text-align:start}
 .search-label-suggestions button{cursor:pointer}.search-label-suggestions button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .search-label-suggestions button[aria-selected=true],.search-label-suggestions button:hover{background:var(--mail-hover)}
-.header{background:#103c33;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
-.header-brand>.icon-button,.toolbar>.icon-button,.header .page-title{color:#f5f4e8}
-.header-brand>.icon-button:hover,.toolbar>.icon-button:hover{background:#ffffff20}
-.brand-name{color:#f5f4e8}.header .mail-search{--phooey-ink:#173c35}
 </style>
