@@ -172,6 +172,10 @@
         :data-message-id="message.emailId"
         hide-star
         trash
+        show-importance
+        :importance-reason="message.importanceReason"
+        :busy="busy || loading"
+        @importance="markImportance(message,$event)"
         :participants="message.name || message.sendEmail"
         :subject="message.subject"
         :labels="rowLabels(message)"
@@ -378,6 +382,27 @@ async function reloadAfterRemoval(index) {
   const buttons=root.value.querySelectorAll('.conversation-open');
   const next=buttons[Math.min(Math.max(0,index),buttons.length-1)];
   (next || root.value.querySelector('.select-options'))?.focus();
+}
+async function markImportance(message,important) {
+  if (busy.value || loading.value) return;
+  const token=user.authenticatedToken,request=revision;
+  const current=()=>!disposed && revision===request && token && token===user.authenticatedToken && token===localStorage.getItem('token');
+  if (!current()) return;
+  const trigger=root.value?.querySelector(`[data-message-id="${message.emailId}"] .row-importance:focus`);
+  busy.value=true;
+  try {
+    const result=await http.post(`/v1/messages/${message.emailId}/trash-importance`,{important},{headers:{Authorization:token}});
+    if (current()) {
+      message.importanceReason=result.importanceReason;
+      mail.conversationRevision++;
+    }
+  } catch(e) {
+    if (current()) error.value=e.message || 'Could not change importance.';
+  } finally {
+    busy.value=false;
+    await nextTick();
+    if (current() && trigger?.isConnected && document.activeElement===document.body)trigger.focus();
+  }
 }
 async function setRead(ids,read) {
   if (busy.value || loading.value || !ids.length) return;

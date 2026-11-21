@@ -1,7 +1,7 @@
 <template>
   <div
     class="conversation-row"
-    :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips, 'hover-actions': user.hoverActions }"
+    :class="{ unread, selected, 'draft-row': draftOnly, 'trash-row':trash, 'with-files': showChips, 'hover-actions': user.hoverActions }"
   >
     <span v-if="canDrag" class="drag-grip" aria-hidden="true" draggable="true"
       @dragstart="startMove" @dragend="endMove"></span>
@@ -30,7 +30,7 @@
         width="20"
       />
     </button>
-    <span v-else class="star-space"></span>
+    <span v-else-if="!trash" class="star-space"></span>
     <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
@@ -41,7 +41,7 @@
       @click="$emit('open')"
     >
       <span class="participants">
-        <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="17" aria-hidden="true" />
+        <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="20" aria-hidden="true" />
         <span v-if="people.length" class="names sender-names">
           <span v-if="people.length > 1" class="earlier-senders"><template v-for="(person,i) in people.slice(0,-1)" :key="i">{{ person.separator }}<span :class="{'unread-sender':person.unread}" :title="person.name">{{ person.label }}</span></template></span>
           <span class="last-sender">{{ people.at(-1).separator }}<span :class="{'unread-sender':people.at(-1).unread}" :title="people.at(-1).name">{{ people.at(-1).label }}</span></span>
@@ -251,6 +251,9 @@ onBeforeUnmount(endMove);
   .conversation-open { gap: 0; padding-inline: 5px 10px; }
   .participants { box-sizing: border-box; padding-inline-end: 32px; }
   .summary { padding-inline-end: 10px; }
+  .trash-row { padding-inline-start:16px; }
+  .trash-row .conversation-open { padding-inline-start:0; }
+  .trash-row .participants { flex-basis:calc(20px + clamp(140px,16vw,200px)); }
   .row-actions :deep(.mail-icon) {
     width: 40px;
     height: min(40px,var(--mail-row-height,40px));
@@ -267,6 +270,7 @@ onBeforeUnmount(endMove);
   .with-files .paperclip {display:none}
   .file-chips {position:absolute;left:calc(76px + clamp(140px, 16vw, 200px));right:14px;bottom:7px;display:flex;gap:6px;align-items:center;overflow:hidden}
   .with-files:has(.row-importance) .file-chips {left:calc(106px + clamp(140px, 16vw, 200px))}
+  .trash-row.with-files:has(.row-importance) .file-chips {left:calc(96px + clamp(140px,16vw,200px))}
   .file-chip {display:inline-flex;align-items:center;gap:6px;border:1px solid var(--secondary-border-color,var(--light-border-color));border-radius:16px;min-width:0;max-width:170px;padding:0 10px;height:26px;color:var(--regular-text-color);font:500 12px/24px Arial,sans-serif;cursor:pointer}
   .file-chip:hover,.file-chip:focus-visible {background:var(--mail-hover)}
   .file-chip:focus-visible {outline-offset:-2px}
@@ -339,6 +343,8 @@ onBeforeUnmount(endMove);
   }
   .row-importance { position: absolute; right: 42px; bottom: 8px; z-index: 1; }
   .conversation-row:has(.row-importance) .summary { padding-right: 62px; }
+  .trash-row .row-importance { right:8px; }
+  .trash-row:has(.row-importance) .summary { padding-right:32px; }
   .row-star {
     position: absolute;
     bottom: 6px;
