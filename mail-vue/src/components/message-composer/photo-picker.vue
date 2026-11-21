@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <dialog ref="dialog" class="photo-picker" :aria-labelledby="id+'-title'" @cancel.prevent="cancel" @keydown.esc.stop.prevent="cancel">
+    <dialog ref="dialog" class="photo-picker" :aria-labelledby="id+'-title'" @dragover="blockFileNavigation" @drop="blockFileNavigation" @cancel.prevent="cancel" @keydown.esc.stop.prevent="cancel">
       <header><h2 :id="id+'-title'">Insert Photo</h2>
         <button type="button" class="close" aria-label="Close picker" data-tip="Close" :disabled="busy" @click="cancel">
           <Icon icon="material-symbols:close" width="22"/>
@@ -30,8 +30,8 @@
         <main v-else class="web">
           <label :for="id+'-url'">Image URL</label>
           <input :id="id+'-url'" type="url" v-model="url" placeholder="Paste an image URL" autocomplete="off" spellcheck="false" :disabled="busy" @keydown.enter.prevent="insert">
-          <img v-if="previewUrl" :key="previewUrl" :src="previewUrl" alt="Photo preview" referrerpolicy="no-referrer"
-            @load="previewState='ready'" @error="previewState='failed'">
+          <img v-if="previewUrl" ref="previewImage" :key="previewUrl" :src="previewUrl" alt="Photo preview" referrerpolicy="no-referrer"
+            @load="previewResult($event,'ready')" @error="previewResult($event,'failed')">
           <p v-if="url.trim() && !address" role="status">Enter an http or https image URL.</p>
           <p v-else-if="previewState==='failed'" role="status">Couldn’t load this image. Check the URL and try again.</p>
         </main>
@@ -47,12 +47,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import { Icon } from "@iconify/vue";
-import { photoTypes, transferFiles } from "./files";
+import { photoTypes, transferFiles, hasFiles } from "./files";
 const props = defineProps({ submit: { type: Function, required: true } });
 const emit = defineEmits(["close"]);
 const id = useId(), dialog = ref(), fileInput = ref();
 const sources = [{name:"Web Address (URL)",icon:"link"}, {name:"Upload",icon:"upload"}];
 const tab = ref("Upload"), photos = ref([]), hovering = ref(false), error = ref(""), busy = ref(false);
+const previewImage = ref();
 const url = ref(""), previewUrl = ref(""), previewState = ref("");
 const address = computed(() => {
   try {
@@ -82,6 +83,14 @@ function add(files) {
     error.value="These photos would exceed the 5 MiB message limit."; return;
   }
   photos.value.push(...files.map(file => ({file,preview:URL.createObjectURL(file)})));
+}
+function blockFileNavigation(event) {
+  if (hasFiles(event.dataTransfer)) event.preventDefault();
+}
+function previewResult(event, result) {
+  if (tab.value !== "Upload" && event.target === previewImage.value &&
+      event.target.getAttribute("src") === address.value && previewUrl.value === address.value)
+    previewState.value = result;
 }
 function browse(event) { add(Array.from(event.target.files)); event.target.value=""; }
 function drop(event) {

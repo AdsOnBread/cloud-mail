@@ -79,6 +79,7 @@ export function planFiles(files, mode, form, content) {
 
 
 function base64Length(content) {
+  if (typeof content !== "string") return content.byteLength || 0;
   const data = content.slice(content.indexOf(",") + 1).replace(/\s/g, "");
   return Math.max(0, Math.floor(data.length * 3 / 4) - (data.endsWith("==") ? 2 : Number(data.endsWith("="))));
 }

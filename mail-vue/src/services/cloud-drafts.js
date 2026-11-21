@@ -36,11 +36,26 @@ const apiError=e=>e.response?.data||e;
 const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
 // The server stores pasted photos as CID attachments. Compare the restored image
 // in the HTML once, while retaining separately attached files in the comparison.
+function referencedAttachments(row) {
+  const files = row.attachments || [];
+  if (!files.some(file => file.contentId)) return files;
+  const template = document.createElement("template");
+  template.innerHTML = row.content || "";
+  const sources = new Set(Array.from(template.content.querySelectorAll("img[src]"), image => image.getAttribute("src")));
+  return files.filter(file => {
+    if (!file.contentId) return true;
+    const id = file.contentId.replace(/^<|>$/g, "");
+    if (sources.has("cid:" + id) || sources.has("/api/v1/drafts/attachments/" + file.attachmentId + "/content")) return true;
+    if (!file.content || typeof file.content !== "string") return false;
+    const src = file.content.startsWith("data:") ? file.content : "data:"+(file.contentType || file.mimeType)+";base64,"+file.content;
+    return sources.has(src);
+  });
+}
 function savedFingerprint(row) {
   const template=document.createElement('template');
   template.innerHTML=row.content || '';
   const photos=new Set(Array.from(template.content.querySelectorAll('img[src]'), image=>image.getAttribute('src')));
-  const attachments=(row.attachments || []).filter(file=>!file.contentId || !photos.has(file.content));
+  const attachments=referencedAttachments(row).filter(file=>!file.contentId || !photos.has(file.content));
   // Filing participates in draft conflicts but never changes a delivery receipt.
   return JSON.stringify([fingerprint({...row, content:template.innerHTML, attachments}),draftFilingFingerprint(row)]);
 }
@@ -99,6 +114,7 @@ export async function saveLocalDraft(input, {requireCurrent = false, session, st
       current.starEditBase === draftEditBase(input));
     return writeDraft(database, {
       ...input,
+      attachments:starOnly ? input.attachments : referencedAttachments(input),
       // A filing-only edit keeps its content ancestor across tabs and cloud uploads.
       starEditBase:starOnly && current ? current.starEditBase || draftEditBase(current) : undefined,
       ...(preserveStar && current ? {mailboxStarred:Boolean(current.mailboxStarred)} : {}),
@@ -133,7 +149,7 @@ async function push(database,row,api) {
   if (!uploadId) return;
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
-    const attachments=value.attachments.map(({attachmentId,...f})=>f);
+    const attachments=referencedAttachments(value).map(({attachmentId,...f})=>f);
     const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};

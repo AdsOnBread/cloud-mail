@@ -209,9 +209,9 @@
             •••
           </button>
         </div>
-        <div v-if="form.attachments.length" class="compose-attachments">
+        <div v-if="attachedFiles.length" class="compose-attachments">
           <div
-            v-for="(file, index) in form.attachments"
+            v-for="(file, index) in attachedFiles"
             :key="index"
             class="attachment-chip"
           >
@@ -223,7 +223,7 @@
               type="button"
               :aria-label="`Remove ${file.filename}`"
               :disabled="sending || attaching"
-              @click="form.attachments.splice(index, 1)"
+              @click="form.attachments.splice(form.attachments.indexOf(file), 1)"
             >
               ×
             </button>
@@ -665,6 +665,7 @@ const emptyForm = () => ({
   draftId: null,
 });
 const form = reactive(emptyForm());
+const attachedFiles = computed(() => form.attachments.filter(file => !file.contentId));
 const starChoice = ref(null);
 const starRevision = ref(0);
 async function readComposeStar() {
