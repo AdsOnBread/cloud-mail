@@ -35,6 +35,7 @@
           <button
             class="mail-icon select-options"
             aria-label="Selection options"
+            ref="selectionButton"
             data-tip="Select"
           >
             <Icon icon="material-symbols:arrow-drop-down" width="16" />
@@ -433,6 +434,7 @@ async function setRead(batch,unread,leaveReader=false) {
   if (!batch.length || batch.some(row=>!canCancel(row) || reading.value.has(row.draftId))) return;
   const owner=identity.value, session=localStorage.getItem("token"), origin=route.fullPath;
   const current=()=>!disposed && identity.value===owner && localStorage.getItem("token")===session;
+  const focused=document.activeElement;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   for (const {draftId} of messages) reading.value.add(draftId);
   try {
@@ -442,6 +444,11 @@ async function setRead(batch,unread,leaveReader=false) {
     for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
     drafts.scheduledRevision++;
     if (leaveReader && route.fullPath===origin) back();
+    else if (!messageId.value && search.filters.isUnread && !unread) {
+      await nextTick();
+      if (current() && route.fullPath===origin && !focused?.isConnected && document.activeElement===document.body)
+        focusList();
+    }
   } catch(e) {
     if (current()) {
       await load();
@@ -601,15 +608,18 @@ watch(
   },
   { immediate: true },
 );
-const backButton = ref();
+const backButton = ref(), selectionButton = ref();
+function focusList(id) {
+  const scroller=scroll.value;
+  const wanted=scroller?.querySelector('[data-scheduled-id="'+id+'"] .conversation-open');
+  (wanted || scroller?.querySelector('.conversation-open') || selectionButton.value)?.focus();
+}
 watch(messageId, (id, old) => {
   if (id) nextTick(() => backButton.value?.focus());
-  if (!id && old)
-    nextTick(() =>
-      scroll.value
-        ?.querySelector('[data-scheduled-id="' + old + '"] .conversation-open')
-        ?.focus(),
-    );
+  if (!id && old) {
+    offset.value=Math.min(offset.value, Math.floor(Math.max(0,ordered.value.length-1)/50)*50);
+    nextTick(()=>focusList(old));
+  }
 });
 function keydown(event) {
   if (
