@@ -22,6 +22,17 @@ beforeEach(async()=>{
  await env.db.prepare('UPDATE setting SET send=0').run();await settingService.refresh(c());
 });
 afterEach(()=>vi.restoreAllMocks());
+describe('System label visibility',()=>{
+ it('keeps folder choices per user and validates the available modes',async()=>{
+   const {systemLabels,setSystemLabel}=await import('../src/cloud/system-labels');
+   await setSystemLabel(env.db,1,'trash','show');await setSystemLabel(env.db,1,'draft','unread');
+   await setSystemLabel(env.db,1,'trash','hide');
+   expect(await systemLabels(env.db,1)).toEqual({draft:'unread',trash:'hide'});
+   expect(await systemLabels(env.db,2)).toEqual({});
+   await expect(setSystemLabel(env.db,1,'trash','unread')).rejects.toMatchObject({code:400});
+   await expect(setSystemLabel(env.db,1,'email','hide')).rejects.toMatchObject({code:400});
+ });
+});
 describe('Cloud drafts',()=>{
  it('migrates repeatably, imports once, permits incomplete drafts and isolates owners',async()=>{
    const d=await draft({subject:'',content:'',receiveEmail:[]});

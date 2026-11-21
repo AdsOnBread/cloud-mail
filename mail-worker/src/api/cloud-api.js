@@ -8,8 +8,11 @@ import {schedule,scheduledList,setScheduledMark,cancel} from '../cloud/scheduled
 import { send } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
 import { moveFromTrash,setTrashRead } from '../cloud/trash-actions';
+import {systemLabels,setSystemLabel} from '../cloud/system-labels';
 const root='/v1';const uid=c=>userContext.getUserId(c);
 app.use(root+'/*',async(c,next)=>{await activeUser(c,uid(c));await next();c.header('Cache-Control','private, no-store');});
+app.get(root+'/system-labels',async c=>c.json(result.ok(await systemLabels(c.env.db,uid(c)))));
+app.put(root+'/system-labels/:folder',async c=>c.json(result.ok(await setSystemLabel(c.env.db,uid(c),c.req.param('folder'),(await c.req.json()).mode))));
 app.get(root+'/signatures',async c=>c.json(result.ok(await readSignatures(c.env.db,uid(c)))));
 app.put(root+'/signatures',async c=>c.json(result.ok(await saveSignatures(c.env.db,uid(c),await c.req.json()))));
 app.get(root+'/drafts',async c=>c.json(result.ok(await drafts.list(c,uid(c),c.req.query()))));
