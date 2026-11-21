@@ -4,16 +4,28 @@
       <button type="button" class="icon-button" aria-label="Toggle navigation" data-tip="Main menu" :aria-expanded="uiStore.asideShow" @click="changeAside"><Icon icon="material-symbols:menu" width="24" /></button>
       <router-link to="/inbox" class="brand-name"><Icon icon="material-symbols:mail-outline-rounded" width="32" /><span>{{ settingStore.settings.title || 'Cloudmail' }}</span></router-link>
     </div>
-    <div v-if="searchable" class="mail-search" role="search">
+    <div v-if="searchable" class="mail-search" role="search" @focusout="leaveSuggestions">
       <form class="search-entry" @submit.prevent="submitSearch">
       <button type="submit" @pointerdown.left.prevent class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
       <span v-if="searchScope" id="mail-search-scope" class="search-folder">{{ searchScope }}</span>
-      <input v-model="searchText" aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @keydown.esc="clearSearch" />
+      <input ref="searchInput" v-model="searchText" role="combobox" aria-autocomplete="list" :aria-expanded="showLabels"
+        :aria-controls="showLabels ? 'search-label-suggestions' : undefined"
+        :aria-activedescendant="showLabels && matches[choice] ? 'search-label-option-'+choice : undefined"
+        :aria-keyshortcuts="userStore.user.generalSettings?.keyboardShortcuts ? '/' : undefined"
+        aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @focus="suggest=true" @input="suggest=true;choice=0" @keydown="searchKeys" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" @pointerdown.left.prevent class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
+      <div v-if="showLabels" id="search-label-suggestions" role="listbox" aria-label="Go to label" class="search-label-suggestions">
+        <button v-for="(item,i) in matches" :id="'search-label-option-'+i" :key="item.key" type="button"
+          role="option" :aria-selected="i===choice" tabindex="-1" @pointerdown.prevent @click="openLabel(item)">
+          <Icon :icon="'material-symbols:'+item.icon" width="18"/><span>{{item.name}}</span>
+        </button>
+        <div v-if="!matches.length" role="presentation">No matching labels</div>
+      </div>
       <SearchOptions :query-text="searchText" @applied="applyAdvanced" />
     </div>
     <div v-else class="page-title">{{ $t(route.meta.title) }}</div>
+    <MailboxShortcuts :available="searchable" @search="focusSearch" />
     <div class="toolbar">
       <button type="button" v-if="uiStore.dark" class="icon-button" aria-label="Switch to light mode" data-tip="Light mode" @click="openDark($event)">
         <Icon icon="material-symbols:light-mode-outline" width="22"/>
@@ -76,6 +88,9 @@
 </template>
 
 <script setup>
+import MailboxShortcuts from "@/components/mail-keyboard-shortcuts/index.vue";
+import {systemFolders} from '@/components/mail-labels/system-folders';
+import {useMailLabels} from '@/store/mail-labels';
 import SearchOptions from "@/components/mail-search-options.vue";
 import router from "@/router";
 import {logout} from "@/request/login.js";
@@ -122,7 +137,50 @@ const searchScope = computed(() => {
 const searchLabelId=computed(()=>route.params.labelId || (searchFolder.value==="label" ? route.query.labelId : undefined));
 watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = appliedText.value; }, { immediate:true });
 watch(appliedText, value => { searchText.value = value; });
+const labels=useMailLabels(), searchInput=ref(null), suggest=ref(false), choice=ref(0);
+let searchOrigin;
+const labelQuery=computed(()=>/^label:(.*)$/i.exec(searchText.value)?.[1]);
+const showLabels=computed(()=>suggest.value && labelQuery.value!==undefined);
+const matches=computed(()=>{
+  if(labelQuery.value===undefined) return [];
+  const term=labelQuery.value.trim().toLocaleLowerCase();
+  return [{id:'email',name:'Inbox',icon:'inbox-outline'},...systemFolders,...categoryFolders]
+    .filter(folder=>!folder.permission || hasPerm(folder.permission))
+    .map(folder=>({...folder,key:folder.id,to:{name:folder.id}}))
+    .concat(labels.items.map(label=>({key:'label-'+label.id,name:label.name,icon:'label-outline',to:{name:'label',params:{labelId:label.id}}})))
+    .filter(item=>item.name.toLocaleLowerCase().includes(term));
+});
+function focusSearch(label){
+  if(!searchInput.value) return;
+  searchOrigin=document.activeElement;
+  searchInput.value.focus();
+  if(label){searchText.value='label:';choice.value=0;suggest.value=true;}
+  else searchInput.value.select();
+}
+function leaveSuggestions(event){
+  if(event.relatedTarget!==searchInput.value) suggest.value=false;
+}
+function searchKeys(event){
+  if(event.isComposing || event.keyCode===229) return;
+  if(event.key==='Escape'){
+    event.preventDefault();event.stopPropagation();
+    suggest.value=false;searchText.value=appliedText.value;
+    if(searchOrigin?.isConnected && searchOrigin!==document.body) searchOrigin.focus();
+    else searchInput.value.blur();
+    searchOrigin=null;
+  } else if(showLabels.value && matches.value.length && ['ArrowDown','ArrowUp'].includes(event.key)){
+    event.preventDefault();
+    choice.value=(choice.value+(event.key==='ArrowDown'?1:-1)+matches.value.length)%matches.value.length;
+    document.getElementById('search-label-option-'+choice.value)?.scrollIntoView({block:'nearest'});
+  }
+}
+async function openLabel(item){
+  await router.push(item.to);
+  if(router.resolve(item.to).fullPath!==router.currentRoute.value.fullPath) return;
+  clearSearch();suggest.value=false;searchInput.value?.blur();searchOrigin=null;
+}
 function submitSearch() {
+  if(showLabels.value){if(matches.value[choice.value]) openLabel(matches.value[choice.value]);return;}
   const {query,excluded}=readSearchBar(searchText.value);
   const filters={...mailSearch.filters};
   if (excluded) filters.excluded=excluded; else delete filters.excluded;
@@ -149,7 +207,7 @@ async function applyAdvanced({scope,query,filters,stillCurrent,origin}) {
   await nextTick();
   if (!origin?.isConnected && document.activeElement===document.body) document.querySelector('.mail-search [data-search-options]')?.focus({preventScroll:true});
 }
-function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
+function clearSearch() { choice.value=0; searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
 
 const settingStore = useSettingStore();
 const userStore = useUserStore();
@@ -394,4 +452,13 @@ function formatName(email) {
   .header { position:relative; }
   .mail-search:has(.search-entry input:focus) { position:absolute; inset-inline:8px; z-index:2; }
 }
+</style>
+
+<style scoped>
+.mail-search{position:relative}
+.search-label-suggestions{position:absolute;top:100%;inset-inline:0;z-index:110;max-height:min(360px,50dvh);overflow:auto;background:var(--el-bg-color);color:var(--el-text-color-primary);box-shadow:0 4px 8px #20212433;border-radius:0 0 16px 16px;padding:4px 0 8px}
+.mail-search:has(.search-label-suggestions){border-radius:24px 24px 0 0;background:var(--el-bg-color)}
+.search-label-suggestions button,.search-label-suggestions>div{display:flex;align-items:center;gap:16px;width:100%;padding:0 18px;min-height:36px;font:14px/20px Arial,sans-serif;text-align:start}
+.search-label-suggestions button{cursor:pointer}.search-label-suggestions button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-label-suggestions button[aria-selected=true],.search-label-suggestions button:hover{background:var(--mail-hover)}
 </style>
