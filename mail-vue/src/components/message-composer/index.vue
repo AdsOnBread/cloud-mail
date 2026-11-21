@@ -317,8 +317,8 @@
       </div>
     </div>
     <SignatureManager v-if="managerMounted" v-model="managingSignatures" :account-id="form.accountId" @closed="signatureButton?.focus()"/>
-    <dialog ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
-      :aria-describedby="recipientNoticeId" @close="focusRecipients('receiveEmail')">
+    <dialog v-if="missingRecipient" ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
+      :aria-describedby="recipientNoticeId" @close="dismissRecipientError">
       <h2>Error</h2>
       <p :id="recipientNoticeId">Please specify at least one recipient.</p>
       <form method="dialog"><button type="submit" autofocus>OK</button></form>
@@ -412,6 +412,7 @@ const props = defineProps({ inline: Boolean });
 const emit = defineEmits(["sent", "closed"]);
 const composeRoot = ref();
 const recipientDialog = ref();
+const missingRecipient = ref(false);
 const recipientNoticeId = useId();
 const desktop = ref(window.innerWidth >= 768);
 const modal = computed(
@@ -634,6 +635,7 @@ function startSignatureDefault(){
   })();
 }
 function resetForm() {
+  missingRecipient.value = false;
   lastInput = null;
   restoreFocus = null;
   signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
@@ -1004,13 +1006,20 @@ async function discardEditor(selected, session = draftSession()) {
     preparing.value = false;
   }
 }
+function dismissRecipientError() {
+  missingRecipient.value = false;
+  focusRecipients("receiveEmail");
+}
 function validForSend() {
   if (sending.value || attaching.value) return false;
   commitRecipients();
   const recipients = normalizeRecipients(form);
   recipientErrors.value = recipients.errors;
   if (recipientFields.every(field => recipients[field].length === 0)) {
-    if (!recipientDialog.value.open) recipientDialog.value.showModal();
+    if (!missingRecipient.value) {
+      missingRecipient.value = true;
+      nextTick(() => recipientDialog.value?.showModal());
+    }
     return false;
   }
   if (Object.keys(recipientErrors.value).length) {

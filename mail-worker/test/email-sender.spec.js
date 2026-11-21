@@ -50,6 +50,17 @@ describe('Cloudflare email payloads', () => {
 		expect(binding.send).toHaveBeenCalledTimes(1);
 	});
 
+	it('allows blind-copy delivery without synthesizing a visible recipient or subject', async () => {
+		const data = { ...params(), receiveEmail: [], bcc: ['blind@example.net'], subject: '', html: '', text: '' };
+		const message = await buildMessage(data);
+		expect(message).toMatchObject({ bcc: data.bcc, subject: '', text: '\r\n' });
+		expect(message).not.toHaveProperty('to');
+		expect(message).not.toHaveProperty('cc');
+		for (const subject of ['x'.repeat(999), 'line\r\nbreak', null]) {
+			await expect(buildMessage({ ...data, subject })).rejects.toMatchObject({code: 400});
+		}
+	});
+
 	it('enforces recipient and encoded size limits, including body content', async () => {
 		await expect(buildMessage({ ...params(), receiveEmail: [] })).rejects.toMatchObject({ code: 400 });
 		await expect(buildMessage({ ...params(), receiveEmail: ['invalid'] })).rejects.toMatchObject({ code: 400 });

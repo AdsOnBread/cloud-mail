@@ -292,6 +292,28 @@ describe("composer persistence and sending", () => {
     expect(alias.get(".from-row").text()).toContain("alias@example.com");
     alias.unmount();
   });
+  it("asks once before sending an empty blind-copy message and preserves it on cancel", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.mocked(emailSend).mockResolvedValue([{emailId: 2}]);
+    const wrapper = composer();
+    try {
+      wrapper.vm.open();
+      await flushPromises();
+      await wrapper.findAll("button").find(item => item.text() === "Bcc").trigger("click");
+      await wrapper.get('[aria-label="Bcc recipients"]').setValue("private@example.com");
+      const send = wrapper.findAll("button").find(item => item.text() === "Send");
+      await send.trigger("click");
+      expect(confirm).toHaveBeenCalledWith("Send this message without a subject or text in the body?");
+      expect(emailSend).not.toHaveBeenCalled();
+      await send.trigger("click");
+      await flushPromises();
+      expect(emailSend).toHaveBeenCalledTimes(1);
+      expect(emailSend.mock.calls[0][0]).toMatchObject({subject:"", receiveEmail:[], bcc:["private@example.com"]});
+    } finally {
+      wrapper.unmount();
+      confirm.mockRestore();
+    }
+  });
   it("restores a subject selection from the minimized caption", async () => {
     const wrapper = composer();
     wrapper.vm.open();

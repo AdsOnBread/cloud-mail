@@ -15,7 +15,7 @@ export function validateRecipients(recipients) {
 	}
 }
 
-export function normalizeRecipients(to, cc = [], bcc = []) {
+export function normalizeRecipients(to = [], cc = [], bcc = []) {
 	if (![to,cc,bcc].every(Array.isArray)) throw new BizError('Recipients must be arrays.',400);
 	validateRecipients([...to,...cc,...bcc]);
 	const seen = new Set();

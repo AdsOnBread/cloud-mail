@@ -257,9 +257,9 @@ const emailService = {
 			sendType, //Send type
 			emailId, //Original message ID when replying
 			receiveEmail, //Recipient addresses
-			text, //Plain text body
-			content, //Message content
-			subject, //Subject
+			text = '', //Plain text body
+			content = '', //Message content
+			subject = '', //Subject
 			attachments = [] //Attachments
 		} = params;
 		const recipients = normalizeRecipients(receiveEmail,params.cc,params.bcc);

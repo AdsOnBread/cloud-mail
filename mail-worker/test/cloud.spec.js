@@ -82,7 +82,7 @@ describe('Send attempts',()=>{
    await expect(drafts.get(c(),1,d.draftId)).rejects.toMatchObject({code:404});
  });
  it('claims a draft atomically across clients and preserves a failed draft',async()=>{
-   const d=await draft({subject:''});const result=await send(c(),1,{version:d.version,idempotencyKey:'failed-draft-001'},{draftId:d.draftId});expect(result.state).toBe('failed');
+   const d=await draft({subject:'Invalid\nheader'});const result=await send(c(),1,{version:d.version,idempotencyKey:'failed-draft-001'},{draftId:d.draftId});expect(result.state).toBe('failed');
    expect((await drafts.get(c(),1,d.draftId)).state).toBe('draft');
    const fixed=await drafts.save(c(),1,{version:(await drafts.get(c(),1,d.draftId)).version,subject:'Fixed'},d.draftId);
    const results=await Promise.allSettled(['concurrent-key-a','concurrent-key-b'].map(idempotencyKey=>send(c(),1,{version:fixed.version,idempotencyKey},{draftId:d.draftId})));
@@ -413,6 +413,19 @@ describe('Attachment retention',()=>{
 });
 
 describe('Scheduled send',()=>{
+ it('delivers an empty blind-copy-only scheduled draft and keeps its envelope private',async()=>{
+   const {schedule,deliverDue}=await import('../src/cloud/scheduled');
+   const d=await draft({subject:'',text:'',content:'',receiveEmail:[],bcc:['person@example.com'],plainText:true});
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+600});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());
+   const {results}=await env.db.prepare('SELECT user_id,subject,recipient,cc,bcc,text FROM email ORDER BY user_id').all();
+   expect(results).toHaveLength(2);
+   expect(results[0]).toMatchObject({user_id:1,subject:'',recipient:'[]',text:''});
+   expect(JSON.parse(results[0].bcc).map(item=>item.address)).toEqual(['person@example.com']);
+   expect(results[1]).toMatchObject({user_id:2,subject:'',recipient:'[]',text:''});
+   expect(JSON.parse(results[1].bcc || '[]')).toEqual([]);
+ });
  it('removes queued messages from draft sync, isolates owners, and cancels back to the same editable draft',async()=>{
    const {schedule,scheduledList,cancel,deliverDue}=await import('../src/cloud/scheduled');
    const d=await draft(),sendAt=Math.floor(Date.now()/1000)+1800;
