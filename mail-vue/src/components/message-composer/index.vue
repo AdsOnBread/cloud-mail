@@ -63,7 +63,7 @@
             :data-tip="minimized ? 'Maximize' : 'Minimize'"
             @click="toggleMinimized"
           >
-            <Icon :icon="minimized ? 'material-symbols:crop-square' : 'material-symbols:remove'" width="18" />
+            <Icon :icon="minimized ? 'material-symbols:check-box-outline-blank' : 'material-symbols:remove'" width="18" />
           </button>
           <button
             v-if="!inline"
@@ -1700,7 +1700,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 3px;
-  min-height: 68px;
+  min-height: 64px;
   flex-shrink: 0;
 }
 .compose-footer .el-button {

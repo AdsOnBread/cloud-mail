@@ -1,147 +1,180 @@
 <template>
-  <div ref="row" class="format-row" data-tip-placement="top" @pointerdown.capture="remember">
-    <div class="format-strip" :class="{spaced: available >= 445}"
-      :style="{width: stripWidth+'px'}" role="toolbar" aria-label="Text formatting">
-    <div class="group">
-      <FormatPicker
-        v-for="picker in selectors"
-        :key="picker.label"
-        :label="picker.label"
-        :tooltip="tip(picker)"
-        :choices="picker.options"
-        :value="picker.command === 'FontName' ? fontValue : sizes[sizeIndex][1]"
-        @open="opened(true)"
-        @choose="(value) => apply(picker.command, value)"
-      >
-        <span v-if="picker.command === 'FontName'" class="font-name">{{
-          fontName
-        }}</span>
-        <Icon v-else icon="material-symbols:format-size" width="18" />
-      </FormatPicker>
-    </div>
-    <div class="group">
-      <button
-        v-for="a in styles"
-        :key="a.command"
-        :aria-label="a.label"
-        :data-tip="tip(a)"
-        :aria-pressed="!!active[a.command]"
-        @mousedown.prevent
-        @click="apply(a.command)"
-      >
-        <Icon :icon="icon(a)" width="19" />
-      </button>
-      <FormatPopup
-        v-model="colorOpen"
-        label="Text color"
-        role="dialog"
-        panel-label="Text and background colors"
-        panel-class="format-palette"
-        @open="openColors"
-        @ready="focusColors"
-      >
-        <template #trigger
-          ><Icon icon="material-symbols:format-color-text" width="19" /><Icon
-            icon="material-symbols:arrow-drop-down"
-            width="14"
-        /></template>
-        <div ref="palette" class="palette-columns">
-          <div v-for="group in colorGroups" :key="group.command">
-            <div class="palette-heading">{{ group.label }}</div>
-            <div
-              role="grid"
-              :aria-label="group.label"
-              class="swatches"
-              @keydown="navigateColors($event, group.command)"
-            >
+  <div
+    ref="row"
+    class="format-row"
+    data-tip-placement="top"
+    @pointerdown.capture="remember"
+  >
+    <div
+      class="format-strip"
+      :class="{ spaced: available >= 445 }"
+      :style="{
+        width: stripWidth + 'px',
+        '--more-gap': showHistory ? '80px' : '4px',
+      }"
+      role="toolbar"
+      aria-label="Text formatting"
+    >
+      <div class="group">
+        <FormatPicker
+          v-for="picker in selectors"
+          :key="picker.label"
+          :label="picker.label"
+          :tooltip="tip(picker)"
+          :choices="picker.options"
+          :value="
+            picker.command === 'FontName' ? fontValue : sizes[sizeIndex][1]
+          "
+          @open="opened(true)"
+          @choose="(value) => apply(picker.command, value)"
+        >
+          <span v-if="picker.command === 'FontName'" class="font-name">{{
+            fontName
+          }}</span>
+          <Icon v-else icon="material-symbols:format-size" width="18" />
+        </FormatPicker>
+      </div>
+      <div class="group">
+        <button
+          v-for="a in styles"
+          :key="a.command"
+          :aria-label="a.label"
+          :data-tip="tip(a)"
+          :aria-pressed="!!active[a.command]"
+          @mousedown.prevent
+          @click="apply(a.command)"
+        >
+          <Icon :icon="icon(a)" width="19" />
+        </button>
+        <FormatPopup
+          v-model="colorOpen"
+          label="Text color"
+          role="dialog"
+          panel-label="Text and background colors"
+          panel-class="format-palette"
+          @open="openColors"
+          @ready="focusColors"
+        >
+          <template #trigger
+            ><Icon icon="material-symbols:format-color-text" width="19" /><Icon
+              icon="material-symbols:arrow-drop-down"
+              width="14"
+          /></template>
+          <div ref="palette" class="palette-columns">
+            <div v-for="group in colorGroups" :key="group.command">
+              <div class="palette-heading">{{ group.label }}</div>
               <div
-                v-for="(row, y) in colorRows"
-                :key="y"
-                role="row"
-                class="swatch-row"
+                role="grid"
+                :aria-label="group.label"
+                class="swatches"
+                @keydown="navigateColors($event, group.command)"
               >
-                <button
-                  v-for="(color, x) in row"
-                  :key="color"
-                  role="gridcell"
-                  class="swatch"
-                  :style="{ backgroundColor: color }"
-                  :aria-label="group.label + ' ' + color"
-                  :title="color"
-                  :aria-selected="currentColors[group.command] === color"
-                  :tabindex="positions[group.command] === 8 * y + x ? 0 : -1"
-                  :data-position="8 * y + x"
-                  @focus="positions[group.command] = 8 * y + x"
-                  @mousedown.prevent
-                  @click="chooseColor(group.command, color)"
+                <div
+                  v-for="(row, y) in colorRows"
+                  :key="y"
+                  role="row"
+                  class="swatch-row"
                 >
-                  <Icon
-                    v-if="currentColors[group.command] === color"
-                    icon="material-symbols:check"
-                    width="14"
-                    :color="checkColor(color)"
-                  />
-                </button>
+                  <button
+                    v-for="(color, x) in row"
+                    :key="color"
+                    role="gridcell"
+                    class="swatch"
+                    :style="{ backgroundColor: color }"
+                    :aria-label="group.label + ' ' + color"
+                    :title="color"
+                    :aria-selected="currentColors[group.command] === color"
+                    :tabindex="positions[group.command] === 8 * y + x ? 0 : -1"
+                    :data-position="8 * y + x"
+                    @focus="positions[group.command] = 8 * y + x"
+                    @mousedown.prevent
+                    @click="chooseColor(group.command, color)"
+                  >
+                    <Icon
+                      v-if="currentColors[group.command] === color"
+                      icon="material-symbols:check"
+                      width="14"
+                      :color="checkColor(color)"
+                    />
+                  </button>
+                </div>
               </div>
+              <button
+                :aria-label="'Default ' + group.label.toLowerCase()"
+                class="default-color"
+                @mousedown.prevent
+                @click="chooseColor(group.command, null)"
+              >
+                Default
+              </button>
             </div>
-            <button
-              :aria-label="'Default ' + group.label.toLowerCase()"
-              class="default-color"
-              @mousedown.prevent
-              @click="chooseColor(group.command, null)"
-            >
-              Default
-            </button>
           </div>
-        </div>
-      </FormatPopup>
-    </div>
-    <div v-if="showLists" class="group">
-      <FormatPicker
-        label="Align"
-        tooltip="Align"
-        :choices="alignmentChoices"
-        :value="alignment.command"
-        icons-only
-        @open="opened(true)"
-        @choose="(command) => apply(command)"
-      >
-        <Icon :icon="icon(alignment)" width="19" />
-      </FormatPicker>
+        </FormatPopup>
+      </div>
+      <div v-if="showLists" class="group">
+        <FormatPicker
+          label="Align"
+          tooltip="Align"
+          :choices="alignmentChoices"
+          :value="alignment.command"
+          icons-only
+          @open="opened(true)"
+          @choose="(command) => apply(command)"
+        >
+          <Icon :icon="icon(alignment)" width="19" />
+        </FormatPicker>
+        <button
+          v-for="a in visibleParagraph"
+          :key="a.command"
+          :aria-label="a.label"
+          :data-tip="tip(a)"
+          :aria-pressed="a.toggle ? !!active[a.command] : undefined"
+          @mousedown.prevent
+          @click="apply(a.command)"
+        >
+          <Icon :icon="icon(a)" width="18" />
+        </button>
+      </div>
       <button
-        v-for="a in visibleParagraph"
+        v-for="a in extra.slice(0, extraCount)"
         :key="a.command"
+        class="extra-action"
         :aria-label="a.label"
         :data-tip="tip(a)"
         :aria-pressed="a.toggle ? !!active[a.command] : undefined"
         @mousedown.prevent
         @click="apply(a.command)"
       >
-        <Icon :icon="icon(a)" width="18" />
+        <Icon :icon="icon(a)" width="20" />
       </button>
+      <FormatPicker
+        :trigger-class="complete ? 'detached-more' : ''"
+        label="More formatting options"
+        :choices="overflowChoices"
+        actions
+        :icons-only="showIndent"
+        @open="opened(true)"
+        @choose="(command) => apply(command)"
+        ><Icon icon="material-symbols:more-horiz" width="18"
+      /></FormatPicker>
     </div>
-    <button v-for="a in extra.slice(0, extraCount)" :key="a.command" class="extra-action"
-      :aria-label="a.label" :data-tip="tip(a)" :aria-pressed="a.toggle ? !!active[a.command] : undefined"
-      @mousedown.prevent @click="apply(a.command)"><Icon :icon="icon(a)" width="20"/></button>
-    <FormatPicker v-if="!complete"
-      label="More formatting options"
-      :choices="overflowChoices"
-      actions
-      :icons-only="showIndent"
-      @open="opened(true)"
-      @choose="(command) => apply(command)"
-      ><Icon icon="material-symbols:more-horiz" width="18"
-    /></FormatPicker>
-    </div>
-    <div v-if="showHistory" class="format-history" role="group" aria-label="Editing history">
-      <button v-for="a in history" :key="a.command" :aria-label="a.label" :data-tip="tip(a)"
-        :disabled="!active[a.command]" @mousedown.prevent @click="apply(a.command)">
-        <Icon :icon="icon(a)" width="20"/>
+    <div
+      v-if="showHistory"
+      class="format-history"
+      role="group"
+      aria-label="Editing history"
+    >
+      <button
+        v-for="a in history"
+        :key="a.command"
+        :aria-label="a.label"
+        :data-tip="tip(a)"
+        :disabled="!active[a.command]"
+        @mousedown.prevent
+        @click="apply(a.command)"
+      >
+        <Icon :icon="icon(a)" width="20" />
       </button>
-    </div>
-    <div v-if="complete" class="advanced-format">
-      <FormatPicker label="More formatting options" :choices="overflowChoices" actions icons-only
-        @open="opened(true)" @choose="command=>apply(command)"><Icon icon="material-symbols:more-horiz" width="18"/></FormatPicker>
     </div>
   </div>
 </template>
@@ -168,16 +201,46 @@ const active = ref({}),
   sizeIndex = ref(1),
   currentColors = ref({});
 // Reserve history space only while a change can be undone or redone.
-const showHistory = computed(() => width.value >= 395 && (active.value.Undo || active.value.Redo));
-const available = computed(() => Math.max(0,width.value - (showHistory.value ? 76 : 0)));
+const showHistory = computed(
+  () => width.value >= 395 && (active.value.Undo || active.value.Redo),
+);
+const available = computed(() =>
+  Math.max(0, width.value - (showHistory.value ? 76 : 0)),
+);
 const showLists = computed(() => available.value >= 395);
 const showIndent = computed(() => available.value >= 505);
 const complete = computed(() => available.value >= 612);
-const extraCount = computed(() => complete.value ? 3 : available.value >= 568 ? 2 : available.value >= 543 ? 1 : 0);
+const extraCount = computed(() =>
+  complete.value
+    ? 3
+    : available.value >= 568
+      ? 2
+      : available.value >= 543
+        ? 1
+        : 0,
+);
 const stripWidth = computed(() => {
   if (complete.value) return 576;
-  const natural = extraCount.value ? 513 + 30 * extraCount.value : showIndent.value ? 513 : 445;
-  return Math.min(natural,available.value);
+  const natural = extraCount.value
+    ? 513 + 30 * extraCount.value
+    : showIndent.value
+      ? 513
+      : 445;
+  return Math.min(natural, available.value);
+});
+// If shrinking the editor moves a focused control into More, keep the keyboard in the toolbar.
+watch([extraCount, showIndent, showLists, showHistory], async () => {
+  const focused = document.activeElement;
+  if (!row.value?.contains(focused)) return;
+  await nextTick();
+  if (
+    row.value?.isConnected &&
+    !focused.isConnected &&
+    document.activeElement === document.body
+  )
+    row.value
+      .querySelector('button[aria-label="More formatting options"]')
+      ?.focus();
 });
 const positions = ref({ ForeColor: 0, HiliteColor: 7 });
 let bookmark;
@@ -457,12 +520,38 @@ function navigateColors(event, command) {
 }
 </script>
 <style scoped>
-.format-row { position:relative;display:flex;align-items:center;width:100%;min-width:0;gap:12px;flex:none; }
-.format-history { display:flex;flex:none; }
-.format-history button, .advanced-format :deep(button) { width:32px;height:32px;border-radius:50%;display:inline-grid;place-items:center;cursor:pointer;color:var(--regular-text-color); }
-.format-history button:disabled { opacity:.38;cursor:default; }
-.format-history button:enabled:hover,.advanced-format :deep(button:hover) { background:var(--mail-hover); }
-.advanced-format { margin-left:-8px; }
+.format-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 12px;
+  flex: none;
+}
+.format-history {
+  display: flex;
+  flex: none;
+}
+.format-history button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--regular-text-color);
+}
+.format-history button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.format-history button:enabled:hover {
+  background: var(--mail-hover);
+}
+.format-strip {
+  position: relative;
+}
 .format-strip {
   display: flex;
   align-items: center;
@@ -479,19 +568,74 @@ function navigateColors(event, command) {
   background: var(--mail-compose-header);
 }
 /* The standard strip keeps controls in place as the trailing actions change. */
-.spaced.format-strip { padding:0 0 0 11px;gap:0;justify-content:flex-start;min-height:40px;border-radius:24px; }
-.spaced .group { position:relative;gap:10px;padding:0;border:none; }
-.spaced .group:not(:last-child)::after { content:"";position:absolute;right:-6px;top:1px;height:18px;width:1px;background:var(--light-border-color); }
-.spaced .group:nth-child(1) { gap:9px;margin-right:12px; }
-.spaced .group:nth-child(2) { margin-right:9px; }
-.spaced .group:nth-child(3) { margin-right:10px; }
-.spaced.format-strip :deep(button) { box-sizing:border-box;flex:none;width:20px;min-width:0;height:20px;padding:0; }
-.spaced.format-strip :deep(button[aria-haspopup]:not([aria-label="More formatting options"])) { width:40px; }
-.spaced.format-strip :deep(button[aria-label="Font"]) { width:97px; }
-.spaced.format-strip :deep(button[aria-label="Text color"]) { margin-left:-3px; }
-.spaced.format-strip :deep(button[aria-label="Numbered list"]) { margin-left:-3px; }
-.spaced .extra-action + .extra-action { margin-left:15px; }
-.spaced.format-strip :deep(button[aria-label="More formatting options"]) { margin-left:2px; }
+.spaced.format-strip {
+  padding: 0 0 0 11px;
+  gap: 0;
+  justify-content: flex-start;
+  min-height: 40px;
+  border-radius: 24px;
+}
+.spaced .group {
+  position: relative;
+  gap: 10px;
+  padding: 0;
+  border: none;
+}
+.spaced .group:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 1px;
+  height: 18px;
+  width: 1px;
+  background: var(--light-border-color);
+}
+.spaced .group:nth-child(1) {
+  gap: 9px;
+  margin-right: 12px;
+}
+.spaced .group:nth-child(2) {
+  margin-right: 9px;
+}
+.spaced .group:nth-child(3) {
+  margin-right: 10px;
+}
+.spaced.format-strip :deep(button) {
+  box-sizing: border-box;
+  flex: none;
+  width: 20px;
+  min-width: 0;
+  height: 20px;
+  padding: 0;
+}
+.spaced.format-strip :deep(button[aria-haspopup]) {
+  width: 40px;
+}
+.spaced.format-strip :deep(button[aria-label="Font"]) {
+  width: 97px;
+}
+.spaced.format-strip :deep(button[aria-label="Text color"]) {
+  margin-left: -3px;
+}
+.spaced.format-strip :deep(button[aria-label="Numbered list"]) {
+  margin-left: -3px;
+}
+.spaced .extra-action + .extra-action {
+  margin-left: 15px;
+}
+.spaced.format-strip :deep(button[aria-label="More formatting options"]) {
+  width: 20px;
+  margin-left: 2px;
+}
+.spaced.format-strip :deep(button.detached-more[aria-haspopup]) {
+  position: absolute;
+  left: calc(100% + var(--more-gap));
+  top: 4px;
+  margin: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+}
 
 .group {
   display: flex;

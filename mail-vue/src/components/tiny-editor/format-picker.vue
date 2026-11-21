@@ -51,7 +51,7 @@
   </FormatPopup>
 </template>
 <script setup>
-import { nextTick, ref } from "vue";
+import { nextTick, ref, watch } from "vue";
 import FormatPopup from "./format-popup.vue";
 import { Icon } from "@iconify/vue";
 const props = defineProps({
@@ -83,6 +83,29 @@ async function onShow() {
       ),
     );
 }
+// A resize can move commands between this open menu and the toolbar.
+watch(
+  () => props.choices,
+  async (choices, previous) => {
+    if (!visible.value || !menu.value?.contains(document.activeElement)) return;
+    const oldIndex = Array.from(menu.value.children).indexOf(
+      document.activeElement,
+    );
+    const current = choices.findIndex(
+      (item) => item.value === previous[oldIndex]?.value && !item.disabled,
+    );
+    const index =
+      current >= 0 ? current : choices.findIndex((item) => !item.disabled);
+    await nextTick();
+    if (
+      visible.value &&
+      index >= 0 &&
+      (document.activeElement === document.body ||
+        menu.value?.contains(document.activeElement))
+    )
+      focusAt(index);
+  },
+);
 function choose(value) {
   visible.value = false;
   emit("choose", value);
