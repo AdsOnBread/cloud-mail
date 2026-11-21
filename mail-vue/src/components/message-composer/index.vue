@@ -118,7 +118,9 @@
               ref="toField"
               v-model="form.receiveEmail"
               label="To"
-              :contacts="writerStore.sendRecipientRecord"
+              :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
+              :account-id="form.accountId"
+              @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.receiveEmail"
               @contacts="openContacts('receiveEmail')"
@@ -147,7 +149,9 @@
               ref="ccField"
               v-model="form.cc"
               label="Cc"
-              :contacts="writerStore.sendRecipientRecord"
+              :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
+              :account-id="form.accountId"
+              @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.cc"
               @contacts="openContacts('cc')"
@@ -157,7 +161,9 @@
               ref="bccField"
               v-model="form.bcc"
               label="Bcc"
-              :contacts="writerStore.sendRecipientRecord"
+              :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
+              :account-id="form.accountId"
+              @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.bcc"
               @contacts="openContacts('bcc')"
@@ -1236,6 +1242,9 @@ function attachUndo(cancel, session) {
     } finally { stop(); }
     return "Sending undone. Message returned to Drafts.";
   };
+}
+function rememberPerson({email,name}) {
+  if (name && name!==email) form.replyRecipientNames={...form.replyRecipientNames,[email.toLowerCase()]:name};
 }
 function rememberRecipients(recent) {
   writerStore.sendRecipientRecord = [...new Set([...recent, ...writerStore.sendRecipientRecord])].slice(0,500);

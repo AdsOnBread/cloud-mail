@@ -17,17 +17,28 @@
             @pointerdown.prevent @click="remove(index)"> <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button>
         </span>
       </template>
-      <input ref="input" :id="inputId" v-model="pending" :list="`${inputId}-suggestions`"
+      <input ref="input" :id="inputId" v-model="pending" role="combobox" aria-autocomplete="list"
+        :aria-expanded="!!options.length" :aria-controls="options.length ? listId : undefined"
+        :aria-activedescendant="options[active] ? listId+'-'+active : undefined"
         :style="{order:editing ?? modelValue.length}" :aria-label="`${label} recipients`"
         :aria-invalid="!!error" :aria-describedby="error ? `${inputId}-error` : undefined"
-        autocomplete="off" autocapitalize="off" spellcheck="false" @keydown="keydown" @blur="commit" @paste="paste" />
-      <datalist :id="`${inputId}-suggestions`">
-        <option v-for="address in suggestions" :key="address" :value="address" />
-      </datalist>
+        autocomplete="off" autocapitalize="off" spellcheck="false" @input="typing=true" @keydown="keydown" @blur="commit" @paste="paste" />
     </div>
     <slot />
     <p v-if="error" :id="`${inputId}-error`" class="recipient-error" role="alert">{{ error }}</p>
     <Teleport to="body">
+      <div v-if="options.length" ref="panel" :id="listId" class="recipient-suggestions" :style="position"
+        role="listbox" :aria-label="`${label} suggestions`" @mousedown.prevent>
+        <div v-for="(person,i) in options" :key="person.email" :id="listId+'-'+i"
+          role="option" :aria-selected="active===i" @pointermove="active=i" @click="pick(person)">
+          <span class="suggestion-avatar" aria-hidden="true">{{ person.name.charAt(0).toUpperCase() }}</span>
+          <span class="suggestion-lines">
+            <span v-for="(line,n) in [person.name,person.email]" :key="n">
+              <template v-for="(part,j) in highlighted(line)" :key="j"><b v-if="j===1">{{ part }}</b><template v-else>{{ part }}</template></template>
+            </span>
+          </span>
+        </div>
+      </div>
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
         class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @mousedown.prevent @focusout="leaveMenu">
         <button type="button" role="menuitem" @click="clipboardAction(false)">Copy email address</button>
@@ -38,13 +49,14 @@
   </div>
 </template>
 <script setup>
-import { computed, nextTick, ref, useId, watch } from 'vue';
+import { nextTick, ref, useId, watch } from 'vue';
+import {useRecipientSuggestions} from './suggestions';
 import { splitRecipients } from '@/utils/recipients.js';
 import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
-  names: Object, contacts: { type: Array, default: () => [] }, error: String });
-const emit = defineEmits(['update:modelValue', 'contacts']);
+  names: Object, accountId: Number, owner: String, error: String });
+const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
 const inputId = `recipient-${useId()}`;
@@ -53,10 +65,16 @@ function display(address) {
   const name = props.names && Object.hasOwn(props.names,key) && props.names[key];
   return typeof name === 'string' && name ? name : address;
 }
-const suggestions = computed(() => props.contacts.filter(address => pending.value &&
-  address.toLowerCase().includes(pending.value.toLowerCase()) &&
-  !props.modelValue.some(value => value.toLowerCase() === address.toLowerCase())).slice(0, 10));
+const listId = inputId+'-suggestions';
+const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,highlighted} =
+  useRecipientSuggestions(props,pending,input,editing,person=>{
+    emit('choosePerson',person);
+    pending.value=person.email;
+    commit();
+    input.value?.focus();
+  });
 function clear() {
+  hideSuggestions();
   pending.value = '';
   editing.value = null;
   menuIndex.value = null;
@@ -64,6 +82,7 @@ function clear() {
 // A pointer can activate a different chip while the input still holds an edit.
 // Resolve both changes against one version of the list before Vue moves the chips.
 function resolveInput(targetIndex) {
+  hideSuggestions();
   const updated = [...props.modelValue];
   const entered = splitRecipients(pending.value);
   const source = editing.value;
@@ -98,6 +117,7 @@ async function edit(index) {
 }
 function keydown(event) {
   if (event.isComposing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (keys(event)) return;
   if (event.key === 'Escape' && editing.value !== null) {
     const index = editing.value;
     event.preventDefault(); event.stopPropagation(); clear();
@@ -217,4 +237,11 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 16px; height:34px; cursor:pointer; text-align:left; color:inherit; font:400 14px/20px Roboto,Arial,sans-serif; }
 .recipient-menu button:hover,.recipient-menu button:focus-visible { background:var(--base-fill); outline:none; }
 .recipient-menu kbd { color:var(--placeholder-text-color); font:inherit; }
+.recipient-suggestions { position:fixed; z-index:2450; box-sizing:border-box; padding:4px 0; overflow:auto; overscroll-behavior:contain; border-radius:8px; background:var(--mail-surface,#fff); color:var(--el-text-color-primary); box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d; font:14px/20px Roboto,Arial,sans-serif; }
+.recipient-suggestions [role=option] { height:52px; box-sizing:border-box; display:flex; align-items:center; gap:16px; padding:0 12px; cursor:pointer; }
+.recipient-suggestions [aria-selected=true] { background:var(--mail-hover,#f2f2f2); }
+.suggestion-avatar { display:grid; place-items:center; flex:0 0 32px; height:32px; border-radius:50%; background:#647781; color:#fff; font-size:16px; }
+.suggestion-lines { display:grid; min-width:0; }
+.suggestion-lines > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.suggestion-lines > span + span { color:var(--regular-text-color); font-size:12px; line-height:16px; }
 </style>
