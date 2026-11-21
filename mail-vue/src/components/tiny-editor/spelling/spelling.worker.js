@@ -1,4 +1,5 @@
 import {loadModule} from '@farscrl/hunspell-wasm';
+import {dictionaryData} from './dictionary-data';
 import {franc} from 'franc';
 import {languages, preferredDictionary} from './languages';
 
@@ -18,8 +19,7 @@ async function select(language, base) {
   engine ||= await loadModule();
   const buffers = await Promise.all(['aff','dic'].map(async ext => {
     const response = await fetch(new URL('spelling/' + language + '/index.' + ext, base));
-    if (!response.ok) throw new Error('Dictionary unavailable');
-    return new Uint8Array(await response.arrayBuffer());
+    return dictionaryData(response, ext);
   }));
   const paths = [];
   try {

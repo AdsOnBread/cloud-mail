@@ -1,4 +1,5 @@
 import {expect, it} from 'vitest';
+import {dictionaryData} from '../src/components/tiny-editor/spelling/dictionary-data';
 import {collectWords, liveWords, replaceWord} from '../src/components/tiny-editor/spelling/words';
 import {languages, preferredDictionary} from '../src/components/tiny-editor/spelling/languages';
 
@@ -37,4 +38,10 @@ it('honors regional dictionary preferences in browser language order', () => {
   expect(preferredDictionary(['pt-PT','en-US'])).toBe('pt-pt');
   expect(preferredDictionary(['pt-BR'])).toBe('pt');
   expect(languages).toHaveLength(new Set(languages.map(([id]) => id)).size);
+});
+
+it('rejects a fallback page and accepts a word count with a dictionary producer comment', async () => {
+  await expect(dictionaryData(new Response('<html>Sign in</html>'), 'dic')).rejects.toThrow();
+  await expect(dictionaryData(new Response('Not an affix file'), 'aff')).rejects.toThrow();
+  await expect(dictionaryData(new Response('2 # producer\none\ntwo'), 'dic')).resolves.toBeInstanceOf(Uint8Array);
 });
