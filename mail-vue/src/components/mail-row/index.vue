@@ -38,7 +38,10 @@
     >
       <span class="participants">
         <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="17" aria-hidden="true" />
-        <span v-if="people.length" class="names sender-names"><template v-for="(person,i) in people" :key="i"><span>{{ person.separator }}</span><span :class="{'unread-sender':person.unread}" :title="person.name">{{ person.label }}</span></template></span>
+        <span v-if="people.length" class="names sender-names">
+          <span v-if="people.length > 1" class="earlier-senders"><template v-for="(person,i) in people.slice(0,-1)" :key="i">{{ person.separator }}<span :class="{'unread-sender':person.unread}" :title="person.name">{{ person.label }}</span></template></span>
+          <span class="last-sender">{{ people.at(-1).separator }}<span :class="{'unread-sender':people.at(-1).unread}" :title="people.at(-1).name">{{ people.at(-1).label }}</span></span>
+        </span>
         <span v-else-if="participants" class="names">{{ participants }}</span>
         <span v-if="draftCount" class="draft-marker"
           ><span v-if="participants || people.length" class="draft-comma">, </span
@@ -178,6 +181,9 @@ defineEmits(["select", "star", "open", "importance"]);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sender-names { display: inline-flex; min-width: 0; }
+.earlier-senders,.last-sender { overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.earlier-senders + .last-sender { flex-shrink: 0; max-width: 65%; }
 .sender-names,.draft-comma { font-weight: 400; }
 .sender-names .unread-sender { font-weight: 700; }
 .draft-comma { color: var(--el-text-color-primary); }

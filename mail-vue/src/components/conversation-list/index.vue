@@ -210,7 +210,7 @@
           :starred="Boolean(row.starred)"
           :unread="Boolean(row.unreadCount)"
           :busy="busy"
-          :open-label="`Open ${row.subject || '(no subject)'}, ${row.messageCount} messages${replies(row).length ? ', draft' : ''}`"
+          :open-label="rowOpenLabel(row)"
           @open="open(row)"
           @select="toggle(row.lastEmailId)"
           @star="star(row)"
@@ -659,6 +659,12 @@ async function openContext(row) {
     ? contextDropdown.value[0]
     : contextDropdown.value
   )?.handleOpen?.();
+}
+function rowOpenLabel(row) {
+  const n = replies(row).length;
+  const messages = row.messageCount + (row.messageCount === 1 ? " message" : " messages");
+  const saved = n ? ", " + n + (n === 1 ? " draft" : " drafts") : "";
+  return "Open " + (row.subject || "(no subject)") + ", " + messages + saved;
 }
 async function open(row, reply) {
   context.value = 0;

@@ -60,6 +60,13 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe('Web conversations', () => {
+  it('recognizes a received copy of an owned sent message without treating an unrelated incoming address as me',async()=>{
+    const root=await insert({type:1,send_email:'admin@example.com',message_id:'<local@local>'});
+    await insert({account_id:3,send_email:'admin@example.com',message_id:root.message_id,name:'Alex',unread:0});
+    await insert({account_id:3,send_email:'admin@example.com',message_id:'<external@sender>',in_reply_to:root.message_id,name:'Other author',unread:1});
+    const [row]=(await list({allReceive:1})).threads;
+    expect(row.senders.map(({name,unread})=>[name,unread])).toEqual([['me',true],['Other author',false]]);
+  });
   it('keeps read state per sender and shares visible thread counts with saved replies',async()=>{
     const first=await insert({message_id:'<first@external.com>',name:'Taylor Ray',unread:1});
     const reply={in_reply_to:first.message_id};
