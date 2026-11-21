@@ -291,7 +291,10 @@ async function setDisplay(list, mode) {
   saving.value = true;
   error.value = "";
   try {
-    await labels.setDisplay(props.label.id, list, mode);
+    await labels.setDisplay(props.label.id, list, mode, () => {
+      const focused=document.activeElement;
+      return open.value && (focused===trigger.value || main.value?.contains(focused) || focused===document.body);
+    });
     open.value = false;
   } catch (e) {
     error.value = e.message || "Could not change label visibility.";
