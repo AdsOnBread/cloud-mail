@@ -1,7 +1,7 @@
 <template>
   <div
     class="conversation-row"
-    :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips }"
+    :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips, 'hover-actions': user.hoverActions }"
   >
     <label class="check-target" data-tip="Select">
       <input
@@ -71,9 +71,10 @@ import { Icon } from "@iconify/vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
 import {computed,ref} from "vue";
+import {useUserStore} from "@/store/user";
 import {useUiStore} from "@/store/ui";
 import FilePreview from "@/components/mail-attachments/preview.vue";
-const ui=useUiStore(),previewFile=ref(null);
+const ui=useUiStore(), user=useUserStore(),previewFile=ref(null);
 const props=defineProps({
   canStarDraft:Boolean,
   attachments:Array,
@@ -210,18 +211,27 @@ defineEmits(["select", "star", "open", "importance"]);
   align-items: center;
 }
 @media (min-width: 768px) {
+  .conversation-row { padding-inline: 11px 6px; }
+  .check-target,.row-star,.star-space,.row-importance { flex-basis: 30px; width: 30px; }
+  .conversation-open { gap: 0; padding-inline: 5px 10px; }
+  .participants { box-sizing: border-box; padding-inline-end: 32px; }
+  .summary { padding-inline-end: 10px; }
+  .row-actions :deep(.mail-icon) {
+    width: 40px;
+    height: min(40px,var(--mail-row-height,40px));
+  }
   /* Keep native tab order stable while focus moves from the row into its actions. */
   .row-actions {
     display:flex;
     position:absolute;
-    inset-inline-end:12px;
+    inset-inline-end:6px;
     opacity:0;
     pointer-events:none;
   }
   .with-files {box-sizing:border-box;height:calc(var(--mail-row-height,40px) + 32px);padding-bottom:32px}
   .with-files .paperclip {display:none}
-  .file-chips {position:absolute;left:calc(96px + clamp(140px, 16vw, 200px));right:14px;bottom:7px;display:flex;gap:6px;align-items:center;overflow:hidden}
-  .with-files:has(.row-importance) .file-chips {left:calc(124px + clamp(140px, 16vw, 200px))}
+  .file-chips {position:absolute;left:calc(76px + clamp(140px, 16vw, 200px));right:14px;bottom:7px;display:flex;gap:6px;align-items:center;overflow:hidden}
+  .with-files:has(.row-importance) .file-chips {left:calc(106px + clamp(140px, 16vw, 200px))}
   .file-chip {display:inline-flex;align-items:center;gap:6px;border:1px solid var(--secondary-border-color,var(--light-border-color));border-radius:16px;min-width:0;max-width:170px;padding:0 10px;height:26px;color:var(--regular-text-color);font:500 12px/24px Arial,sans-serif;cursor:pointer}
   .file-chip:hover,.file-chip:focus-visible {background:var(--mail-hover)}
   .file-chip:focus-visible {outline-offset:-2px}
@@ -248,10 +258,10 @@ defineEmits(["select", "star", "open", "importance"]);
     z-index: 1;
     box-shadow: var(--mail-row-shadow);
   }
-  .conversation-row:hover .row-actions {
+  .conversation-row.hover-actions:hover .row-actions {
     position:static;opacity:1;pointer-events:auto;
   }
-  .conversation-row:hover:has(.row-actions) .row-date {
+  .conversation-row.hover-actions:hover:has(.row-actions) .row-date {
     display: none;
   }
   .conversation-row:hover .row-star {

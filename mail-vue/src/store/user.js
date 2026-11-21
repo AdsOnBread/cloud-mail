@@ -10,6 +10,7 @@ export const useUserStore = defineStore('user', {
     }),
     getters: {
         undoSeconds: state => state.user.generalSettings?.undoSeconds ?? useUiStore().composeModes[state.user.email]?.undoSeconds ?? 5,
+        hoverActions: state => state.user.generalSettings?.hoverActions !== false,
         defaultReplyAll: state => state.user.generalSettings?.replyAll === true,
     },
     actions: {

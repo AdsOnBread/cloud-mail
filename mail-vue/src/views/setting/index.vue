@@ -17,6 +17,16 @@
           </label>
         </div>
       </div>
+      <div class="setting-row">
+        <strong id="hover-actions">Hover actions:</strong>
+        <div role="radiogroup" aria-labelledby="hover-actions">
+          <label class="radio-choice"><input v-model="form.hoverActions" type="radio" name="hover-actions" :value="true"
+            :disabled="!ready || busy" aria-describedby="hover-description">Enable hover actions</label>
+          <span id="hover-description">Quickly gain access to archive, delete, mark as read, and snooze controls on hover.</span>
+          <label class="radio-choice"><input v-model="form.hoverActions" type="radio" name="hover-actions" :value="false"
+            :disabled="!ready || busy">Disable hover actions</label>
+        </div>
+      </div>
       <div ref="keyboardRow" class="setting-row">
         <strong id="keyboard-shortcuts">Keyboard shortcuts:</strong>
         <div role="radiogroup" aria-labelledby="keyboard-shortcuts">
@@ -58,12 +68,12 @@ import SignatureFields from '@/components/mail-signatures/fields.vue';
 import {useMailSignatures} from '@/store/mail-signatures';
 
 const user=useUserStore(), account=useAccountStore(), router=useRouter();
-const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false});
+const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false,hoverActions:true});
 const baseline=ref(null), busy=ref(false), conflict=ref(''), error=ref(''), preferencesError=ref('');
 const signatures=useMailSignatures(), signatureForm=ref(null), signatureRevision=ref(0), savedSignatures=ref(''), signatureError=ref('');
 const keyboardRow=ref(null);
 const ready=computed(()=>Boolean(baseline.value));
-const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts));
+const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts || baseline.value.hoverActions!==form.hoverActions));
 const signaturesChanged=computed(()=>signatureForm.value && JSON.stringify(signatureForm.value)!==savedSignatures.value);
 const dirty=computed(()=>preferencesChanged.value || signaturesChanged.value);
 let generation=0;
@@ -75,8 +85,8 @@ function session() {
 function accept(saved) {
   if ((user.user.generalSettings?.version ?? 0) > saved.version) saved=user.user.generalSettings;
   user.user.generalSettings=saved;
-  baseline.value={...saved,undoSeconds:user.undoSeconds,keyboardShortcuts:saved.keyboardShortcuts===true};
-  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts});
+  baseline.value={...saved,undoSeconds:user.undoSeconds,keyboardShortcuts:saved.keyboardShortcuts===true,hoverActions:saved.hoverActions!==false};
+  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions});
 }
 function acceptSignatures(data) {
   signatureRevision.value++;
@@ -138,7 +148,7 @@ async function save() {
   } finally { if (request.current()) busy.value=false; }
 }
 function cancel() {
-  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts});
+  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions});
   if (savedSignatures.value) acceptSignatures(JSON.parse(savedSignatures.value));
   router.push('/inbox');
 }
@@ -182,6 +192,8 @@ form :is(select,button){border:revert;background:revert;padding:revert}
 html.dark form{color-scheme:dark}
 #undo-send-period{font:inherit;width:35px;height:22px;margin-inline:4px 0}
 .radio-choice{display:flex;align-items:center;gap:5px;width:fit-content;cursor:pointer}
+#hover-description { margin-inline-start: 4px; }
+.radio-choice:has(+ #hover-description) { display: inline-flex; }
 .radio-choice input{margin:0;accent-color:var(--el-color-primary)}
 footer{display:flex;justify-content:center;gap:6px;padding:14px 0}
 button{font:inherit;color:inherit;cursor:pointer}button:disabled{color:GrayText;cursor:default}

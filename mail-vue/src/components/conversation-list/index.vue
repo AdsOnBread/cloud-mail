@@ -170,7 +170,7 @@
     <details v-if="scheduledMatches.length" class="marked-scheduled" open>
       <summary>Scheduled ({{ scheduledMatches.length }})</summary>
       <div class="scheduled-links">
-        <div v-for="message in scheduledMatches" :key="message.draftId" class="filed-queue-row" :class="{ 'inbox-queue-row':folder==='inbox' }">
+        <div v-for="message in scheduledMatches" :key="message.draftId" class="filed-queue-row" :class="{ 'inbox-queue-row':folder==='inbox', 'hover-actions':owner.hoverActions }">
           <RouterLink :to="{name:'scheduled', query:{message:message.draftId,from:folder,labelId:folder==='label' ? labelId : undefined}}"
             :aria-description="'Send scheduled for '+formatDetailDate(message.sendAt*1000)">
             <Icon icon="material-symbols:schedule-send-outline" width="18" />
@@ -756,8 +756,8 @@ defineExpose({ refresh });
 .inbox-queue-row:focus-within .queue-archive {opacity:1;pointer-events:auto;}
 .inbox-queue-row:focus-within:has(.queue-archive) time {visibility:hidden;min-width:32px;}
 @media(hover:hover) {
-  .inbox-queue-row:hover .queue-archive {opacity:1;pointer-events:auto;}
-  .inbox-queue-row:hover:has(.queue-archive) time {visibility:hidden;min-width:32px;}
+  .inbox-queue-row.hover-actions:hover .queue-archive {opacity:1;pointer-events:auto;}
+  .inbox-queue-row.hover-actions:hover:has(.queue-archive) time {visibility:hidden;min-width:32px;}
 }
 @media(hover:none) {
   .scheduled-links .queue-archive {position:static;transform:none;opacity:1;pointer-events:auto;flex:none;}
