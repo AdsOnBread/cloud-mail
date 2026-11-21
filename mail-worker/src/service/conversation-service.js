@@ -1,3 +1,4 @@
+import { mailboxAttachments } from './mailbox-attachments';
 import { addMailFilters } from '../service/mail-search-filters';
 import { importanceFields, importanceJoin, importanceReason, setImportance } from "./mail-importance";
 import { checkCategory, categoryQuery, fileCategory } from './inbox-categories';
@@ -150,11 +151,12 @@ export async function conversationList(c, p, userId) {
 		db.prepare('SELECT MIN(wake_at) wake FROM conversation_filing WHERE user_id=? AND wake_at>unixepoch()').bind(userId),
 	]);
 	const rows = page.results.slice(0, limit);
+  const files = await mailboxAttachments(db, userId, rows, 'threads');
   const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
 			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, importance_change, replied, ...summary } = row;
-			return { ...camel(summary), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
+			return { ...camel(summary), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
 		unreadThreads: totals?.unread_threads||0,
     ...(category?{categoryUnread:Object.fromEntries(count.results.map(row=>[row.category,row.unread_threads]))}:{}),

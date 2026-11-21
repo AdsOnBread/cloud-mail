@@ -1,3 +1,4 @@
+import { mailboxAttachments } from '../service/mailbox-attachments';
 import { addMailFilters } from '../service/mail-search-filters';
 import { ensureThreads } from '../mobile/threads';
 import { filedConversations, inboxMember } from '../service/conversation-filing';
@@ -31,7 +32,9 @@ export async function list(c,userId,p={}) {
     FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
     ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}
     WHERE ${filters.join(' AND ')} ORDER BY e.email_id DESC LIMIT ?`).bind(...args,limit+1).all()).results;
-  return {messages:rows.slice(0,limit).map(camel),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
+  const page=rows.slice(0,limit);
+  const files=folder==='trash' ? await mailboxAttachments(c.env.db,userId,page,'trash') : new Map();
+  return {messages:page.map(row=>({...camel(row),...files.get(row.email_id)})),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
 }
 export async function detail(c,userId,emailId) {
   const row=await c.env.db.prepare(`SELECT e.*,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id

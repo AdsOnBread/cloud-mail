@@ -1,3 +1,5 @@
+import { attachedFile } from "./mailbox-attachments";
+
 // Both the conversation and message lists use "e" for the owned, visible email.
 export function addMailFilters(params, filters, args) {
 	for (const [field, columns] of Object.entries({
@@ -12,7 +14,7 @@ export function addMailFilters(params, filters, args) {
 		args.push(...columns.map(() => value.slice(0, 200)));
 	}
 	if (String(params.hasAttachment) === '1')
-		filters.push('EXISTS (SELECT 1 FROM attachments att WHERE att.user_id=e.user_id AND att.email_id=e.email_id)');
+		filters.push(`EXISTS (SELECT 1 FROM attachments att WHERE ${attachedFile})`);
 	if (String(params.isUnread) === '1') filters.push('e.type=0 AND e.unread=0');
 	const days = Number(params.days);
 	if ([1, 7, 30, 365].includes(days)) {

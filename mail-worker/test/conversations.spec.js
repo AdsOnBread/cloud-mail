@@ -80,7 +80,25 @@ describe('Web conversations', () => {
 		expect(opened.messages.map((m) => m.emailId)).toEqual([root.email_id, sent.email_id]);
 		expect((await mobile.threads(env.db, 1, { folder: 'inbox' })).threads[0].threadId).toBe(opened.threadId);
 	});
-	it.each(['name', 'send_email', 'recipient', 'cc', 'subject', 'text', 'content'])('matches literal substring in %s', async (field) => {
+	it('lists only downloadable attachments on this page, including files from earlier thread members', async () => {
+    const root=await insert({message_id:'<files@example.com>'});
+    await insert({in_reply_to:'<files@example.com>'});
+    const other=await insert({subject:'Inline only'});
+    const add=(id,name,type=0,cid=null,owner=1,account=1)=>env.db.prepare(
+      'INSERT INTO attachments(email_id,user_id,account_id,key,filename,type,content_id) VALUES(?,?,?,?,?,?,?)'
+    ).bind(id,owner,account,'attachments/'+name,name,type,cid).run();
+    for (const name of ['a.txt','b.txt','c.txt','d.txt']) await add(root.email_id,name);
+    await add(other.email_id,'inline.png',1,'embedded');
+    await add(other.email_id,'foreign.txt',0,null,2,2);
+    const page=await list({hasAttachment:1});
+    expect(page.total).toBe(1);
+    expect(page.threads[0].attachmentCount).toBe(4);
+    expect(page.threads[0].attachments.map(file=>file.filename)).toEqual(['a.txt','b.txt','c.txt']);
+    await cloudMail.trash(context(),1,[root.email_id]);
+    expect((await list()).threads.every(row=>!row.attachmentCount)).toBe(true);
+    expect((await cloudMail.list(context(),1,{folder:'trash',hasAttachment:1})).messages[0].attachmentCount).toBe(4);
+  });
+  it.each(['name', 'send_email', 'recipient', 'cc', 'subject', 'text', 'content'])('matches literal substring in %s', async (field) => {
 		const root = await insert({ [field]: 'a%b_c\\d' });
 		await insert({ subject: 'No match' });
 		expect((await list({ q: '%b_c\\' })).threads.map((t) => t.lastEmailId)).toEqual([root.email_id]);
