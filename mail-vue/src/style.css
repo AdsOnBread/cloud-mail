@@ -190,6 +190,7 @@ html:not(.dark) {
     --mail-read: #f5f6ef;
     --send-blue: #0b57d0;
     --send-ink: #fff;
+    --send-outline: #747775;
     --scheduled-notice: rgb(241 243 244 / 87%);
     --scheduled-date: #ad5707;
     --scheduled-date-selected: #9c4c05;
@@ -220,6 +221,7 @@ html:not(.dark) {
 html.dark {
     --send-blue: #a8c7fa;
     --send-ink: #062e6f;
+    --send-outline: #8e918f;
     --mail-canvas: #1b1b1f;
     --mail-surface: #242529;
     --mail-search: #2d2f35;

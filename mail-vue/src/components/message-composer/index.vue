@@ -258,7 +258,7 @@
         </div>
         <p v-if="sendError" class="send-error" role="alert">{{ sendError }}</p>
         <div class="compose-footer" data-tip-placement="top">
-          <SendControls :busy="sending || attaching || preparing" :sending="sending"
+          <SendControls :inline="inline" :busy="sending || attaching || preparing" :sending="sending"
             :active="show && !minimized && !dockHidden" :tip="shortcutHint('Send','Enter')" :shortcut="primaryKey+'+Enter'"
             @send="trigger => sendEmail(null,trigger)" @schedule="openSchedule"/>
           <button

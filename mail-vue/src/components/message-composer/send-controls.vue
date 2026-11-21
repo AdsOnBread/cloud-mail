@@ -1,5 +1,5 @@
 <template>
-  <div ref="group" class="split-send">
+  <div ref="group" class="split-send" :class="{outlined:inline}">
     <button type="button" class="send-primary" :disabled="busy" :aria-keyshortcuts="shortcut"
       :data-tip="tip" @click="$emit('send',$event.currentTarget)">
       <span v-if="busy" class="send-spinner" aria-hidden="true"/>{{ sending ? "Sending…" : "Send" }}
@@ -26,7 +26,7 @@
 <script setup>
 import {nextTick, ref, useId, watch} from "vue";
 import {Icon} from "@iconify/vue";
-const props = defineProps({busy:Boolean, sending:Boolean, active:Boolean, tip:String, shortcut:String});
+const props = defineProps({inline:Boolean, busy:Boolean, sending:Boolean, active:Boolean, tip:String, shortcut:String});
 const emit = defineEmits(["send","schedule"]);
 const group=ref(null), trigger=ref(null), menu=ref(null), item=ref(null);
 const id=useId(), open=ref(false), position=ref({});
@@ -113,6 +113,12 @@ watch(open, async (visible,_,cleanup) => {
 .send-primary:focus-visible,.send-options:focus-visible,.send-options[aria-expanded=true] {
   background:color-mix(in srgb,var(--send-blue),var(--send-ink) 24%);
 }
+.outlined {border-radius:18px;box-shadow:inset 0 0 0 1px var(--send-outline);}
+.outlined .send-primary,.outlined .send-options {background:transparent;color:var(--regular-text-color);}
+.outlined .send-primary {min-width:80px;padding:0 16px;}
+.outlined .send-options {width:32px;border:0;box-shadow:inset 0 0 0 1px var(--send-outline);}
+.outlined button:hover {background:color-mix(in srgb,var(--regular-text-color) 8%,transparent);}
+.outlined button:focus-visible,.outlined button[aria-expanded=true] {background:color-mix(in srgb,var(--regular-text-color) 14%,transparent);}
 .send-primary:disabled,.send-options:disabled {opacity:.65; cursor:default;}
 .send-spinner {width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:send-spin .7s linear infinite;}
 @keyframes send-spin {to{transform:rotate(1turn);}}
@@ -125,5 +131,5 @@ watch(open, async (visible,_,cleanup) => {
 .send-menu button {display:flex;align-items:center;gap:12px;width:100%;height:32px;padding:0 16px;border:0;
   background:transparent;color:inherit;cursor:pointer;font:400 14px/20px Arial,sans-serif;text-align:left;}
 .send-menu button:hover,.send-menu button:focus {background:#eee;outline:0;}
-:global(html.dark) .send-menu button:hover,:global(html.dark) .send-menu button:focus {background:#393a3e;}
+html.dark .send-menu button:hover,html.dark .send-menu button:focus {background:#393a3e;}
 </style>
