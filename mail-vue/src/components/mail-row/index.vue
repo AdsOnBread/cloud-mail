@@ -183,7 +183,7 @@ defineEmits(["select", "star", "open", "importance"]);
 }
 .sender-names { display: inline-flex; min-width: 0; }
 .earlier-senders,.last-sender { overflow: hidden; text-overflow: ellipsis; white-space: pre; }
-.earlier-senders + .last-sender { flex-shrink: 0; max-width: 65%; }
+.earlier-senders { flex-shrink: 3; }
 .sender-names,.draft-comma { font-weight: 400; }
 .sender-names .unread-sender { font-weight: 700; }
 .draft-comma { color: var(--el-text-color-primary); }
