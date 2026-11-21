@@ -20,6 +20,7 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
+      <MovePicker :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
       <LabelPicker :rows="[{lastEmailId:Number(route.query.emailId),labelIds}]" :disabled="busy || !messages.length" @apply="ops=>mutate('label',ops)" />
       <button
         v-if="threadDrafts.length"
@@ -131,6 +132,7 @@ import { useAccountStore } from "@/store/account";
 import { userDraftStore } from "@/store/draft";
 import { draftKey } from "@/utils/draft-summary";
 import { mailboxDate } from "@/utils/day";
+import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useUiStore } from "@/store/ui";
@@ -407,7 +409,7 @@ async function mutate(action, extra = {}) {
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;
-    if (["delete","archive","inbox"].includes(action)) back();
+    if (["delete","archive","inbox","move"].includes(action)) back();
     else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
     else {
       unreadCount.value=extra.unread===0?incoming.value:0;

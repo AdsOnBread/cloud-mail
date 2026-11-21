@@ -117,7 +117,8 @@
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
-        <LabelPicker :rows="rows.filter(row=>selected.includes(row.lastEmailId))" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
+        <MovePicker :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
+          <LabelPicker :rows="rows.filter(row=>selected.includes(row.lastEmailId))" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
       </template>
       <span class="total">{{
         total && rows.length
@@ -326,6 +327,7 @@
   </section>
 </template>
 <script setup>
+import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 const labels = useMailLabels();

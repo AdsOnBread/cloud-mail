@@ -133,6 +133,9 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
    if(['archive','snooze','inbox'].includes(operation))for(const id of ids)filing.set(id,operation==='archive'?null:operation==='inbox'?0:p.wakeAt);
+   else if(operation==='move')for(const id of ids){
+     const set=membership.get(id)||new Set();set.delete(p.fromLabelId);if(p.labelId)set.add(p.labelId);membership.set(id,set);filing.set(id,p.labelId?null:0);
+   }
    else if(operation==='label')for(const id of ids){
      const set=membership.get(id)||new Set();for(const lid of p.add)set.add(lid);for(const lid of p.remove)set.delete(lid);membership.set(id,set);
    }

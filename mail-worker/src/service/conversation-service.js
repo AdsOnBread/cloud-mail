@@ -229,12 +229,28 @@ export async function conversationAction(c, p, userId, action) {
 	}
 	if (action === 'label') {
     await changeLabels(db,userId,ids,p.add,p.remove);
-  } else if (['archive', 'snooze', 'inbox'].includes(action)) {
+  } else if (['archive', 'snooze', 'inbox','move'].includes(action)) {
 		if (action === 'snooze' && (!Number.isSafeInteger(p.wakeAt) || p.wakeAt <= Math.floor(Date.now() / 1000) || p.wakeAt > 253402300799))
 			throw new BizError('Choose a future snooze time.', 400);
-		const wakeAt = action === 'archive' ? null : action === 'inbox' ? 0 : p.wakeAt;
+		const wakeAt = action === 'move' ? (p.labelId ? null : 0) : action === 'archive' ? null : action === 'inbox' ? 0 : p.wakeAt;
 		// File exactly the members that were resolved, including older anchors that may survive a deletion.
 		const statements = [];
+    if(action==='move'){
+      const source=p.fromLabelId??0,destination=p.labelId;
+      if(![source,destination].every(id=>Number.isSafeInteger(id) && id>=0) || source>0 && destination===source)
+        throw new BizError('Choose a different destination.',400);
+      const selected=[...new Set([source,destination].filter(Boolean))];
+      if(selected.length){
+        const {results}=await db.prepare(`SELECT label_id FROM mailbox_labels WHERE user_id=? AND label_id IN (${selected.map(()=>'?')})`).bind(userId,...selected).all();
+        if(results.length!==selected.length)throw new BizError('Label not found.',404);
+      }
+      for(let i=0;i<ids.length;i+=30){
+        const members=ids.slice(i,i+30);
+        if(destination)statements.push(db.prepare(`INSERT INTO mailbox_label_members(user_id,label_id,email_id) VALUES ${members.map(()=>'(?,?,?)')} ON CONFLICT(user_id,label_id,email_id) DO NOTHING`).bind(...members.flatMap(id=>[userId,destination,id])));
+        if(source)statements.push(db.prepare(`DELETE FROM mailbox_label_members WHERE user_id=? AND label_id=? AND email_id IN (${members.map(()=>'?')})`).bind(userId,source,...members));
+      }
+    }
+
 		for (let i = 0; i < ids.length; i += 30) {
 			const chunk = ids.slice(i, i + 30);
 			statements.push(

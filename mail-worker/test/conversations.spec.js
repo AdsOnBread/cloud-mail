@@ -303,3 +303,18 @@ it('filters before pagination and retains full thread state when viewing a singl
  expect(trash.messages.map(row=>row.emailId)).toEqual([first.email_id]);
  expect((await cloudMail.list(context(),1,{folder:'trash',hasAttachment:'1'})).messages).toEqual([]);
 });
+
+it('moves between labels and Inbox atomically while retaining other labels',async()=>{
+  const {saveLabel}=await import('../src/service/mailbox-labels');
+  const row=await insert(),id=row.email_id;
+  const src=await saveLabel(env.db,1,'Source'),dest=await saveLabel(env.db,1,'Destination'),other=await saveLabel(env.db,2,'Private');
+  await action('label',[id],{add:[src.id],remove:[]});
+  await expect(action('move',[id],{labelId:other.id})).rejects.toMatchObject({code:404});
+  expect((await list()).total).toBe(1);
+  await action('move',[id],{labelId:dest.id});
+  expect((await list()).total).toBe(0);
+  expect((await messages(id)).labelIds.sort()).toEqual([src.id,dest.id].sort());
+  await action('move',[id],{fromLabelId:dest.id,labelId:0});
+  expect((await list()).total).toBe(1);
+  expect((await messages(id)).labelIds).toEqual([src.id]);
+});
