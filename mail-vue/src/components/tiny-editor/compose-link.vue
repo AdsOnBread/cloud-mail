@@ -258,29 +258,25 @@ function remove() {
     if (anchor?.isConnected) ed.dom.remove(anchor, true);
   });
 }
-// Native movement happens after keydown and includes platform editing commands
-// such as macOS Control+E. Ignore shortcuts that leave the selection untouched.
+// The editor handles Select All itself. macOS also has native Control-key
+// equivalents of the arrows and line boundaries, including in Safari.
+function movesSelection(event) {
+  if (event.isComposing) return false;
+  if (/^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(event.key)) return true;
+  const key = event.key.toLowerCase();
+  return ((event.ctrlKey || event.metaKey) && key === "a") ||
+    (event.ctrlKey && !event.altKey && !event.metaKey && /^[befnp]$/.test(key));
+}
 watch(() => props.editor, (ed, _, cleanup) => {
   if (!ed) return;
-  let before;
-  const endpoints = () => {
-    const selection = ed.getDoc().getSelection();
-    return [selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset];
+  let moving = false;
+  const down = event => { moving = movesSelection(event); };
+  const moved = () => { if (moving) followCaret(); };
+  const stop = () => { moving = false; };
+  const up = event => {
+    if (movesSelection(event)) followCaret();
+    stop();
   };
-  const down = event => {
-    before = !event.defaultPrevented && !event.isComposing && !["Tab","Escape"].includes(event.key)
-      ? endpoints() : null;
-  };
-  const moved = () => {
-    if (!before) return;
-    const after = endpoints();
-    if (after.some((value, i) => value !== before[i])) {
-      before = after;
-      followCaret();
-    }
-  };
-  const stop = () => { before = null; };
-  const up = () => { moved(); stop(); };
   const input = event => {
     if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|insertFromPaste|delete)/.test(event.inputType)) followCaret();
   };
