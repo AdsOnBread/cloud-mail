@@ -32,7 +32,7 @@ const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
   textField = ref(null);
-let bookmark, anchor, originalText, owner, range, resize, fragment = 0;
+let bookmark, anchor, originalText, owner, range, resize, fragment = null;
 const safeUrl = computed(() => {
   const raw = panel.value?.url.trim();
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
@@ -65,8 +65,9 @@ function position() {
   if (!frame || !parent) return;
   const bounds = parent.getBoundingClientRect();
   const frameRect = frame.getBoundingClientRect();
-  const lines = (anchor || range).getClientRects();
-  const line = lines[Math.min(fragment, lines.length - 1)] || owner.selection.getNode().getBoundingClientRect();
+  const lines = Array.from((fragment == null ? range : anchor).getClientRects());
+  const line = (fragment == null ? lines.find(rect => rect.bottom > 0 && rect.top < frame.clientHeight)
+    : lines[Math.min(fragment, lines.length - 1)]) || lines[0] || owner.selection.getNode().getBoundingClientRect();
   if (panel.value.preview && (line.bottom <= 0 || line.top >= frame.clientHeight)) {
     close(box.value.contains(document.activeElement));
     return;
@@ -118,7 +119,7 @@ async function open(existing = null, preview = false, pointer = null) {
   anchor = existing || ed.dom.getParent(ed.selection.getNode(), "a[href]");
   range = ed.selection.getRng().cloneRange();
   fragment = anchor && pointer ? Math.max(0, Array.from(anchor.getClientRects()).findIndex(rect =>
-    pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : 0;
+    pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : null;
   bookmark = ed.selection.getBookmark(2, true);
   originalText = anchor?.textContent || ed.selection.getContent({format:"text"});
   panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview};

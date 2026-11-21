@@ -32,6 +32,9 @@ importers:
       dexie:
         specifier: ^4.0.11
         version: 4.2.0
+      diff:
+        specifier: 8.0.4
+        version: 8.0.4
       echarts:
         specifier: ^5.6.0
         version: 5.6.0
@@ -1616,6 +1619,10 @@ packages:
 
   dexie@4.2.0:
     resolution: {integrity: sha512-OSeyyWOUetDy9oFWeddJgi83OnRA3hSFh3RrbltmPgqHszE9f24eUCVLI4mPg0ifsWk0lQTdnS+jyGNrPMvhDA==}
+
+  diff@8.0.4:
+    resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
+    engines: {node: '>=0.3.1'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -4547,6 +4554,8 @@ snapshots:
     optional: true
 
   dexie@4.2.0: {}
+
+  diff@8.0.4: {}
 
   dunder-proto@1.0.1:
     dependencies:

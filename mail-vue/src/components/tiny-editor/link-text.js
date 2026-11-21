@@ -1,35 +1,69 @@
-// Preserve formatting on the unchanged parts of a link when its label is edited.
+import {diffChars, diffWordsWithSpace} from "diff";
+
+// Keep the existing inline elements, including styles on text between separate edits.
 export function renameLink(link, label) {
   const original = link.textContent;
   if (original === label) return;
-  if (!original || link.querySelector("img,br,[contenteditable=false]")) {
+  const walker = link.ownerDocument.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+  const runs = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.length) runs.push(node);
+  }
+  if (!runs.length || link.querySelector("img,br,[contenteditable=false]")) {
     link.textContent = label;
     return;
   }
-
-  let start = 0;
-  while (start < original.length && original[start] === label[start]) start++;
-  let end = original.length;
-  let newEnd = label.length;
-  while (end > start && newEnd > start && original[end - 1] === label[newEnd - 1]) {
-    end--;
-    newEnd--;
+  if (runs.length === 1) {
+    runs[0].data = label;
+    return;
   }
 
-  const walker = link.ownerDocument.createTreeWalker(link, NodeFilter.SHOW_TEXT);
-  const replacement = label.slice(start, newEnd);
-  let offset = 0, inserted = false;
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.data;
-    const next = offset + text.length;
-    if (text.length && next >= start && offset <= end) {
-      const prefix = text.slice(0, Math.max(0, start - offset));
-      const suffix = text.slice(Math.max(0, end - offset));
-      // At a formatting boundary, replacement inherits the first replaced character.
-      const insertHere = !inserted && (next > start || start === end);
-      node.data = prefix + (insertHere ? replacement : "") + suffix;
-      if (insertHere) inserted = true;
+  const options = {timeout: 35, maxEditLength: 1024};
+  const deadline = Date.now() + options.timeout;
+  const changes = diffWordsWithSpace(original, label, options);
+  if (!changes) {
+    // Bound work on very large pasted replacements and retain each run's formatting.
+    let offset = 0;
+    runs.forEach((node, i) => {
+      const end = i === runs.length - 1 ? label.length : offset + node.length;
+      node.data = label.slice(offset, end);
+      offset = end;
+    });
+    return;
+  }
+  // Refine word edits so formatting inside a partially changed word also survives.
+  const pieces = [];
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i], next = changes[i + 1];
+    if (change.removed && next?.added && !/\s/.test(change.value + next.value)) {
+      const timeout = deadline - Date.now();
+      const letters = timeout > 0 && diffChars(change.value, next.value, {...options, timeout});
+      pieces.push(...(letters || [change, next]));
+      i++;
+    } else pieces.push(change);
+  }
+  const output = runs.map(() => "");
+  let index = 0, offset = 0, firstRemoved = null;
+  for (const change of pieces) {
+    if (change.added) {
+      const target = firstRemoved ?? (offset ? index : Math.max(0, index - 1));
+      output[target] += change.value;
+      firstRemoved = null;
+      continue;
     }
-    offset = next;
+    firstRemoved = change.removed ? index : null;
+    let remaining = change.value.length;
+    while (remaining > 0) {
+      const text = runs[index].data;
+      const take = Math.min(remaining, text.length - offset);
+      if (!change.removed) output[index] += text.slice(offset, offset + take);
+      remaining -= take;
+      offset += take;
+      if (offset === text.length) {
+        index++;
+        offset = 0;
+      }
+    }
   }
+  runs.forEach((node, i) => { node.data = output[i]; });
 }

@@ -6,6 +6,8 @@ it.each([
   ["<b>First</b> <i>Second</i>", "First third", "<b>First</b> <i>third</i>"],
   ["<strong>Notes</strong>", "Notes from <May>", "<strong>Notes from &lt;May&gt;</strong>"],
   ["<b>Some</b> <i>notes</i>", "Review", "<b>Review</b><i></i>"],
+  ["<b>First</b> <i>middle</i> <u>last</u>", "first middle LAST", "<b>first</b> <i>middle</i> <u>LAST</u>"],
+  ["<i>be</i><b>gin</b>", "began", "<i>be</i><b>gan</b>"],
   ['<img alt="Map">', "Map", "Map"],
 ])("retains formatted text when renaming %s", (html, label, expected) => {
   const link = document.createElement("a");
