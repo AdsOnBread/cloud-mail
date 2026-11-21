@@ -2,7 +2,7 @@
   <div ref="root" class="parent-picker" @focusout="leave">
     <el-popover :visible="open" :trigger="[]" :teleported="false" :persistent="false"
       :width="width" :offset="0" :show-arrow="false" placement="bottom-start"
-      popper-class="label-parent-options" :popper-style="{padding:0}">
+      @after-enter="focusOpenedList" popper-class="label-parent-options" :popper-style="{padding:0}">
       <template #reference>
         <span class="parent-anchor">
           <button ref="trigger" type="button" role="combobox" aria-label="Nest label under:" aria-haspopup="listbox"
@@ -30,18 +30,25 @@ const emit = defineEmits(['update:modelValue']);
 const root = ref(), trigger = ref(), list = ref(), open = ref(false);
 const { width } = useElementSize(root);
 const listId = useId();
-let prefix = '', lastTyped = 0;
+let prefix = '', lastTyped = 0, requestedRow = 0;
 
 function close() { open.value = false; prefix = ''; }
 function leave(event) {
   if (event.relatedTarget && !root.value.contains(event.relatedTarget)) close();
 }
 onClickOutside(root, close);
-function focusRow(index) { list.value?.children[index]?.focus(); }
+function focusRow(index) {
+  requestedRow = index;
+  list.value?.children[index]?.focus();
+}
+function focusOpenedList() {
+  if (open.value && document.activeElement === trigger.value) focusRow(requestedRow);
+}
 async function show(index = props.labels.findIndex(label => label.id === props.modelValue) + 1) {
+  requestedRow = index;
   open.value = true;
   await nextTick();
-  if (open.value) focusRow(index);
+  focusOpenedList();
 }
 function choose(label) {
   if (label) emit('update:modelValue', label.id);
@@ -53,7 +60,7 @@ function keydown(event) {
   if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
   const rows = props.labels;
   const index = open.value && list.value
-    ? Array.from(list.value.children).indexOf(event.target)
+    ? (event.target === trigger.value ? requestedRow : Array.from(list.value.children).indexOf(event.target))
     : rows.findIndex(label => label.id === props.modelValue) + 1;
   if (key === 'Tab') {
     if (open.value) { close(); trigger.value?.focus(); }
