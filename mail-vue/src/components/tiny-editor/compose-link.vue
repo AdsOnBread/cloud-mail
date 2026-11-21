@@ -1,7 +1,7 @@
 <template>
   <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview}" role="dialog"
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
-    @keydown.esc.stop.prevent="close(true)" @pointerdown.stop>
+    @keydown.esc.stop.prevent="close(true)" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
       <span>Go to link:</span>
       <a v-if="safeUrl" :href="safeUrl" target="_blank" rel="noopener noreferrer">{{ panel.url }}</a>
@@ -27,11 +27,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { Icon } from "@iconify/vue";
+import { renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
   textField = ref(null);
-let bookmark, anchor, originalText, owner, range, resize;
+let bookmark, anchor, originalText, owner, range, resize, fragment = 0;
 const safeUrl = computed(() => {
   const raw = panel.value?.url.trim();
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
@@ -64,7 +65,12 @@ function position() {
   if (!frame || !parent) return;
   const bounds = parent.getBoundingClientRect();
   const frameRect = frame.getBoundingClientRect();
-  const line = (anchor || range)?.getClientRects()[0] || owner.getBody().getBoundingClientRect();
+  const lines = (anchor || range).getClientRects();
+  const line = lines[Math.min(fragment, lines.length - 1)] || owner.selection.getNode().getBoundingClientRect();
+  if (panel.value.preview && (line.bottom <= 0 || line.top >= frame.clientHeight)) {
+    close(box.value.contains(document.activeElement));
+    return;
+  }
   const edge = 3;
   const x = frameRect.left - bounds.left + frame.clientLeft + line.left;
   const top = frameRect.top - bounds.top + frame.clientTop + line.top;
@@ -85,6 +91,9 @@ function close(focus = false) {
   if (focus && owner === props.editor && !owner.removed) owner.focus();
   anchor = bookmark = range = owner = resize = null;
 }
+function leaveCard(event) {
+  if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) close();
+}
 function insideEditor() {
   close(false);
 }
@@ -101,23 +110,27 @@ function editorKey(event) {
   }
   close(false);
 }
-async function open(existing = null, preview = false) {
+async function open(existing = null, preview = false, pointer = null) {
   close(false);
   const ed = props.editor;
   if (!ed?.initialized || ed.removed) return;
   owner = ed;
   anchor = existing || ed.dom.getParent(ed.selection.getNode(), "a[href]");
   range = ed.selection.getRng().cloneRange();
+  fragment = anchor && pointer ? Math.max(0, Array.from(anchor.getClientRects()).findIndex(rect =>
+    pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : 0;
   bookmark = ed.selection.getBookmark(2, true);
   originalText = anchor?.textContent || ed.selection.getContent({format:"text"});
   panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview};
+  const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown", insideEditor);
   ed.on("keydown", editorKey, true);
   ed.getWin().addEventListener("scroll", position, {passive:true});
   await nextTick();
-  if (!box.value || owner !== ed) return;
+  if (!box.value || panel.value !== opened) return;
   position();
+  if (!box.value || panel.value !== opened) return;
   resize = new ResizeObserver(position);
   resize.observe(box.value);
   resize.observe(box.value.parentElement);
@@ -150,7 +163,7 @@ function apply() {
   change((ed) => {
     if (anchor?.isConnected) {
       ed.dom.setAttrib(anchor, "href", href);
-      if (text !== originalText) anchor.textContent = text;
+      if (text !== originalText) renameLink(anchor, text);
     } else if (!ed.selection.isCollapsed() && text === originalText) {
       ed.execCommand("mceInsertLink", false, { href });
     } else {
@@ -191,9 +204,9 @@ defineExpose({ open, close });
   box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
   font:14px/20px Arial,sans-serif;
 }
-form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; }
+form { display:grid; grid-template-columns:minmax(0,1fr) 68px; align-items:center; gap:8px; }
 label {
-  display:flex; align-items:center; gap:12px; min-width:0; height:32px;
+  display:flex; align-items:center; gap:16px; min-width:0; height:32px;
   grid-column:1; padding:0 8px; box-sizing:border-box; cursor:text;
   border:1px solid var(--secondary-text-color); border-radius:4px;
 }

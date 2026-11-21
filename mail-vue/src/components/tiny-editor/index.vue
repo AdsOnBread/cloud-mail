@@ -204,7 +204,7 @@ function initEditor(initialContent) {
           const link = ed.dom.getParent(event.target, "a[href]");
           if (link && !event.altKey && !event.metaKey && !event.ctrlKey) {
             event.preventDefault();
-            linkPanel.value?.open(link, true);
+            linkPanel.value?.open(link, true, {x:event.clientX, y:event.clientY});
           }
         });
       }
