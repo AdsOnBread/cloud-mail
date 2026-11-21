@@ -482,7 +482,10 @@ async function reply(message, all, draft, forward=false) {
       try { await editor.openDraft(draft); }
       catch (e) { if (current()) closed(); throw e; }
     }
-    else await editor[forward ? "openForward" : all ? "openReplyAll" : "openReply"](message);
+    else if (await editor[forward ? "openForward" : all ? "openReplyAll" : "openReply"](message) === false) {
+      if (current()) closed();
+      return;
+    }
     await nextTick();
     if (!current()) return;
     activeDraft.value=draft?.draftId ?? null;

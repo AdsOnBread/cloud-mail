@@ -6,14 +6,43 @@ export function responseSubject(subject,mode) {
   return (reply ? /^re:/i : /^fwd:/i).test(subject) ? subject : (reply ? "Re: " : "Fwd: ")+subject;
 }
 
-export function changeQuotedBody(html,generated,plainText) {
+// Switching response type changes the generated attribution. Keep the body
+// already in the draft, including edits to the quoted message and its images.
+function plainHeaderLength(lines) {
+  const first=lines[0]?.textContent || "";
+  if (first.endsWith(" wrote:")) return 1;
+  if (!first.startsWith("---------- Forwarded message")) return 0;
+  let end=1;
+  while (end<lines.length && /^(From|Date|Subject|To|Cc):/.test(lines[end].textContent)) end++;
+  return end + (end<lines.length && !lines[end].textContent.trim() ? 1 : 0);
+}
+export function changeQuotedBody(html,generated,plainText,mode) {
   const previous=document.createElement("template"), next=document.createElement("template");
   previous.innerHTML=html;
+  const old=Array.from(previous.content.children).find(el=>el.classList.contains("cloudmail-reply-quote"));
+  if (!old) return html;
   next.innerHTML=plainText ? plainMarkup(generated).content : generated;
   const quote=next.content.querySelector(".cloudmail-reply-quote");
-  const old=Array.from(previous.content.children).find(el=>el.classList.contains("cloudmail-reply-quote"));
-  if (old) old.replaceWith(quote);
-  else previous.content.append(quote);
+  if (!quote) return html;
+  if (plainText) {
+    const original=Array.from(old.childNodes), updated=Array.from(quote.childNodes);
+    quote.replaceChildren(...updated.slice(0,plainHeaderLength(updated)),...original.slice(plainHeaderLength(original)));
+  } else if (mode==="forward") {
+    const attribution=old.firstElementChild;
+    if (attribution?.textContent.trimEnd().endsWith(" wrote:")) attribution.remove();
+    const body=Array.from(old.children).find(el=>el.tagName==="BLOCKQUOTE");
+    if (body) body.replaceWith(...body.childNodes);
+    const header=quote.firstElementChild;
+    quote.replaceChildren(header,document.createElement("br"),...old.childNodes);
+  } else {
+    const header=old.firstElementChild;
+    if (header?.textContent.startsWith("---------- Forwarded message")) {
+      if (header.nextSibling?.nodeName==="BR") header.nextSibling.remove();
+      header.remove();
+    }
+    quote.querySelector("blockquote").replaceChildren(...old.childNodes);
+  }
+  old.replaceWith(quote);
   return previous.innerHTML;
 }
 

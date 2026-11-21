@@ -506,7 +506,7 @@ const show = ref(false);
 const editingRecipients = ref(false);
 const loadedSource = shallowRef(null);
 const responseSource = computed(() => loadedSource.value || props.responseMessage || emailStore.detailMap?.[form.responseSourceId || form.emailId]);
-const responseHeader = computed(() => props.inline || (!form.detachedReply && form.responseView === "pop"));
+const responseHeader = computed(() => props.inline || (!form.detachedReply && !!form.sendType && form.responseView === "pop"));
 const responseMode = computed(() => form.sendType === "forward" ? "forward" : form.replyAll ? "all" : "reply");
 const addressExpanded = ref(true);
 const subjectCaption = ref("");
@@ -1017,7 +1017,7 @@ async function prepareMessage(message, mode, all = false) {
 async function responseCommand(command) {
   if (sending.value || preparing.value || attaching.value || !show.value) return;
   if (command === "pop" || command === "subject") return moveResponse(command);
-  if (command === responseMode.value) {
+  if (command === responseMode.value && (command==="forward" || form.replyAll!==undefined)) {
     editor.value?.focus();
     return;
   }
@@ -1094,7 +1094,7 @@ async function changeResponse(command) {
       const quote=await quotedMessage(source,mode,controller.signal,session.token);
       session.check();
       if (controller.signal.aborted || !mounted) return;
-      const html=changeQuotedBody(editor.value?.getContent() ?? form.content, quote.content,form.plainText);
+      const html=changeQuotedBody(editor.value?.getContent() ?? form.content, quote.content,form.plainText,mode);
       const files=form.attachments.filter(file=>!file.fromResponse);
       form.attachments=[...files,...quote.attachments.map(file=>({...file,fromResponse:true}))];
       form.content=defValue.value=html;
