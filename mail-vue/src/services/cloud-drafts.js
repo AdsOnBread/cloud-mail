@@ -529,10 +529,12 @@ async function recoverDeliveries(database, follow) {
   const session=draftSession(database),api=sessionAPI(database);
   session.check();
   const entries=await database.meta.where('key').startsWith('ordinary-send/').toArray();
+  let awaitingAdmission=false;
   for (const entry of entries) {
     if (tracking.has(trackingKey(session,entry.attemptId))) continue;
     const receipt=await api.get('/v1/send-attempts/'+entry.attemptId,{noMsg:true});
     if (receipt.state==='not_started') {
+      awaitingAdmission ||= Date.now()-entry.createdAt<120000;
       // Never dispatch on startup. The original request could still be in flight.
       if (Date.now()-entry.createdAt>86400000) await database.meta.delete(entry.key);
       continue;
@@ -543,8 +545,9 @@ async function recoverDeliveries(database, follow) {
       continue;
     }
     session.check();
-    follow(heldDelivery({...receipt,undoUntil:receipt.undoUntil || 0},database,api,entry.localId),[],entry.replyTo);
+    follow(heldDelivery({...receipt,undoUntil:receipt.undoUntil || 0},database,api,entry.localId),[],entry.replyTo,entry.subject,receipt.state!=='holding' || receipt.remainingMs===0);
   }
+  return awaitingAdmission;
 }
 
 function heldDelivery(receipt, database, api, id) {
@@ -609,7 +612,10 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   if(before?.pendingSchedule)throw new Error('Check Scheduled before sending this message.');
   if(before?.sendAttemptId) {
     const attempt=await api.get(`/v1/send-attempts/${before.sendAttemptId}`,{noMsg:true});
-    if (attempt.state === 'sent') return finishSentAttempt(database, id, before.sendAttemptId, attempt.messages);
+    if (attempt.state === 'sent') {
+      await database.meta.delete(receiptKey(before.sendAttemptId));
+      return finishSentAttempt(database,id,before.sendAttemptId,attempt.messages);
+    }
     if (attempt.state === 'uncertain') throw new Error(attempt.message || 'Delivery is uncertain. Check Sent before sending another copy.');
     if (['holding','sending'].includes(attempt.state)) return heldDelivery(attempt,database,api,id);
     if (['failed','canceled'].includes(attempt.state)) {
@@ -628,7 +634,7 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     const attempt = current.sendAttemptId || crypto.randomUUID();
     if (undoSeconds && !await database.meta.get(receiptKey(attempt))) {
       await database.meta.put({key:receiptKey(attempt), attemptId:attempt, localId:id, createdAt:Date.now(),
-        undoSeconds,replyTo:row.sendType==='reply' ? row.emailId : 0});
+        undoSeconds,subject:row.subject,replyTo:row.sendType==='reply' ? row.emailId : 0});
     }
     await database.draft.put({...current, sendAttemptId:attempt, sendFingerprint, syncState:'sending'});
     return attempt;
@@ -663,20 +669,24 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     await updateSendAttempt(database, id, sendAttemptId, result.state, current.version, row);
     throw new Error(result.message||'Delivery is uncertain. Check Sent before sending another copy.');
   }
+  await database.meta.delete(receiptKey(sendAttemptId));
   return finishSentAttempt(database,id,sendAttemptId,result.messages);
 }
 export function startDraftSync(follow) {
   const checking=new Set();
+  let retry,stopped=false;
   const sync=()=>{
     if(document.visibilityState==='hidden') return;
     syncCloudDrafts().catch(()=>{});
     const identity=useUserStore().authenticatedToken;
     if (identity && !checking.has(identity) && follow) {
       checking.add(identity);
-      recoverDeliveries(db.value,follow).catch(()=>{}).finally(()=>checking.delete(identity));
+      recoverDeliveries(db.value,follow).then(pending=>{
+        if (pending && !stopped) {clearTimeout(retry);retry=setTimeout(sync,500);}
+      }).catch(()=>{}).finally(()=>checking.delete(identity));
     }
   };
   const stop=watch([db,()=>useUserStore().authenticatedToken],sync);
   sync();const timer=setInterval(sync,60000);window.addEventListener('online',sync);document.addEventListener('visibilitychange',sync);
-  return ()=>{stop();clearInterval(timer);window.removeEventListener('online',sync);document.removeEventListener('visibilitychange',sync);};
+  return ()=>{stopped=true;clearTimeout(retry);stop();clearInterval(timer);window.removeEventListener('online',sync);document.removeEventListener('visibilitychange',sync);};
 }

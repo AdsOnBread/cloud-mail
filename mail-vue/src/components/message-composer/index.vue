@@ -1208,13 +1208,13 @@ function scheduledFeedback(result, sendAt, session) {
   attachUndo(() => cancelScheduledReceipt(receipt, session), session);
 }
 function attachUndo(cancel, session) {
-  feedback.notice.undoFiling = async () => {
+  const notice = feedback.notice;
+  notice.undoFiling = async () => {
     session.check();
-    const notice = feedback.notice;
     let moved = false;
     const stop = watch([router.currentRoute, () => accountStore.currentAccountId,
       () => accountStore.currentAccount.allReceive], () => { moved = true; }, {flush:"sync"});
-    const canOpen = () => !moved && feedback.notice === notice;
+    const canOpen = () => !moved && (feedback.notice === notice || feedback.previousHolds.includes(notice));
     try {
       const restored = await cancel();
       // The cloud cancellation is final even if the local draft cannot yet be reopened.
@@ -1241,13 +1241,13 @@ function recordSent(messages) {
   emailStore.conversationRevision++;
   userStore.refreshUserInfo();
 }
-async function followDelivery(delivery, recent, replyTo) {
+async function followDelivery(delivery, recent, replyTo, subject, quiet=false) {
   const session=draftSession();
   if (!delivery.begin()) return;
-  feedback.show("Sending…");
-  const notice=feedback.notice;
+  const notice=quiet ? {} : (feedback.show("Sending…"),feedback.notice);
+  notice.subject=subject;
   notice.holding=true;
-  if (delivery.delay>0) attachUndo(delivery.cancel,session);
+  if (!quiet && delivery.delay>0) attachUndo(delivery.cancel,session);
   try {
     await new Promise(resolve=>setTimeout(resolve,delivery.delay));
     session.check();
@@ -1272,7 +1272,10 @@ async function followDelivery(delivery, recent, replyTo) {
     }
   } catch (error) {
     if (feedback.notice===notice) feedback.show(error.message || "Delivery has not been confirmed. Check Sent.");
-  } finally { delivery.end(); }
+  } finally {
+    if (feedback.previousHolds.includes(notice) && !notice.busy) feedback.dismiss(notice);
+    delivery.end();
+  }
 }
 async function sendEmail(sendAt=null) {
   if (!validForSend()) return;
@@ -1304,7 +1307,7 @@ async function sendEmail(sendAt=null) {
     });
     const recent = recipientFields.flatMap(field => form[field]);
     if (sent.state === 'holding') {
-      void followDelivery(sent,recent,form.sendType==="reply" ? form.emailId : 0);
+      void followDelivery(sent,recent,form.sendType==="reply" ? form.emailId : 0,form.subject);
       show.value=false;resetForm();emit("closed");return;
     }
     recordSent(sent);

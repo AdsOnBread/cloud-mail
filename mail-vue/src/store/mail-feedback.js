@@ -3,35 +3,39 @@ import { useEmailStore } from "./email";
 import http from "@/axios";
 
 export const useMailFeedback = defineStore("mail-feedback", {
-  state: () => ({ notice: null, restored: 0, deliveredReply:null }),
+  state: () => ({ notice:null, previousHolds:[], sequence:0, restored: 0, deliveredReply:null }),
   actions: {
     show(message, emailIds = []) {
-      this.dismiss();
-      this.notice = { message, emailIds: [...emailIds], busy: false };
+      const old=this.notice;
+      if (old?.holding && (old.undoFiling || old.busy)) {
+        this.previousHolds.push(old);
+        this.notice=null;
+      } else this.dismiss();
+      this.notice = { id:++this.sequence, message, emailIds: [...emailIds], busy: false };
     },
     dismissedDrafts(recovery, reopen) {
       this.show(recovery.count === 1 ? "Draft discarded." : recovery.count + " drafts discarded.");
       this.notice.recovery = recovery;
       this.notice.reopen = reopen;
     },
-    dismiss() {
-      const notice = this.notice;
-      this.notice = null;
+    dismiss(notice=this.notice) {
+      if (this.notice===notice) this.notice=null;
+      else this.previousHolds=this.previousHolds.filter(entry=>entry!==notice);
       if (notice?.recovery && !notice.busy) notice.recovery.dispose().catch(() => {});
     },
     trashed(emailIds, count = 1, noun = "conversation") {
       this.show(count === 1 ? (noun === "message" ? "Message" : "Conversation") + " moved to Trash." :
         count + " " + noun + "s moved to Trash.", emailIds);
     },
-    async undo() {
-      const notice = this.notice;
+    async undo(notice=this.notice) {
       if (!notice || (!notice.recovery && !notice.undoFiling && !notice.emailIds.length) || notice.busy) return;
       const session = localStorage.getItem("token");
       notice.busy = true;
       try {
         if (notice.undoFiling) {
           const message=await notice.undoFiling();
-          if (this.notice===notice) this.show(message || 'Action undone.');
+          if (this.notice===notice) { delete notice.holding; this.show(message || 'Action undone.'); }
+          else this.dismiss(notice);
           return;
         }
         if (notice.recovery) {
