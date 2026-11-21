@@ -589,7 +589,6 @@ async function load(
     scheduledMatches.value = queue.messages || [];
     scheduledError.value = queue.error || "";
     rows.value = data.threads;
-    emailStore.conversationListRefresh++;
     total.value = data.total;
     if(props.folder==="inbox" && !search.query && !Object.keys(search.filters).length)
       emailStore.inboxUnread={accountId:account.currentAccountId,allReceive:Boolean(account.currentAccount.allReceive),count:data.categoryUnread?Object.values(data.categoryUnread).reduce((acc,n)=>acc+n,0):data.unreadThreads};
@@ -619,6 +618,7 @@ async function load(
   }
 }
 function refresh() {
+  emailStore.conversationListRefresh++;
   return load();
 }
 function nextPage() {

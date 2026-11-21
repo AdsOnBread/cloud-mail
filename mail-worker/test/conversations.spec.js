@@ -360,6 +360,14 @@ it('keeps category folders independent of inbox tabs and counts overlapping purc
   await action('read',[receipt.email_id],{unread:1});
   expect((await list({folder:'all',countOnly:1,categoryCounts:1})).categoryUnread.purchases).toBe(0);
 });
+it('counts unread category threads across shared aliases without counting invisible mail',async()=>{
+  const root=await insert({account_id:3,send_email:'receipts@shop.example',subject:'Your receipt',unread:0,message_id:'<shared-receipt@shop.example>'});
+  await insert({account_id:1,unread:1,in_reply_to:'<shared-receipt@shop.example>',reply_to_email_id:root.email_id,subject:'Re: Your receipt'});
+  await insert({account_id:3,unread:0,send_email:'invites@linkedin.com',subject:'Social invitation'});
+  const counts=async p=>(await list({folder:'all',countOnly:1,categoryCounts:1,...p})).categoryUnread;
+  expect(await counts({accountId:1})).toEqual({updates:1,purchases:1});
+  expect(await counts({allReceive:1})).toEqual({updates:1,purchases:1,social:1});
+});
 it('categorizes complete conversations before pagination and retains explicit filing across replies',async()=>{
   const personal=await insert({subject:'Dinner?',message_id:'<dinner@example.com>'});
   const promo=await insert({send_email:'offers@bookshop.example',subject:'New titles',message_id:'<books@example.com>'});

@@ -66,7 +66,27 @@ export async function conversationList(c, p, userId) {
 	const tab = p.category ? checkCategory(p.category) : null;
   const category = categoryFolders.includes(p.folder) ? p.folder : tab;
   const categoryCounts = p.folder === 'all' && String(p.countOnly) === '1' && String(p.categoryCounts) === '1';
-  const categorize = Boolean(category) || String(p.includeCategory) === '1' || categoryCounts;
+  if (categoryCounts) {
+    const combined = Number(p.allReceive) === 1;
+    // An unread reply on another alias still counts when this alias has a visible member.
+    // Start with unread threads, then inspect only their members for classification and scope.
+    const {results} = await db.prepare(`WITH unread AS (
+      SELECT DISTINCT m.thread_id FROM email e JOIN account a ON a.account_id=e.account_id
+      JOIN mobile_thread_members m ON m.user_id=e.user_id AND m.email_id=e.email_id
+      WHERE ${visible} AND e.type=0 AND e.unread=0
+    ), grouped AS (
+      SELECT m.thread_id, MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source,
+        MAX(override.change_id) category_override, MAX(CASE WHEN ${purchaseMessage} THEN 1 ELSE 0 END) purchase_match
+      FROM unread u CROSS JOIN mobile_thread_members m ON m.user_id=? AND m.thread_id=u.thread_id
+      JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id JOIN account a ON a.account_id=e.account_id
+      LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id
+      WHERE ${visible} GROUP BY m.thread_id ${combined?'':'HAVING MAX(e.account_id=?)=1'}
+    )${categoryQuery} SELECT category,COUNT(*) n,SUM(purchase_match) purchases FROM categorized GROUP BY category`)
+      .bind(userId,userId,userId,...(combined?[]:[Number(p.accountId)||0])).all();
+    return {categoryUnread:{...Object.fromEntries(results.map(r=>[r.category,r.n])),
+      purchases:results.reduce((n,row)=>n+row.purchases,0)}};
+  }
+  const categorize = Boolean(category) || String(p.includeCategory) === '1';
   const purchases = p.folder === 'purchases';
   if(tab && p.folder!=='inbox')throw new BizError('Categories are available in Inbox.',400);
   const filters = [];
@@ -105,7 +125,7 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    summaries AS (SELECT m.thread_id,${importanceFields},${purchases || categoryCounts?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    summaries AS (SELECT m.thread_id,${importanceFields},${purchases?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
       JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
@@ -119,12 +139,6 @@ export async function conversationList(c, p, userId) {
       ${p.folder==='important'?'WHERE ('+importanceReason+') IS NOT NULL':purchases?'WHERE summary.purchase_match=1':''})${categorize?categoryQuery:''}`;
 	const bound = [userId, userId, ...args, userId];
   const groupSource=categorize?'categorized':'grouped';
-  if (categoryCounts) {
-    const {results} = await db.prepare(`${base} SELECT category,COUNT(*) n,SUM(purchase_match) purchases
-      FROM categorized WHERE unread_count>0 GROUP BY category`).bind(...bound).all();
-    return {categoryUnread:{...Object.fromEntries(results.map(r=>[r.category,r.n])),
-      purchases:results.reduce((n,row)=>n+row.purchases,0)}};
-  }
 	if (String(p.countOnly) === '1') {
     const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM ${groupSource} WHERE unread_count>0 ${category?'AND category=?':''}`).bind(...bound,...(category?[category]:[])).first();
     return {unreadThreads:result.unreadThreads};

@@ -238,15 +238,6 @@ function formatName(email) {
 .detail-dropdown {
   color: var(--el-text-color-primary) !important;
 }
-@media (max-width:600px) {
-  .search-folder { display:none; }
-  .search-folder + input::placeholder { visibility:visible; }
-}
-/* Make room for the active query and its controls on compact phones. */
-@media (max-width:480px) {
-  .header { position:relative; }
-  .mail-search:focus-within { position:absolute; inset-inline:8px; z-index:2; }
-}
 </style>
 <style lang="scss" scoped>
 
