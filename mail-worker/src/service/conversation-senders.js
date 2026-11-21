@@ -7,8 +7,8 @@ export async function conversationSenders(db, userId, threadIds) {
         max(e.type=1) OVER (PARTITION BY m.thread_id,lower(trim(e.send_email)),
           coalesce(nullif(e.message_id,''),nullif(e.resend_email_id,''),e.email_id)) authored
       FROM json_each(?) page CROSS JOIN mobile_thread_members m ON m.thread_id=page.value AND m.user_id=?
-      JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
-      JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0
+      CROSS JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
+      CROSS JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0
       WHERE e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)
     ) SELECT thread_id,
       CASE WHEN authored THEN 'me' ELSE coalesce(min(nullif(trim(name),'')),min(send_email),'') END name,
