@@ -480,8 +480,9 @@ const filedDrafts = computed(() => {
     if (props.folder==="starred" ? !draft.starred : !draft.labelIds?.includes(props.labelId)) return false;
     if (props.folder==="label" && !account.currentAccount.allReceive && draft.accountId!==account.currentAccountId) return false;
     if (f.hasAttachment && !draft.hasFiles || f.days && draft.lastDate<Date.now()-Number(f.days)*86400000) return false;
-    return includes(draft.sender,f.from) && includes(draft.recipients,f.to) && includes(draft.subject,f.subject) &&
-      [draft.subject,draft.preview,draft.sender,draft.recipients].some(text=>includes(text,search.query));
+    const sender=draft.sender || account.accounts.find(a=>a.accountId===draft.accountId)?.email;
+    return includes(sender,f.from) && includes(draft.recipients,f.to) && includes(draft.subject,f.subject) &&
+      [draft.subject,draft.searchBody,sender,draft.recipients].some(text=>includes(text,search.query));
   });
 });
 async function openFiledDraft(draft) {

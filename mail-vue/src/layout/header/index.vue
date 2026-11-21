@@ -101,6 +101,7 @@ const searchFolder = computed(() => {
   if (route.name === "scheduled" && route.query.message) {
     if (route.query.from === "starred") return "star";
     if (route.query.from === "important") return "important";
+    if (route.query.from === "label" && /^\d+$/.test(route.query.labelId || "")) return "label";
   }
   return route.name;
 });
@@ -108,14 +109,15 @@ const searchScope = computed(() => {
   if (categoryFolders.some(item=>item.id===searchFolder.value)) return "category:" + searchFolder.value;
   return ["trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
 });
-watch([searchFolder,()=>route.params.labelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
+const searchLabelId=computed(()=>route.params.labelId || (searchFolder.value==="label" ? route.query.labelId : undefined));
+watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {
   mailSearch.query = searchText.value.trim();
   returnToResults();
 }
 function returnToResults() {
-  if (route.name === 'scheduled' && route.query.message) router.replace({name:searchFolder.value});
+  if (route.name === 'scheduled' && route.query.message) router.replace(searchFolder.value==='label' ? {name:'label',params:{labelId:searchLabelId.value}} : {name:searchFolder.value});
   if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder,query:mailSearch.folder==="email" && route.query.category?{category:route.query.category}:{}});
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }

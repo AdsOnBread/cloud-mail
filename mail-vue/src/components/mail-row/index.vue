@@ -12,11 +12,11 @@
       />
     </label>
     <button
-      v-if="!draftOnly && !hideStar"
+      v-if="(!draftOnly || canStarDraft) && !hideStar"
       class="row-star mail-icon"
       :class="{ starred }"
       :aria-pressed="Boolean(starred)"
-      :aria-label="starred ? 'Unstar conversation' : 'Star conversation'"
+      :aria-label="(starred ? 'Unstar ' : 'Star ') + (draftOnly ? 'draft' : 'conversation')"
       :data-tip="starred ? 'Unstar' : 'Star'"
       :disabled="busy"
       @click="$emit('star')"
@@ -74,6 +74,7 @@ import {useUiStore} from "@/store/ui";
 import FilePreview from "@/components/mail-attachments/preview.vue";
 const ui=useUiStore(),previewFile=ref(null);
 const props=defineProps({
+  canStarDraft:Boolean,
   attachments:Array,
   attachmentCount:Number,
   showImportance: Boolean,

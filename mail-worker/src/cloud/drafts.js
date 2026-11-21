@@ -5,7 +5,7 @@ import { normalizeAttachment,MAX_MESSAGE_BYTES } from '../service/email-sender';
 import r2Service from '../service/r2-service';
 import { camel } from '../mobile/service';
 
-const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui','labelIds','mailboxStarred'];
+const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui','labelIds'];
 function normalize(input,previous={}) {
   const value={...previous};
   for(const key of fields) if(Object.hasOwn(input,key)) value[key]=input[key];
@@ -22,10 +22,6 @@ function normalize(input,previous={}) {
       throw new BizError('Invalid draft labels.',400);
     value.labelIds = [...new Set(value.labelIds)].sort((a,b)=>a-b);
   }
-  if (value.mailboxStarred !== undefined) {
-    if (![false,true,0,1].includes(value.mailboxStarred)) throw new BizError('Invalid draft star.',400);
-    value.mailboxStarred = Number(value.mailboxStarred);
-  }
   if(value.plainText!==undefined && typeof value.plainText!=='boolean')throw new BizError('Invalid message format.',400);
   if(value.sendType&&!['reply','forward'].includes(value.sendType)) throw new BizError('Invalid message kind.',400);
   if(new TextEncoder().encode(JSON.stringify(value)).length>MAX_MESSAGE_BYTES) throw new BizError('Draft is too large.',413);
@@ -38,12 +34,12 @@ export async function files(c,userId,id) {
   return (await c.env.db.prepare('SELECT attachment_id,filename,mime_type,size,content_id FROM draft_files WHERE user_id=? AND draft_id=? ORDER BY attachment_id').bind(userId,id).all()).results.map(camel);
 }
 function decode(row,attachments) {
-  return {...JSON.parse(row.data),draftId:row.draft_id,clientId:row.client_id,accountId:row.account_id,version:row.version,state:row.state,createTime:row.created_at,updatedAt:row.updated_at,attachments:attachments.map(camel)};
+  return {...JSON.parse(row.data),draftId:row.draft_id,clientId:row.client_id,sendEmail:row.sender_email,accountId:row.account_id,version:row.version,state:row.state,createTime:row.created_at,updatedAt:row.updated_at,attachments:attachments.map(camel)};
 }
 export async function get(c,userId,id,includeDeleted=false) {
   id=positive(id);
   const [rows,attachments]=await c.env.db.batch([
-    c.env.db.prepare('SELECT d.* FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id WHERE d.user_id=? AND d.draft_id=? AND a.is_del=0').bind(userId,id),
+    c.env.db.prepare('SELECT d.*,a.email AS sender_email FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id WHERE d.user_id=? AND d.draft_id=? AND a.is_del=0').bind(userId,id),
     c.env.db.prepare('SELECT attachment_id,filename,mime_type,size,content_id FROM draft_files WHERE user_id=? AND draft_id=? ORDER BY attachment_id').bind(userId,id)
   ]);
   const row=rows.results[0];
@@ -94,8 +90,13 @@ async function removeObjects(c,rows) { for(const row of rows) {try{await r2Servi
 export async function save(c,userId,input,id) {
   const old=id?await get(c,userId,id):null;
   if(old && (input.version!==old.version||old.state!=='draft')) throw conflict(old);
-  const accountId=input.accountId??old?.accountId;await mailbox(c,userId,accountId);
+  const accountId=input.accountId??old?.accountId;const sender=await mailbox(c,userId,accountId);
   const data=normalize(input,old?Object.fromEntries(fields.map(k=>[k,old[k]]).filter(([,v])=>v!==undefined)):{});
+  // Older clients echo mailbox metadata; only an explicit compose choice edits the star.
+  if (input.composeStarred !== undefined) {
+    if (typeof input.composeStarred !== 'boolean') throw new BizError('Invalid draft star.',400);
+    data.mailboxStarred = Number(input.composeStarred);
+  } else if (old?.mailboxStarred != null) data.mailboxStarred = old.mailboxStarred;
   if (old?.mailboxImportant != null) data.mailboxImportant = old.mailboxImportant;
   if(data.emailId) {
     const source=await c.env.db.prepare('SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.email_id=? AND e.user_id=? AND a.user_id=e.user_id AND e.is_del=0 AND a.is_del=0 AND e.trashed_at IS NULL').bind(positive(data.emailId),userId).first();
@@ -146,7 +147,7 @@ export async function save(c,userId,input,id) {
       await removeObjects(c,prepared?.fresh||[]);return get(c,userId,existing.draft_id,true);
     }
     if(prepared)await removeObjects(c,existingFiles.filter(f=>!prepared.keep.some(k=>k.attachmentId===f.attachment_id)));
-    return decode(results.at(-2).results[0],results.at(-1).results);
+    return decode({...results.at(-2).results[0],sender_email:sender.email},results.at(-1).results);
   } catch(error) {if(!row)await removeObjects(c,prepared?.fresh||[]);throw error;}
 
 }

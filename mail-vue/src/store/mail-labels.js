@@ -76,14 +76,15 @@ export const useMailLabels = defineStore("mail-labels", {
     async save(id, name, anchors = [], parentId = null, move = null) {
       const owner = this.owner;
       const destination=move && this.edit?.destination;
-      if (move && !destination) {
+      const creation=move || (this.edit?.onCreated ? this.edit : null);
+      if (creation && !destination) {
         const intent=JSON.stringify([name,parentId]);
-        if (move.intent && move.intent!==intent) move.clientId=crypto.randomUUID();
-        move.intent=intent;
+        if (creation.intent && creation.intent!==intent) creation.clientId=crypto.randomUUID();
+        creation.intent=intent;
       }
       const label = destination || (id
         ? await labelAPI(this).put(path + "/" + id, { name, parentId })
-        : await labelAPI(this).post(path, { name, parentId, ...(move ? {clientId:move.clientId} : {}) }));
+        : await labelAPI(this).post(path, { name, parentId, ...(creation ? {clientId:creation.clientId} : {}) }));
       if (owner !== this.owner) return;
       ++this.request;
       this.items = [
@@ -106,9 +107,10 @@ export const useMailLabels = defineStore("mail-labels", {
           this.applied = { anchors: [...anchors], labelId: label.id };
       }
       if (owner !== this.owner) return;
+      if (creation === this.edit) creation?.onCreated?.(label.id);
       this.edit = null;
       await this.load(owner);
-      if(owner===this.owner) {this.revealed={id:label.id}; return label;}
+      if(owner===this.owner)this.revealed={id:label.id};
     },
     async setDisplay(id, list, mode, ownsFocus) {
       const owner = this.owner;
@@ -146,6 +148,7 @@ export const useMailLabels = defineStore("mail-labels", {
       if (owner !== this.owner) return;
       ++this.request;
       this.items = this.items.filter((item) => item.id !== id);
+      if (creation === this.edit) creation?.onCreated?.(label.id);
       this.edit = null;
       await this.load(owner);
     },

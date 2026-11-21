@@ -91,7 +91,7 @@ export async function saveLocalDraft(input, {requireCurrent = false, session} = 
   const row = await database.transaction('rw', database.draft, database.att, async () => {
     const current = input.draftId ? await database.draft.get(input.draftId) : null;
     if(current?.deleted || current?.pendingSchedule || (!current && input.draftId))throw new Error('This draft has changed. Check Scheduled or reopen it from Drafts.');
-    if (current && requireCurrent && !matchesEditor(current, input)) throw new Error('The draft changed elsewhere. Reopen it before discarding.');
+    if (current && requireCurrent && !matchesEditor(current, input)) throw new Error('The draft changed elsewhere. Reopen it before changing it.');
     // A background upload can advance the cloud version of precisely the edit still in the composer.
     // A different edit token means the editor must keep its own base version for conflict detection.
     const sameEdit = current && input.editToken && input.editToken === current.editToken;
@@ -128,7 +128,7 @@ async function push(database,row,api) {
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
     const attachments=value.attachments.map(({attachmentId,...f})=>f);
-    const payload={...strip(value),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken}};
+    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};
     await database.transaction('rw', database.draft, database.att, async () => {
@@ -321,7 +321,7 @@ export async function discardDrafts(ids, expectedEditor, session = draftSession(
       const row = await database.draft.get(id);
       if (!row || row.deleted) throw new Error('This draft is no longer available.');
       if (expectedEditor?.draftId === id && !matchesEditor(row, expectedEditor))
-        throw new Error('The draft changed elsewhere. Reopen it before discarding.');
+        throw new Error('The draft changed elsewhere. Reopen it before changing it.');
       if (row.pendingSchedule || (row.sendAttemptId && resolvedAttempts.get(id) !== row.sendAttemptId) ||
           (!resolvedAttempts.has(id) && ['sending','uncertain'].includes(row.syncState)))
         throw new Error('Check the delivery status before discarding this draft.');

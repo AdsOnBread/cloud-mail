@@ -16,6 +16,7 @@
     :close-on-press-escape="!saving"
     @close="!saving && (labels.edit = null)"
     @opened="input?.focus()"
+    @closed="restoreOpener"
   >
     <form @submit.prevent="submit">
       <p v-if="labels.edit?.remove">
@@ -91,9 +92,12 @@ const parents = computed(() =>
     (label) => !node.value || !inLabelBranch(label.name, node.value.label.name),
   ),
 );
+let opener;
+function restoreOpener() { const restore=opener; opener=null; restore?.(); }
 watch(
   () => labels.edit,
   (value) => {
+    if (value) opener=value.restoreFocus;
     const current = tree.value.byId.get(value?.id);
     name.value = current?.text ?? value?.name ?? "";
     parentId.value = current?.parent?.label.id ?? value?.parentId ?? null;
@@ -103,7 +107,7 @@ watch(
 );
 async function submit() {
   if (!labels.edit || saving.value || !name.value.trim()) return;
-  const { id, remove, anchors, move, onCreated } = labels.edit;
+  const { id, remove, anchors, move } = labels.edit;
   saving.value = true;
   try {
     if (!remove && !labels.edit.destination && nested.value && !parentId.value) return;
@@ -112,14 +116,13 @@ async function submit() {
       if (route.name === "label" && Number(route.params.labelId) === id)
         await router.replace("/inbox");
     } else {
-      const saved = await labels.save(
+      await labels.save(
         id,
         name.value.trim(),
         anchors,
         nested.value ? parentId.value : null,
         move,
       );
-      if (!id && saved) onCreated?.(saved.id);
     }
     mail.conversationRevision++;
   } catch (e) {

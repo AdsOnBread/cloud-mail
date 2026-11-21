@@ -433,7 +433,7 @@ describe('Scheduled send',()=>{
    const label=async(owner,name)=>(await env.db.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id')
      .bind(owner,name).first()).label_id;
    const keep=await label(1,'Keep'),removed=await label(1,'Delete later'),foreign=await label(2,'Private');
-   const d=await draft({labelIds:[keep,keep,removed,foreign],mailboxStarred:true});
+   const d=await draft({labelIds:[keep,keep,removed,foreign],composeStarred:true});
    const saved=await drafts.save(c(),1,{version:d.version,subject:'Revised'},d.draftId);
    expect(saved.labelIds).toEqual([keep,removed,foreign]);
    expect(saved.mailboxStarred).toBe(1);

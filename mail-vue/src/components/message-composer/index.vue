@@ -285,7 +285,7 @@
               </el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
-          <ComposeMore :disabled="sending || preparing || attaching" :active="show && !minimized"
+          <ComposeMore ref="moreOptions" :disabled="sending || preparing || attaching" :active="show && !minimized"
             :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
             :label-ids="form.labelIds" :starred="form.mailboxStarred"
             @labels="form.labelIds = $event" @star="form.mailboxStarred = $event" @command="moreCommand"/>
@@ -405,6 +405,7 @@ const props = defineProps({ inline: Boolean });
 const emit = defineEmits(["sent", "closed"]);
 const composeRoot = ref();
 const labelStore=useMailLabels();
+const moreOptions=ref();
 const router=useRouter();
 const recipientDialog = ref();
 const missingRecipient = ref(false);
@@ -846,7 +847,9 @@ async function moreCommand(command) {
   const current = () => show.value && !sending.value && owner === userStore.user.email && generation === signatureGeneration;
   if (!current()) return;
   if (command === "new-label") {
-    labelStore.edit = {onCreated(id) {
+    labelStore.edit = {clientId: crypto.randomUUID(), restoreFocus() {
+      if (current()) moreOptions.value?.focus();
+    }, onCreated(id) {
       if (current() && !form.labelIds.includes(id)) form.labelIds = [...form.labelIds,id];
     }};
     return;
@@ -1157,7 +1160,7 @@ async function deleteContact() {
 }
 function keydown(event) {
   if (labelStore.edit) return;
-  if(managingSignatures.value || scheduling.value || event.target.closest?.(".recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
+  if(managingSignatures.value || scheduling.value || event.target.closest?.(".label-dialog,.recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
   if (

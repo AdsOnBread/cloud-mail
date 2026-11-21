@@ -62,7 +62,8 @@
       <MailRow
         v-for="draft in page"
         :key="draft.draftId"
-        draft-only
+        draft-only can-star-draft
+        :starred="draft.starred" :busy="busy" @star="toggleStar(draft)"
         :draft-count="1"
         :participants="draft.recipients"
         :subject="draft.subject"
@@ -102,8 +103,8 @@ import { useMailFeedback } from "@/store/mail-feedback";
 import {useUiStore} from "@/store/ui";
 import { userDraftStore } from "@/store/draft";
 import { useMailSearchStore } from "@/store/mail-search";
-import { draftSession, discardDrafts, syncCloudDrafts } from "@/services/cloud-drafts";
-import { openSavedDraft } from "@/services/draft-list";
+import { draftSession, discardDrafts, saveLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
+import { openSavedDraft, readSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 defineOptions({ name: "draft" });
@@ -172,6 +173,19 @@ async function open(id) {
   } catch (e) {
     error.value = e.message || "Could not open draft.";
   }
+}
+async function toggleStar(item) {
+  if (busy.value) return;
+  busy.value=true;
+  try {
+    error.value="";
+    const session=draftSession();
+    const draft=await readSavedDraft(item.draftId);
+    if (draft.sendAttemptId) throw new Error("Check the delivery status before changing this draft.");
+    await saveLocalDraft({...draft,mailboxStarred:!item.starred},{requireCurrent:true,session});
+    syncCloudDrafts().catch(()=>{});
+  } catch(e) { error.value=e.message || "Could not change the draft star."; }
+  finally { busy.value=false; }
 }
 async function discard(ids) {
   if (busy.value || !ids.length) return;
