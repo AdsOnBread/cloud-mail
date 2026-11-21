@@ -3,6 +3,8 @@
     class="conversation-row"
     :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips, 'hover-actions': user.hoverActions }"
   >
+    <span v-if="canDrag" class="drag-grip" aria-hidden="true" draggable="true"
+      @dragstart="$emit('start-move', $event)" @dragend="$emit('end-move')"></span>
     <label class="check-target" data-tip="Select">
       <input
         type="checkbox"
@@ -32,6 +34,8 @@
     <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
+      :draggable="canDrag || undefined"
+      @dragstart="canDrag && $emit('start-move', $event)" @dragend="canDrag && $emit('end-move')"
       :aria-description="[senders?.map(person=>person.name).join(', '), dateTitle].filter(Boolean).join('. ')"
       :aria-label="openLabel + (attachmentCount ? ', has attachment' : '')"
       @click="$emit('open')"
@@ -82,6 +86,7 @@ import {useUiStore} from "@/store/ui";
 import FilePreview from "@/components/mail-attachments/preview.vue";
 const ui=useUiStore(), user=useUserStore(),previewFile=ref(null);
 const props=defineProps({
+  canDrag:Boolean,
   canStarDraft:Boolean,
   attachments:Array,
   attachmentCount:Number,
@@ -114,7 +119,7 @@ function fileColor(file){
   if(/\.(csv|xlsx?)$/i.test(file.filename))return 'sheet';
   return 'document';
 }
-defineEmits(["select", "star", "open", "importance"]);
+defineEmits(["start-move", "end-move", "select", "star", "open", "importance"]);
 </script>
 <style scoped>
 .conversation-row {
@@ -137,6 +142,9 @@ defineEmits(["select", "star", "open", "importance"]);
 .selected {
   --row-fill: var(--mail-selected);
 }
+.drag-grip { position:absolute; inset-inline-start:0; width:11px; height:100%; cursor:grab; opacity:0; }
+.drag-grip::after { content:""; position:absolute; top:50%; left:2px; transform:translateY(-50%); width:8px; height:16px; background:radial-gradient(circle,currentColor 1px,transparent 1.4px) 0 0 / 4px 4px; }
+.conversation-row:hover .drag-grip { opacity:.65; }
 .check-target,
 .row-star,
 .star-space {

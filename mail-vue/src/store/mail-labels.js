@@ -37,6 +37,9 @@ export const useMailLabels = defineStore("mail-labels", {
     request: 0,
   }),
   actions: {
+    moveConversations(ids, destination) {
+      return conversationAction('move', ids, destination, labelAPI(this));
+    },
     bindSession(owner,token) {
       if (this.owner===owner && this.sessionToken===token)return;
       // Only bind a new credential after loginUserInfo has identified its owner.

@@ -211,6 +211,8 @@
           :unread="Boolean(row.unreadCount)"
           :busy="busy"
           :open-label="rowOpenLabel(row)"
+          :can-drag="width >= 768 && !busy"
+          @start-move="startMove($event, row)" @end-move="endConversationDrag(dragSource)"
           @open="open(row)"
           @select="toggle(row.lastEmailId)"
           @star="star(row)"
@@ -328,6 +330,7 @@
 <script setup>
 import {draftSearchMatcher} from "@/utils/draft-summary";
 import http from "@/axios";
+import {startConversationDrag, endConversationDrag} from "@/components/mail-labels/conversation-drag";
 import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
@@ -691,19 +694,39 @@ async function open(row, reply) {
 }
 async function mutate(action, extra = {}, ids = selected.value) {
   if (busy.value) return;
+  const token = owner.authenticatedToken, path = route.fullPath, view = key.value;
+  const sameSession = () => owner.authenticatedToken === token && localStorage.getItem("token") === token;
   busy.value = true;
   try {
-    const result = await conversationAction(action, ids, extra);
+    const destination = action === "move" && (labels.items.find(label => label.id === extra.labelId)?.name || "Inbox");
+    const result = action === "move" ? await labels.moveConversations(ids, extra) : await conversationAction(action, ids, extra);
+    if (!sameSession()) return;
+    if (destination) feedback.show((ids.length === 1 ? "Conversation" : ids.length + " conversations") + " moved to " + destination + ".");
     if (action === "delete") feedback.trashed(result?.emailIds || [], ids.length);
-    selected.value = selected.value.filter((id) => !ids.includes(id));
     emailStore.conversationRevision++;
+    if (!active || path !== route.fullPath || view !== key.value) return;
+    selected.value = selected.value.filter((id) => !ids.includes(id));
     await refresh();
   } catch (e) {
-    error.value = e.message || "Could not update the conversation.";
+    if (sameSession() && active && path === route.fullPath && view === key.value) error.value = e.message || "Could not update the conversation.";
   } finally {
     busy.value = false;
   }
 }
+const dragSource = Symbol();
+const rowAnchors = computed(() => new Set(rows.value.map(row => row.lastEmailId)));
+function startMove(event, row) {
+  const token = owner.authenticatedToken, path = route.fullPath, mailbox = account.currentAccountId, view = key.value;
+  const ids = selected.value.includes(row.lastEmailId) ? [...selected.value] : [row.lastEmailId];
+  const currentSession = () => token && owner.authenticatedToken === token && localStorage.getItem("token") === token;
+  const currentView = () => active && route.fullPath === path && key.value === view && account.currentAccountId === mailbox;
+  if (!event.dataTransfer || !currentSession() || !currentView() || busy.value) return event.preventDefault();
+  startConversationDrag(event, dragSource, id => {
+    if (!currentSession() || !currentView() || busy.value || !ids.every(anchor => rowAnchors.value.has(anchor))) return false;
+    return id === 0 ? props.folder !== "inbox" : id !== props.labelId && labels.items.some(label => label.id === id);
+  }, id => mutate("move", {labelId:id, fromLabelId:props.labelId || 0}, ids));
+}
+watch([key, () => route.fullPath, () => owner.authenticatedToken, () => account.currentAccountId], () => endConversationDrag(dragSource), {flush:"sync"});
 function remove(ids = selected.value) {
   return mutate("delete", {}, Array.isArray(ids) ? ids : selected.value);
 }
@@ -716,6 +739,7 @@ onActivated(() => {
   if (!loading.value) refresh();
 });
 onDeactivated(() => {
+  endConversationDrag(dragSource);
   active = false;
   snoozePicker.value?.close();
 });
@@ -735,6 +759,7 @@ timer = setInterval(
   Math.max(3, settings.settings.autoRefresh || 30) * 1000,
 );
 onUnmounted(() => {
+  endConversationDrag(dragSource);
   generation++;
   clearInterval(timer);
   clearTimeout(wakeTimer);

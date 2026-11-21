@@ -64,8 +64,9 @@ function filterStorage(event){
 }
 onMounted(()=>window.addEventListener('storage',filterStorage));
 onBeforeUnmount(()=>{window.removeEventListener('storage',filterStorage);filters.editor=null;filters.senderRequest=null;});
+import {draggingConversations} from "@/components/mail-labels/conversation-drag";
 const pointerInRail=ref(false),keyboardInRail=ref(false);
-const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));
+const peek=computed(()=>!isMobile.value && (draggingConversations.value || pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));
 let railTimer;
 function enterRail(e){
   clearTimeout(railTimer);

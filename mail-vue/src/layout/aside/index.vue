@@ -5,7 +5,8 @@
       <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <el-menu :collapse="false"  >
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
-                      :class="activeFolder === 'email' ? 'choose-item' : ''">
+                      @dragenter="hoverDestination($event,0)" @dragover="hoverDestination($event,0)" @dragleave="leaveDestination($event,0)" @drop="dropConversations($event,0)"
+                      :class="{'choose-item':activeFolder==='email','drop-destination':dropTarget===0}">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread + drafts.scheduledInboxUnread" class="menu-name draft-count">{{ unread + drafts.scheduledInboxUnread }}</span>
         </el-menu-item>
@@ -38,7 +39,9 @@
             <span class="menu-name">{{ showHiddenLabels ? 'Less' : 'More' }}</span>
           </button>
           <div v-show="showHiddenLabels || !isHiddenLabel(label)" class="label-row" :data-label-id="label.id" :style="{ '--branch-indent': Math.min(depth,5)*12+'px' }"
-            :class="{'selected-label':activeLabel===label.id,'unread-label':labelUnread[label.id]}">
+            @dragenter="hoverDestination($event,label.id)" @dragover="hoverDestination($event,label.id)"
+            @dragleave="leaveDestination($event,label.id)" @drop="dropConversations($event,label.id)"
+            :class="{'drop-destination':dropTarget===label.id,'selected-label':activeLabel===label.id,'unread-label':labelUnread[label.id]}">
             <button v-if="node.children.length" type="button" class="label-disclosure"
               :aria-expanded="expandedLabels.has(label.id)" :aria-label="(expandedLabels.has(label.id)?'Collapse label: ':'Expand label: ')+label.name"
               @click="toggleBranch(label.id)">
@@ -101,6 +104,7 @@
 </template>
 
 <script setup>
+import {dropTarget, hoverDestination, leaveDestination, dropConversations} from "@/components/mail-labels/conversation-drag";
 import MailBrand from '@/components/mail-brand.vue';
 import {categoryFolders} from "@/utils/inbox-categories";
 import {systemFolders,folderMode} from "@/components/mail-labels/system-folders";
@@ -362,4 +366,5 @@ const uiStore = useUiStore();
 @media (max-width:767px) { .el-menu-item { height:40px; } }
 .mobile-brand{display:none}
 @media(max-width:767px){.mobile-brand{display:flex;align-items:center;padding:14px 20px;text-decoration:none}}
+.label-row.drop-destination,.el-menu-item.drop-destination { background:var(--mail-selected); outline:2px solid currentColor; outline-offset:-2px; }
 </style>
