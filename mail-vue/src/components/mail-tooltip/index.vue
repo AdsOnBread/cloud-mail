@@ -21,7 +21,7 @@ const visible = ref(false),
   y = ref(0);
 const placed=ref(false);
 const descriptionId="mail-control-tip";
-let timer,target,size,attributes,pointerFocus=false;
+let timer,target,size,attributes,pointerTimer,pointerFocus=false;
 function descriptions(button) {
   return (button.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
 }
@@ -83,9 +83,15 @@ function enter(event) {
 function leave(event) {
   if (target?.contains(event.target) && !target.contains(event.relatedTarget)) hide();
 }
-function pointerDown(){pointerFocus=true;hide();}
+function pointerDown(){clearTimeout(pointerTimer);pointerFocus=true;hide();}
+function pointerEnd(){
+  // Focus caused by a tap or click occurs during the gesture. A subsequent
+  // Tab can originate inside the editor iframe, outside this document.
+  clearTimeout(pointerTimer);
+  pointerTimer=setTimeout(()=>{pointerFocus=false;},0);
+}
 function keyDown(){pointerFocus=false;hide();}
-const events={pointerover:enter,pointerout:leave,focusin:enter,focusout:leave,pointerdown:pointerDown,keydown:keyDown,scroll:hide};
+const events={pointerover:enter,pointerout:leave,focusin:enter,focusout:leave,pointerdown:pointerDown,pointerup:pointerEnd,pointercancel:pointerEnd,click:pointerEnd,keydown:keyDown,scroll:hide};
 onMounted(()=>{
   for (const [type,listener] of Object.entries(events)) document.addEventListener(type,listener,true);
   window.addEventListener('blur',hide);
@@ -94,6 +100,7 @@ onMounted(()=>{
   window.visualViewport?.addEventListener('scroll',hide);
 });
 onBeforeUnmount(()=>{
+  clearTimeout(pointerTimer);
   hide();
   for (const [type,listener] of Object.entries(events)) document.removeEventListener(type,listener,true);
   window.removeEventListener('blur',hide);

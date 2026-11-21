@@ -1,7 +1,7 @@
 <template>
   <section class="conversation-view" aria-label="Conversation">
     <div class="conversation-toolbar">
-      <button aria-label="Back to mail" data-tip="Back to mail" @click="back">
+      <button data-reader-back aria-label="Back to mail" data-tip="Back to mail" @click="back">
         <Icon icon="material-symbols:arrow-back" width="22" />
       </button>
       <button :disabled="busy || !messages.length" :aria-label="filingTitle" :data-tip="filingTitle" @click="mutate(filingAction)">
