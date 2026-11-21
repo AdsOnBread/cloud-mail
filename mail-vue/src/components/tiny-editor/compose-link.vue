@@ -26,7 +26,7 @@
   </div>
 </template>
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, shortenLinkDestination, renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
@@ -89,7 +89,10 @@ function leaveCard(event) {
 function insideEditor() {
   close(false);
 }
-const navigationKey = key => /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(key);
+function selectionKey(event) {
+  return /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(event.key) ||
+    ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a");
+}
 function fragmentAt(link, point) {
   return Math.max(0, Array.from(link.getClientRects()).findIndex(rect =>
     point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom));
@@ -123,7 +126,7 @@ function followCaret() {
 }
 function editorKey(event) {
   if (!panel.value?.preview || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (navigationKey(event.key) || event.isComposing || event.key.length === 1 ||
+  if (selectionKey(event) || event.isComposing || event.key.length === 1 ||
       ["Backspace","Delete","Enter","Shift"].includes(event.key)) return;
   if (event.key === "Tab" && !event.shiftKey) {
     event.preventDefault();
@@ -237,8 +240,39 @@ function remove() {
     if (anchor?.isConnected) ed.dom.remove(anchor, true);
   });
 }
+// A native selection moves after keydown. Follow repeated arrows while held,
+// then check the final range on keyup (including a single quick keystroke).
+watch(() => props.editor, (ed, _, cleanup) => {
+  if (!ed) return;
+  let navigating = false;
+  const down = event => { navigating = !event.isComposing && selectionKey(event); };
+  const moved = () => { if (navigating) followCaret(); };
+  const stop = () => { navigating = false; };
+  const up = event => {
+    if (navigating && selectionKey(event)) followCaret();
+    stop();
+  };
+  const input = event => {
+    if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|delete)/.test(event.inputType)) followCaret();
+  };
+  ed.on("keydown", down);
+  ed.on("SelectionChange", moved);
+  ed.on("keyup", up);
+  ed.on("blur mousedown", stop);
+  ed.on("input", input);
+  ed.on("compositionend", followCaret);
+  cleanup(() => {
+    ed.off("keydown", down);
+    ed.off("SelectionChange", moved);
+    ed.off("keyup", up);
+    ed.off("blur mousedown", stop);
+    ed.off("input", input);
+    ed.off("compositionend", followCaret);
+    close();
+  });
+}, {immediate:true});
 onBeforeUnmount(() => close());
-defineExpose({ open, close, followCaret, navigationKey, openPhoto: link => open(link, false, null, true) });
+defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
 </script>
 <style scoped>
 .link-card {
