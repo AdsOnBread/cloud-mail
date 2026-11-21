@@ -108,3 +108,10 @@ export function suggestions(now = new Date()) {
     )
     .sort((a, b) => a.when - b.when);
 }
+
+export function calendarWeeks(cursor) {
+  const year = cursor.getFullYear(), month = cursor.getMonth();
+  const offset = calendarDate(year, month, 1).getDay();
+  return Array.from({length:6}, (_, week) =>
+    Array.from({length:7}, (_, day) => calendarDate(year, month, 1 - offset + week * 7 + day)));
+}

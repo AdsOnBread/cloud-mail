@@ -1,3 +1,4 @@
+import {searchDateBounds} from "../../../shared/mail-search-date";
 import { attachedFile } from "./mailbox-attachments";
 
 // Both the conversation and message lists use "e" for the owned, visible email.
@@ -21,9 +22,23 @@ export function addMailFilters(params, filters, args, {conversation = false} = {
           AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7))`
       : `EXISTS (SELECT 1 FROM attachments att WHERE ${attachedFile})`);
 	if (String(params.isUnread) === '1') filters.push('e.type=0 AND e.unread=0');
+  addSearchDates(params, 'e.create_time', filters, args);
+}
+
+// Callers provide the creation-time column, independently of the folder or pagination order.
+export function addSearchDates(params, column, filters, args) {
+  const {after, before} = searchDateBounds(params);
+  if (after !== null) {
+    filters.push(column + ">=datetime(?,'unixepoch')");
+    args.push(after);
+  }
+  if (before !== null) {
+    filters.push(column + "<datetime(?,'unixepoch')");
+    args.push(before);
+  }
 	const days = Number(params.days);
 	if ([1, 7, 30, 365].includes(days)) {
-		filters.push("e.create_time>=datetime('now',?)");
+		filters.push(column + ">=datetime('now',?)");
 		args.push('-' + days + ' days');
 	}
 }

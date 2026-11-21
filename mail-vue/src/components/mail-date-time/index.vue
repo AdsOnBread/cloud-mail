@@ -99,6 +99,7 @@ import { computed, nextTick, ref, useId, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import {
   calendarDate,
+  calendarWeeks,
   formatDay,
   parseDay,
   parseTime,
@@ -165,16 +166,7 @@ const atFirstMonth = computed(
 const atLastMonth = computed(
   () => cursor.value.getFullYear() === 9999 && cursor.value.getMonth() === 11,
 );
-const weeks = computed(() => {
-  const year = cursor.value.getFullYear(),
-    month = cursor.value.getMonth(),
-    offset = calendarDate(year, month, 1).getDay();
-  return Array.from({ length: 6 }, (_, week) =>
-    Array.from({ length: 7 }, (_, day) =>
-      calendarDate(year, month, 1 - offset + week * 7 + day),
-    ),
-  );
-});
+const weeks = computed(() => calendarWeeks(cursor.value));
 const error = ref(""),
   invalid = ref("");
 const sameDate = (a, b) => b && a.getTime() === b.getTime();

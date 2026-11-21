@@ -1,3 +1,4 @@
+import {addSearchDates} from '../service/mail-search-filters';
 import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
 import { permission, positive, conflict } from './auth';
@@ -94,11 +95,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     args.push(...choices.map(() => term));
   }
   if (filters.hasAttachment === '1') conditions.push(fileCount + '>0');
-  const days = Number(filters.days);
-  if ([1,7,30,365].includes(days)) {
-    conditions.push("d.created_at>=datetime('now',?)");
-    args.push('-' + days + ' days');
-  }
+  addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
     ${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
