@@ -1,3 +1,4 @@
+import {undoConversationMove} from '../service/conversation-move-undo.js';
 import {readContact,setContact} from '../cloud/contacts';
 import {listFilters,previewFilter,saveFilter,deleteFilter} from '../cloud/message-filters';
 import app from '../hono/hono';
@@ -66,8 +67,12 @@ app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c
 app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'),c.req.query('preview')==='text');return mail.fileResponse(object,row);});
 app.post(root+'/messages/move-from-trash',async c=>{
   await permission(c,uid(c),'email:delete');
-  const {emailIds,labelId,clientId}=await c.req.json();
-  return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),emailIds,labelId,clientId)));
+  const {emailIds,labelId,clientId,undoable,requestId}=await c.req.json();
+  return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),emailIds,labelId,clientId,{undoable,requestId})));
+});
+app.post(root+'/messages/undo-recovery',async c=>{
+  await permission(c,uid(c),'email:delete');
+  return c.json(result.ok(await undoConversationMove(c.env.db,uid(c),(await c.req.json()).token,true)));
 });
 app.post(root+'/messages/trash-labels',async c=>{
   const {emailIds,add,remove}=await c.req.json();
@@ -78,7 +83,11 @@ app.post(root+'/messages/trash-read',async c=>{
   return c.json(result.ok(await setTrashRead(c.env.db,uid(c),emailIds,read)));
 });
 for(const action of ['trash','restore','purge']) app.post(root+'/messages/'+action,async c=>{
-  await permission(c,uid(c),'email:delete');return c.json(result.ok(await mail.trash(c,uid(c),(await c.req.json()).emailIds,action)));
+  await permission(c,uid(c),'email:delete');
+  const body=await c.req.json();
+  if (action==='restore' && body.undoable===true)
+    return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),body.emailIds,0,undefined,{undoable:true,requestId:body.requestId,previousLocation:true})));
+  return c.json(result.ok(await mail.trash(c,uid(c),body.emailIds,action)));
 });
 async function attemptStatus(c) {
   const row=await c.env.db.prepare('SELECT state,result FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(uid(c),c.req.param('id')).first();

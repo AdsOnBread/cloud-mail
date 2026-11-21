@@ -27,6 +27,9 @@ export const moveUndoSchema = [
     wake_at INTEGER, notified INTEGER, had_source INTEGER NOT NULL, had_destination INTEGER NOT NULL,
     PRIMARY KEY(token,email_id))`,
   'CREATE INDEX IF NOT EXISTS idx_move_prior_message ON conversation_move_prior(user_id,email_id)',
+  `CREATE TABLE IF NOT EXISTS trash_recovery_prior (
+    token TEXT NOT NULL REFERENCES conversation_move_undo(token) ON DELETE CASCADE,
+    email_id INTEGER NOT NULL, trashed_at TEXT NOT NULL, PRIMARY KEY(token,email_id))`,
   invalidate('conversation_filing','INSERT','NEW'),
   invalidate('conversation_filing','UPDATE OF wake_at','NEW'),
   invalidate('conversation_filing','DELETE','OLD'),
@@ -51,8 +54,8 @@ export async function withMoveRetry(db,userId,requestId,intent,apply) {
   const existing=await replay();
   if (existing) return existing;
   try {
-    return await apply(result=>db.prepare(`INSERT INTO conversation_move_requests(user_id,request_id,intent,result,expires)
-      VALUES(?,?,?,?,unixepoch()+86400)`).bind(userId,requestId,intent,JSON.stringify(result)));
+    return await apply((result,guard='1',checks=[])=>db.prepare(`INSERT INTO conversation_move_requests(user_id,request_id,intent,result,expires)
+      SELECT ?,?,?,?,unixepoch()+86400 WHERE ${guard}`).bind(userId,requestId,intent,JSON.stringify(result),...checks));
   } catch(error) {
     const existing=await replay();
     if (existing) return existing;
@@ -67,11 +70,11 @@ export function expiredMoves(db) {
   ];
 }
 
-export function captureMove(db, userId, token, source, destination, ids) {
+export function captureMove(db, userId, token, source, destination, ids, guard='1', checks=[]) {
   const statements = [
     ...expiredMoves(db),
     db.prepare(`INSERT INTO conversation_move_undo(token,user_id,expires,state,source,destination)
-      VALUES(?,?,unixepoch()+86400,'capturing',?,?)`).bind(token,userId,source || null,destination || null)
+      SELECT ?,?,unixepoch()+86400,'capturing',?,? WHERE ${guard}`).bind(token,userId,source || null,destination || null,...checks)
   ];
   for (let i=0; i<ids.length; i+=500) {
     statements.push(db.prepare(`INSERT INTO conversation_move_prior
@@ -79,13 +82,14 @@ export function captureMove(db, userId, token, source, destination, ids) {
       SELECT ?1,?2,j.value,f.email_id IS NOT NULL,f.wake_at,f.notified,
         EXISTS(SELECT 1 FROM mailbox_label_members WHERE user_id=?2 AND email_id=j.value AND label_id=?3),
         EXISTS(SELECT 1 FROM mailbox_label_members WHERE user_id=?2 AND email_id=j.value AND label_id=?4)
-      FROM json_each(?5) j LEFT JOIN conversation_filing f ON f.user_id=?2 AND f.email_id=j.value`)
+      FROM json_each(?5) j LEFT JOIN conversation_filing f ON f.user_id=?2 AND f.email_id=j.value
+      WHERE EXISTS(SELECT 1 FROM conversation_move_undo WHERE token=?1)`)
       .bind(token,userId,source,destination,JSON.stringify(ids.slice(i,i+500))));
   }
   return statements;
 }
 
-export async function undoConversationMove(db, userId, token) {
+export async function undoConversationMove(db, userId, token, trash=false) {
   if (typeof token !== 'string' || !/^[a-f\d-]{36}$/i.test(token)) throw new BizError('Invalid move.',400);
   const query = sql => db.prepare(sql).bind(token,userId);
   const restoring = `FROM conversation_move_prior p JOIN conversation_move_undo u ON u.token=p.token
@@ -93,6 +97,7 @@ export async function undoConversationMove(db, userId, token) {
   const changes = await db.batch([
     query(`UPDATE conversation_move_undo SET state='restoring'
       WHERE token=?1 AND user_id=?2 AND state='ready' AND expires>unixepoch()
+      AND ${trash ? '' : 'NOT'} EXISTS(SELECT 1 FROM trash_recovery_prior WHERE token=?1)
       AND NOT EXISTS (SELECT 1 FROM conversation_move_prior p WHERE p.token=?1 AND NOT EXISTS
         (SELECT 1 FROM email e JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id
          WHERE e.user_id=?2 AND e.email_id=p.email_id AND e.is_del=0 AND a.is_del=0
@@ -107,8 +112,13 @@ export async function undoConversationMove(db, userId, token) {
       SELECT p.user_id,p.email_id,p.wake_at,p.notified ${restoring} AND p.had_filing=1`),
     query(`INSERT INTO mobile_changes(user_id,entity,entity_id,operation)
       SELECT p.user_id,'message',p.email_id,'upsert' ${restoring}`),
+    ...(trash ? [query(`UPDATE email SET trashed_at=(SELECT t.trashed_at FROM trash_recovery_prior t
+      WHERE t.token=?1 AND t.email_id=email.email_id) WHERE user_id=?2 AND email_id IN
+      (SELECT t.email_id FROM trash_recovery_prior t JOIN conversation_move_undo u ON u.token=t.token
+       WHERE u.token=?1 AND u.user_id=?2 AND u.state='restoring')`)] : []),
     query("UPDATE conversation_move_undo SET state='done' WHERE token=?1 AND user_id=?2 AND state='restoring'"),
     query("DELETE FROM conversation_move_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='done')"),
+    query("DELETE FROM trash_recovery_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='done')"),
     query('SELECT state FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND expires>unixepoch()')
   ]);
   if (changes.at(-1).results[0]?.state !== 'done') throw new BizError('This move can no longer be undone.',409);

@@ -416,6 +416,56 @@ describe('Recoverable Trash',()=>{
    await setTrashLabels(env.db,1,[a.email_id],[],[label]);
    expect((await mail.list(c(),1,{folder:'trash'})).messages[0].labelIds).toEqual([]);
  });
+ it('undoes Trash recovery without resetting the retention clock or re-trashing surviving siblings',async()=>{
+   const {moveFromTrash}=await import('../src/cloud/trash-actions');
+   const {undoConversationMove}=await import('../src/service/conversation-move-undo');
+   const first=(await message()).email_id, sibling=(await message({message_id:'<sibling@local>',in_reply_to:'<original@example.net>'})).email_id;
+   const date=await env.db.prepare("SELECT datetime('now','-29 days') d").first('d');
+   await env.db.prepare('UPDATE email SET trashed_at=? WHERE email_id=?').bind(date,first).run();
+   await env.db.prepare('INSERT INTO conversation_filing VALUES(1,?,NULL,1)').bind(sibling).run();
+   const options={undoable:true,requestId:crypto.randomUUID()};
+   const recover=()=>moveFromTrash(env.db,1,[first],0,undefined,options);
+   const [a,b]=await Promise.all([recover(),recover()]);
+   expect(a).toEqual(b);
+   expect((await mail.list(c(),1,{folder:'inbox'})).messages.length).toBeGreaterThan(0);
+   await expect(undoConversationMove(env.db,1,a.undoToken)).rejects.toMatchObject({code:409});
+   await expect(undoConversationMove(env.db,2,a.undoToken,true)).rejects.toMatchObject({code:409});
+   await undoConversationMove(env.db,1,a.undoToken,true);
+   await undoConversationMove(env.db,1,a.undoToken,true);
+   expect(await env.db.prepare('SELECT trashed_at FROM email WHERE email_id=?').bind(first).first('trashed_at')).toBe(date);
+   expect(await env.db.prepare('SELECT trashed_at FROM email WHERE email_id=?').bind(sibling).first()).toEqual({trashed_at:null});
+   expect((await env.db.prepare('SELECT email_id,wake_at,notified FROM conversation_filing WHERE user_id=1').all()).results)
+     .toEqual([{email_id:sibling,wake_at:null,notified:1}]);
+   expect(await recover()).toEqual({messageCount:1,alreadyProcessed:true});
+ });
+ it('restores prior labels and distinct Trash dates and rejects a stale recovery',async()=>{
+   const {moveFromTrash}=await import('../src/cloud/trash-actions');
+   const {undoConversationMove}=await import('../src/service/conversation-move-undo');
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const first=(await message()).email_id, second=(await message({subject:'Other',message_id:'<other@local>'})).email_id;
+   const {id:label}=await saveLabel(env.db,1,'Filed');
+   const ids=[first,second];
+   for(const id of ids)await env.db.prepare("UPDATE email SET trashed_at=datetime('now',?) WHERE email_id=?").bind('-'+id+' days',id).run();
+   const dates=async()=>(await env.db.prepare('SELECT email_id,trashed_at FROM email ORDER BY email_id').all()).results;
+   const initial=await dates();
+   await env.db.prepare('INSERT INTO mailbox_label_members VALUES(1,?,?)').bind(label,first).run();
+   const recover=async(previousLocation=false)=>moveFromTrash(env.db,1,ids,previousLocation?0:label,undefined,{undoable:true,requestId:crypto.randomUUID(),previousLocation});
+   for(const previous of [false,true]){
+     const move=await recover(previous);
+     expect((await dates()).every(r=>r.trashed_at===null)).toBe(true);
+     await undoConversationMove(env.db,1,move.undoToken,true);
+     expect(await dates()).toEqual(initial);
+     expect((await env.db.prepare('SELECT email_id FROM mailbox_label_members WHERE label_id=?').bind(label).all()).results).toEqual([{email_id:first}]);
+   }
+   const move=await recover(true);
+   await mail.trash(c(),1,[first]);
+   await mail.trash(c(),1,[first],'restore');
+   await expect(undoConversationMove(env.db,1,move.undoToken,true)).rejects.toMatchObject({code:409});
+   expect((await dates()).every(r=>r.trashed_at===null)).toBe(true);
+   const requestId=crypto.randomUUID();
+   await expect(moveFromTrash(env.db,1,ids,0,undefined,{previousLocation:true,undoable:true,requestId})).rejects.toMatchObject({code:409});
+   expect(await env.db.prepare('SELECT result FROM conversation_move_requests WHERE request_id=?').bind(requestId).first()).toBeNull();
+ });
  it('files recovered mail atomically and preserves the folder of a surviving sibling',async()=>{
    const {moveFromTrash,setTrashRead}=await import('../src/cloud/trash-actions');
    const first=await message(), second=await message({message_id:'<reply@local>',in_reply_to:'<original@example.net>'});

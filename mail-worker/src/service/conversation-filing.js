@@ -26,6 +26,9 @@ export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
     if (tables.has('cloud_drafts')) statements.push(`CREATE INDEX IF NOT EXISTS idx_reply_draft_activity
 		ON cloud_drafts(user_id,json_extract(data,'$.emailId'),updated_at)
 		WHERE state='draft' AND json_extract(data,'$.sendType')='reply'`);
+	if (tables.has('email')) statements.push(`CREATE TRIGGER IF NOT EXISTS move_undo_trash_change AFTER UPDATE OF trashed_at ON email
+    WHEN OLD.trashed_at IS NOT NEW.trashed_at BEGIN DELETE FROM conversation_move_undo WHERE state='ready' AND token IN
+    (SELECT token FROM conversation_move_prior WHERE user_id=OLD.user_id AND email_id=OLD.email_id); END`);
 	if (tables.has('email')) statements.push(`CREATE TRIGGER IF NOT EXISTS filing_cleanup AFTER DELETE ON email BEGIN
 		DELETE FROM conversation_filing WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END`);
 	if (tables.has('email')) statements.push('CREATE TRIGGER IF NOT EXISTS label_member_cleanup AFTER DELETE ON email BEGIN DELETE FROM mailbox_label_members WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END');

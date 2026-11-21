@@ -1,3 +1,4 @@
+import {captureMove,withMoveRetry} from '../service/conversation-move-undo.js';
 import {validateLabelChange} from '../service/mailbox-labels';
 import {withLabelMove} from '../service/label-move';
 import BizError from '../error/biz-error';
@@ -56,13 +57,23 @@ function anchor(current,row) {
   return (incoming(row) ? row.email_id>current.email_id : row.email_id<current.email_id) ? row : current;
 }
 
-export async function moveFromTrash(db,userId,ids,labelId,clientId) {
+export async function moveFromTrash(db,userId,ids,labelId,clientId,{undoable,requestId,previousLocation}={}) {
   const selected=selectedIds(ids);
   if (!Number.isSafeInteger(labelId) || labelId<0) throw new BizError('Choose a destination.',400);
   const idList=JSON.stringify(selected.sort((a,b)=>a-b));
-  return withLabelMove(db,userId,clientId,labelId,['trash',selected],record=>recover(db,userId,selected,labelId,idList,record));
+  const recovery={db,userId,selected,labelId,idList,undoable:undoable===true};
+  const apply=record=>{
+    if (!previousLocation) return recover(recovery,record);
+    const guard=`(SELECT COUNT(*) FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${owned}
+      AND e.trashed_at IS NOT NULL AND e.scheduled_draft_id IS NULL AND e.email_id IN (SELECT value FROM json_each(?)))=?`;
+    return commitRecovery(recovery,record,selected,guard,[userId,idList,selected.length],[]);
+  };
+  if (undoable===true && requestId!==undefined && clientId===undefined)
+    return withMoveRetry(db,userId,requestId,JSON.stringify(['trash',previousLocation===true,labelId,selected]),apply);
+  return withLabelMove(db,userId,clientId,labelId,['trash',selected],apply);
 }
-async function recover(db,userId,selected,labelId,idList,record) {
+async function recover(recovery,record) {
+  const {db,userId,selected,labelId,idList}=recovery;
   // Project just the selected messages back into the normal thread grouping. Trash
   // may contain a newer reply, an older anchor, or an entirely deleted conversation.
   await ensureThreads(db,userId);
@@ -96,6 +107,7 @@ async function recover(db,userId,selected,labelId,idList,record) {
   // All filing writes precede the email update, which advances the revision.
   const guard='EXISTS (SELECT 1 FROM mobile_thread_state WHERE user_id=? AND revision=?) AND (?=0 OR EXISTS (SELECT 1 FROM mailbox_labels WHERE user_id=? AND label_id=?))';
   const check=[userId,state.results[0].revision,labelId,userId,labelId];
+  const touched=new Set(selected);
   const statements=[];
   if (labelId) statements.push(db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)
     SELECT ?,?,value FROM json_each(?) WHERE ${guard}`).bind(userId,labelId,idList,...check));
@@ -110,14 +122,30 @@ async function recover(db,userId,selected,labelId,idList,record) {
         WHERE ${guard}`).bind(userId,fallback,JSON.stringify(restored),userId,previous.email_id,...check));
     } else {
       const filed=labelId ? restored : [...new Set([...restored,next.email_id])];
+      if (!labelId) touched.add(next.email_id);
       statements.push(db.prepare(`INSERT OR REPLACE INTO conversation_filing(user_id,email_id,wake_at)
         SELECT ?,value,? FROM json_each(?) WHERE ${guard}`).bind(userId,labelId ? null : 0,JSON.stringify(filed),...check));
     }
   }
-  if (record) statements.unshift(record({messageCount:selected.length},guard,check));
+  return commitRecovery(recovery,record,[...touched],guard,check,statements);
+}
+async function commitRecovery({db,userId,selected,labelId,idList,undoable},record,touched,guard,check,filing) {
+  const result={messageCount:selected.length};
+  const statements=[];
+  if (undoable) {
+    result.undoToken=crypto.randomUUID();
+    statements.push(...captureMove(db,userId,result.undoToken,0,labelId,touched,guard,check));
+    statements.push(db.prepare(`INSERT INTO trash_recovery_prior(token,email_id,trashed_at)
+      SELECT ?,email_id,trashed_at FROM email WHERE user_id=? AND email_id IN (SELECT value FROM json_each(?)) AND ${guard}`)
+      .bind(result.undoToken,userId,idList,...check));
+  }
+  statements.push(...filing);
+  if (record) statements.push(record(result,guard,check));
+  const mailUpdate=statements.length;
   statements.push(db.prepare(`UPDATE email SET trashed_at=NULL WHERE email_id IN
     (SELECT value FROM json_each(?) WHERE ${guard}) AND user_id=? RETURNING email_id`).bind(idList,...check,userId));
+  if (undoable) statements.push(db.prepare("UPDATE conversation_move_undo SET state='ready' WHERE token=?").bind(result.undoToken));
   const results=await db.batch(statements);
-  if (results.at(-1).results.length!==selected.length) throw new BizError('Trash changed. Refresh and try again.',409);
-  return {messageCount:selected.length};
+  if (results[mailUpdate].results.length!==selected.length) throw new BizError('Trash changed. Refresh and try again.',409);
+  return result;
 }
