@@ -419,20 +419,21 @@ function toggleFiles() {
 }
 async function mark(row, field, value) {
   if (busy.value || !canCancel(row)) return;
-  const owner = identity.value;
+  const owner = identity.value, email = user.user.email;
   const session = localStorage.getItem("token");
-  const current = () => !disposed && identity.value === owner && localStorage.getItem("token") === session;
+  const sameSession = () => user.user.email === email && localStorage.getItem("token") === session;
+  const current = () => !disposed && identity.value === owner && sameSession();
   busy.value = true;
   error.value = "";
   try {
     await http.post("/v1/scheduled/" + row.draftId + "/mark", {version: row.version, field, value}, {noMsg:true});
+    if (sameSession()) drafts.scheduledRevision++;
     if (!current()) return;
     const saved = rows.value.find(item => item.draftId === row.draftId);
     if (saved) {
       if (field === "starred") saved.starred = value;
       else saved.importanceReason = value ? "user" : null;
     }
-    drafts.scheduledRevision++;
   } catch (e) {
     if (current()) {
       await load();
