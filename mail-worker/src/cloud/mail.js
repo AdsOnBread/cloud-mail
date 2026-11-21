@@ -21,8 +21,9 @@ function visibleMail(c) {
 export async function searchPeople(c,userId,params) {
   const {field,accountId,folder}=params;
   if (folder==='compose' && field==='any') {
-    const term=params.q?.trim().slice(0,maxPersonTerm), mailbox=positive(accountId);
-    if (!term) return [];
+    const term=params.q?.trim().slice(0,maxPersonTerm) || '', mailbox=positive(accountId);
+    const picker=params.view==='picker';
+    if (!term && !picker) return [];
     const projection=`SELECT e.email_id,e.name,e.send_email sendEmail,e.type,e.recipient,e.cc,
       CASE WHEN e.type=1 THEN e.bcc ELSE '' END bcc
       FROM candidates c CROSS JOIN email e ON e.email_id=c.id JOIN account a ON a.account_id=e.account_id
@@ -30,7 +31,7 @@ export async function searchPeople(c,userId,params) {
     const read=async (ids,args)=>(await c.env.db.prepare(`WITH candidates(id) AS MATERIALIZED (${ids}) ${projection}`)
       .bind(...args,userId,mailbox).all()).results;
     const recent=await read('SELECT email_id FROM email WHERE user_id=? AND account_id=? ORDER BY email_id DESC LIMIT 96',[userId,mailbox]);
-    const limit=8+maxPeople, matches=peopleSuggestions(recent,'any',term,limit);
+    const limit=picker ? 50 : 8+maxPeople, matches=peopleSuggestions(recent,'any',term,limit);
     const tokens=term.match(/[\p{L}\p{M}\p{N}]+/gu);
     if (matches.length>=limit || !tokens || term.length<2) return matches;
     // Search older indexed headers. Subject-only matches are rejected by peopleSuggestions.

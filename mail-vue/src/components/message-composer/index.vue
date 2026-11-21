@@ -341,41 +341,9 @@
     </dialog>
     <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="closePhotos" />
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
-    <el-dialog
-      v-model="showContacts"
-      append-to-body
-      title="Recent contacts"
-      width="min(480px, calc(100% - 32px))"
-      @closed="contactsTabRef?.clearSelection()"
-    >
-      <p class="contact-target">
-        Add to
-        {{
-          contactField === "receiveEmail"
-            ? "To"
-            : contactField === "cc"
-              ? "Cc"
-              : "Bcc"
-        }}
-      </p>
-      <el-table
-        ref="contactsTabRef"
-        row-key="email"
-        :data="contacts"
-        max-height="360"
-      >
-        <el-table-column type="selection" width="40" /><el-table-column
-          property="email"
-          label="Email address"
-        />
-      </el-table>
-      <template #footer
-        ><el-button @click="deleteContact">Remove selected contacts</el-button
-        ><el-button type="primary" @click="chooseContact"
-          >Select contacts</el-button
-        ></template
-      >
-    </el-dialog>
+    <ContactPicker v-if="showContacts" :owner="form.ownerEmail" :account-id="form.accountId"
+      :addresses="form[contactField]" :names="form.replyRecipientNames" :recent="mailboxRecents" :removed="removedSuggestions"
+      @insert="chooseContact" @forget="emails=>writerStore.forgetAddresses(form.ownerEmail,form.accountId,emails)" @close="closeContacts"/>
   </section>
 </template>
 <script setup>
@@ -384,6 +352,7 @@ import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
+import ContactPicker from './contact-picker.vue';
 import {sendConfirmation} from "./send-confirmation";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
@@ -691,11 +660,7 @@ const validateAddresses = ref(false);
 const recipientErrors = computed(()=>validateAddresses.value ? normalizeRecipients(form).errors : {});
 const defValue = ref("");
 const showContacts = ref(false);
-const contactsTabRef = ref();
 const contactField = ref("receiveEmail");
-const contacts = computed(() =>
-  writerStore.sendRecipientRecord.map((email) => ({ email })),
-);
 let baseline = "";
 let restoredUntouched = false;
 const preparing = ref(false);
@@ -792,6 +757,7 @@ function resetForm() {
   dragHint.value = "";
   starChoice.value=null;
   recipientNotice.value = null;
+  showContacts.value=false;
   lastInput = null;
   restoreFocus = null;
   signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
@@ -1283,7 +1249,6 @@ function rememberPerson({email,name}) {
 }
 function rememberRecipients(recent, accountId) {
   writerStore.rememberAddresses(userStore.user.email,accountId,recent);
-  writerStore.sendRecipientRecord = [...new Set([...recent, ...writerStore.sendRecipientRecord])].slice(0,500);
 }
 function recordSent(messages) {
   messages.forEach(message => emailStore.sendScroll?.addItem?.(message));
@@ -1389,40 +1354,14 @@ function openContacts(field) {
   commitRecipients();
   contactField.value = field;
   showContacts.value = true;
-  nextTick(() => {
-    contactsTabRef.value?.clearSelection();
-    contacts.value
-      .filter((contact) => form[field].includes(contact.email))
-      .forEach((contact) =>
-        contactsTabRef.value.toggleRowSelection(contact, true),
-      );
-  });
 }
-function chooseContact() {
-  const selected = contactsTabRef.value
-    .getSelectionRows()
-    .map((contact) => contact.email);
-  form[contactField.value] = [
-    ...new Set([
-      ...form[contactField.value].filter(
-        (email) => !writerStore.sendRecipientRecord.includes(email),
-      ),
-      ...selected,
-    ]),
-  ];
-  showContacts.value = false;
+function closeContacts(){
+  showContacts.value=false;
+  if(show.value && !props.dockHidden) focusRecipients(contactField.value);
 }
-async function deleteContact() {
-  try {
-    await ElMessageBox.confirm(
-      "Remove the selected addresses from recent contacts?",
-      { confirmButtonText: "Remove", cancelButtonText: "Cancel" },
-    );
-    const selected = contactsTabRef.value
-      .getSelectionRows()
-      .map((contact) => contact.email);
-    writerStore.forgetAddresses(form.ownerEmail, form.accountId, selected);
-  } catch {}
+function chooseContact(people){
+  form[contactField.value]=people.map(person=>person.email);
+  for(const person of people) if(person.name && person.name!==person.email) rememberPerson(person);
 }
 function keydown(event) {
   if (props.dockHidden || discardLocked.value) return;

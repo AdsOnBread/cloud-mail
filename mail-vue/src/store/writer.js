@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 
 export const useWriterStore = defineStore('writer', {
     state: () => ({
-        sendRecipientRecord: [],
         mailboxRecents: {},
         removedSuggestions: {}
     }),
@@ -21,7 +20,6 @@ export const useWriterStore = defineStore('writer', {
         },
         forgetAddresses(owner, accountId, addresses) {
             const removed = new Set(addresses.map(address=>address.toLowerCase()));
-            this.sendRecipientRecord = this.sendRecipientRecord.filter(address => !removed.has(address.toLowerCase()));
             if (!owner || !(accountId > 0)) return;
             const key = JSON.stringify([owner, accountId]);
             this.mailboxRecents[key] = this.recentAddresses(owner,accountId).filter(address => !removed.has(address.toLowerCase()));
@@ -29,6 +27,6 @@ export const useWriterStore = defineStore('writer', {
         }
     },
     persist: {
-        pick: ['sendRecipientRecord','mailboxRecents','removedSuggestions'],
+        pick: ['mailboxRecents','removedSuggestions'],
     },
 })
