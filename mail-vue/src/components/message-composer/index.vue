@@ -350,10 +350,12 @@ import { useRouter } from "vue-router";
 import SchedulePicker from "./schedule.vue";
 import {useMailFeedback} from "@/store/mail-feedback";
 import tinyEditor from "@/components/tiny-editor/index.vue";
+import {recipientDragSession} from "@/components/recipient-field/drag";
 import RecipientField from "@/components/recipient-field/index.vue";
 import {
   nextTick,
   onMounted,
+  provide,
   useId,
   onUnmounted,
   reactive,
@@ -722,6 +724,11 @@ const emptyForm = () => ({
   draftId: null,
 });
 const form = reactive(emptyForm());
+provide(recipientDragSession,()=>{
+  const token=userStore.authenticatedToken;
+  return show.value && !minimized.value && !sending.value && !preparing.value && !attaching.value &&
+    form.ownerEmail && form.ownerEmail===userStore.user.email && token===localStorage.getItem("token") ? token : null;
+});
 const mailboxRecents = computed(()=>writerStore.recentAddresses(form.ownerEmail,form.accountId));
 const removedSuggestions = computed(()=>writerStore.removedSuggestions[JSON.stringify([form.ownerEmail,form.accountId])] || []);
 const attachedFiles = computed(() => form.attachments.filter(file => !file.contentId));

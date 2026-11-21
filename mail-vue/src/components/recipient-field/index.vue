@@ -1,15 +1,18 @@
 <template>
-  <div class="recipient-field" :class="{ 'has-error': error }">
+  <div class="recipient-field" ref="root" :class="{ 'has-error': error, 'drop-at-end':dropIndex===modelValue.length }"
+    @dragover="overChip" @dragenter="overChip" @dragleave="leaveRecipient($event,dragField)"
+    @drop="dropChip">
     <button type="button" class="field-label" ref="labelButton" :aria-label="`Choose ${label} contacts`"
       :data-tip="`${label} - Select contacts`" @click="$emit('contacts')">{{ label }}</button>
     <div ref="entry" class="recipient-entry" @click.self="input?.focus()">
       <template v-for="(address, index) in modelValue" :key="index">
         <span v-if="editing !== index" class="recipient-chip" :style="{order:index}"
-          :class="{ invalid: !isEmail(address), chosen: menuIndex === index }">
-          <button type="button" class="chip-address" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
+          :class="{ invalid: !isEmail(address), chosen: menuIndex === index, 'drop-before':dropIndex===index }">
+          <button type="button" class="chip-address" :draggable="!!session && mouseChip"
+            @dragstart="startDrag($event,index)" @dragend="endRecipientDrag(dragField)" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
-            @pointerdown.prevent="touchActivated=false" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
-            @pointerenter="hoverChip($event,index)" @pointerleave="leaveCard"
+            @pointerdown="chipPointerDown($event)" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
+            @pointerenter="mouseChip=$event.pointerType!=='touch';hoverChip($event,index)" @pointerleave="leaveCard"
             @keydown="chipKey($event,index)" @copy="clipboardEvent($event,index)" @cut="clipboardEvent($event,index)">
             <span class="avatar" aria-hidden="true">{{ display(address).charAt(0).toUpperCase() }}</span>
             <span class="chip-text">{{ display(address) }}</span>
@@ -59,7 +62,8 @@
 <script setup>
 import ContactCard from './contact-card.vue';
 import {useContactCard,dismissContactCard} from './use-contact-card';
-import { nextTick, ref, useId, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import {recipientDragSession,recipientDrop,startRecipientDrag,endRecipientDrag,hoverRecipient,leaveRecipient,dropRecipient} from './drag';
 import {useRecipientSuggestions} from './suggestions';
 import {cleanRecipientName} from '../../../../shared/recipient-names';
 import { formatRecipient, parseRecipientList, splitRecipients } from '@/utils/recipients.js';
@@ -90,6 +94,43 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
   });
 const {target:cardTarget,card:contactCard,pinned,open:openCard,close:closeCard,hold:holdCard,hover,leave:leaveCard}=useContactCard();
 let touchActivated=false;
+const root=ref(), mouseChip=ref(false), session=inject(recipientDragSession,null);
+const dragField={
+  session:()=>root.value?.closest("fieldset:disabled,[inert]") ? null : session?.(),
+  address:index=>props.modelValue[index], name:display,
+  prepare() {
+    const editIndex=editing.value, length=props.modelValue.length;
+    const {updated}=resolveInput();
+    const delta=updated.length-length;
+    return {addresses:updated,position:index=>editIndex!==null && index>editIndex ? index+delta : index};
+  },
+  write:addresses=>emit('update:modelValue',addresses),
+  remember:(email,name)=>emit('choosePerson',{email,name}),
+  focus:index=>nextTick(()=>focusAt(index)),
+};
+const dropIndex=computed(()=>recipientDrop.value?.field===dragField ? recipientDrop.value.index : null);
+function chipPointerDown(event) {
+  touchActivated=false;
+  mouseChip.value=event.pointerType!=="touch";
+  if (!session || !mouseChip.value || event.button!==0) event.preventDefault();
+}
+function startDrag(event,index) {
+  closeCard(); closeMenu(false); hideSuggestions();
+  startRecipientDrag(event,dragField,index);
+}
+function insertion(event) {
+  const address=event.target.closest?.(".recipient-chip")?.querySelector(".chip-address");
+  if (!address) return props.modelValue.length;
+  const rect=address.closest(".recipient-chip").getBoundingClientRect();
+  return Number(address.dataset.index)+(event.clientX>=rect.left+rect.width/2 ? 1 : 0);
+}
+function overChip(event) {
+  if (!event.target.closest?.(".reveal-recipient")) hoverRecipient(event,dragField,insertion(event));
+}
+function dropChip(event) {
+  if (!event.target.closest?.(".reveal-recipient")) dropRecipient(event,dragField,insertion(event));
+}
+onBeforeUnmount(()=>endRecipientDrag(dragField));
 function showCard(index,focus=false) {
   const address=props.modelValue[index], trigger=chip(index);
   if (!props.owner || !isEmail(address) || !trigger) return;
@@ -118,6 +159,7 @@ watch(()=>props.modelValue[cardTarget.value?.index],value=>{
   if (cardTarget.value && value!==cardTarget.value.address) closeCard();
 });
 function clear() {
+  endRecipientDrag(dragField);
   closeCard();
   hideSuggestions();
   clipboardVersion++;
@@ -334,7 +376,7 @@ defineExpose({ pendingChange, commit, focus: () => input.value?.focus(), focusAd
 <style scoped>
 .recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:36px; box-sizing:border-box; border-bottom:1px solid var(--compose-divider, var(--light-border-color)); padding:3px 0; }
 .field-label { cursor:pointer; text-align:left; flex-shrink:0; color:var(--regular-text-color); font-size:14px; }
-.recipient-entry { flex:1; min-width:100px; display:flex; align-items:center; flex-wrap:wrap; gap:4px; cursor:text; }
+.recipient-entry { flex:1; min-width:100px; display:flex; align-items:center; flex-wrap:wrap; gap:8px; cursor:text; }
 input { appearance:none; border:0; border-radius:0; outline:none; background:transparent; font:inherit; flex:1; width:100px; min-width:80px; padding:4px 0; color:inherit; }
 .recipient-chip { display:inline-flex; align-items:center; border-radius:999px; padding:2px; box-shadow:inset 0 0 0 1px var(--compose-chip-border,#c4c7c5); color:var(--regular-text-color,#444746); max-width:100%; box-sizing:border-box; }
 .chip-address,.remove { display:inline-flex; align-items:center; cursor:pointer; border:0; padding:0; background:transparent; color:inherit; outline:none; }
@@ -343,6 +385,9 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .avatar { display:grid; place-items:center; width:24px; height:24px; flex:none; border-radius:50%; background:#687783; color:white; font-size:13px; }
 .remove { flex:none; justify-content:center; width:22px; height:24px; border-radius:50%; }
 .remove svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; }
+.recipient-chip { position:relative; }
+.recipient-chip.drop-before::before,.drop-at-end .recipient-entry input { border-inline-start:2px solid var(--el-color-primary); }
+.recipient-chip.drop-before::before { content:""; position:absolute; inset-block:1px; inset-inline-start:-4px; }
 .recipient-chip:hover { background:var(--base-fill); }
 .recipient-chip:focus-within,.recipient-chip.chosen { background:#c2e7ff; color:#001d35; box-shadow:none; }
 .recipient-chip.invalid { box-shadow:inset 0 0 0 1px var(--el-color-danger); }
