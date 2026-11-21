@@ -2,13 +2,13 @@
   <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @keydown.esc.stop.prevent="help.close()" @close="restoreHelpFocus">
     <div class="help-content">
       <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
-        <button autofocus aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
+        <button autofocus tabindex="0" aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
       </header>
       <footer>
         <span>Keyboard shortcuts are {{enabled ? 'on' : 'off'}}.
-          <button type="button" class="help-link" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
+          <button type="button" tabindex="0" class="help-link" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
         </span>
-        <RouterLink :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
+        <RouterLink tabindex="0" :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
         <p v-if="saveError" role="alert">{{saveError}}</p>
       </footer>
       <div class="shortcut-content" tabindex="0" role="region" aria-label="Shortcut list">

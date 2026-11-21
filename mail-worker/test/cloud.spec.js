@@ -42,6 +42,14 @@ describe('General mail settings',()=>{
    expect(await readSignatures(env.db,1)).toEqual(newer);
    expect((await readSignatures(env.db,2)).version).toBe(0);
  });
+ it('preserves enabled keyboard shortcuts when an older client saves preferences alone',async()=>{
+   const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
+   const prefs={version:0,replyAll:false,undoSeconds:5};
+   await saveGeneralSettings(env.db,1,{...prefs,keyboardShortcuts:true});
+   await saveGeneralSettings(env.db,1,{...prefs,version:1,undoSeconds:10});
+   await expect(saveGeneralSettings(env.db,1,{...prefs,version:2,keyboardShortcuts:'false'})).rejects.toMatchObject({code:400});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:false,keyboardShortcuts:true});
+ });
  it('rejects stale edits, keeps preferences per user, and removes them on deletion',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const input={version:0,undoSeconds:30,replyAll:true};
