@@ -1,5 +1,6 @@
 import app from './hono/webs';
 import { oauthFetch } from './mcp/oauth';
+import {indexWordBatch} from './service/mail-word-index';
 import {deliverDue} from './cloud/scheduled';
 import { purgeExpired } from './cloud/mail';
 import { email } from './email/email';
@@ -48,7 +49,8 @@ const worker = {
 	async scheduled(c, env, ctx) {
 		if (c.cron === '* * * * *') { await deliverDue({env}); return; }
 		if (c.cron === '*/30 * * * *') {
-			await analysisService.refreshEchartsCache({ env })
+			await analysisService.refreshEchartsCache({ env });
+			await indexWordBatch(env.db);
 			return;
 		}
 

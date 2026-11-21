@@ -199,7 +199,7 @@
       <p v-if="!messages.length && !error" class="empty" role="status">
         {{
           loading
-            ? "Loading…"
+            ? (preparingSearch ? "Preparing searchable mail…" : "Loading…")
             : search.query || filtered
               ? "No messages match your search."
               : "No conversations in Trash."
@@ -210,6 +210,7 @@
   </section>
 </template>
 <script setup>
+import {searchPage} from '@/services/preparing-search';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
@@ -249,7 +250,7 @@ const messages = ref([]),
   nextCursor = ref(null);
 const detail = ref(null),
   busy = ref(false),
-  loading = ref(false),
+  loading = ref(false), preparingSearch=ref(false),
   error = ref(""),
   notice = ref("");
 const messageId = computed(() => Number(route.query.message) || 0);
@@ -353,10 +354,14 @@ async function load(pages = history.value) {
   error.value = "";
   loading.value = true;
   try {
-    let page = await list(pages.at(-1), search.query);
+    preparingSearch.value=false;
+    const readPage=()=>searchPage(()=>list(pages.at(-1),search.query),()=>!disposed && request===revision,()=>{preparingSearch.value=true;});
+    let page = await readPage();
+    if (!page) return;
     while (!page.messages.length && pages.length && request === revision) {
       pages = pages.slice(0, -1);
-      page = await list(pages.at(-1), search.query);
+      page = await readPage();
+      if (!page) return;
     }
     if (request !== revision) return;
     history.value = pages;

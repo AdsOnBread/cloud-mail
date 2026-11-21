@@ -110,7 +110,7 @@ export async function conversationList(c, p, userId) {
 		filters.push('e.account_id=?');
 		args.push(Number(p.accountId) || 0);
 	}
-	await prepareExcludedSearch(db,userId,p.excluded);
+	if (!(await prepareExcludedSearch(db,userId,p.folder==='starred' || Number(p.allReceive)===1 ? null : p.accountId,p.excluded))) return {preparingSearch:true};
 	addMailFilters(p,filters,args,{conversation:true});
 	if (p.q?.trim()) {
 		const term =

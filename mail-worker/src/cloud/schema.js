@@ -1,4 +1,4 @@
-import {mailWordSchema} from '../service/mail-word-index';
+import {mailWordSchema} from '../service/mail-word-schema.js';
 export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
   user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
   PRIMARY KEY(user_id,folder))`;

@@ -60,7 +60,7 @@ export async function list(c,userId,p={}) {
   if(folder==='starred') filters.push('s.star_id IS NOT NULL');
   if(p.accountId) {filters.push('e.account_id=?');args.push(positive(p.accountId));}
   if(p.cursor) {filters.push('e.email_id<?');args.push(positive(p.cursor));}
-  await prepareExcludedSearch(c.env.db,userId,p.excluded);
+  if (!(await prepareExcludedSearch(c.env.db,userId,p.accountId,p.excluded))) return {preparingSearch:true};
   addMailFilters(p,filters,args);
   if(p.q?.trim()) {
     const term='%'+p.q.trim().slice(0,200).replace(/[\\%_]/g,'\\$&')+'%';

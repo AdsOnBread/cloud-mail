@@ -311,7 +311,7 @@
         </MailRow>
       </div>
       <p v-if="loading" role="status" class="list-status">
-        Loading conversations…
+        {{ preparingSearch ? 'Preparing searchable mail…' : 'Loading conversations…' }}
       </p>
       <p v-else-if="!rows.length && !filedDrafts.length && !scheduledMatches.length && !scheduledError && !error" class="list-status">
         {{
@@ -382,6 +382,7 @@ import { useAccountStore } from "@/store/account";
 import { useEmailStore } from "@/store/email";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useSettingStore } from "@/store/setting";
+import {searchPage} from '@/services/preparing-search';
 import { conversationList, conversationAction } from "@/request/conversation";
 import {fileScheduledMessages} from "@/services/scheduled-filing";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
@@ -419,7 +420,7 @@ async function archiveQueued(message,button) {
 const rows = ref([]),
   selected = ref([]),
   ascending = ref(false),
-  loading = ref(false),
+  loading = ref(false), preparingSearch=ref(false),
   busy = ref(false),
   error = ref(""),
   total = ref(0),
@@ -619,18 +620,19 @@ async function load(
   prior = history.value,
 ) {
   const request = ++generation;
+  preparingSearch.value=false;
   loading.value = true;
   error.value = "";
   try {
     const includeScheduled = !target.cursor && (["starred","important","label"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
       && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
-      conversationList({ ...params(), cursor: target.cursor }),
+      searchPage(()=>conversationList({ ...params(), cursor: target.cursor }),()=>request===generation,()=>{preparingSearch.value=true;}),
       includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
         accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
         noMsg:true}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
     ]);
-    if (request !== generation) return;
+    if (request !== generation || !data) return;
     if (target.cursor && data.total !== total.value)
       return await load({ cursor: null, offset: 0 }, []);
     if (!data.threads.length && prior.length)
