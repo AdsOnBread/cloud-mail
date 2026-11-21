@@ -1,6 +1,6 @@
 <template>
   <div ref="tile" class="attachment-tile" :class="'file-'+kind">
-    <button type="button" class="attachment-open" :aria-label="'Preview '+filename" @click="$emit('preview',file)">
+    <button type="button" class="attachment-open" :aria-label="'Preview '+filename" @click="openPreview">
       <span class="thumbnail" aria-hidden="true">
         <img v-if="image" :src="image" alt="" @error="clearImage">
         <span v-else-if="sample" class="sample">{{sample}}</span>
@@ -68,6 +68,10 @@ function stopThumbnail() {
   sample.value="";
 }
 onBeforeUnmount(()=>{observer?.disconnect();stopThumbnail();});
+function openPreview(event) {
+  event.currentTarget.focus({preventScroll:true});
+  emit("preview",props.file);
+}
 async function download() {
   try {saveAttachment(await attachmentBlob(props.file),filename.value);}
   catch(e){emit("error",e.message || "Could not download attachment.");}

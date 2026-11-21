@@ -66,6 +66,21 @@ describe('Cloud drafts',()=>{
    const updated=await drafts.save(c(),1,{version:d.version,attachments:[f]},d.draftId);expect(updated.attachments[0].attachmentId).toBe(f.attachmentId);
    await drafts.remove(c(),1,d.draftId,updated.version);await expect(drafts.file(c(),1,f.attachmentId)).rejects.toMatchObject({code:404});
  });
+ it('limits automatic text samples to the first kilobyte and checks attachment ownership before reading',async()=>{
+   const content='a'.repeat(1024)+'last lines';
+   const d=await draft({attachments:[{filename:'draft.txt',content:btoa(content),contentType:'text/plain'}]});
+   const file=d.attachments[0],original=await message();
+   const {default:storage}=await import('../src/service/r2-service');
+   const key='attachments/text-sample.txt';
+   await storage.putObj(c(),key,new TextEncoder().encode(content),{contentType:'text/plain'});
+   const row=await env.db.prepare("INSERT INTO attachments(user_id,email_id,account_id,key,filename,mime_type) VALUES(1,?,1,?,'source.txt','text/plain') RETURNING att_id").bind(original.email_id,key).first();
+   const read=async result=>{const {object}=await result;return new Response(object.body||object).text();};
+   for (const get of [(uid,sample)=>drafts.file(c(),uid,file.attachmentId,sample),(uid,sample)=>mail.attachment(c(),uid,row.att_id,sample)]) {
+     expect(await read(get(1,true))).toBe(content.slice(0,1024));
+     expect(await read(get(1,false))).toBe(content);
+     await expect(get(2,true)).rejects.toMatchObject({code:404});
+   }
+ });
  it('allows only one concurrent draft writer',async()=>{
    const d=await draft();const edits=await Promise.allSettled(['A','B'].map(subject=>drafts.save(c(),1,{version:d.version,subject},d.draftId)));
    expect(edits.filter(e=>e.status==='fulfilled')).toHaveLength(1);

@@ -1,3 +1,21 @@
+async function readPrefix(stream,limit) {
+  const reader=stream.getReader(),bytes=new Uint8Array(limit);
+  let length=0;
+  try {
+    while (length<limit) {
+      const {value,done}=await reader.read();
+      if (done) break;
+      const part=value.subarray(0,limit-length);
+      bytes.set(part,length);
+      length+=part.length;
+    }
+    return bytes.subarray(0,length);
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+}
+
 const kvObjService = {
 
 	async putObj(c, key, content, metadata) {
@@ -18,12 +36,12 @@ const kvObjService = {
 	},
 
 	async getObj(c, key, prefixBytes) {
-		const obj = await c.env.kv.getWithMetadata(key, { type: "arrayBuffer"});
+		const obj = await c.env.kv.getWithMetadata(key, { type: prefixBytes ? "stream" : "arrayBuffer"});
 		if (!obj.value) {
 			return null;
 		}
 
-		return new Response(prefixBytes ? obj.value.slice(0,prefixBytes) : obj.value, {
+		return new Response(prefixBytes ? await readPrefix(obj.value,prefixBytes) : obj.value, {
 			headers: {
 				'Content-Type': obj.metadata?.contentType || 'application/octet-stream',
 				'Content-Disposition': obj.metadata?.contentDisposition || null,
