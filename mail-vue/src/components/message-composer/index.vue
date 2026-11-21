@@ -844,7 +844,9 @@ function reveal() {
 }
 function open() {
   if (show.value) {
-    restoreCompose();
+    if (minimized.value) restoreCompose();
+    else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
+    else editor.value?.focus();
     return;
   }
   if (preparing.value) return;
