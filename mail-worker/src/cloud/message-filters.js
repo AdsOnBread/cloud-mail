@@ -64,6 +64,7 @@ async function prepareExclusions(db,user){
   do { if(await indexWordBatch(db,user,null))return true; } while(Date.now()<deadline);
   return false;
 }
+const pendingWords='EXISTS (SELECT 1 FROM mail_word_pending WHERE user_id=?)';
 export async function previewFilter(db, user, input) {
 	const rule = JSON.stringify(criteria(input));
 	if (input.excluded && !(await prepareExclusions(db,user))) return { preparing: true };
@@ -71,13 +72,13 @@ export async function previewFilter(db, user, input) {
 	const row = await db
 		.prepare(
 			`WITH r AS (SELECT ? AS user_id,? AS criteria)
-    SELECT count(DISTINCT coalesce(m.thread_id,'message:'||e.email_id)) AS conversations
+    SELECT count(DISTINCT coalesce(m.thread_id,'message:'||e.email_id)) AS conversations, (? AND ${pendingWords}) AS pending
     FROM email e JOIN r ON r.user_id=e.user_id LEFT JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     WHERE ${filterMatches}`,
 		)
-		.bind(user, rule)
+		.bind(user, rule, input.excluded ? 1 : 0, user)
 		.first();
-	return row;
+	return row.pending ? {preparing:true} : {conversations:row.conversations};
 }
 export async function saveFilter(db, user, id, input) {
 	if (!/^[0-9a-f-]{36}$/i.test(id) || !Number.isSafeInteger(input.version) || input.version < 0) invalid('Invalid filter revision.');
@@ -89,19 +90,21 @@ export async function saveFilter(db, user, id, input) {
 	const validLabel = '(? IS NULL OR EXISTS (SELECT 1 FROM mailbox_labels WHERE user_id=? AND label_id=?))';
 	if (input.applyExisting === true && input.criteria?.excluded && !(await prepareExclusions(db,user)))
 		return { preparing: true };
-	const statements = [
+	const indexesWords=Boolean(input.applyExisting && input.criteria?.excluded);
+  const ready='(?=0 OR NOT '+pendingWords+')';
+  const statements = [
 		input.version === 0
 			? db
 					.prepare(
-						`INSERT INTO mail_filters(id,user_id,criteria,actions,mutation) SELECT ?,?,?,?,? WHERE ${validLabel}
+						`INSERT INTO mail_filters(id,user_id,criteria,actions,mutation) SELECT ?,?,?,?,? WHERE ${validLabel} AND ${ready}
         ON CONFLICT(id) DO NOTHING`,
 					)
-					.bind(id, user, query, json, mutation, label, user, label)
+					.bind(id, user, query, json, mutation, label, user, label,Number(indexesWords),user)
 			: db
 					.prepare(
-						`UPDATE mail_filters SET criteria=?,actions=?,mutation=?,version=version+1 WHERE id=? AND user_id=? AND version=? AND ${validLabel}`,
+						`UPDATE mail_filters SET criteria=?,actions=?,mutation=?,version=version+1 WHERE id=? AND user_id=? AND version=? AND ${validLabel} AND ${ready}`,
 					)
-					.bind(query, json, mutation, id, user, input.version, label, user, label),
+					.bind(query, json, mutation, id, user, input.version, label, user, label,Number(indexesWords),user),
 	];
 	if (input.applyExisting === true)
 		statements.push(
@@ -113,10 +116,12 @@ export async function saveFilter(db, user, id, input) {
 				)
 				.bind(user, id, mutation),
 		);
-	statements.push(db.prepare('SELECT * FROM mail_filters WHERE id=? AND user_id=?').bind(id, user));
+	statements.push(db.prepare('SELECT (? AND '+pendingWords+') AS pending').bind(Number(indexesWords),user));
+  statements.push(db.prepare('SELECT * FROM mail_filters WHERE id=? AND user_id=?').bind(id, user));
 	const result = await db.batch(statements),
 		row = result.at(-1).results[0];
 	if (row?.mutation !== mutation) {
+    if(result.at(-2).results[0].pending)return {preparing:true};
 		if (input.version === 0 && row?.version === 1 && row.criteria === query && row.actions === json) return exposed(row);
 		if (label && !(await db.prepare('SELECT 1 FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(user, label).first()))
 			throw new BizError('This label is no longer available.', 404);

@@ -5,7 +5,7 @@ function addresses(column) {
   const list = `CASE WHEN json_valid(${column}) THEN ${column} ELSE json_array(${column}) END`;
   return `coalesce((SELECT group_concat(CASE WHEN j.type='object'
     THEN coalesce(json_extract(j.value,'$.name'),'')||${boundary}||coalesce(json_extract(j.value,'$.address'),'')
-    WHEN j.type='text' THEN j.value ELSE '' END,${boundary}) FROM json_each(${list}) j),'')`;
+    WHEN j.type='text' THEN j.value ELSE '' END,${boundary}) FROM json_tree(${list}) j WHERE j.type='object' OR (j.type='text' AND typeof(j.key)='integer')),'')`;
 }
 export function indexedHeaders(row) {
   return [`coalesce(${row}.subject,'')`,`coalesce(${row}.name,'')`,`coalesce(${row}.send_email,'')`,
@@ -30,10 +30,18 @@ export function mailWordSchema() {
     'CREATE TABLE IF NOT EXISTS mail_word_pending(email_id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,revision BLOB NOT NULL)',
     'CREATE INDEX IF NOT EXISTS idx_mail_word_pending ON mail_word_pending(user_id,email_id)',
     'CREATE TABLE IF NOT EXISTS mail_word_setup(user_id INTEGER NOT NULL,account_id INTEGER NOT NULL,cursor INTEGER NOT NULL,through_id INTEGER NOT NULL,PRIMARY KEY(user_id,account_id))',
-    `CREATE TRIGGER IF NOT EXISTS mail_words_insert AFTER INSERT ON email BEGIN ${add} END`,
-    `CREATE TRIGGER IF NOT EXISTS mail_words_update AFTER UPDATE OF email_id,user_id,is_del,type,name,send_email,recipient,cc,bcc,subject,text,content
+    `CREATE TRIGGER IF NOT EXISTS mail_words_insert_v2 AFTER INSERT ON email BEGIN ${add} END`,
+    `CREATE TRIGGER IF NOT EXISTS mail_words_update_v2 AFTER UPDATE OF email_id,user_id,is_del,type,name,send_email,recipient,cc,bcc,subject,text,content
       ON email BEGIN ${remove} ${add} END`,
     `CREATE TRIGGER IF NOT EXISTS mail_words_delete AFTER DELETE ON email BEGIN ${remove} END`,
+    'DROP TRIGGER IF EXISTS mail_words_insert',
+    'DROP TRIGGER IF EXISTS mail_words_update',
+    'CREATE TABLE IF NOT EXISTS mail_word_upgrades(version INTEGER PRIMARY KEY)',
+    `INSERT OR IGNORE INTO mail_word_pending(email_id,user_id,revision)
+      SELECT email_id,user_id,randomblob(16) FROM email
+      WHERE NOT EXISTS (SELECT 1 FROM mail_word_upgrades WHERE version=2) AND is_del=0 AND user_id>0
+        AND (instr(recipient,'"group"')>0 OR instr(cc,'"group"')>0 OR (type=1 AND instr(bcc,'"group"')>0))`,
+    'INSERT OR IGNORE INTO mail_word_upgrades VALUES(2)',
     'INSERT OR IGNORE INTO mail_word_setup SELECT 0,0,0,coalesce(max(email_id),0) FROM email',
   ];
 }

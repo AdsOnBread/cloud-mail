@@ -50,12 +50,13 @@ export const messageFilterSchema = [
 	].map(
 		([name, event, transition]) =>
 			`CREATE TRIGGER IF NOT EXISTS mail_filter_${name} AFTER ${event} ON email
-      WHEN NEW.type=0 AND NEW.status=0 AND NEW.is_del=0${transition} AND ${ownedRules}
+      WHEN NEW.type=0 AND NEW.status=0 AND NEW.is_del=0${transition} AND (${ownedRules} OR EXISTS (SELECT 1 FROM mail_filter_bodies WHERE email_id=NEW.email_id))
       BEGIN
         INSERT OR REPLACE INTO mail_word_index(rowid,headers,body)
           SELECT e.email_id,${indexedHeaders('e')},coalesce(b.body,e.text,'') FROM email e
           LEFT JOIN mail_filter_bodies b ON b.email_id=e.email_id WHERE e.email_id=NEW.email_id
           AND EXISTS (SELECT 1 FROM mail_filters r WHERE r.user_id=NEW.user_id AND ${field('excludedQuery')} IS NOT NULL);
-        ${applyMatches('NEW.email_id')} END`,
+        ${applyMatches('NEW.email_id')}
+        DELETE FROM mail_filter_bodies WHERE email_id=NEW.email_id; END`,
 	),
 ];

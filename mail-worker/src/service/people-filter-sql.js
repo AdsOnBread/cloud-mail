@@ -40,7 +40,7 @@ export function peopleSQL(field,columns,source,unicode=true){
       const list=`CASE WHEN json_valid(${column}) THEN ${column} ELSE json_array(${column}) END`;
       const email="CASE WHEN who.type='object' THEN json_extract(who.value,'$.address') ELSE who.value END";
       const name="CASE WHEN who.type='object' THEN json_extract(who.value,'$.name') END";
-      return `EXISTS (SELECT 1 FROM json_each(${list}) who WHERE ${matches(email,name)})`;
+      return `EXISTS (SELECT 1 FROM json_tree(${list}) who WHERE (who.type='object' OR (who.type='text' AND typeof(who.key)='integer')) AND ${matches(email,name)})`;
     }).join(' OR ');
   }
   return `EXISTS (SELECT 1 FROM json_each(${source}) term WHERE ${match})`;

@@ -19,11 +19,11 @@ export async function indexWordBatch(db,userId,accountId) {
   if (accountId) {scope.push('e.account_id=?');args.push(accountId);}
   const source=`FROM mail_word_pending p JOIN email e ON e.email_id=p.email_id AND e.user_id=p.user_id
     ${scope.length ? 'WHERE '+scope.join(' AND ') : ''}`;
-  const {results}=await db.prepare(`SELECT p.email_id,p.user_id,hex(p.revision) AS revision,e.content
+  const {results}=await db.prepare(`SELECT p.email_id,p.user_id,hex(p.revision) AS revision,e.content,e.text
     ${source} ORDER BY p.email_id LIMIT 4`).bind(...args).all();
   const statements=[];
   for (const row of results) {
-    const text=emailUtils.htmlToText(row.content);
+    const text=row.text?.trim() ? row.text : emailUtils.htmlToText(row.content);
     statements.push(db.prepare(`INSERT OR REPLACE INTO mail_word_index(rowid,headers,body)
       SELECT e.email_id,${indexedHeaders('e')},? FROM email e JOIN mail_word_pending p ON p.email_id=e.email_id
       WHERE p.email_id=? AND p.user_id=? AND hex(p.revision)=?`).bind(text,row.email_id,row.user_id,row.revision),

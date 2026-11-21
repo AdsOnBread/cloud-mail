@@ -828,15 +828,15 @@ const emailService = {
 	},
 
 	async completeReceive(c, status, emailId) {
-    if(status===emailConst.status.RECEIVE){
-      const row=await c.env.db.prepare(`SELECT user_id AS userId,email_id AS emailId,text,content FROM email WHERE email_id=? AND ${blankMailText('text')} AND length(content)>0`).bind(emailId).first();
-      const body=row && filterBodyStatement(c.env.db,row);
-      if(body)await body.run();
-    }
-		return await orm(c).update(email).set({
-			isDel: isDel.NORMAL,
-			status: status
-		}).where(eq(email.emailId, emailId)).returning().get();
+    const db=c.env.db;
+    const row=status===emailConst.status.RECEIVE && await db.prepare(`SELECT user_id AS userId,email_id AS emailId,text,content FROM email
+      WHERE email_id=? AND ${blankMailText('text')} AND length(content)>0`).bind(emailId).first();
+    const publish=orm(c).update(email).set({isDel:isDel.NORMAL,status}).where(eq(email.emailId,emailId)).returning();
+    const body=row && filterBodyStatement(db,row);
+    if(!body)return publish.get();
+    const query=publish.toSQL();
+    await db.batch([body,db.prepare(query.sql).bind(...query.params)]);
+    return orm(c).select().from(email).where(eq(email.emailId,emailId)).get();
 	},
 
 	async completeReceiveAll(c) {

@@ -65,6 +65,7 @@ describe('Incoming mail filters',()=>{
    await create({from:'outside@',words:'invoice',excluded:'invisible'},{archive:true},{applyExisting:true});
    const arrived=await message({...html,status:6,is_del:1});await emailService.completeReceive(c(),0,arrived.email_id);
    expect((await db.prepare('SELECT count(*) n FROM conversation_filing').first()).n).toBe(3);
+   expect((await db.prepare('SELECT count(*) n FROM mail_filter_bodies').first()).n).toBe(0);
    expect((await db.prepare("SELECT count(*) n FROM mobile_changes WHERE entity_id=? AND entity='message' AND operation='upsert'").bind(arrived.email_id).first()).n).toBeGreaterThan(1);
  });
  it('converts recipient and whole-word exclusions without widening or narrowing the search',async()=>{
@@ -72,8 +73,23 @@ describe('Incoming mail filters',()=>{
    expect(await previewFilter(db,1,{from:'émile',to:'robin@example.net',words:'robin',excluded:'art'})).toEqual({conversations:1});
    expect(await previewFilter(db,1,{excluded:'robin'})).toEqual({conversations:0});
    await create({excluded:'art robin'},{star:true});
-   const hidden=await message({name:'Robin',text:'Partial'}),visible=await message({recipient:'[]',text:'Partial'});
+   await message({name:'Robin',text:'Partial'});const visible=await message({recipient:'[]',text:'Partial'});
    expect((await db.prepare('SELECT email_id FROM star').all()).results).toEqual([{email_id:visible.email_id}]);
+ });
+ it('searches named groups and fences a bulk save against mail that arrives after preparation',async()=>{
+   const group=await message({recipient:JSON.stringify([{name:'Team',group:[{address:'alix@example.net'}]}])});
+   expect(await previewFilter(db,1,{to:'alix@example.net'})).toEqual({conversations:1});
+   expect(await previewFilter(db,1,{excluded:'alix'})).toEqual({conversations:0});
+   let inject=true;
+   const fenced={prepare:sql=>db.prepare(sql),batch:async statements=>{
+     if(inject){inject=false;await message({text:'',content:'<b>finance</b>'});}
+     return db.batch(statements);
+   }};
+   const id=crypto.randomUUID(),input={version:0,criteria:{excluded:'finance'},actions:{read:true},applyExisting:true};
+   expect(await saveFilter(fenced,1,id,input)).toEqual({preparing:true});
+   expect(await listFilters(db,1)).toEqual([]);
+   await saveFilter(db,1,id,input);
+   expect((await db.prepare('SELECT email_id FROM email WHERE unread=1').all()).results).toEqual([{email_id:group.email_id}]);
  });
  it('applies conflicting attachment and sender rules in creation order to a real local delivery',async()=>{
    await saveFilter(db,2,crypto.randomUUID(),{version:0,criteria:{hasAttachment:true},actions:{category:'updates'}});

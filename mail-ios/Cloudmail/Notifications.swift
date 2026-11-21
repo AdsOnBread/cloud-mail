@@ -16,7 +16,7 @@ import UIKit
         guard profile.notificationsEnabled, [.authorized,.provisional,.ephemeral].contains(authorization), !alerts.isEmpty else { return }
         if alerts.count > 3 {
             let content = UNMutableNotificationContent(); content.title = "\(alerts.count) new messages"
-            content.body = profile.previewEnabled ? profile.email : "Open Cloudmail to read your mail."
+            content.body = profile.previewEnabled ? profile.email : "Open phooey! mail to read your mail."
             content.sound = .default; content.threadIdentifier = profile.id
             content.userInfo = ["profileID":profile.id,"threadID":alerts.last!.threadID]
             try await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:"summary|\(profile.id)",content:content,trigger:nil))
@@ -24,7 +24,7 @@ import UIKit
             for alert in alerts {
                 let content = UNMutableNotificationContent()
                 content.title = profile.previewEnabled ? alert.sender : "New mail"
-                content.body = profile.previewEnabled ? alert.subject : "Open Cloudmail to read your mail."
+                content.body = profile.previewEnabled ? alert.subject : "Open phooey! mail to read your mail."
                 content.sound = .default; content.threadIdentifier = profile.id
                 content.userInfo = ["profileID":profile.id,"threadID":alert.threadID]
                 try await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier:alert.id,content:content,trigger:nil))
