@@ -130,7 +130,7 @@ button {cursor:pointer;color:inherit}
 .close:hover,.cancel:hover,nav button:hover {background:var(--base-fill)}
 .body {display:flex;flex:1;min-height:0}
 nav {width:196px;flex:none;box-sizing:border-box;padding:12px 8px;border-right:1px solid var(--light-border-color)}
-nav button {display:flex;width:100%;align-items:center;gap:16px;height:40px;padding:0 16px;border-radius:22px;text-align:left}
+nav button {display:flex;width:100%;align-items:center;gap:12px;height:40px;padding:0 8px 0 16px;border-radius:22px;text-align:left;white-space:nowrap}
 nav button[aria-pressed="true"] {background:var(--mail-selected,#d3e3fd);color:var(--el-text-color-primary)}
 main {flex:1;min-width:0;overflow:auto;padding:20px;display:flex}
 main.hovering {background:var(--base-fill);outline:2px dashed var(--el-color-primary);outline-offset:-8px}
