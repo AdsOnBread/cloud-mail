@@ -24,24 +24,8 @@
         </div>
         <div v-if="invalidRange" class="range-error">End date must be on or after start date.</div>
         <div class="range-actions"><button type="submit" :disabled="!valid">Apply</button></div>
-        <div v-if="active!==null" ref="calendar" class="range-calendar" :style="calendarStyle" aria-label="Choose a date">
-          <div class="month-heading">
-            <button type="button" aria-label="Previous month" :disabled="cursor.getFullYear()===1000 && cursor.getMonth()===0" @click="browse(-1)">«</button>
-            <strong aria-live="polite">{{ monthLabel }}</strong>
-            <button type="button" aria-label="Next month" :disabled="cursor.getFullYear()===9999 && cursor.getMonth()===11" @click="browse(1)">»</button>
-          </div>
-          <table role="grid" :aria-label="monthLabel" @keydown="gridKeys">
-            <thead><tr><th v-for="day in weekdays" :key="day" scope="col" :abbr="day">{{ day[0] }}</th></tr></thead>
-            <tbody><tr v-for="week in weeks" :key="week[0].getTime()"><td v-for="date in week" :key="date.getTime()"
-              :aria-selected="same(date,dates[active])">
-              <button type="button" :data-date="rangeInput(date)" :aria-label="date.toLocaleDateString('en-US',{dateStyle:'full'})"
-                :tabindex="same(date,cursor) ? 0 : -1" :aria-current="same(date,today) ? 'date' : undefined"
-                :disabled="date.getFullYear()<1000 || date.getFullYear()>9999"
-                :class="{muted:date.getMonth()!==cursor.getMonth(),chosen:same(date,dates[active])}"
-                @click="pick(date)">{{ date.getDate() }}</button>
-            </td></tr></tbody>
-          </table>
-        </div>
+        <SearchCalendar v-if="active!==null" ref="calendar" v-model:cursor="cursor" :selected="dates[active]"
+          :today="today" :style="calendarStyle" @pick="pick"/>
       </form>
     </div>
   </Teleport>
@@ -51,22 +35,18 @@ import {computed,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
 import {positionMailboxPopup} from '../mail-popup-position';
 import {Icon} from '@iconify/vue';
 import {useMailSearchStore} from '@/store/mail-search';
-import {calendarDate,calendarWeeks,moveMonth} from './dates';
+import SearchCalendar from './search-calendar.vue';
 import {midnight,olderChoices,recentChoices,parseRangeInput,rangeDates,rangeInput,timeCaption,withoutTime} from './search-range';
 
 const store=useMailSearchStore(), id=useId(), trigger=ref(), panel=ref(), calendar=ref(), fields=[];
 const activeRecent=computed(()=>recentChoices.find(([key])=>key===String(store.filters.days)));
 const choices=computed(()=>[['','Any time'],...(activeRecent.value ? [activeRecent.value] : []),...olderChoices,['custom','Custom range…']]);
-const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const open=ref(false), custom=ref(false), active=ref(null), texts=ref(['','']), today=ref(new Date()), cursor=ref(new Date());
 const panelStyle=ref({}), calendarStyle=ref({});
 const caption=computed(()=>timeCaption(store.filters)), applied=computed(()=>caption.value!=='Any time');
 const dates=computed(()=>texts.value.map(parseRangeInput));
 const invalidRange=computed(()=>dates.value[0] && dates.value[1] && dates.value[0]>dates.value[1]);
 const valid=computed(()=>dates.value.some(Boolean) && texts.value.every((text,i)=>!text.trim() || dates.value[i]) && !invalidRange.value);
-const weeks=computed(()=>calendarWeeks(cursor.value));
-const monthLabel=computed(()=>cursor.value.toLocaleDateString('en-US',{month:'long',year:'numeric'}));
-const same=(a,b)=>b && a.toDateString()===b.toDateString();
 function checked(key) {
   if (!key) return !applied.value;
   if (key==='custom') return store.filters.dateAfter!=null || store.filters.dateBefore!=null;
@@ -76,7 +56,7 @@ function place() {
   if (!open.value || !panel.value) return;
   panelStyle.value=positionMailboxPopup(panel.value,trigger.value,custom.value ? 302 : 220);
   if (calendar.value && active.value!==null) nextTick(()=>{
-    if (calendar.value && fields[active.value]) calendarStyle.value=positionMailboxPopup(calendar.value,fields[active.value],270,panel.value);
+    if (calendar.value && fields[active.value]) calendarStyle.value=positionMailboxPopup(calendar.value.root,fields[active.value],270,panel.value);
   });
 }
 async function show() {
@@ -132,24 +112,7 @@ function pick(date) {
   texts.value[i]=rangeInput(date);
   returnToField(i);
 }
-function browse(step) {
-  cursor.value=moveMonth(cursor.value,step);
-}
-function focusDay() {
-  nextTick(()=>calendar.value?.querySelector('[data-date="'+rangeInput(cursor.value)+'"]')?.focus({preventScroll:true}));
-}
-function enterGrid(i) { openCalendar(i);focusDay(); }
-function gridKeys(event) {
-  const date=event.target.dataset.date && parseRangeInput(event.target.dataset.date);
-  if (!date) return;
-  const steps={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7,Home:-date.getDay(),End:6-date.getDay()};
-  let next;
-  if (event.key in steps) next=calendarDate(date.getFullYear(),date.getMonth(),date.getDate()+steps[event.key]);
-  else if (['PageUp','PageDown'].includes(event.key)) next=moveMonth(date,(event.key==='PageUp' ? -1 : 1)*(event.shiftKey ? 12 : 1));
-  else return;
-  event.preventDefault();
-  if (next.getFullYear()>=1000 && next.getFullYear()<=9999) {cursor.value=next;focusDay();}
-}
+function enterGrid(i) { openCalendar(i);nextTick(()=>calendar.value?.focusDay()); }
 function tabOut(event) {
   // Follow the chip's place in the mailbox tab order when leaving the teleported panel.
   if (!custom.value) { close(); return; }
@@ -195,15 +158,5 @@ onBeforeUnmount(()=>listen(false));
 .range-actions button {border-radius:4px;height:36px;min-width:87px;background:var(--el-color-primary);color:white;font-weight:500;}
 .range-actions button:disabled {background:var(--el-fill-color-light);color:var(--el-text-color-disabled);cursor:default;}
 .range-error {padding:6px 16px 0;color:var(--el-color-danger);font-size:12px;}
-.range-calendar {position:fixed;box-sizing:border-box;z-index:1;overflow:auto;border:1px solid var(--light-border-color);background:var(--mail-surface);box-shadow:0 2px 6px #0003;padding:16px 16px 23px;min-height:0;}
-.month-heading {display:flex;justify-content:space-between;align-items:center;height:48px;}
-.month-heading button {font-size:18px;width:32px;height:32px;border-radius:50%;}
-.range-calendar table {border-collapse:collapse;width:min(224px,100%);margin:auto;font-size:12px;text-align:center;}
-.range-calendar th {font-weight:500;height:32px;}
-.range-calendar td {padding:0;}
-.range-calendar td button {width:100%;height:32px;border-radius:50%;}
-.range-calendar .muted {color:var(--secondary-text-color);}
-.range-calendar .chosen {background:var(--mail-selected);font-weight:700;}
-.range-calendar [aria-current=date] {color:var(--el-color-primary);}
 @media(prefers-reduced-motion:reduce){.range-fields label span{transition:none;}}
 </style>

@@ -84,7 +84,7 @@ import { useMailTheme } from '@/store/mail-theme';
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
 import {useRoute} from "vue-router";
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import { useMailSearchStore } from "@/store/mail-search.js";
 import {useSettingStore} from "@/store/setting.js";
 import {hasPerm} from "@/perm/perm.js"
@@ -97,7 +97,12 @@ const searchText = ref(mailSearch.query);
 import {categoryFolders} from "@/utils/inbox-categories";
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name) || categoryFolders.some(item=>item.id===route.name));
 const searchFolder = computed(() => {
-  if (route.name === "content" && categoryFolders.some(item=>item.id===route.query.folder)) return route.query.folder;
+  if (route.name==='content') {
+    const origin=route.query.folder;
+    if (origin==='label') return /^\d+$/.test(route.query.labelId || '') ? 'label' : 'all';
+    if (['all','draft','archived','snoozed','important',...categoryFolders.map(item=>item.id)].includes(origin)) return origin;
+    return {sent:'send',starred:'star'}[origin] || 'email';
+  }
   if (route.name === "scheduled" && route.query.message) {
     if (route.query.from === "starred") return "star";
     if (route.query.from === "important") return "important";
@@ -120,18 +125,20 @@ function returnToResults() {
   if (route.name === 'scheduled' && route.query.message) router.replace(searchFolder.value==='label' ? {name:'label',params:{labelId:searchLabelId.value}} : {name:searchFolder.value});
   if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder,query:mailSearch.folder==="email" && route.query.category?{category:route.query.category}:{}});
 }
-async function applyAdvanced({scope,query,filters}) {
+async function applyAdvanced({scope,query,filters,stillCurrent,origin}) {
+  if (!stillCurrent()) return;
   const [name,labelId]=scope.split(':');
   const target={name};
   if (name==='label') target.params={labelId};
   if (name==='email' && route.query.category && mailSearch.folder==='email') target.query={category:route.query.category};
-  const owner=userStore.user.email;
   if (route.fullPath!==router.resolve(target).fullPath) await router.push(target);
-  if (route.name!==name || (name==='label' && String(route.params.labelId)!==labelId) || userStore.user.email!==owner) return;
+  if (route.name!==name || (name==='label' && String(route.params.labelId)!==labelId) || !stillCurrent()) return;
   mailSearch.visit(name,labelId);
-  mailSearch.$patch({query});
+  mailSearch.query=query;
   mailSearch.filters=filters;
   searchText.value=query;
+  await nextTick();
+  if (!origin?.isConnected && document.activeElement===document.body) document.querySelector('.mail-search [data-search-options]')?.focus({preventScroll:true});
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
 
@@ -376,6 +383,6 @@ function formatName(email) {
 /* Make room for the active query and its controls on compact phones. */
 @media (max-width:480px) {
   .header { position:relative; }
-  .mail-search:focus-within { position:absolute; inset-inline:8px; z-index:2; }
+  .mail-search:has(.search-entry input:focus) { position:absolute; inset-inline:8px; z-index:2; }
 }
 </style>
