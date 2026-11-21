@@ -488,7 +488,8 @@ let snoozeOpener;
 function focusSnoozeCalendar() {
   if(document.activeElement?.matches('.snooze-date-dialog'))snoozePicker.value?.focus();
 }
-function restoreSnoozeFocus() {
+async function restoreSnoozeFocus() {
+  await nextTick();
   if (snoozeOpen.value || !snoozeOpener?.isConnected) return;
   const current=document.activeElement;
   if(current!==document.body && current?.getClientRects().length && !current.closest('.snooze-date-dialog,.snooze-menu'))return;

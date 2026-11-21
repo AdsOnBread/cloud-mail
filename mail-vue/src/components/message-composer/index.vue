@@ -230,8 +230,8 @@
             >{{ sending ? "Sending…" : "Send" }}</el-button
           >
           <el-dropdown trigger="click" placement="top-start" :show-arrow="false" popper-class="mail-action-menu compose-format-popup">
-            <button ref="sendOptions" class="send-options" aria-label="More send options" data-tip="More send options" :disabled="sending || attaching"><Icon icon="material-symbols:arrow-drop-down" width="18"/></button>
-            <template #dropdown><el-dropdown-menu><el-dropdown-item @click="validForSend() && schedulePicker.open(sendOptions)"><Icon icon="material-symbols:schedule-send-outline" width="18"/>Schedule send</el-dropdown-item></el-dropdown-menu></template>
+            <button class="send-options" aria-label="More send options" data-tip="More send options" :disabled="sending || attaching"><Icon icon="material-symbols:arrow-drop-down" width="18"/></button>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item @click="validForSend() && schedulePicker.open(composeRoot.querySelector('.send-options'))"><Icon icon="material-symbols:schedule-send-outline" width="18"/>Schedule send</el-dropdown-item></el-dropdown-menu></template>
           </el-dropdown></div>
           <button
             type="button"
@@ -378,7 +378,7 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
-const sendOptions=ref(), photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
+const photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
 const feedback=useMailFeedback();
 const photoTypes = ["image/png","image/jpeg","image/gif","image/webp","image/heic","image/avif"];
 async function insertPhoto(event) {

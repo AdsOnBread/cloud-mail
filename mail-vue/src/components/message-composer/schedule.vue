@@ -99,7 +99,9 @@ function showCalendar() {
   error.value = "";
   nextTick(() => picker.value?.focus());
 }
-function restoreFocus() {
+async function restoreFocus() {
+  // The dialog emits closed before updating v-model on Escape and the close button.
+  await nextTick();
   if (
     !visible.value &&
     opener?.isConnected &&
