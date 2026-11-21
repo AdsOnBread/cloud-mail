@@ -155,13 +155,15 @@ async function focusItem(row, col) {
   scroller.value?.querySelector('[data-row="' + row + '"][data-col="' + col + '"]')?.focus({ preventScroll: true });
 }
 async function variants(event, item) {
-  const original = item.skins ? item : entries.value?.find(other => other.unicode === item.unicode);
+  const original = item.skins ? item : entries.value?.find(other =>
+    other.unicode === item.unicode || other.skins?.some(skin => skin.unicode === item.unicode));
   if (!original?.skins?.length) return;
   event.preventDefault();
   skinChoices.value = [original, ...original.skins];
   scrollTo(0);
   await nextTick();
-  focusItem(0, 0);
+  const index = skinChoices.value?.findIndex(choice => choice.unicode === item.unicode) ?? -1;
+  if (index >= 0) focusItem(Math.floor(index / columns.value), index % columns.value);
 }
 function navigate(event) {
   if (skinChoices.value && event.key === "Escape") {
