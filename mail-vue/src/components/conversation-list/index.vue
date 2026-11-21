@@ -780,9 +780,9 @@ defineExpose({ refresh });
   border: 1px solid var(--light-border-color);
   padding: 8px;
 }
-.compact-page-action { display:none; }
+:global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:none; }
 @media (max-width: 480px) {
-  .compact-page-action { display:flex; }
+  :global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:flex; }
   .has-selection .pager, .has-selection .total { display:none; }
   .mail-toolbar {
     gap: 0;
