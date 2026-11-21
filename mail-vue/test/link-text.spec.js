@@ -53,6 +53,7 @@ it("accepts display-form international domains and encodes spaces in web paths",
 
 it("edits a simple mailbox without a scheme and preserves compound email destinations", () => {
   expect(editableLinkUrl("mailto:notes@example.org")).toBe("notes@example.org");
+  expect(editableLinkUrl(new URL("mailto:person@例え.jp").href)).toBe("person@例え.jp");
   for (const href of ["mailto:orders%3Ftag@example.org", "mailto:a@example.org?subject=Hi%20there", "https://example.org/"]) {
     expect(editableLinkUrl(href)).toBe(href);
   }

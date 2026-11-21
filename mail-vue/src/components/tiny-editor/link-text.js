@@ -42,7 +42,14 @@ export function normalizeLinkUrl(value) {
 // its scheme would change an encoded local part, subject or other parameter.
 export function editableLinkUrl(href) {
   const address = href.replace(/^mailto:/i, "");
-  return address !== href && normalizeLinkUrl(address) === normalizeLinkUrl(href) ? address : href;
+  if (address === href) return href;
+  const destination = normalizeLinkUrl(href);
+  if (!destination) return href;
+  try {
+    const decoded = decodeURI(address);
+    if (normalizeLinkUrl(decoded) === destination) return decoded;
+  } catch { /* Keep the original spelling of a non-decodable address. */ }
+  return normalizeLinkUrl(address) === destination ? address : href;
 }
 
 export function shortenLinkDestination(value) {
