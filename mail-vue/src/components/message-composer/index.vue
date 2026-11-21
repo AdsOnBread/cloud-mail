@@ -655,7 +655,8 @@ const replyRecipientSummary = computed(() => {
   const recipients = [...form.receiveEmail, ...form.cc, ...form.bcc];
   const address = recipients[0];
   if (!address) return "Add recipients";
-  const name = form.replyRecipientNames?.[address.toLowerCase()];
+  const candidate = form.replyRecipientNames?.[address.toLowerCase()];
+  const name = typeof candidate === "string" ? candidate : "";
   return `${name && name.toLowerCase() !== address.toLowerCase() ? `${name} (${address})` : address}${recipients.length > 1 ? ` +${recipients.length - 1}` : ""}`;
 });
 function editReplyRecipients() {

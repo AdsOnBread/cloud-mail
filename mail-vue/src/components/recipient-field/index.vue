@@ -48,7 +48,11 @@ const emit = defineEmits(['update:modelValue', 'contacts']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
 const inputId = `recipient-${useId()}`;
-const display = address => props.names?.[address.toLowerCase()] || address;
+function display(address) {
+  const key = address.toLowerCase();
+  const name = props.names && Object.hasOwn(props.names,key) && props.names[key];
+  return typeof name === 'string' && name ? name : address;
+}
 const suggestions = computed(() => props.contacts.filter(address => pending.value &&
   address.toLowerCase().includes(pending.value.toLowerCase()) &&
   !props.modelValue.some(value => value.toLowerCase() === address.toLowerCase())).slice(0, 10));

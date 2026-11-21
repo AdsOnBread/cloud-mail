@@ -5,7 +5,7 @@ import RecipientField from '../src/components/recipient-field/index.vue';
 
 function field() {
   return mount(defineComponent({ components:{RecipientField}, setup() { return { recipients:ref([]), entry:ref() }; },
-    template:'<RecipientField ref="entry" v-model="recipients" label="Bcc" />' }), {attachTo:document.body});
+    template:'<RecipientField ref="entry" v-model="recipients" label="Bcc" :names="{}" />' }), {attachTo:document.body});
 }
 describe('recipient entry', () => {
   it('commits an unfinished address through the public method used by Send and Save', async () => {
@@ -15,8 +15,8 @@ describe('recipient entry', () => {
     wrapper.unmount();
   });
   it('preserves invalid addresses visibly rather than silently dropping them', async () => {
-    const wrapper=field(); await wrapper.get('input').setValue('not-an-email'); await wrapper.get('input').trigger('keydown',{key:'Enter'});
-    expect(wrapper.vm.recipients).toEqual(['not-an-email']); expect(wrapper.find('.invalid').exists()).toBe(true);
+    const wrapper=field(); await wrapper.get('input').setValue('constructor'); await wrapper.get('input').trigger('keydown',{key:'Enter'});
+    expect(wrapper.vm.recipients).toEqual(['constructor']); expect(wrapper.find('.invalid').exists()).toBe(true);
     wrapper.unmount();
   });
   it('commits on blur/Tab and removes the selected chip', async () => {
