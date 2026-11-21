@@ -1,7 +1,7 @@
 import {rewriteTextRuns} from "../link-text";
 
 const boundary = 'address,article,blockquote,br,div,h1,h2,h3,h4,h5,h6,li,p,pre,td,th';
-const skip = 'a[href],code,pre,script,style,[contenteditable=false],[data-mce-bogus],.cloudmail-reply-quote';
+const skip = 'a[href],audio,canvas,code,embed,hr,iframe,img,object,pre,script,style,svg,video,[contenteditable=false],[data-mce-bogus],.cloudmail-reply-quote';
 const tokens = /(?:https?:\/\/|www\.)[^\s<>]+|[\p{L}\d._%+-]+@[\p{L}\d.\-]+\.[\p{L}]{2,}|[\p{L}\p{M}\d]+(?:['’\u200c][\p{L}\p{M}\d]+)*/giu;
 
 // Join inline runs before tokenizing so a style change within a word does not
