@@ -141,6 +141,7 @@ const displayName = (entry) =>
 const initial = (entry) =>
   Array.from(displayName(entry).trim())[0]?.toUpperCase();
 const people = computed(() => {
+  if (!current()) return [];
   const term = personSearchKey(query.value.trim()),
     byEmail = new Map();
   const hidden = new Set(

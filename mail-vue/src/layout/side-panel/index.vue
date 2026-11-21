@@ -61,10 +61,7 @@
         aria-label="Connected apps"
         :tabindex="active === 4 ? 0 : -1"
         @focus="active = 4"
-        @click="
-          open = false;
-          ui.quickSettings = false;
-        "
+        @click="openConnections"
         ><span><Icon icon="material-symbols:add" width="22" /></span
       ></RouterLink>
     </div>
@@ -93,10 +90,14 @@
 <script setup>
 import { computed, nextTick, ref, useId } from "vue";
 import { Icon } from "@iconify/vue";
+import { useRoute } from "vue-router";
+import { useUserStore } from "@/store/user";
 import { useUiStore } from "@/store/ui";
 import Contacts from "./contacts.vue";
 defineProps({ accountId: { type: Number, required: true } });
 const open = defineModel({ type: Boolean, required: true });
+const route = useRoute(),
+  user = useUserStore();
 const ui = useUiStore(),
   active = ref(0),
   toolbar = ref(),
@@ -122,7 +123,24 @@ const links = [
 const toggleLabel = computed(() =>
   ui.sideRailHidden ? "Show side panel" : "Hide side panel",
 );
+function openConnections(event) {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  open.value = false;
+  ui.quickSettings = false;
+  if (route.name === "account-settings" && route.hash === "#connected-apps") {
+    const section = document.getElementById("connected-apps");
+    section?.focus({ preventScroll: true });
+    section?.scrollIntoView({ block: "start" });
+  }
+}
 function toggleContacts() {
+  if (
+    !user.authenticatedToken ||
+    user.authenticatedToken !== localStorage.getItem("token")
+  ) {
+    open.value = false;
+    return;
+  }
   ui.quickSettings = false;
   open.value = !open.value;
 }
@@ -183,7 +201,7 @@ function navigate(event) {
 .contact-symbol {
   color: #1967d2;
 }
-:global(html.dark) .contact-symbol {
+html.dark .contact-symbol {
   color: #a8c7fa;
 }
 .side-rail hr {
@@ -208,7 +226,7 @@ function navigate(event) {
   background: var(--mail-surface);
   box-shadow: 0 1px 4px #0003;
 }
-:global(.photo-theme) :is(.rail-tool, .rail-toggle):not(.hiddenRail) {
+.photo-theme :is(.rail-tool, .rail-toggle):not(.hiddenRail) {
   color: white;
   --mail-hover: #ffffff29;
 }

@@ -53,7 +53,7 @@ const labels=useMailLabels(), filters=useMessageFilters(), filterAccount=useAcco
 watch(()=>[user.authenticatedToken,user.user.userId,filterAccount.currentAccountId],()=>{filters.editor=null;filters.senderRequest=null},{flush:'sync'});
 function filterStorage(event){
   if((event.key===null || event.key==='token') && localStorage.getItem('token')!==user.authenticatedToken){
-    filters.editor=null;filters.senderRequest=null;contactsOpen.value=false;
+    filters.editor=null;filters.senderRequest=null;
   }
 }
 onMounted(()=>window.addEventListener('storage',filterStorage));
@@ -80,10 +80,14 @@ watch([sideAccountId, ()=>user.user.email, ()=>user.authenticatedToken,sideAvail
   contactsOpen.value=false;
 },{flush:'sync'});
 const sessionEnded = ref(false);
-function checkReaderSession(event) {
-  if (!conversationWindow.value || sessionEnded.value) return;
+function checkSession(event) {
+  if ((!conversationWindow.value && !contactsOpen.value) || sessionEnded.value) return;
   if (event?.type === "storage" && (event.storageArea !== localStorage || (event.key !== null && event.key !== "token"))) return;
   if (user.authenticatedToken && user.authenticatedToken === localStorage.getItem("token")) return;
+  if (!conversationWindow.value) {
+    contactsOpen.value=false;
+    return;
+  }
   event?.preventDefault();
   event?.stopImmediatePropagation();
   sessionEnded.value = true;
@@ -91,11 +95,13 @@ function checkReaderSession(event) {
 }
 const sessionEvents = ["storage", "pageshow", "focus", "click", "keydown"];
 onMounted(() => {
-  for (const event of sessionEvents) window.addEventListener(event, checkReaderSession, true);
-  checkReaderSession();
+  for (const event of sessionEvents) window.addEventListener(event, checkSession, true);
+  document.addEventListener("visibilitychange",checkSession);
+  checkSession();
 });
 onBeforeUnmount(() => {
-  for (const event of sessionEvents) window.removeEventListener(event, checkReaderSession, true);
+  for (const event of sessionEvents) window.removeEventListener(event, checkSession, true);
+  document.removeEventListener("visibilitychange",checkSession);
 });
 const writerRef = ref();
 const composeModal=computed(()=>Boolean(writerRef.value?.modalOpen));
