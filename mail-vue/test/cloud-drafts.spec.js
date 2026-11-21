@@ -49,9 +49,11 @@ describe('Cloud draft synchronization',()=>{
  });
  it('merges another tab’s filing-only revision into later typing without forking the draft',async()=>{
   const opened=await saveLocalDraft(input({content:'Original',mailboxStarred:false}));
-  const starred=await saveLocalDraft({...opened,mailboxStarred:true},{starOnly:true,requireCurrent:true});
+  const intermediate=await saveLocalDraft({...opened,mailboxStarred:true},{starOnly:true,requireCurrent:true});
+  const cleared=await saveLocalDraft({...intermediate,mailboxStarred:false},{starOnly:true,requireCurrent:true});
+  const starred=await saveLocalDraft({...cleared,mailboxStarred:true},{starOnly:true,requireCurrent:true});
   await db.value.draft.put({...await db.value.draft.get(starred.draftId),cloudVersion:4,dirty:false});
-  const typed=await saveLocalDraft({...opened,content:'Original continued'},{preserveStar:true});
+  const typed=await saveLocalDraft({...intermediate,content:'Original continued'},{preserveStar:true});
   expect(typed).toMatchObject({draftId:opened.draftId,mailboxStarred:true,cloudVersion:4,content:'Original continued'});
   expect(typed.starEditBase).toBeUndefined();
  });

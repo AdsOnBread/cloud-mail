@@ -60,7 +60,7 @@ export function hasDraftContent(draft) {
 }
 
 export function draftEditBase(row) {
-  return row.editToken || JSON.stringify([row.cloudVersion ?? null,row.localRevision ?? null]);
+  return row.starEditBase || row.editToken || JSON.stringify([row.cloudVersion ?? null,row.localRevision ?? null]);
 }
 
 // Omit empty filing choices so fingerprints from older versions still compare equal.

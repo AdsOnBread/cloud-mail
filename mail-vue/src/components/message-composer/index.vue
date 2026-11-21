@@ -933,7 +933,7 @@ async function persistDraftNow(options) {
     starChoice.value=null;
     form.mailboxStarred=Boolean(saved.mailboxStarred);
   }
-  Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
+  Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, starEditBase:saved.starEditBase, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
   if (saved.detachedReply) Object.assign(form, {emailId:0, sendType:"", inlineReply:false});
   return saved;
 }
