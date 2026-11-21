@@ -1,5 +1,5 @@
 <template>
-  <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview}" role="dialog"
+  <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview, 'selection-link':panel.selectedText}" role="dialog"
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
     @keydown.esc.stop.prevent="close(true)" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
@@ -12,7 +12,7 @@
       <button type="button" @click="remove">Remove</button>
     </template>
     <form v-else :class="{'image-link':panel.imageLink}" @submit.prevent="apply">
-      <label v-if="!panel.imageLink">
+      <label v-if="!panel.imageLink && !panel.selectedText">
         <Icon icon="material-symbols:short-text" width="18" aria-hidden="true" />
         <input ref="textField" v-model="panel.text" aria-label="Anchor Text" placeholder="Text" autocomplete="off" />
       </label>
@@ -34,8 +34,9 @@ const panel = ref(null),
   box = ref(null),
   textField = ref(null), urlField = ref(null);
 let bookmark, anchor, originalText, owner, range, resize, fragment = null;
-const safeUrl = computed(() => {
-  const raw = panel.value?.url.trim();
+const safeUrl = computed(() => normalizeUrl(panel.value?.url));
+function normalizeUrl(value) {
+  const raw = value?.trim();
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
   try {
     const candidate = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)
@@ -50,7 +51,7 @@ const safeUrl = computed(() => {
   } catch {
     return "";
   }
-});
+}
 function outside(event) {
   if (
     !box.value?.contains(event.target) &&
@@ -124,7 +125,27 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   bookmark = ed.selection.getBookmark(2, true);
   originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
   const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
-  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, imageLink, existing:Boolean(anchor)};
+  const selectedText = !anchor && !imageLink && !range.collapsed && Boolean(originalText.trim());
+  if (selectedText && /^https?:\/\/[^\s]+$/i.test(originalText)) {
+    const href = normalizeUrl(originalText);
+    if (href) {
+      ed.undoManager.transact(() => ed.execCommand("mceInsertLink", false, {href}));
+      ed.nodeChanged();
+      ed.dispatch("change");
+      anchor = ed.dom.getParent(ed.selection.getEnd(), "a[href]");
+      if (anchor) {
+        preview = true;
+        range.selectNodeContents(anchor);
+        const after = ed.dom.createRng();
+        after.setStartAfter(anchor);
+        after.collapse(true);
+        ed.selection.setRng(after);
+        bookmark = ed.selection.getBookmark(2, true);
+      }
+    }
+  }
+  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, imageLink,
+    selectedText:selectedText && !anchor, existing:Boolean(anchor)};
   const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown", insideEditor);
@@ -225,6 +246,8 @@ button { font:inherit; cursor:pointer; }
   grid-column:2; grid-row:2; padding:6px 14px; border-radius:16px;
   font-weight:500; color:var(--el-color-primary);
 }
+.selection-link { width:334px; padding:18px 16px; }
+.selection-link .apply-link { grid-row:1; }
 .image-link label { grid-column:1 / -1; }
 .remove-link { grid-row:2;justify-self:start;color:var(--el-color-primary); }
 .remove-link:hover { text-decoration:underline; }
