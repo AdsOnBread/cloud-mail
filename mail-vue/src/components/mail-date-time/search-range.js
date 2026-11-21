@@ -1,4 +1,4 @@
-import {formatDay,parseDay} from './dates';
+import {calendarDate,formatDay,moveMonth,parseDay} from './dates';
 
 export const olderChoices = [
   ['1w', 'Older than a week'], ['1m', 'Older than a month'],
@@ -33,6 +33,22 @@ export function timeCaption(filters) {
   return 'Any time';
 }
 export function withoutTime(filters) {
-  const {days,olderThan,dateAfter,dateBefore,...rest} = filters;
+  const {days,olderThan,dateAfter,dateBefore,dateCenter,dateWindow,...rest} = filters;
   return rest;
+}
+
+export const withinChoices = [
+  ['1d','1 day'],['3d','3 days'],['1w','1 week'],['2w','2 weeks'],
+  ['1m','1 month'],['2m','2 months'],['6m','6 months'],['1y','1 year'],
+];
+
+export function centeredRange(day, period) {
+  if (!day || !withinChoices.some(([key])=>key===period)) return null;
+  const count=Number(period.slice(0,-1)), unit=period.slice(-1);
+  function edge(direction) {
+    const step=direction*count;
+    return unit==='m' || unit==='y' ? moveMonth(day,step*(unit==='y' ? 12 : 1)) :
+      calendarDate(day.getFullYear(),day.getMonth(),day.getDate()+step*(unit==='w' ? 7 : 1));
+  }
+  return {dateCenter:rangeInput(day),dateWindow:period,dateAfter:midnight(edge(-1)),dateBefore:midnight(edge(1),true)};
 }
