@@ -61,7 +61,7 @@ async function save() {
     const value=await http.put("/v1/contacts",{email:props.email,name:title.value,accountId:props.accountId,saved:!saved.value},config());
     if (!current()) return;
     saved.value=value;
-    if (value) writer.rememberAddresses(props.owner,props.accountId,[props.email]);
+    if (value) writer.restoreSuggestions(props.owner,props.accountId,[props.email]);
     writer.contactRevision++;
     notice.value=value ? "Added to contacts" : "Removed from contacts";
   } catch { if (current()) notice.value="Couldn’t update this contact. Try again."; }
@@ -76,10 +76,15 @@ function send() {
 }
 function place() {
   if (!props.anchor?.isConnected || !props.anchor.getClientRects().length) return emit("close");
-  if (card.value) position.value=positionMailboxPopup(card.value,props.anchor,340);
+  if (card.value) position.value=positionMailboxPopup(card.value,props.anchor,340,undefined,false,1,15);
 }
 function outside(event) {
   if (!card.value?.contains(event.target) && !props.anchor.contains(event.target)) emit("close");
+}
+function escape(event) {
+  if (event.key!=="Escape" || event.isComposing || event.defaultPrevented) return;
+  event.preventDefault();event.stopPropagation();
+  emit("close",card.value?.contains(document.activeElement));
 }
 function tab(event) {
   const actions=[...card.value.querySelectorAll("a,button:not(:disabled)")];
@@ -93,6 +98,7 @@ onMounted(async()=>{
   place();read();
   observer=new ResizeObserver(place);
   observer.observe(card.value);observer.observe(props.anchor);
+  document.addEventListener("keydown",escape,true);
   window.addEventListener("scroll",place,true);window.addEventListener("resize",place);
   window.visualViewport?.addEventListener("resize",place);
   document.addEventListener("pointerdown",outside,true);document.addEventListener("focusin",outside,true);
@@ -100,9 +106,10 @@ onMounted(async()=>{
   window.addEventListener("blur",windowBlur);
   if (props.focused) { await nextTick();focus(); }
 });
-function windowBlur(){ if (document.activeElement?.tagName==="IFRAME") emit("close"); }
+function windowBlur(){setTimeout(()=>{if (current() && document.activeElement?.tagName==="IFRAME") emit("close");},0);}
 onBeforeUnmount(()=>{
   controller.abort();observer?.disconnect();
+  document.removeEventListener("keydown",escape,true);
   window.removeEventListener("scroll",place,true);window.removeEventListener("resize",place);
   window.visualViewport?.removeEventListener("resize",place);
   document.removeEventListener("pointerdown",outside,true);document.removeEventListener("focusin",outside,true);window.removeEventListener("blur",windowBlur);

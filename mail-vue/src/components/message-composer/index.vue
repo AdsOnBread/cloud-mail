@@ -388,7 +388,7 @@ import db from "@/db/db.js";
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-import {openSeparateWindow, returnComposeWindow, saveWindowState, windowState} from "@/layout/write/separate-window";
+import {openContactWindow, openSeparateWindow, returnComposeWindow, saveWindowState, windowState} from "@/layout/write/separate-window";
 const props = defineProps({ inline: Boolean, responseMessage:Object, separateWindow:String, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
 const emit = defineEmits(["sent", "closed", "dock-state", "editor-focus"]);
 const composeRoot = ref();
@@ -788,7 +788,9 @@ function startSignatureDefault(){
     if(pristine)automaticBaseline=draftFingerprint(form);
   })();
 }
+let windowContactSeed=false;
 function resetForm() {
+  windowContactSeed=false;
   clearFormatCaption();
   focusAfterResize=undefined;
   fileGeneration++;
@@ -1267,8 +1269,10 @@ function persistDraft(options) {
 async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
   const draft = snapshot();
   if (autosave && props.separateWindow && !hasDraftContent(draft)) {
-    const state=windowState(props.separateWindow);
-    if (state.person) saveWindowState(props.separateWindow,{...state,person:null});
+    if (windowContactSeed) {
+      saveWindowState(props.separateWindow,{...windowState(props.separateWindow),person:null});
+      windowContactSeed=false;
+    }
     if (!draft.draftId) return;
     const recovery = await discardDrafts([draft.draftId], draft);
     // The empty document remains editable. Later typing starts a fresh draft
@@ -1583,7 +1587,7 @@ async function writeToContact(person) {
   try {
     const session=draftSession();
     const sender={accountId:form.accountId,email:form.sendEmail,name:form.name};
-    await openSeparateWindow(()=>({owner:session.owner,sender,person}),session);
+    await openContactWindow({owner:session.owner,sender,person},session,props.separateWindow);
   } catch(error) { sendError.value=error.message || "Could not open a new message."; }
 }
 function openContacts(field) {
@@ -1718,7 +1722,10 @@ defineExpose({
   openDraft,
   restoreWindow: async (state,draft) => {
     if (draft) await openDraft(draft);
-    else open(state.person,state.sender);
+    else {
+      open(state.person,state.sender);
+      windowContactSeed=Boolean(props.separateWindow && state.person);
+    }
     if (typeof state.formatting === "boolean") showFormatting.value = state.formatting;
     if (!draft && typeof state.plainText === "boolean") form.plainText = state.plainText;
     if (!show.value) throw new Error("Could not open the composer.");

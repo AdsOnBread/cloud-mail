@@ -42,11 +42,11 @@
       </div>
       <ContactCard v-if="cardIndex!==null && chip(cardIndex)" :key="cardAddress" ref="contactCard"
         :email="cardAddress" :name="display(cardAddress)" :owner="owner" :account-id="accountId"
-        :anchor="chip(cardIndex)" :focused="pinned" @hold="holdCard" @leave="leaveCard" @close="closeCard" @send="composeContact"/>
+        :anchor="chip(cardIndex).closest('.recipient-chip')" :focused="pinned" @hold="holdCard" @leave="leaveCard" @close="closeCard" @send="composeContact"/>
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
         class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @copy="clipboardEvent($event,menuIndex)" @cut="clipboardEvent($event,menuIndex)" @mousedown.prevent @focusout="leaveMenu">
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'copy')">Copy <kbd>{{ modifier }}C</kbd></button>
-        <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'address')"><span>Copy “{{ modelValue[menuIndex] }}”</span><kbd>{{ alt }}C</kbd></button>
+        <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'address')"><span>Copy "{{ modelValue[menuIndex] }}"</span><kbd>{{ alt }}C</kbd></button>
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'cut')">Cut <kbd>{{ modifier }}X</kbd></button>
         <button v-if="isEmail(modelValue[menuIndex])" type="button" role="menuitem" @click="edit(menuIndex,true)">Change name <kbd>{{ shift }}E</kbd></button>
         <button type="button" role="menuitem" @click="edit(menuIndex)">Change email address <kbd>{{ shift }}F</kbd></button>
@@ -71,7 +71,7 @@ const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
 const editingName=ref(false), clipboardError=ref('');
 const apple=/Mac|iPhone|iPad/.test(navigator.platform);
-const modifier=apple?'⌘':'Ctrl+', alt=apple?'⌥':'Alt+', shift=apple?'⇧':'Shift+';
+const modifier=apple?'⌘+':'Ctrl+', alt=apple?'Option+':'Alt+', shift='Shift+';
 let clipboardVersion=0;
 const inputId = `recipient-${useId()}`;
 function display(address) {
@@ -278,7 +278,7 @@ async function clipboardAction(index,action) {
   else if (source!==null) closeMenu(true);
 }
 function reposition() {
-  const anchor = chip(menuIndex.value);
+  const anchor = chip(menuIndex.value)?.closest(".recipient-chip");
   if (menu.value && anchor) {
     const width=Math.max(252,Math.min(540,menu.value.scrollWidth));
     menuStyle.value=positionMailboxPopup(menu.value,anchor,width,undefined,false,0);
@@ -359,8 +359,8 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .remove:hover { background:rgba(68,71,70,.12); }
 .recipient-error { width:100%; font-size:12px; color:var(--el-color-danger); padding-left:40px; }
 .recipient-menu { position:fixed; z-index:10000; box-sizing:border-box; padding:8px 0; overflow:auto; border-radius:4px; background:var(--mail-surface,#fff); color:var(--regular-text-color); box-shadow:0 8px 10px 1px #00000024,0 3px 14px 2px #0000001f,0 5px 5px -3px #0003; }
-.recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 16px; height:32px; cursor:pointer; text-align:left; color:inherit; font:400 14px/20px Roboto,Arial,sans-serif; }
-.recipient-menu button { gap:16px; }
+.recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 12px 0 42px; height:32px; cursor:pointer; text-align:left; color:inherit; font:500 12px/16px Roboto,Arial,sans-serif; letter-spacing:.3px; }
+.recipient-menu button { gap:48px; }
 .recipient-menu button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .recipient-menu kbd { flex:none; }
 .clipboard-error { display:block; padding:8px 16px; font-size:12px; }

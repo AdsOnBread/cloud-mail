@@ -87,7 +87,7 @@ function previewSenders(members) {
   }
   return [...people.values()];
 }
-const labels = new Map(), membership = new Map();
+const labels = new Map(), membership = new Map(), savedContacts = new Map();
 let recentColors=[];
 let nextLabel = 1;
 function threadLabels(members) {
@@ -266,9 +266,18 @@ const api=createHTTPServer(async(req,res)=>{
    }
    data=receipt||{state:'not_started'};
  }
+ else if(path==='/v1/contacts'){
+   const p=body ? JSON.parse(body) : Object.fromEntries(url.searchParams);
+   const key=JSON.stringify([Number(p.accountId),p.email.toLowerCase()]);
+   if(req.method==='PUT'){
+     if(p.saved)savedContacts.set(key,{accountId:Number(p.accountId),email:p.email,name:p.name});
+     else savedContacts.delete(key);
+   }
+   data=savedContacts.get(key) || null;
+ }
  else if(path==='/v1/search/people'){
    const p=Object.fromEntries(url.searchParams), scoped=rows.filter(r=>!p.accountId||r.accountId===Number(p.accountId));
-   const initial=p.folder==='compose'?[]:p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]
+   const initial=p.folder==='compose'?[...savedContacts.values()].filter(person=>person.accountId===Number(p.accountId)).map(person=>({sendEmail:person.email,name:person.name})):p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]
      .filter(d=>d.scheduledAt && (!p.accountId || d.accountId===Number(p.accountId))).map(d=>{
        const sender=accounts.find(a=>a.accountId===d.accountId);
        return {draftId:d.draftId,senderEmail:sender?.email,senderName:d.name||sender?.name,recipients:d.receiveEmail,cc:d.cc,bcc:d.bcc};

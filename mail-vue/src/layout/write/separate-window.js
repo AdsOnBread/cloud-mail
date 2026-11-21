@@ -83,6 +83,16 @@ export async function openSeparateWindow(prepare, session) {
   }
 }
 
+// Sibling composers return to the mailbox independently, even when the user
+// starts the second message from a contact inside the first separate window.
+export function openContactWindow(state,session,sourceWindow) {
+  session.check();
+  if (!sourceWindow) return openSeparateWindow(()=>state,session);
+  const api=window.opener?.[bridge];
+  if (!api?.openContact) throw new Error("Open the original mailbox to start another message.");
+  return api.openContact(window,sourceWindow,state);
+}
+
 export async function checkWindowSession(state, session) {
   if (state.owner !== session.owner || state.stamp !== await sessionStamp(session))
     throw new Error("This compose window belongs to a different mailbox session.");
@@ -106,6 +116,17 @@ export function receiveComposeWindows({restore, getSession, discardEditor, draft
   let ready = false;
   const api = {
     discardEditor,
+    openContact(child,key,state) {
+      if (id || !isComposer(child,key)) throw new Error("The compose window changed.");
+      const session=getSession();
+      session.check();
+      return openSeparateWindow(async()=>{
+        const entry=await register(child,key);
+        entry.check();
+        if (state.owner!==session.owner) throw new Error("The sending mailbox changed.");
+        return state;
+      },session);
+    },
     changed(child,key) {
       const entry = children.get(child);
       if (!entry || entry.id !== key || !isComposer(child,key)) return;
