@@ -124,6 +124,7 @@
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item v-if="selectedRows.some(row => !row.importanceReason)" @click="mutate('importance', { important: true })">Mark as important</el-dropdown-item>
             <el-dropdown-item v-if="selectedRows.some(row => row.importanceReason)" @click="mutate('importance', { important: false })">Mark as not important</el-dropdown-item>
+            <el-dropdown-item v-if="hasPerm('email:send')" divided :disabled="forwarding" @click="forwardMessages(selectedRows.map(row => row.lastEmailId))">Forward as attachment</el-dropdown-item>
             <el-dropdown-item v-if="history.length" class="compact-page-action" divided :disabled="loading || busy" @click="previousPage">Previous page</el-dropdown-item>
             <el-dropdown-item v-if="hasMore" class="compact-page-action" :divided="!history.length" :disabled="loading || busy" @click="nextPage">Next page</el-dropdown-item>
           </el-dropdown-menu></template>
@@ -299,6 +300,7 @@
                   @click="open(row, 'replyAll')"
                   >Reply all</el-dropdown-item
                 >
+                <el-dropdown-item v-if="hasPerm('email:send')" :disabled="forwarding" @click="forwardMessages(selected.includes(row.lastEmailId) ? selectedRows.map(item => item.lastEmailId) : [row.lastEmailId])">Forward as attachment</el-dropdown-item>
                 <el-dropdown-item @click="mutate('importance', { important: !row.importanceReason }, [row.lastEmailId])">{{ row.importanceReason ? 'Mark as not important' : 'Mark as important' }}</el-dropdown-item>
                 <el-dropdown-item @click="mutate('read', {}, [row.lastEmailId])"
                   >Mark read</el-dropdown-item
@@ -328,6 +330,8 @@
   </section>
 </template>
 <script setup>
+import {useForwardAttachments} from "@/services/forward-attachments";
+import {hasPerm} from "@/perm/perm";
 import {draftSearchMatcher} from "@/utils/draft-summary";
 import http from "@/axios";
 import {startConversationDrag, endConversationDrag} from "@/components/mail-labels/conversation-drag";
@@ -448,6 +452,7 @@ const key = computed(() =>
     search.query, JSON.stringify(search.filters),
   ].join("|"),
 );
+const {forwarding, forwardMessages} = useForwardAttachments(() => JSON.stringify([key.value, selected.value]));
 function deliveryState(status) {
   return (
     {

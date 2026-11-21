@@ -325,6 +325,7 @@ defineExpose({
   open: (person) => launch("open", person),
   openReply: (email) => launch("openReply", email),
   openReplyAll: (email) => launch("openReplyAll", email),
+  openAttachedMessages: (request) => launch("openAttachedMessages", request),
   openForward: (email) => launch("openForward", email),
   openDraft: (draft, options) => launch("openDraft", draft, options),
   focusDraft,

@@ -881,12 +881,13 @@ function initialWritingArea(content="") {
   Object.assign(template.content.firstElementChild.style,css);
   return template.innerHTML;
 }
-function open(person, sender) {
+function open(person, sender, attachments = []) {
   if (show.value) return focusWindow();
   if (preparing.value) return;
   resetForm();
   setSender(sender);
   if (person && person.accountId !== form.accountId) return;
+  form.attachments.push(...attachments);
   defValue.value=initialWritingArea();
   if (person) {
     form.receiveEmail = [person.email];
@@ -1747,6 +1748,9 @@ defineExpose({
   prepareDiscard,finishDiscard,unlockDiscard,
   discardEditor,
   open,
+  openAttachedMessages({attachments, sender, signal}) {
+    if (!signal.aborted) open(null, sender, attachments);
+  },
   openDraft,
   restoreWindow: async (state,draft) => {
     if (draft) await openDraft(draft);

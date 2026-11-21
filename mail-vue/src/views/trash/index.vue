@@ -46,6 +46,7 @@
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item @click="trashPicker?.show()">Label as</el-dropdown-item>
             <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">{{restoreLabel}}</el-dropdown-item>
+            <el-dropdown-item v-if="hasPerm('email:send') && !hasScheduled" divided :disabled="forwarding" @click="forwardTrash">Forward as attachment</el-dropdown-item>
             <template v-if="!messageId">
               <el-dropdown-item class="compact-trash-pager" :disabled="!history.length || busy || loading" @click="previous">Previous page</el-dropdown-item>
               <el-dropdown-item class="compact-trash-pager" :disabled="!nextCursor || busy || loading" @click="next">Next page</el-dropdown-item>
@@ -252,6 +253,7 @@ import LabelPicker from "@/components/mail-labels/picker.vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MovePicker from "@/components/mail-labels/move.vue";
 import {useMailLabels} from "@/store/mail-labels";
+import {useForwardAttachments} from "@/services/forward-attachments";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
@@ -337,6 +339,13 @@ const targets = computed(() =>
 );
 const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(row=>selected.value.includes(row.emailId)));
 const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
+const {forwarding, forwardMessages} = useForwardAttachments(() => JSON.stringify([mailbox.value, targets.value, search.query, search.filters]));
+function forwardTrash() {
+  const sender = windowAccount.value && detail.value?.mailboxEmail
+    ? {accountId:detail.value.accountId, email:detail.value.mailboxEmail, name:detail.value.mailboxName}
+    : undefined;
+  return forwardMessages(selectedRows.value.map(row => row.emailId), {trash:true, mailbox:mailbox.value, sender});
+}
 const restoreLabel=computed(()=>hasScheduled.value && selectedRows.value.every(row=>row.scheduledDraftId) ? 'Restore to Drafts' : 'Restore to previous location');
 const moreButton=ref(),trashPicker=ref();
 const labelRows=computed(()=>selectedRows.value.map(m=>({lastEmailId:m.emailId,labelIds:m.labelIds})));
