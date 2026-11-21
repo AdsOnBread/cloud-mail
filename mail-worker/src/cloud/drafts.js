@@ -5,7 +5,7 @@ import { normalizeAttachment,MAX_MESSAGE_BYTES } from '../service/email-sender';
 import r2Service from '../service/r2-service';
 import { camel } from '../mobile/service';
 
-const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui'];
+const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui','labelIds','mailboxStarred'];
 function normalize(input,previous={}) {
   const value={...previous};
   for(const key of fields) if(Object.hasOwn(input,key)) value[key]=input[key];
@@ -16,6 +16,15 @@ function normalize(input,previous={}) {
   for(const key of ['receiveEmail','cc','bcc']) {
     value[key]??=[];
     if(!Array.isArray(value[key])||value[key].length>50||value[key].some(a=>typeof a!=='string'||a.length>320)) throw new BizError('Invalid draft recipients.',400);
+  }
+  if (value.labelIds !== undefined) {
+    if (!Array.isArray(value.labelIds) || value.labelIds.some(id => !Number.isSafeInteger(id) || id < 1))
+      throw new BizError('Invalid draft labels.',400);
+    value.labelIds = [...new Set(value.labelIds)].sort((a,b)=>a-b);
+  }
+  if (value.mailboxStarred !== undefined) {
+    if (![false,true,0,1].includes(value.mailboxStarred)) throw new BizError('Invalid draft star.',400);
+    value.mailboxStarred = Number(value.mailboxStarred);
   }
   if(value.plainText!==undefined && typeof value.plainText!=='boolean')throw new BizError('Invalid message format.',400);
   if(value.sendType&&!['reply','forward'].includes(value.sendType)) throw new BizError('Invalid message kind.',400);
@@ -87,9 +96,7 @@ export async function save(c,userId,input,id) {
   if(old && (input.version!==old.version||old.state!=='draft')) throw conflict(old);
   const accountId=input.accountId??old?.accountId;await mailbox(c,userId,accountId);
   const data=normalize(input,old?Object.fromEntries(fields.map(k=>[k,old[k]]).filter(([,v])=>v!==undefined)):{});
-  for (const field of ['mailboxStarred','mailboxImportant']) {
-    if (old?.[field] != null) data[field] = old[field];
-  }
+  if (old?.mailboxImportant != null) data.mailboxImportant = old.mailboxImportant;
   if(data.emailId) {
     const source=await c.env.db.prepare('SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.email_id=? AND e.user_id=? AND a.user_id=e.user_id AND e.is_del=0 AND a.is_del=0 AND e.trashed_at IS NULL').bind(positive(data.emailId),userId).first();
     if(!source && (!old || data.emailId!==old.emailId)) throw new BizError('Original message not found.',404);

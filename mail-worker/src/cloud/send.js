@@ -92,6 +92,13 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
       const sender = `FROM cloud_drafts d JOIN email e ON e.user_id=d.user_id AND e.account_id=d.account_id
         WHERE d.user_id=? AND d.draft_id=? AND d.state='sending' AND e.email_id=? AND e.type=1`;
       const ids = [userId,draft.draftId,messages[0].emailId];
+      if (draft.labelIds?.length) {
+        filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)
+          SELECT d.user_id,l.label_id,e.email_id FROM cloud_drafts d
+          JOIN email e ON e.user_id=d.user_id AND e.account_id=d.account_id
+          JOIN mailbox_labels l ON l.user_id=d.user_id AND l.label_id IN (SELECT value FROM json_each(d.data,'$.labelIds'))
+          WHERE d.user_id=? AND d.draft_id=? AND d.state='sending' AND e.email_id=? AND e.type=1`).bind(...ids));
+      }
       filing.push(
         c.env.db.prepare(`INSERT INTO star(user_id,email_id) SELECT d.user_id,e.email_id ${sender}
           AND json_extract(d.data,'$.mailboxStarred')=1

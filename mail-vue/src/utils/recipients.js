@@ -55,11 +55,19 @@ export function restoreDraft(draft = {}) {
 }
 
 export function hasDraftContent(draft) {
-  return !!(draft.subject || draft.content || draft.attachments?.length ||
+  return !!(draft.labelIds?.length || draft.mailboxStarred || draft.subject || draft.content || draft.attachments?.length ||
     recipientFields.some(field => draft[field]?.length));
+}
+
+// Omit empty filing choices so fingerprints from older versions still compare equal.
+export function draftFilingFingerprint(draft) {
+  return [
+    ...(draft.labelIds?.length ? [{labels:[...draft.labelIds].sort((a,b)=>a-b)}] : []),
+    ...(draft.mailboxStarred ? [{starred:true}] : []),
+  ];
 }
 
 export function draftFingerprint(draft) {
   return JSON.stringify([draft.subject, draft.content, ...recipientFields.map(field => draft[field] || []),
-    (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : [])]);
+    (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : []), ...draftFilingFingerprint(draft)]);
 }
