@@ -3,32 +3,42 @@
     <div>
       <router-link class="mobile-brand" to="/inbox"><MailBrand :title="settingStore.settings.title"/></router-link>
       <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
-      <el-menu :collapse="false"  >
-        <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
+      <nav aria-label="Mail folders">
+        <router-link class="folder-row" :to="{name:'email'}" aria-label="Inbox" data-tip="Inbox"
                       @dragenter="hoverDestination($event,0)" @dragover="hoverDestination($event,0)" @dragleave="leaveDestination($event,0)" @drop="dropConversations($event,0)"
                       :class="{'choose-item':activeFolder==='email','drop-destination':dropTarget===0}">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread + drafts.scheduledInboxUnread" class="menu-name draft-count">{{ unread + drafts.scheduledInboxUnread }}</span>
-        </el-menu-item>
+        </router-link>
         <template v-for="hidden in [false,true]" :key="String(hidden)">
-          <el-menu-item v-if="hidden" index="more" :aria-expanded="more" :aria-label="more ? 'Less' : 'More'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
+          <button v-if="hidden" ref="moreFolders" class="folder-row" type="button" :aria-expanded="more" :aria-label="more ? 'Fewer folders' : 'More folders'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
             <Icon :icon="more ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20"/><span class="menu-name folder-name">{{ more ? 'Less' : 'More' }}</span>
-          </el-menu-item>
+          </button>
           <template v-if="!hidden || more">
-            <el-menu-item v-for="folder in folderGroups[Number(hidden)]" :key="folder.id" :index="folder.id" :aria-label="folder.name" :data-tip="folder.name"
-              :class="{'choose-item':activeFolder===folder.id}" @click="router.push({name:folder.id})">
-              <Icon :icon="'material-symbols:'+folder.icon" width="20" height="20"/>
-              <span class="menu-name folder-name">{{ folder.translation ? $t(folder.translation) : folder.name }}</span>
-              <span v-if="folderCounts[folder.id]" class="menu-name draft-count">{{ folderCounts[folder.id] }}</span>
-            </el-menu-item>
+            <div v-for="folder in folderGroups[Number(hidden)]" :key="folder.id" class="folder-line"
+              :data-folder="folder.id" :class="{'choose-item': activeFolder===folder.id}">
+              <router-link :to="{name:folder.id}" class="folder-row" :aria-label="folder.name" :data-tip="folder.name"
+                :aria-description="folderCounts[folder.id] ? String(folderCounts[folder.id]) : undefined"
+                @keydown.right="focusCategoryOptions">
+                <Icon :icon="'material-symbols:'+folder.icon" width="20" height="20"/>
+                <span class="menu-name folder-name">{{ folder.translation ? $t(folder.translation) : folder.name }}</span>
+                <span v-if="folderCounts[folder.id]" class="menu-name draft-count">{{ folderCounts[folder.id] }}</span>
+              </router-link>
+              <CategoryOptions v-if="categoryIds.has(folder.id)" :key="labels.owner" :folder="folder" :restore-focus="restoreCategoryFocus" />
+            </div>
           </template>
         </template>
         <template v-if="more">
-        <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" data-tip="Settings" index="setting"
-                      :class="activeFolder === 'setting' ? 'choose-item' : ''">
-          <Icon icon="fluent:settings-48-regular" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('settings')}}</span>
-        </el-menu-item>
+          <router-link class="folder-row" :to="{name:'label-settings'}" aria-label="Manage labels" data-tip="Manage labels" :class="{'choose-item':route.name==='label-settings'}">
+            <Icon icon="material-symbols:settings-outline" width="20"/><span class="menu-name folder-name">Manage labels</span>
+          </router-link>
+          <button type="button" class="folder-row" data-tip="Create new label" aria-label="Create new label" @click="labels.edit={}">
+            <Icon icon="material-symbols:add" width="20"/><span class="menu-name folder-name">Create new label</span>
+          </button>
+          <router-link class="folder-row" :to="{name:'setting'}" aria-label="Settings" data-tip="Settings"
+            :class="{'choose-item':route.name==='setting'}">
+            <Icon icon="fluent:settings-48-regular" width="20"/><span class="menu-name folder-name">{{$t('settings')}}</span>
+          </router-link>
         </template>
         <div class="label-heading"><span class="menu-name">Labels</span><button class="mail-icon" aria-label="Create new label" data-tip="Create new label" @click="labels.edit={}"><Icon icon="material-symbols:add" width="20" /></button></div>
         <template v-for="{node,depth,label} in orderedLabels" :key="label.id">
@@ -61,37 +71,37 @@
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
-        <el-menu-item @click="router.push({name: 'analysis'})" aria-label="Analytics" data-tip="Analytics" index="analysis" v-perm="'analysis:query'"
+        <router-link class="folder-row" :to="{name:'analysis'}" aria-label="Analytics" data-tip="Analytics" v-perm="'analysis:query'"
                       :class="activeFolder === 'analysis' ? 'choose-item' : ''">
           <Icon icon="fluent:data-pie-20-regular" width="24" height="24" />
           <span class="menu-name" style="margin-left: 13px">{{$t('analytics')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'user'})" aria-label="All users" data-tip="All users" index="setting" v-perm="'user:query'"
+        </router-link>
+        <router-link class="folder-row" :to="{name:'user'}" aria-label="All users" data-tip="All users" v-perm="'user:query'"
                       :class="activeFolder === 'user' ? 'choose-item' : ''">
           <Icon icon="si:user-alt-2-line" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('allUsers')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'all-email'})" aria-label="Manage all mail" data-tip="Manage all mail" index="all-email" v-perm="'all-email:query'"
+        </router-link>
+        <router-link class="folder-row" :to="{name:'all-email'}" aria-label="Manage all mail" data-tip="Manage all mail" v-perm="'all-email:query'"
                       :class="activeFolder === 'all-email' ? 'choose-item' : ''">
           <Icon icon="fluent:mail-list-28-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">Manage all mail</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'role'})" aria-label="Permissions" data-tip="Permissions" index="setting" v-perm="'role:query'"
+        </router-link>
+        <router-link class="folder-row" :to="{name:'role'}" aria-label="Permissions" data-tip="Permissions" v-perm="'role:query'"
                       :class="activeFolder === 'role' ? 'choose-item' : ''">
           <Icon icon="fluent:lock-closed-16-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('permissions')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'reg-key'})" aria-label="Invite codes" data-tip="Invite codes" index="reg-key" v-perm="'reg-key:query'"
+        </router-link>
+        <router-link class="folder-row" :to="{name:'reg-key'}" aria-label="Invite codes" data-tip="Invite codes" v-perm="'reg-key:query'"
                       :class="activeFolder === 'reg-key' ? 'choose-item' : ''">
           <Icon icon="fluent:fingerprint-20-filled" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('inviteCode')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'sys-setting'})" aria-label="System settings" data-tip="System settings" index="sys-setting" v-perm="'setting:query'"
+        </router-link>
+        <router-link class="folder-row" :to="{name:'sys-setting'}" aria-label="System settings" data-tip="System settings" v-perm="'setting:query'"
                       :class="activeFolder === 'sys-setting' ? 'choose-item' : ''">
           <Icon icon="eos-icons:system-ok-outlined" width="18" height="18" style="margin-left: 2px" />
           <span class="menu-name" style="margin-left: 17px">{{$t('SystemSettings')}}</span>
-        </el-menu-item>
-      </el-menu>
+        </router-link>
+      </nav>
       <div class="mailbox-selector">
         <el-popover v-if="hasPerm('account:query') && settingStore.settings.manyEmail === 0" v-model:visible="uiStore.accountShow" trigger="click" placement="right-start" :width="340" popper-class="mailbox-popover">
           <template #reference><button type="button" class="mailbox-button" :data-tip="accountStore.currentAccount.email" aria-label="Choose mailbox" :aria-expanded="uiStore.accountShow"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span><Icon class="mailbox-chevron" icon="material-symbols:expand-more" width="18" /></button></template>
@@ -116,7 +126,7 @@ import Account from '@/layout/account/index.vue';
 import { useAccountStore } from '@/store/account.js';
 import { useUiStore } from '@/store/ui.js';
 import { hasPerm } from '@/perm/perm.js';
-import router from "@/router/index.js";
+import CategoryOptions from "@/components/mail-labels/category-options.vue";
 import { useRoute } from 'vue-router';
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import {labelTree,openLabelRows} from "@/components/mail-labels/tree";
@@ -141,7 +151,17 @@ const activeFolder = computed(() => {
   return route.meta.name;
 });
 const labels = useMailLabels(), user=useUserStore();
-const more=ref(false);
+const more=ref(false), moreFolders=ref([]);
+const categoryIds=new Set(categoryFolders.map(folder=>folder.id));
+function focusCategoryOptions(event) {
+  const button=event.currentTarget.nextElementSibling?.querySelector('.category-trigger');
+  if(button){event.preventDefault();button.focus();}
+}
+async function restoreCategoryFocus(id) {
+  await nextTick();
+  const row=document.querySelector(`.mail-sidebar [data-folder="${id}"]`);
+  (row?.querySelector('.category-trigger') || moreFolders.value[0])?.focus();
+}
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
 watch([()=>user.user.email,()=>user.authenticatedToken],([email,token])=>{
   if(!email || !token)return;
@@ -351,20 +371,28 @@ const uiStore = useUiStore();
 .mailbox-button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:left; }
 .compose-button { margin:8px 0 12px 8px; padding:0 24px; height:56px; display:flex; align-items:center; gap:16px; color:var(--mail-on-compose); background:var(--mail-compose); border-radius:16px; cursor:pointer; font-weight:500; box-shadow:0 1px 2px #0001; }
 .compose-button:hover { box-shadow:0 2px 5px #0003; }
-.el-menu { border:0; background:transparent; width:100%; }
-.el-menu-item { height:32px; line-height:32px; margin:0 12px 0 0; padding:0 24px !important; border-radius:0 18px 18px 0; color:var(--el-text-color-primary); }
-.el-menu-item svg { flex-shrink:0; }
-.el-menu-item:hover { background:var(--mail-hover); }
+nav { width:100%; }
+.folder-line { position:relative; margin-right:16px; border-radius:0 16px 16px 0; }
+.folder-line:hover,.folder-line:focus-within { background:var(--mail-hover); }
+.folder-line .folder-row { width:100%; margin:0; }
+.folder-line:has(.category-trigger):is(:hover,:focus-within,:has([aria-expanded=true])) .draft-count { visibility:hidden; }
+.folder-line:has(.category-trigger) .folder-row { padding-inline-end:32px; }
+.folder-row { box-sizing:border-box; display:flex; align-items:center; text-align:start; text-decoration:none; cursor:pointer; font:inherit; width:calc(100% - 16px); height:32px; line-height:32px; margin:0 16px 0 0; padding:0 24px; border-radius:0 18px 18px 0; color:var(--el-text-color-primary); }
+.folder-row:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }
+.folder-row svg { flex-shrink:0; }
+.folder-row:hover:not(.folder-line .folder-row) { background:var(--mail-hover); }
 .choose-item { background:var(--mail-selected) !important; font-weight:600; }
 .menu-name { font-size:14px; }
 .draft-count { margin-left:auto; font-size:12px; font-weight:600; }
 .manage-title { padding:24px 24px 8px; font-size:12px; color:var(--regular-text-color); }
 :global(.mail-layout.nav-compact .mail-sidebar .menu-name), :global(.mail-layout.nav-compact .mail-sidebar .manage-title), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button span), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-chevron), :global(.mail-layout.nav-compact .mail-sidebar .compose-button span) { display:none; }
-:global(.mail-layout.nav-compact .mail-sidebar .el-menu-item) { padding:0 24px !important; margin-right:8px; height:40px; border-radius:0 20px 20px 0; }
+:global(.mail-layout.nav-compact .mail-sidebar .folder-row) { padding:0 24px; width:64px; margin-right:0; height:40px; border-radius:0 20px 20px 0; }
+:global(.mail-layout.nav-compact .mail-sidebar .folder-line) { margin-right:8px; border-radius:0 20px 20px 0; }
 :global(.mail-layout.nav-compact .mail-sidebar .compose-button) { width:48px; padding:0 12px; margin-left:12px; height:48px; }
 :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button) { padding:0 12px; }
-@media (max-width:767px) { .el-menu-item { height:40px; } }
+@media (hover:none) { .folder-line:has(.category-trigger) .draft-count { margin-inline-end:8px; visibility:visible; } }
+@media (max-width:767px) { .folder-row { height:40px; } }
 .mobile-brand{display:none}
 @media(max-width:767px){.mobile-brand{display:flex;align-items:center;padding:14px 20px;text-decoration:none}}
-.label-row.drop-destination,.el-menu-item.drop-destination { background:var(--mail-selected); outline:2px solid currentColor; outline-offset:-2px; }
+.label-row.drop-destination,.folder-row.drop-destination { background:var(--mail-selected); outline:2px solid currentColor; outline-offset:-2px; }
 </style>
