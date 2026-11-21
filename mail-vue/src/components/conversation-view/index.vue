@@ -688,9 +688,21 @@ h1 {
 }
 .bottom-replies {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 24px 0 0 56px;
 }
+.bottom-replies .el-button {
+  height:36px;
+  margin:0;
+  padding:0 16px;
+  border:1px solid var(--secondary-text-color);
+  border-radius:18px;
+  color:var(--regular-text-color);
+  background:transparent;
+  font:500 14px/20px Arial,sans-serif;
+}
+.bottom-replies .el-button:is(:hover,:focus-visible){background:var(--mail-hover);color:var(--el-text-color-primary)}
 .bottom-replies svg {
   margin-right: 8px;
 }

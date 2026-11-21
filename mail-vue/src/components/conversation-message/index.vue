@@ -18,7 +18,7 @@
           <span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span>
         </time>
         <button
-          class="icon-button"
+          class="icon-button message-star"
           :data-tip="message.isStar ? 'Unstar' : 'Star'"
           :aria-pressed="Boolean(message.isStar)"
           :aria-label="message.isStar ? 'Unstar message' : 'Star message'"
@@ -27,7 +27,7 @@
           <Icon
             :icon="
               message.isStar
-                ? 'fluent-color:star-16'
+                ? 'material-symbols:star'
                 : 'material-symbols:star-outline'
             "
             width="20"
@@ -221,7 +221,7 @@ async function remove() {
 .address {flex:0 1 auto}
 .snippet,.conversation-recipients {grid-area:2 / 2 / 3 / -1;min-width:0;text-align:start}
 .snippet {color:var(--regular-text-color);font:13px/20px Arial,sans-serif}
-.conversation-recipients {display:flex;align-items:center;height:20px;width:fit-content;max-width:100%;position:relative;z-index:2;line-height:20px}
+.conversation-recipients {grid-column:2;display:flex;align-items:center;height:20px;width:fit-content;max-width:100%;position:relative;z-index:2;line-height:20px}
 .message-actions {
   grid-area:1 / 3;display:flex;align-items:center;justify-content:end;
   position:relative;z-index:2;height:20px;color:var(--regular-text-color);
@@ -229,6 +229,7 @@ async function remove() {
 time {cursor:pointer;margin-inline-end:10px;white-space:nowrap}
 .short-time {display:none}
 .icon-button {width:40px;height:40px;border-radius:50%;display:inline-grid;place-items:center;flex-shrink:0;color:inherit;cursor:pointer}
+.message-star[aria-pressed="true"] {color:#e9a900}
 .icon-button:is(:hover,:focus-visible) {background:var(--mail-hover)}
 .message-html,.attachments {margin-inline-start:calc(var(--avatar-size) + var(--header-gap))}
 .message-html {margin-top:8px}
