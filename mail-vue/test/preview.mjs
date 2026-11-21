@@ -1,3 +1,4 @@
+import {containsExcluded,excludedPhrases} from '../../shared/mail-search-words.js';
 import {fileContentBytes,matchesSize,sizeCriterion,storedMessageBytes} from '../../shared/mail-search-size.js';
 import {peopleSuggestions} from '../../shared/mail-people-suggestions.js';
 import {maxPeople,peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
@@ -84,7 +85,8 @@ function matchesRowSize(row,p,files) {
 }
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
- return matchesPeople([{name:row.name,address:row.sendEmail}],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].flatMap(v=>typeof v==='string'?JSON.parse(v||'[]'):v||[]),peopleTerms(p,'to')) &&
+ const recipients=[row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].flatMap(v=>typeof v==='string'?JSON.parse(v||'[]'):v||[]).flatMap(v=>typeof v==='string'?[v]:[v.name,v.address]);
+ return !containsExcluded([row.subject,row.text,row.name,row.sendEmail,...recipients],excludedPhrases(p.excluded)) && matchesPeople([{name:row.name,address:row.sendEmail}],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].flatMap(v=>typeof v==='string'?JSON.parse(v||'[]'):v||[]),peopleTerms(p,'to')) &&
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
@@ -136,7 +138,7 @@ const api=createHTTPServer(async(req,res)=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
      return (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
-       matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
+       !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(['/v1/scheduled/read','/v1/scheduled/inbox'].includes(path) && req.method==='POST'){
    const {messages,unread,inbox,previousEdit}=JSON.parse(body);

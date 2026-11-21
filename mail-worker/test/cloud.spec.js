@@ -695,7 +695,7 @@ describe('Scheduled send',()=>{
  it('finds scheduled mail by body, hidden recipients and downloadable files while keeping the folder count unfiltered',async()=>{
    const {schedule,scheduledList}=await import('../src/cloud/scheduled');
    const when=Math.floor(Date.now()/1000)+3600;
-   const attached=await draft({subject:'Notes',bcc:['finance@example.net'],content:'<p style="color:tomato">Quarterly <b>statement</b></p>',text:'',
+   const attached=await draft({subject:'Notes',bcc:['finance@example.net'],content:'<p style="color:tomato">Quarterly <b>statement</b></p>',text:'\r\n',
      attachments:[{filename:'ledger.txt',content:'c2FtcGxl',contentType:'text/plain'}]});
    const inline=await draft({subject:'Photo',content:'<img src="data:image/png;base64,AAECAw==">'});
    for(const row of [attached,inline])await schedule(c(),1,row.draftId,{version:row.version,sendAt:when});
@@ -713,6 +713,10 @@ describe('Scheduled send',()=>{
      expect(found[0].attachments[0]).not.toHaveProperty('content');
    }
    expect(await scheduledList(c(),1,1,{q:'tomato'})).toEqual([]);
+   for (const excluded of ['finance','"quarterly statement"','ledger finance']) {
+     expect((await scheduledList(c(),1,1,{excluded})).map(row=>row.draftId)).toEqual([inline.draftId]);
+   }
+   expect((await scheduledList(c(),1,1,{q:'Notes',excluded:'tomato quarter'})).map(row=>row.draftId)).toEqual([attached.draftId]);
    expect(await scheduledList(c(),1,1,{countOnly:'1',subject:'Notes'})).toEqual({count:2});
    expect(await scheduledList(c(),1,2,{countOnly:'1'})).toEqual({count:0});
  });

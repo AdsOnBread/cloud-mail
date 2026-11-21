@@ -593,3 +593,41 @@ it('hands MIME bytes to the parser with their declared character set',async()=>{
  const saved=await env.db.prepare("SELECT raw_size,text FROM email WHERE subject='Latin mail'").first();
  expect(saved.raw_size).toBe(raw.byteLength);expect(saved.text).toContain('Café');
 });
+
+it('excludes visible words and phrases before paging, with isolated headers, HTML-only mail and incoming Bcc privacy',async()=>{
+ const plain=await insert({subject:'Café report',text:'The paperwork arrived κόσμος',bcc:'[{"address":"hidden@example.net"}]'});
+ const html=await insert({subject:'Report two',text:'\r\n',content:'<p style="color:magenta">Paper <b>lantern</b></p>'});
+ const sent=await insert({type:1,status:2,subject:'Third report',bcc:'[{"address":"hidden@example.net"}]'});
+ const options={folder:'all',q:'report'};
+ expect((await list({...options,excluded:'cafe hidden'})).total).toBe(1);
+ expect((await list({...options,excluded:'"paper lantern" hidden'})).threads.map(m=>m.lastEmailId)).toEqual([plain.email_id]);
+ expect((await list({...options,excluded:'paper'})).total).toBe(2);
+ expect((await list({...options,excluded:'κόσμοσ'})).total).toBe(2);
+ expect((await list({...options,excluded:'magenta "lantern report" address'})).total).toBe(3);
+ await cloudMail.trash(context(),1,[plain,html,sent].map(m=>m.email_id));
+ const trash=async excluded=>(await cloudMail.list(context(),1,{folder:'trash',excluded,limit:1})).messages.map(m=>m.emailId);
+ expect(await trash('"paper lantern" hidden')).toEqual([plain.email_id]);
+ await env.db.prepare("UPDATE email SET text='replacement' WHERE email_id=?").bind(html.email_id).run();
+ expect(await trash('hidden "paper lantern"')).toEqual([html.email_id]);
+ await env.db.prepare('DELETE FROM email WHERE email_id=?').bind(html.email_id).run();
+ expect(await env.db.prepare("SELECT rowid FROM mail_word_index WHERE mail_word_index MATCH 'replacement'").first()).toBeNull();
+});
+
+it('bounds search preparation and resumes a scoped historical index without returning partial results',async()=>{
+ const {mailWordSchema}=await import('../src/service/mail-word-schema');
+ const {indexWordBatch}=await import('../src/service/mail-word-index');
+ const ids=[];
+ for(let n=0;n<10;n++) ids.push((await insert({subject:'Historical '+n,text:'',content:n===6?'<p>Lantern</p>':'<p>Other</p>'})).email_id);
+ await env.db.prepare('INSERT INTO account(account_id,email,user_id) VALUES(7,\'other-alias@example.com\',1)').run();
+ const other=await insert({account_id:7,subject:'Other alias',text:'',content:'<p>other</p>'});
+ // Simulate messages that existed before search was installed.
+ await env.db.batch(['mail_words_insert','mail_words_update','mail_words_delete'].map(name=>env.db.prepare('DROP TRIGGER '+name)));
+ await env.db.batch(['mail_word_index','mail_word_pending','mail_word_setup'].map(name=>env.db.prepare('DROP TABLE '+name)));
+ await env.db.batch(mailWordSchema().map(sql=>env.db.prepare(sql)));
+ expect(await list({folder:'all',excluded:'lantern'})).toEqual({preparingSearch:true});
+ expect((await env.db.prepare('SELECT count(*) n FROM mail_word_pending WHERE email_id=?').bind(other.email_id).first()).n).toBe(0);
+ expect(await list({folder:'all',excluded:'lantern'})).toEqual({preparingSearch:true});
+ expect((await list({folder:'all',excluded:'lantern',limit:1})).total).toBe(9);
+ await indexWordBatch(env.db);
+ expect((await list({folder:'all',allReceive:1,excluded:'lantern'})).total).toBe(10);
+});

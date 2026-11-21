@@ -315,7 +315,7 @@
       </p>
       <p v-else-if="!rows.length && !filedDrafts.length && !scheduledMatches.length && !scheduledError && !error" class="list-status">
         {{
-          search.query
+          search.query || Object.keys(search.filters).length
             ? "No conversations match your search."
             : category ? "Your "+inboxCategories.find(item=>item.id===category).name+" tab is empty." : "No conversations here."
         }}
