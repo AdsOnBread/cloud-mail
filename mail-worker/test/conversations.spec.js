@@ -451,3 +451,18 @@ it('moves a label branch atomically while retaining identities, membership and c
   expect((await list({folder:'label',labelId:leaf.id})).total).toBe(1);
   expect(await listLabels(db,1)).toContainEqual({...leaf,name:'Personal/Team/Planning/April'});
 });
+
+it('moves overlapping paths without changing unrelated legacy paths or shortening an orphan',async()=>{
+ const {saveLabel,listLabels,removeLabel}=await import('../src/service/mailbox-labels');
+ const save=(name,id,parent)=>saveLabel(env.db,1,name,id,parent);
+ const early=await save('A/B/B'),late=await save('A/B');
+ const detached=await save('A/B/'),legacy=await save('May',undefined,detached.id);
+ await save('A',late.id);
+ const all=await listLabels(env.db,1);
+ expect(all).toEqual(expect.arrayContaining([{...early,name:'A/B'},{...late,name:'A'},detached,legacy]));
+ const longParent=await save('p'.repeat(80)),child=await save('n'.repeat(32),undefined,longParent.id);
+ await removeLabel(env.db,1,longParent.id);
+ const kept=await save(child.name,child.id,late.id);
+ expect(kept.name).toBe('A/'+child.name);
+ await expect(save('x'.repeat(101),child.id)).rejects.toMatchObject({code:400});
+});

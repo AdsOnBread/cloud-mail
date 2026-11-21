@@ -41,18 +41,25 @@ export async function setLabelDisplay(db, userId, id, {list, mode} = {}) {
 	return row;
 }
 
-// Paths are the wire format used by existing clients. Resolve the destination and
-// rewrite the whole branch in one statement so concurrent moves cannot split it.
+// A blank segment after the parent's separator belongs to a different legacy
+// path, e.g. "Projects/" is a standalone label alongside "Projects".
+function descendant(path, root) {
+	return `(substr(${path},1,length(${root})+1) = (${root} || '/') COLLATE NOCASE
+    AND substr(${path},length(${root})+2,1) NOT IN ('','/'))`;
+}
+
 export async function saveLabel(db, userId, name, id, parentId = null) {
-	if (typeof name !== 'string' || !name.trim() || name.trim().length > 100)
+	if (typeof name !== 'string' || !name.trim() || (id === undefined && name.trim().length > 100))
 		throw new BizError('Enter a label name of up to 100 characters.', 400);
 	if (parentId !== null && (!Number.isSafeInteger(parentId) || parentId < 1))
 		throw new BizError('Choose an existing parent label.',400);
-	const target = `destination(path) AS MATERIALIZED (
-    SELECT ? WHERE ? IS NULL
-    UNION ALL SELECT name || '/' || ? FROM mailbox_labels WHERE user_id=? AND label_id=?
+	const leaf=name.trim();
+	if (parentId !== null && leaf.startsWith('/')) throw new BizError('A nested label name cannot start with a slash.',400);
+	const target = `destination(path,parent_path) AS MATERIALIZED (
+    SELECT ?,NULL WHERE ? IS NULL UNION ALL
+    SELECT name || '/' || ?,name FROM mailbox_labels WHERE user_id=? AND label_id=?
   )`;
-	const args=[name.trim(),parentId,name.trim(),userId,parentId];
+	const args=[leaf,parentId,leaf,userId,parentId];
 	try {
 		if (id === undefined) {
 			const row=await db.prepare(`WITH ${target}
@@ -61,22 +68,31 @@ export async function saveLabel(db, userId, name, id, parentId = null) {
 			if (!row) throw new BizError('Parent label not found.',404);
 			return row;
 		}
-		const [write,selected] = await db.batch([
+		// SQLite enforces uniqueness row by row. Use transaction-local BLOB names
+		// outside the TEXT name space so a branch may safely overlap its old path.
+		const token=crypto.randomUUID();
+		const [stage,,selected] = await db.batch([
 			db.prepare(`WITH ${target},
-        source(path) AS MATERIALIZED (SELECT name FROM mailbox_labels WHERE user_id=? AND label_id=?),
-        move(old_path,new_path) AS MATERIALIZED (
-          SELECT source.path,destination.path FROM source,destination
-          WHERE substr(destination.path,1,length(source.path)+1) != source.path || '/' COLLATE NOCASE
+        source(path) AS MATERIALIZED (SELECT name FROM mailbox_labels WHERE user_id=? AND label_id=?
+          AND (? OR name=? OR substr(name,-length(?)-1)='/'||?)),
+        move(old_path) AS MATERIALIZED (
+          SELECT source.path FROM source,destination
+          WHERE (parent_path IS NULL OR (parent_path != source.path COLLATE NOCASE
+            AND NOT ${descendant('parent_path','source.path')}))
+            AND NOT ${descendant('destination.path','source.path')}
         )
-        UPDATE mailbox_labels SET name=(SELECT new_path || substr(name,length(old_path)+1) FROM move)
-        WHERE user_id=? AND EXISTS (SELECT 1 FROM move WHERE label_id=?
-          OR substr(name,1,length(old_path)+1) = old_path || '/' COLLATE NOCASE)`)
-				.bind(...args,userId,id,userId,id),
+        UPDATE mailbox_labels SET name=CAST(? || substr(name,(SELECT length(old_path)+1 FROM move)) AS BLOB)
+        WHERE user_id=? AND EXISTS (SELECT 1 FROM move WHERE label_id=? OR ${descendant('name','old_path')})`)
+				.bind(...args,userId,id,leaf.length<=100?1:0,leaf,leaf,leaf,token,userId,id),
+			db.prepare(`WITH ${target} UPDATE mailbox_labels
+        SET name=(SELECT path FROM destination) || substr(CAST(name AS TEXT),length(?)+1)
+        WHERE user_id=? AND typeof(name)='blob' AND substr(CAST(name AS TEXT),1,length(?))=?`)
+				.bind(...args,token,userId,token,token),
 			db.prepare('SELECT label_id AS id,name FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(userId,id)
 		]);
 		const row=selected.results[0];
 		if (!row) throw new BizError('Label not found.',404);
-		if (!write.meta.changes) throw new BizError('Choose an existing parent outside this label.',400);
+		if (!stage.meta.changes) throw new BizError(leaf.length>100 ? 'Enter a label name of up to 100 characters.' : 'Choose an existing parent outside this label.',400);
 		return row;
 	} catch (error) {
 		if (String(error.message).includes('UNIQUE constraint')) throw new BizError('A label with that name already exists.',409);
