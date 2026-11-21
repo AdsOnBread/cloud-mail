@@ -7,7 +7,7 @@
         class="mail-icon"
         :data-tip="backLabel"
         :aria-label="backLabel"
-        ref="backButton"
+        ref="backButton" data-reader-back
         @click="back"
       >
         <Icon icon="material-symbols:arrow-back" width="20" />
@@ -273,8 +273,9 @@ function visibleLabels(row,reader=false) {
 const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
 const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important","inbox","snoozed"].includes(route.query.from) ? route.query.from : "");
 const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label",inbox:"Inbox",snoozed:"Snoozed"}[originFolder.value] || "Scheduled"));
-const scope = computed(() =>
-  account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
+const receiptSender = computed(() => Number(route.query.message) > 0 && /^\d+$/.test(route.query.sender || "") ? Number(route.query.sender) : 0);
+const scope = computed(() => receiptSender.value || (
+  account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId),
 );
 const identity = computed(() => JSON.stringify([user.user.email, account.currentAccountId, Boolean(account.currentAccount.allReceive)]));
 const messageId = computed(() => Number(route.query.message) || 0);
@@ -291,7 +292,7 @@ const loading = ref(true),
   error = ref("");
 const ordered = computed(() => {
   // Opening the last unread result keeps its reader and pager until the user leaves.
-  let matches = search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
+  let matches = !receiptSender.value && search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
   if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
   if (originFolder.value === "snoozed") matches=matches.filter(row=>row.wakeAt && !row.inbox).sort((a,b)=>a.wakeAt-b.wakeAt || a.draftId-b.draftId);
   if (originFolder.value === "inbox") matches=matches.filter(row=>row.inbox);
@@ -396,7 +397,7 @@ async function load() {
   try {
     const data = await http.get("/v1/scheduled", {
       // Scheduled is capped at 100 messages. Keep read state available for the open reader.
-      params: { accountId: scope.value, q: search.query, ...search.filters, isUnread:undefined },
+      params: { accountId: scope.value, ...(receiptSender.value ? {} : {q: search.query, ...search.filters}), isUnread:undefined },
       noMsg: true,
     });
     if (
@@ -458,7 +459,7 @@ function retry() {
   else loadDetail();
 }
 function open(row, replace = false) {
-  const location = { name: "scheduled", query: { message: row.draftId, from: originFolder.value || undefined, labelId:originLabelId.value || undefined } };
+  const location = { name: "scheduled", query: { message: row.draftId, sender:receiptSender.value || undefined, from: originFolder.value || undefined, labelId:originLabelId.value || undefined } };
   return replace ? router.replace(location) : router.push(location);
 }
 function back() {
@@ -688,7 +689,7 @@ async function cancel(batch) {
   }
 }
 watch(
-  [() => user.user.email, scope, () => account.currentAccountId],
+  [() => user.user.email, scope, () => account.currentAccountId, receiptSender],
   (_, old) => {
     rows.value = [];
     selected.value = [];

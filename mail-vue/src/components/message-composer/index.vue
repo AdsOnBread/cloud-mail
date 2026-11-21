@@ -361,7 +361,7 @@
   </section>
 </template>
 <script setup>
-import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
+import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft, cancelScheduledReceipt } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
@@ -1195,6 +1195,35 @@ function validForSend() {
   });
   return true;
 }
+function scheduledFeedback(result, sendAt, session) {
+  if (result.pending) {
+    feedback.show("Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.");
+    return;
+  }
+  feedback.show("Send scheduled for " + new Date(sendAt * 1000).toLocaleString() + ".");
+  if (!result.scheduled) return;
+  const receipt = result.scheduled;
+  feedback.notice.scheduledMessage = receipt;
+  feedback.notice.undoFiling = async () => {
+    session.check();
+    const origin = router.currentRoute.value.fullPath;
+    const notice = feedback.notice;
+    await cancelScheduledReceipt(receipt, session);
+    // Cancellation is committed even if the user navigates away or draft sync is offline.
+    try {
+      await syncCloudDrafts();
+      session.check();
+      const draft = await session.database.draft.where("cloudDraftId").equals(receipt.draftId).first();
+      if (draft && !draft.deleted && feedback.notice === notice && router.currentRoute.value.fullPath === origin) {
+        const {openSavedDraft} = await import("@/services/draft-list");
+        session.check();
+        if (feedback.notice === notice && router.currentRoute.value.fullPath === origin)
+          await openSavedDraft(draft.draftId, router, "draft");
+      }
+    } catch { /* The cloud draft remains available from Drafts. */ }
+    return "Sending undone. Message returned to Drafts.";
+  };
+}
 async function sendEmail(sendAt=null) {
   if (!validForSend()) return;
   const prompt = sendConfirmation(form);
@@ -1211,8 +1240,10 @@ async function sendEmail(sendAt=null) {
     // Save first so authentication/network failures cannot lose a message or its Bcc recipients.
     const saved = await persistDraft();
     if(sendAt){
+      const session=draftSession();
       const result=await scheduleCloudDraft(saved.draftId,sendAt,saved.editToken);
-      feedback.show(result.pending?"Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.":"Send scheduled for "+new Date(sendAt*1000).toLocaleString()+".");
+      session.check();
+      scheduledFeedback(result,sendAt,session);
       show.value=false;resetForm();emit("closed");return;
     }
     let preservedNotice = "";

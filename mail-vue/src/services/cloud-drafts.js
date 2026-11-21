@@ -385,12 +385,15 @@ export async function removeLocalDraft(id,{sent=false,database:providedDatabase}
 async function reconcileSchedule(database,api,row) {
   const {sendAt,version}=row.pendingSchedule;
   const path=`/v1/drafts/${row.cloudDraftId}/schedule`;
+  let scheduled;
   try {
-    await api.post(path,{version,sendAt},{noMsg:true});
+    scheduled=await api.post(path,{version,sendAt},{noMsg:true});
   } catch(raw) {
     const err=apiError(raw), code=Number(err.code);
     // The server returns its current revision on conflict, including a completed send.
     const accepted=err.current && (err.current.state==='sent' || err.current.scheduledAt===sendAt);
+    if (accepted && err.current.state === 'scheduled' && err.current.version === version + 1)
+      scheduled={draftId:row.cloudDraftId,version:err.current.version,sendAt};
     if(!accepted) {
       if(![400,403,404,409,413].includes(code))return {pending:true};
       await database.transaction('rw',database.draft,async()=>{
@@ -409,7 +412,8 @@ async function reconcileSchedule(database,api,row) {
   });
   userDraftStore().refreshList++;
   userDraftStore().scheduledRevision++;
-  return {pending:false};
+  return {pending:false, scheduled:scheduled?.draftId === row.cloudDraftId && scheduled.version === version + 1 ?
+    {...scheduled, accountId:row.accountId} : null};
 }
 async function syncForDelivery(database, id, editToken) {
   // A sync already pulling cloud changes has passed its local-upload step.
@@ -439,6 +443,13 @@ export async function scheduleCloudDraft(id,sendAt,editToken) {
   if(result.error)throw new Error(result.error);
   return result;
 }
+export async function cancelScheduledReceipt(receipt, session) {
+  session.check();
+  await sessionAPI(session.database).post('/v1/scheduled/' + receipt.draftId + '/cancel', {version:receipt.version}, {noMsg:true});
+  session.check();
+  userDraftStore().scheduledRevision++;
+}
+
 async function finishSentAttempt(database, id, attemptId, messages) {
   let outcome;
   // Hash outside IndexedDB. If an editor changed the draft while hashing,

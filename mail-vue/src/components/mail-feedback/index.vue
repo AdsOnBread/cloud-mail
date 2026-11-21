@@ -3,8 +3,8 @@
     <div v-if="feedback.notice" class="mail-feedback" @mouseenter="pause" @mouseleave="schedule" @focusin="pause" @focusout="schedule">
       <span role="status">{{ feedback.notice.message }}</span>
       <button v-if="feedback.notice.recovery || feedback.notice.undoFiling || feedback.notice.emailIds.length" :disabled="feedback.notice.busy" @click="feedback.undo()">Undo</button>
-      <RouterLink v-if="feedback.notice.sentEmailId" custom :to="sentLocation" v-slot="{href,navigate}">
-        <a :href="href" @click="openSent($event,navigate)">View message</a>
+      <RouterLink v-if="messageLocation" custom :to="messageLocation" v-slot="{href,navigate}">
+        <a :href="href" @click="openMessage($event,navigate)">View message</a>
       </RouterLink>
       <button v-if="feedback.notice.retry" :disabled="feedback.notice.busy" @click="feedback.notice.retry()">Retry</button>
       <button class="dismiss" aria-label="Dismiss notification" @click="feedback.dismiss()"><Icon icon="material-symbols:close" width="18" /></button>
@@ -20,18 +20,26 @@ import { useMailFeedback } from "@/store/mail-feedback";
 import { useUserStore } from "@/store/user";
 const feedback = useMailFeedback(), user = useUserStore();
 const route=useRoute();
-const sentLocation=computed(()=>({path:'/mail',query:{
-  emailId:feedback.notice?.sentEmailId,folder:'sent',
-  ...(route.name==='content' && route.query.window==='1' ? {window:'1'} : {})
-}}));
-async function openSent(event,navigate) {
+const messageLocation=computed(()=>{
+  const notice=feedback.notice;
+  if (notice?.scheduledMessage) return {name:'scheduled',query:{
+    message:notice.scheduledMessage.draftId,sender:notice.scheduledMessage.accountId
+  }};
+  if (notice?.sentEmailId) return {name:'content',query:{emailId:notice.sentEmailId,folder:'sent',
+    ...(route.name==='content' && route.query.window==='1' ? {window:'1'} : {})}};
+  return null;
+});
+async function openMessage(event,navigate) {
   if (event.defaultPrevented || event.button!==0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
   const link=event.currentTarget,notice=feedback.notice;
   const failure=await navigate(event);
   await nextTick();
-  if (failure || feedback.notice!==notice || route.name!=='content' || Number(route.query.emailId)!==notice.sentEmailId) return;
+  if (failure || feedback.notice!==notice) return;
+  const scheduled=notice.scheduledMessage;
+  if (scheduled ? route.name!=='scheduled' || Number(route.query.message)!==scheduled.draftId :
+      route.name!=='content' || Number(route.query.emailId)!==notice.sentEmailId) return;
   if (document.activeElement===link || document.activeElement===document.body)
-    document.querySelector('.conversation-view [data-reader-back]')?.focus({preventScroll:true});
+    document.querySelector(scheduled ? '.scheduled-view [data-reader-back]' : '.conversation-view [data-reader-back]')?.focus({preventScroll:true});
   feedback.dismiss();
 }
 let timer;
