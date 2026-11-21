@@ -229,7 +229,7 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
   padding:24px;border:1px solid var(--light-border-color);background:var(--mail-surface);color:var(--el-text-color-primary);
   box-shadow:0 2px 6px #0003;font:14px/20px Arial,sans-serif;}
 .criteria {display:grid;gap:20px;overflow-y:auto;overscroll-behavior:contain;min-height:0;}
-.criterion {display:grid;grid-template-columns:96px minmax(0,1fr);column-gap:24px;align-items:baseline;color:var(--regular-text-color);}
+.criterion {display:grid;grid-template-columns:96px minmax(0,1fr);column-gap:24px;align-items:start;color:var(--regular-text-color);}
 .options-form :is(input[type=text],input[type=date],select) {box-sizing:border-box;width:100%;height:20px;min-width:0;border:0;
   border-bottom:1px solid var(--light-border-color);border-radius:0;background:var(--mail-surface);color:var(--el-text-color-primary);font:inherit;padding:0;}
 .options-form :is(input[type=text],input[type=date],select):focus {outline:0;box-shadow:inset 0 -2px var(--el-color-primary);}
