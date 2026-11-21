@@ -58,3 +58,9 @@ The inbox comparison covered Primary, Promotions, Social, Updates and Forums, th
 Scheduled rows and their message reader support stars and importance. Starred and Important show matching queued messages in a Scheduled section. Canceling keeps the choices with the draft. Delivery applies them to the sender’s copy. Messages addressed directly to the sending mailbox and replies can show automatic importance, with an explicit choice taking precedence.
 
 The bundled photographs come from NASA’s public image library. [Orbital sunset](https://images.nasa.gov/details/iss067e124176) · [Aurora, photographed by Terry Virts](https://images.nasa.gov/details/iss043e125565) · [Himalayas](https://images.nasa.gov/details/iss068e047346)
+
+### Discarding drafts
+
+The composer closes immediately after a local discard. The Drafts list offers the same action on hover, with keyboard focus, and for a selection. The notification offers Undo. Undo from a docked composer reopens the restored message when that composer is still available. Undo from Drafts restores the rows, and an inline reply stays associated with its conversation while the source is available.
+
+Checked the docked composer, formatted text and links, the row action, selecting two drafts, and reopening after a reload in a fictional mailbox. Offline and synchronization tests cover recipients, attachments, competing edits, a lost upload response, and mailbox changes. Gmail reference: [discarded drafts and the Undo window](https://support.google.com/mail/thread/412155371/how-can-i-retrieve-a-discarded-gmail-draft?hl=en).

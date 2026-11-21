@@ -11,10 +11,10 @@ export function draftSession(database = db.value) {
         useUserStore().user.email !== owner || useUserStore().authenticatedToken !== token ||
         localStorage.getItem('token') !== token) throw new Error('The signed-in user changed. Draft synchronization stopped.');
   };
-  return {database, owner, check};
+  return {database, owner, token, check};
 }
 function sessionAPI(database) {
-  const {check} = draftSession(database);
+  const {check, token} = draftSession(database);
   const call=async(method,path,payload,options={})=>{
     check();const config={...options,headers:{...options.headers,Authorization:token||''}};
     try { return await (['get','delete'].includes(method)?http[method](path,config):http[method](path,payload,config)); } finally { check(); }

@@ -1,7 +1,7 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest';
 import {createPinia,setActivePinia} from 'pinia';
 import {useUserStore} from '../src/store/user';
-import {discardDrafts,saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
+import {draftSession,discardDrafts,saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
 import db from '../src/db/db';
 import http from '../src/axios';
 const state=vi.hoisted(()=>({rows:new Map(),files:new Map(),meta:new Map(),remote:new Map(),events:[],next:1,cloudNext:1,attempts:new Map()}));
@@ -153,7 +153,7 @@ describe('Cloud draft synchronization',()=>{
    expect(state.remote.size).toBe(0);
    Object.defineProperty(navigator,'onLine',{value:false});
    localStorage.setItem('token','different');
-   await expect(operation.restore()).rejects.toThrow('original mailbox');
+   await expect(operation.restore()).rejects.toThrow('signed-in user changed');
    localStorage.setItem('token','test-session');
    const [id]=await operation.restore();
    expect(id).not.toBe(original.draftId);
@@ -175,6 +175,62 @@ describe('Cloud draft synchronization',()=>{
    const operation=await discardDrafts([original.draftId]);await syncCloudDrafts();
    expect(state.remote.size).toBe(0);expect(state.rows.size).toBe(0);
    await operation.dispose();await expect(operation.restore()).rejects.toThrow('no longer');
+ });
+ it('discards locally before an in-flight upload returns and does not revive the removed edit',async()=>{
+   const row=await saveLocalDraft(input());
+   const post=http.post.getMockImplementation();
+   let release, started;
+   const held=new Promise(resolve=>{release=resolve;});
+   const requested=new Promise(resolve=>{started=resolve;});
+   http.post.mockImplementationOnce(async(...args)=>{const result=await post(...args);started();await held;return result;});
+   const first=syncCloudDrafts();await requested;
+   const operation=await discardDrafts([row.draftId]);
+   expect((await db.value.draft.get(row.draftId)).deleted).toBe(true);
+   release();await first;await syncCloudDrafts();
+   expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);await operation.dispose();
+ });
+ it('keeps a newer draft when a stale unchanged editor tries to discard',async()=>{
+   const original=await saveLocalDraft(input());await syncCloudDrafts();
+   const latest=await saveLocalDraft({...await db.value.draft.get(original.draftId),subject:'Other edit'});
+   await expect(discardDrafts([original.draftId],original)).rejects.toThrow('changed elsewhere');
+   await expect(saveLocalDraft(original,{requireCurrent:true})).rejects.toThrow('changed elsewhere');
+   expect(await db.value.draft.get(original.draftId)).toMatchObject({subject:'Other edit',editToken:latest.editToken});
+ });
+ it('rejects an account switch after the click and never flushes its offline discard using the new token',async()=>{
+   const original=await saveLocalDraft(input());await syncCloudDrafts();
+   const session=draftSession();
+   Object.defineProperty(navigator,'onLine',{value:false});
+   const operation=await discardDrafts([original.draftId],undefined,session);await syncCloudDrafts();
+   localStorage.setItem('token','other-owner');
+   await expect(discardDrafts([original.draftId],undefined,session)).rejects.toThrow('signed-in user changed');
+   Object.defineProperty(navigator,'onLine',{value:true});
+   await expect(syncCloudDrafts()).rejects.toThrow('signed-in user changed');
+   expect(http.delete).not.toHaveBeenCalled();expect(state.remote.size).toBe(1);
+   localStorage.setItem('token','test-session');await syncCloudDrafts();await operation.dispose();
+ });
+ it('preserves an uncertain delivery on another device and continues synchronizing subsequent drafts',async()=>{
+   const row=await saveLocalDraft(input());await syncCloudDrafts();
+   const current={...state.remote.get(1),state:'uncertain',version:2};state.remote.set(1,current);event(current);
+   http.delete.mockRejectedValueOnce({code:409,current});
+   const next=await saveLocalDraft(input({subject:'Later draft'}));
+   const operation=await discardDrafts([row.draftId]);await syncCloudDrafts();
+   expect(await db.value.draft.get(row.draftId)).toMatchObject({syncState:'uncertain'});
+   expect(await db.value.draft.get(next.draftId)).toMatchObject({dirty:false});
+   await expect(discardDrafts([row.draftId])).rejects.toThrow('delivery status');await operation.dispose();
+ });
+ it('releases a rejected send receipt so a draft can still be discarded',async()=>{
+   const row=await saveLocalDraft(input());await syncCloudDrafts();
+   http.post.mockRejectedValueOnce({code:409,current:state.remote.get(1)});
+   await expect(sendCloudDraft(row.draftId)).rejects.toMatchObject({code:409});
+   expect((await db.value.draft.get(row.draftId)).sendAttemptId).toBe(null);
+   const operation=await discardDrafts([row.draftId]);await syncCloudDrafts();await operation.dispose();
+ });
+ it('restores an independent editable draft when the reply source has since been removed',async()=>{
+   const row=await saveLocalDraft(input({sendType:'reply',emailId:17,inlineReply:true}));await syncCloudDrafts();
+   const operation=await discardDrafts([row.draftId]);await syncCloudDrafts();
+   http.post.mockRejectedValueOnce({code:404,message:'Original message not found.'});
+   const [id]=await operation.restore();await syncCloudDrafts();
+   expect(await db.value.draft.get(id)).toMatchObject({dirty:false,sendType:'',emailId:0,content:'<p>Hello</p>'});
  });
  it('propagates discard tombstones and never recreates a remotely removed clean draft',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();await removeLocalDraft(row.draftId);await syncCloudDrafts();expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);
