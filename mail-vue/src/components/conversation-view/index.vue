@@ -37,7 +37,7 @@
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
     <div ref="scroll" class="conversation-body">
-      <h1>{{ threadSubject || "(no subject)" }} <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
+      <h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
       </p>
@@ -121,6 +121,7 @@ import {
 } from "vue-router";
 import { Icon } from "@iconify/vue";
 
+import MailImportance from "@/components/mail-importance.vue";
 import ConversationMessage from "@/components/conversation-message/index.vue";
 import MessageComposer from "@/components/message-composer/index.vue";
 import {
@@ -141,6 +142,8 @@ watch(()=>labels.applied,change=>{
   if(change?.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
 });
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
+const importanceReason = ref(null);
+let importanceRevision = 0;
 const unreadCount=ref(0), incoming=ref(0), filedAway=ref(false);
 const hasUnread=computed(()=>unreadCount.value>0);
 function updateMessage(message,change) {
@@ -202,6 +205,7 @@ onBeforeRouteLeave(async () => await save());
 onBeforeRouteUpdate(async () => await save());
 async function load(older = false) {
   if (older && loading.value) return;
+  const requestedImportanceRevision = importanceRevision;
   const request = ++generation,
     anchor = Number(route.query.emailId);
   loading.value = true;
@@ -231,6 +235,7 @@ async function load(older = false) {
     labelIds.value=data.labelIds || [];
     unreadCount.value=data.unreadCount ?? messages.value.filter(m=>m.type===0 && m.unread===0).length;
     incoming.value=data.incoming ?? messages.value.filter(m=>m.type===0).length;
+    if (importanceRevision === requestedImportanceRevision) importanceReason.value = data.importanceReason;
     filedAway.value=Boolean(data.filedAway);
     threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
@@ -397,6 +402,7 @@ function back() {
         draft: "/drafts",
         archived: "/archived",
         snoozed: "/snoozed",
+        important: "/important",
       }[route.query.folder] || "/inbox",
     );
 }
@@ -405,12 +411,16 @@ async function mutate(action, extra = {}) {
   const epoch=viewEpoch, anchor=Number(route.query.emailId);
   busy.value = true;
   try {
-    if ((action !== "label" && !(await save())) || epoch!==viewEpoch) return;
+    if ((!["label", "importance"].includes(action) && !(await save())) || epoch!==viewEpoch) return;
     const result = await conversationAction(action, [anchor], extra);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;
     if (["delete","archive","inbox","move","category"].includes(action)) back();
+    else if (action === "importance") {
+      importanceRevision++;
+      importanceReason.value = extra.important ? "user" : null;
+    }
     else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
     else {
       unreadCount.value=extra.unread===0?incoming.value:0;

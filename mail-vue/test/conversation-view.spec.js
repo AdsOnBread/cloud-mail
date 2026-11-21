@@ -3,7 +3,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import ConversationView from "../src/components/conversation-view/index.vue";
-import { conversationMessages } from "../src/request/conversation";
+import { conversationMessages, conversationAction } from "../src/request/conversation";
 import { userDraftStore } from "../src/store/draft";
 import { useEmailStore } from "../src/store/email";
 const state = vi.hoisted(() => ({
@@ -136,6 +136,24 @@ describe("conversation navigation and inline targets", () => {
     expect(
       wrapper.findAll("article").map((a) => a.text().match(/Message \d+/)[0]),
     ).toEqual(["Message 7", "Message 8", "Message 9", "Message 10"]);
+    wrapper.unmount();
+  });
+  it("keeps a saved importance choice when an older-page response arrives late", async () => {
+    let finishMark, finishPage;
+    conversationAction.mockReturnValueOnce(new Promise(resolve => { finishMark = resolve; }));
+    conversationMessages
+      .mockResolvedValueOnce(page([message(10)], {hasMore: true, nextCursor: 10, importanceReason: null}))
+      .mockReturnValueOnce(new Promise(resolve => { finishPage = resolve; }));
+    const { wrapper } = await setup();
+    const marker = wrapper.get('[role="switch"][aria-label="Important"]');
+    await marker.trigger("click");
+    await wrapper.get(".older").trigger("click");
+    finishMark({});
+    await flushPromises();
+    finishPage(page([message(9)], {importanceReason: null}));
+    await flushPromises();
+    expect(marker.attributes("aria-checked")).toBe("true");
+    expect(wrapper.findAll("article")).toHaveLength(2);
     wrapper.unmount();
   });
   it("saves before changing targets and blocks navigation when saving fails", async () => {

@@ -1,6 +1,6 @@
 <template>
   <section class="conversation-list" aria-label="Conversations">
-    <div class="mail-toolbar">
+    <div class="mail-toolbar" :class="{ 'has-selection': selected.length }">
       <label class="check-target" data-tip="Select">
         <input
           type="checkbox"
@@ -118,7 +118,16 @@
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
         <MovePicker :show-categories="folder==='inbox' && uiPreferences.inboxTabs" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
-          <LabelPicker :rows="rows.filter(row=>selected.includes(row.lastEmailId))" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
+        <LabelPicker :rows="selectedRows" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
+        <el-dropdown trigger="click" placement="bottom-start" popper-class="mail-action-menu" :show-arrow="false">
+          <button class="mail-icon" data-tip="More" aria-label="More actions for selection" :disabled="busy"><Icon icon="material-symbols:more-vert" width="20" /></button>
+          <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item v-if="selectedRows.some(row => !row.importanceReason)" @click="mutate('importance', { important: true })">Mark as important</el-dropdown-item>
+            <el-dropdown-item v-if="selectedRows.some(row => row.importanceReason)" @click="mutate('importance', { important: false })">Mark as not important</el-dropdown-item>
+            <el-dropdown-item v-if="history.length" class="compact-page-action" divided :disabled="loading || busy" @click="previousPage">Previous page</el-dropdown-item>
+            <el-dropdown-item v-if="hasMore" class="compact-page-action" :divided="!history.length" :disabled="loading || busy" @click="nextPage">Next page</el-dropdown-item>
+          </el-dropdown-menu></template>
+        </el-dropdown>
       </template>
       <span class="total">{{
         total && rows.length
@@ -162,6 +171,9 @@
           :date="mailboxDate(rowDate(row))"
           :date-title="formatDetailDate(rowDate(row))"
           :selected="selected.includes(row.lastEmailId)"
+          show-importance
+          :importance-reason="row.importanceReason"
+          @importance="mutate('importance', { important: $event }, [row.lastEmailId])"
           :starred="Boolean(row.starred)"
           :unread="Boolean(row.unreadCount)"
           :busy="busy"
@@ -252,6 +264,7 @@
                   @click="open(row, 'replyAll')"
                   >Reply all</el-dropdown-item
                 >
+                <el-dropdown-item @click="mutate('importance', { important: !row.importanceReason }, [row.lastEmailId])">{{ row.importanceReason ? 'Mark as not important' : 'Mark as important' }}</el-dropdown-item>
                 <el-dropdown-item @click="mutate('read', {}, [row.lastEmailId])"
                   >Mark read</el-dropdown-item
                 >
@@ -681,6 +694,7 @@ async function mutate(action, extra = {}, ids = selected.value) {
 function remove(ids = selected.value) {
   return mutate("delete", {}, Array.isArray(ids) ? ids : selected.value);
 }
+const selectedRows = computed(() => rows.value.filter(row => selected.value.includes(row.lastEmailId)));
 function star(row) {
   return mutate("star", { starred: !row.starred }, [row.lastEmailId]);
 }
@@ -766,7 +780,10 @@ defineExpose({ refresh });
   border: 1px solid var(--light-border-color);
   padding: 8px;
 }
+.compact-page-action { display:none; }
 @media (max-width: 480px) {
+  .compact-page-action { display:flex; }
+  .has-selection .pager, .has-selection .total { display:none; }
   .mail-toolbar {
     gap: 0;
     padding: 0 4px;

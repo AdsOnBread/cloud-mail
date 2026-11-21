@@ -29,6 +29,7 @@
       />
     </button>
     <span v-else class="star-space"></span>
+    <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
       :aria-label="openLabel"
@@ -58,7 +59,10 @@
 </template>
 <script setup>
 import { Icon } from "@iconify/vue";
+import MailImportance from "@/components/mail-importance.vue";
 defineProps({
+  showImportance: Boolean,
+  importanceReason: String,
   participants: String,
   labels: Array,
   subject: String,
@@ -76,7 +80,7 @@ defineProps({
   hideStar: Boolean,
   trash: Boolean,
 });
-defineEmits(["select", "star", "open"]);
+defineEmits(["select", "star", "open", "importance"]);
 </script>
 <style scoped>
 .conversation-row {
@@ -104,6 +108,7 @@ defineEmits(["select", "star", "open"]);
 .star-space {
   flex: 0 0 32px;
 }
+.row-importance { flex: 0 0 28px; width: 28px; height: 28px; }
 .row-star {
   color: var(--secondary-text-color);
   opacity: 0.65;
@@ -242,6 +247,8 @@ defineEmits(["select", "star", "open"]);
   .star-space {
     display: none;
   }
+  .row-importance { position: absolute; right: 42px; bottom: 8px; z-index: 1; }
+  .conversation-row:has(.row-importance) .summary { padding-right: 62px; }
   .row-star {
     position: absolute;
     bottom: 6px;

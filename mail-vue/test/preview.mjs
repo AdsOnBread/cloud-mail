@@ -32,6 +32,14 @@ rows.push({...rows[0],emailId:101,type:1,status:2,unread:1,name:'Alex Morgan',se
 rows.push({...rows[0],emailId:102,subject:'Re: A few ideas for the next chapter',text:'Thanks! The first option is my favorite. What do you think?',content:'<p>Thanks! The first option is my favorite. What do you think?</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 for(let i=40;i<75;i++)rows.push({...rows[0],emailId:i,messageId:`<archive-${i}@example.net>`,replyToEmailId:i===40?0:40,subject:'Release planning archive',text:`Planning update ${i-39}`,content:`<p>Planning update ${i-39}</p>`,unread:1});
 const filedCategory=new Map();
+const importanceChoices = new Map();
+let importanceRevision = 0;
+function importanceReason(members) {
+  const latest = members.map(row => importanceChoices.get(row.emailId)).filter(Boolean)
+    .sort((a, b) => b.revision - a.revision)[0];
+  if (latest) return latest.important ? 'user' : null;
+  return members.some(row => row.type === 1 && [1,2].includes(row.status) && (row.replyToEmailId || row.inReplyTo)) ? 'reply' : null;
+}
 const fixtureCategory = new Map([['Oliver at Figma','promotions'],['GitHub','updates'],['Linear','updates'],['The Browser','forums'],['Taylor Brooks','social']]);
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
 function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:draft.state!=='draft'?'delete':'upsert',draft:draft.state!=='draft'?null:structuredClone(draft)});}
@@ -112,6 +120,7 @@ const api=createHTTPServer(async(req,res)=>{
      const anchor=filingAnchor(members), state=filing.get(anchor);
      if(p.folder==='inbox' && state!==undefined && (state===null || state>now))continue;
      if(p.folder==='label' && !threadLabels(members).includes(Number(p.labelId)))continue;
+     if(p.folder==='important' && !importanceReason(members))continue;
      if(p.folder==='archived' && state!==null)continue;
      if(p.folder==='snoozed' && !(state>now))continue;
      const matches=members.some(row=>{
@@ -123,7 +132,7 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
+     threads.push({threadId,importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
        participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});
@@ -136,7 +145,7 @@ const api=createHTTPServer(async(req,res)=>{
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);
    const state=filing.get(filingAnchor(members));
-   data={filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
+   data={importanceReason:importanceReason(members),filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
    data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId})));
@@ -149,7 +158,8 @@ const api=createHTTPServer(async(req,res)=>{
    else {data={id,name:JSON.parse(body).name};labels.set(id,data);}
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
-   if(operation==='category'){for(const [threadId,members] of grouped())if(members.some(r=>ids.has(r.emailId)))filedCategory.set(threadId,p.category);}
+   if(operation==='importance'){const revision=++importanceRevision;for(const id of ids)importanceChoices.set(id,{revision,important:p.important});}
+   else if(operation==='category'){for(const [threadId,members] of grouped())if(members.some(r=>ids.has(r.emailId)))filedCategory.set(threadId,p.category);}
    else if(['archive','snooze','inbox'].includes(operation))for(const id of ids)filing.set(id,operation==='archive'?null:operation==='inbox'?0:p.wakeAt);
    else if(operation==='move')for(const id of ids){
      const set=membership.get(id)||new Set();set.delete(p.fromLabelId);if(p.labelId)set.add(p.labelId);membership.set(id,set);filing.set(id,p.labelId?null:0);

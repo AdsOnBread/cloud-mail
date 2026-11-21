@@ -94,7 +94,7 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
-const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','trash','all','label'].includes(route.name));
+const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','all','label'].includes(route.name));
 watch([() => route.name,()=>route.params.labelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {

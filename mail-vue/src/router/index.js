@@ -13,7 +13,7 @@ const routes = [
         children: [
             {path:'/all', name:'all', component:()=>import('@/components/conversation-list/index.vue'), props:{folder:'all'}, meta:{title:'All Mail',name:'all',menu:true}},
             {path:'/label/:labelId(\\d+)', name:'label', component:()=>import('@/components/conversation-list/index.vue'), props:route=>({folder:'label',labelId:Number(route.params.labelId)}), meta:{title:'Label',name:'label',menu:true}},
-            ...['snoozed','archived'].map(folder => ({
+            ...['snoozed','archived','important'].map(folder => ({
                 path:'/'+folder, name:folder, component:() => import('@/components/conversation-list/index.vue'),
                 props:{folder}, meta:{title:folder,name:folder,menu:true}
             })),

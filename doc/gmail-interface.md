@@ -11,6 +11,7 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Message reader | Compact toolbar, subject, message headers, recipient details, per-message menu, collapsed history, reply buttons |
 | Compose window and replies | Docked, minimized, expanded and inline states, recipient chips, subject, editing area, save and close |
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |
+| Importance | Outline and filled markers, reason on hover, keyboard toggle, selection menu and Important folder |
 | Filing and feedback | Move to Trash from each entry point, Undo, retained permanent-delete confirmation, archive and snooze |
 | Menus and dialogs | Anchoring, shadow, typography, hover and selected states, focus return, Escape and outside dismissal |
 | Motion and responsive layout | Panel transitions, reduced motion, touch targets, focus visibility and overflow at narrow widths |
@@ -29,6 +30,7 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Quick settings and themes | Compared Gmail’s View all gallery, color and photo tiles, My photos, Cancel and Save. On Cloudmail, tested an included photo, a custom photo saved on this device, color choices, cancellation, reload and stacked mobile dialogs. |
 | Collapsed navigation | Checked expansion on hover, folder names, pointer departure and the position of the mailbox under the open rail. |
 | Move to | Moved a selection to a label, opened the conversation there and moved it back to Inbox. |
+| Importance | Checked marking with Space, reload, folder membership, changing a mark in the reader, bulk marking and clearing, and separate touch targets for the star and marker. A sent reply marks a conversation automatically until the mailbox owner makes an explicit choice. |
 | Scheduled send | Compared Gmail’s Send dropdown and recipient validation. In Cloudmail, chose a custom time, checked the timezone and past-date validation, downloaded an attached file from Scheduled and canceled back to an editable draft. Delivery and interruption tests used fictional mailboxes. |
 
 Cloudmail offers its own photos and supports choosing a personal image. Cloudmail uses sender and subject rules plus manual filing for category placement. Gmail uses a different classification service. The Google Workspace side panel remains a visible difference. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.

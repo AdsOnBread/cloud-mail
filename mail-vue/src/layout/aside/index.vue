@@ -33,6 +33,9 @@
           <Icon :icon="more ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20" /><span class="menu-name folder-name">{{ more ? 'Less' : 'More' }}</span>
         </el-menu-item>
         <template v-if="more">
+          <el-menu-item index="important" aria-label="Important" data-tip="Important" :class="{'choose-item':activeFolder==='important'}" @click="router.push('/important')">
+            <Icon icon="material-symbols:label-important-outline" width="20" /><span class="menu-name folder-name">Important</span>
+          </el-menu-item>
           <el-menu-item index="all" aria-label="All Mail" data-tip="All Mail" :class="{'choose-item':activeFolder==='all'}" @click="router.push('/all')">
             <Icon icon="material-symbols:all-inbox-outline" width="20" /><span class="menu-name folder-name">All Mail</span>
           </el-menu-item>
@@ -127,7 +130,7 @@ const activeFolder = computed(() => route.name === 'content' ? mailSearch.folder
 const labels = useMailLabels(), user=useUserStore();
 const more=ref(false);
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
-watch(activeFolder,folder=>{if(["archived","trash","all","setting"].includes(folder))more.value=true;},{immediate:true});
+watch(activeFolder,folder=>{if(["archived","important","trash","all","setting"].includes(folder))more.value=true;},{immediate:true});
 watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();

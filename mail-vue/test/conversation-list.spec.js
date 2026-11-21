@@ -136,6 +136,21 @@ describe("conversation lists", () => {
     expect(wrapper.get('[aria-label="Select One"]').element.checked).toBe(true);
     wrapper.unmount();
   });
+  it("clears an automatic importance mark without opening, reading or starring the thread", async () => {
+    const importantRow = { ...row(28, "Reply thread"), importanceReason: "reply" };
+    conversationList.mockResolvedValueOnce(page([importantRow])).mockResolvedValue(page([]));
+    const wrapper = mountList("important");
+    await flushPromises();
+    const marker = wrapper.get('[role="switch"]');
+    expect(marker.attributes("aria-checked")).toBe("true");
+    expect(marker.attributes("data-tip")).toContain("you replied");
+    await marker.trigger("click");
+    await flushPromises();
+    expect(conversationAction.mock.calls).toEqual([["importance", [28], { important: false }]]);
+    expect(push).not.toHaveBeenCalled();
+    expect(wrapper.find('[role="switch"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it("pages conversations, preserves user-wide Starred scope and aggregate stars", async () => {
     conversationList
       .mockResolvedValueOnce(
