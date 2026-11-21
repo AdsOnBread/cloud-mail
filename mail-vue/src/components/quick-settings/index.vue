@@ -41,6 +41,7 @@
       <legend class="theme-heading">
         Theme
         <button
+          ref="viewAll"
           class="view-all"
           :disabled="!theme.ready"
           @click="picker.open()"
@@ -73,7 +74,7 @@
       <p v-if="error" role="alert">{{ error }}</p>
     </fieldset>
   </dialog>
-  <ThemePicker ref="picker" />
+  <ThemePicker ref="picker" @closed="afterPicker" />
 </template>
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from "vue";
@@ -83,6 +84,7 @@ import { useUiStore } from "@/store/ui";
 import ThemePicker from "./theme-picker.vue";
 import { themes, useMailTheme } from "@/store/mail-theme";
 const picker = ref(),
+  viewAll = ref(),
   theme = useMailTheme(),
   error = ref("");
 const shortcuts = computed(() => [
@@ -110,10 +112,20 @@ const choices = [
 ];
 const small = window.matchMedia("(max-width:899px)");
 function display() {
-  if (!panel.value) return;
+  if (!panel.value || picker.value?.isOpen()) return;
+  if (
+    panel.value.open &&
+    ui.quickSettings &&
+    panel.value.matches(":modal") === small.matches
+  )
+    return;
   if (panel.value.open) panel.value.close();
   if (ui.quickSettings)
     small.matches ? panel.value.showModal() : panel.value.show();
+}
+function afterPicker() {
+  display();
+  if (ui.quickSettings) viewAll.value?.focus();
 }
 function close() {
   ui.quickSettings = false;

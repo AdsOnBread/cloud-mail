@@ -5,7 +5,10 @@
     aria-labelledby="theme-dialog-title"
     @keydown.esc.stop.prevent="close"
     @cancel.prevent="close"
-    @close="clean"
+    @close="
+      clean();
+      emit('closed');
+    "
   >
     <header>
       <h2 id="theme-dialog-title">Pick your theme</h2>
@@ -61,6 +64,7 @@ import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { Icon } from "@iconify/vue";
 import db from "@/db/db";
 import { themes, useMailTheme } from "@/store/mail-theme";
+const emit = defineEmits(["closed"]);
 const theme = useMailTheme(),
   dialog = ref(),
   file = ref(),
@@ -152,7 +156,7 @@ async function save() {
 }
 watch(db, close, { flush: "sync" });
 onBeforeUnmount(clean);
-defineExpose({ open });
+defineExpose({ open, isOpen: () => Boolean(dialog.value?.open) });
 </script>
 <style scoped>
 .theme-dialog {
