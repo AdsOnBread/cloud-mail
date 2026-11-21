@@ -1,4 +1,4 @@
-import {searchDateBounds} from '../../shared/mail-search-date.js';
+import {searchDateBounds,withinDateBounds} from '../../shared/mail-search-date.js';
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
 import { inLabelBranch } from '../src/components/mail-labels/tree.js';
 import { groupThreads } from '../../mail-worker/src/mobile/threads.js';
@@ -72,9 +72,7 @@ function filingAnchor(members) {
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
 }
 function matchesDate(created,p) {
- const {after,before}=searchDateBounds(p), time=Date.parse(created)/1000;
- return (after==null || time>=after) && (before==null || time<before) &&
-   (!p.days || time>=Date.now()/1000-Number(p.days)*86400);
+ return withinDateBounds(Date.parse(created),searchDateBounds(p));
 }
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));

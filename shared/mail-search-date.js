@@ -15,10 +15,17 @@ export function searchDateBounds(params, now = new Date()) {
   function timestamp(value) {
     if (value == null || !/^-?\d+$/.test(String(value))) return null;
     const number = Number(value);
-    return Number.isSafeInteger(number) && number >= -62135596800 && number <= 253402300800 ? number : null;
+    return Number.isSafeInteger(number) && number >= -62135596800 && number <= 253402300799 ? number : null;
   }
+  const days = Number(params.days);
+  const after = timestamp(params.dateAfter);
+  const recent = [1,7,30,365].includes(days) ? Math.floor(now.getTime()/1000) - days*86400 : null;
   return {
-    after:timestamp(params.dateAfter),
+    after:recent === null ? after : Math.max(after ?? recent, recent),
     before:olderCutoff(params.olderThan, now) ?? timestamp(params.dateBefore),
   };
+}
+
+export function withinDateBounds(milliseconds, {after, before}) {
+  return (after === null || milliseconds >= after * 1000) && (before === null || milliseconds < before * 1000);
 }

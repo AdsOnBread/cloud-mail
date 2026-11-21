@@ -546,6 +546,10 @@ describe('Scheduled send',()=>{
      attachments:[{filename:'ledger.txt',content:'c2FtcGxl',contentType:'text/plain'}]});
    const inline=await draft({subject:'Photo',content:'<img src="data:image/png;base64,AAECAw==">'});
    for(const row of [attached,inline])await schedule(c(),1,row.draftId,{version:row.version,sendAt:when});
+   await env.db.prepare("UPDATE cloud_drafts SET created_at='2023-11-05 06:00:00' WHERE draft_id=?").bind(attached.draftId).run();
+   await env.db.prepare("UPDATE cloud_drafts SET created_at='2023-11-06 07:00:00' WHERE draft_id=?").bind(inline.draftId).run();
+   const range={dateAfter:Date.parse('2023-11-05T06:00:00Z')/1000, dateBefore:Date.parse('2023-11-06T07:00:00Z')/1000};
+   expect((await scheduledList(c(),1,1,range)).map(m=>m.draftId)).toEqual([attached.draftId]);
    for(const filter of [{to:'FINANCE@'},{q:'Quarterly statement'},{hasAttachment:'1'}]){
      const found=await scheduledList(c(),1,1,filter);
      expect(found.map(m=>m.draftId)).toEqual([attached.draftId]);

@@ -36,9 +36,4 @@ export function addSearchDates(params, column, filters, args) {
     filters.push(column + "<datetime(?,'unixepoch')");
     args.push(before);
   }
-	const days = Number(params.days);
-	if ([1, 7, 30, 365].includes(days)) {
-		filters.push(column + ">=datetime('now',?)");
-		args.push('-' + days + ' days');
-	}
 }

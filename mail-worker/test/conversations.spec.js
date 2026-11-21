@@ -521,3 +521,14 @@ it('moves overlapping paths without changing unrelated legacy paths or shortenin
  expect(kept.name).toBe('A/'+child.name);
  await expect(save('x'.repeat(101),child.id)).rejects.toMatchObject({code:400});
 });
+
+it('filters Trash by message date across an inclusive local day before pagination', async () => {
+ const createTimes=['2023-11-05 05:59:59','2023-11-05 06:00:00','2023-11-06 06:59:59','2023-11-06 07:00:00'];
+ const rows=[];
+ for (const create_time of createTimes) rows.push(await insert({create_time,subject:'Date filter fixture'}));
+ await cloudMail.trash(context(),1,rows.map(row=>row.email_id));
+ const bounds={dateAfter:String(Date.parse('2023-11-05T00:00:00-06:00')/1000),dateBefore:String(Date.parse('2023-11-06T00:00:00-07:00')/1000)};
+ const result=await cloudMail.list(context(),1,{folder:'trash',subject:'Date filter fixture',...bounds});
+ expect(result.messages.map(row=>row.emailId).sort()).toEqual([rows[1].email_id,rows[2].email_id].sort());
+ expect((await cloudMail.list(context(),1,{folder:'trash',...bounds,limit:1})).messages).toHaveLength(1);
+});
