@@ -415,6 +415,8 @@ const {
   itemHeight: index => width.value < 768 ? 84 : uiPreferences.rowHeight + (uiPreferences.density === "default" && rows.value[index]?.attachments?.length ? 32 : 0),
   overscan: 12,
 });
+// VueUse tracks the scroll container size, but a density change can resize only its rows.
+watch([()=>uiPreferences.density, ()=>width.value<768], () => containerProps.onScroll(), {flush:"post"});
 let generation = 0,
   active = true,
   timer,

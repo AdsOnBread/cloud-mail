@@ -5,7 +5,8 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import {ElementPlusResolver} from 'unplugin-vue-components/resolvers'
 import {viteStaticCopy} from 'vite-plugin-static-copy';
-import pdfPackage from 'pdfjs-dist/package.json';
+import {createRequire} from 'node:module';
+const pdfPackage = createRequire(import.meta.url)('pdfjs-dist/package.json');
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
