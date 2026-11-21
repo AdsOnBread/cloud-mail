@@ -43,6 +43,7 @@
             <el-dropdown-item divided v-perm="'email:delete'" @click="remove"><Icon icon="material-symbols:delete-outline"/>Delete</el-dropdown-item>
             <el-dropdown-item @click="read"><Icon :icon="message.unread===0?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'"/>{{ message.unread===0 ? 'Mark as read' : 'Mark as unread' }}</el-dropdown-item>
             <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
+            <DownloadMessage :message="detail"/>
           </el-dropdown-menu></template>
         </el-dropdown>
       </div>
@@ -77,6 +78,7 @@ const feedback = useMailFeedback();
 import { ref, computed, watch, useId } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
+import DownloadMessage from "@/components/download-message.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import { useEmailStore } from "@/store/email";

@@ -122,6 +122,10 @@
             <MessageRecipients :message="detail"/>
           </div>
           <time>{{formatDetailDate(detail.createTime)}}</time>
+          <el-dropdown trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
+            <button class="mail-icon" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
+            <template #dropdown><el-dropdown-menu><DownloadMessage :message="detail"/></el-dropdown-menu></template>
+          </el-dropdown>
         </div>
         <div class="message-body">
           <MessageContent :key="detail.emailId" :html="detail.content" :text="detail.text" :subject="detail.subject"
@@ -212,6 +216,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
+import DownloadMessage from "@/components/download-message.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MovePicker from "@/components/mail-labels/move.vue";
