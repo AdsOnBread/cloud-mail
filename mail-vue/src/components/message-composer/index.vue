@@ -258,20 +258,9 @@
         </div>
         <p v-if="sendError" class="send-error" role="alert">{{ sendError }}</p>
         <div class="compose-footer" data-tip-placement="top">
-          <div class="split-send">
-          <el-button
-            type="primary"
-            round
-            :loading="sending || attaching"
-            :data-tip="shortcutHint('Send','Enter')"
-            :aria-keyshortcuts="primaryKey+'+Enter'"
-            @click="sendEmail()"
-            >{{ sending ? "Sending…" : "Send" }}</el-button
-          >
-          <el-dropdown trigger="click" placement="top-start" :show-arrow="false" popper-class="mail-action-menu compose-format-popup">
-            <button class="send-options" aria-label="More send options" data-tip="More send options" :disabled="sending || attaching"><Icon icon="material-symbols:arrow-drop-down" width="18"/></button>
-            <template #dropdown><el-dropdown-menu><el-dropdown-item @click="validForSend() && schedulePicker.open(composeRoot.querySelector('.send-options'))"><Icon icon="material-symbols:schedule-send-outline" width="18"/>Schedule send</el-dropdown-item></el-dropdown-menu></template>
-          </el-dropdown></div>
+          <SendControls :busy="sending || attaching || preparing" :sending="sending"
+            :active="show && !minimized && !dockHidden" :tip="shortcutHint('Send','Enter')" :shortcut="primaryKey+'+Enter'"
+            @send="trigger => sendEmail(null,trigger)" @schedule="openSchedule"/>
           <button
             type="button"
             class="compose-tool formatting-toggle"
@@ -362,6 +351,7 @@ import {quotedMessage} from "./quoted-message";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import ContactPicker from './contact-picker.vue';
+import SendControls from "./send-controls.vue";
 import {sendConfirmation} from "./send-confirmation";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
@@ -633,13 +623,16 @@ function toggleFullScreen() {
 function collapseAddresses() {
   if (!props.inline) addressExpanded.value = false;
 }
-function focusRecipients(field,address) {
+function focusRecipients(field,address,focus=true) {
   if (props.inline) editingRecipients.value = true;
   else addressExpanded.value = true;
   if (field === "cc") showCc.value = true;
   if (field === "bcc") showBcc.value = true;
   const input = {receiveEmail: toField, cc: ccField, bcc: bccField}[field];
-  nextTick(() => address ? input?.value?.focusAddress(address) : input?.value?.focus());
+  nextTick(() => {
+    if (address) input?.value?.focusAddress(address,focus);
+    else if (focus) input?.value?.focus();
+  });
 }
 const appleKeys=/Mac|iPhone|iPad/.test(navigator.platform);
 const primaryKey=appleKeys ? 'Meta' : 'Control';
@@ -1279,28 +1272,36 @@ async function discardEditor(selected,session=draftSession()){
 function dismissRecipientError() {
   const notice=recipientNotice.value;
   recipientNotice.value=null;
-  if (notice && show.value && !props.dockHidden) focusRecipients(notice.field,notice.address);
+  if (!notice || !show.value || props.dockHidden) return;
+  const trigger = notice.trigger;
+  if (trigger?.isConnected && !trigger.disabled && trigger.getClientRects().length) {
+    if (notice.address) focusRecipients(notice.field,notice.address,false);
+    trigger.focus({preventScroll:true});
+  } else focusRecipients(notice.field,notice.address);
 }
-function showRecipientError(message,field,address){
+function showRecipientError(message,field,address,trigger){
   if (!recipientNotice.value) {
-    recipientNotice.value={message,field,address};
+    recipientNotice.value={message,field,address,trigger};
     nextTick(()=>recipientDialog.value?.showModal());
   }
   return false;
 }
-function validForSend() {
+function openSchedule(trigger) {
+  if (validForSend(trigger)) schedulePicker.value.open(trigger);
+}
+function validForSend(trigger) {
   if (sending.value || attaching.value || recipientNotice.value) return false;
   commitRecipients();
   const recipients = normalizeRecipients(form);
   if (recipientFields.every(field => recipients[field].length === 0))
-    return showRecipientError('Please specify at least one recipient.','receiveEmail');
+    return showRecipientError('Please specify at least one recipient.','receiveEmail',null,trigger);
   validateAddresses.value=true;
   if (recipients.firstInvalid) {
     const {field,address}=recipients.firstInvalid;
     const label={receiveEmail:'To',cc:'Cc',bcc:'Bcc'}[field];
-    return showRecipientError(`The address "${address}" in the "${label}" field was not recognized. Please make sure that all addresses are properly formed.`,field,address);
+    return showRecipientError(`The address "${address}" in the "${label}" field was not recognized. Please make sure that all addresses are properly formed.`,field,address,trigger);
   }
-  if (recipients.errors.receiveEmail) return showRecipientError(recipients.errors.receiveEmail,'receiveEmail');
+  if (recipients.errors.receiveEmail) return showRecipientError(recipients.errors.receiveEmail,'receiveEmail',null,trigger);
   recipientFields.forEach((field) => {
     form[field] = recipients[field];
   });
@@ -1395,8 +1396,8 @@ async function followDelivery(delivery, recent, replyTo, subject, quiet=false) {
     delivery.end();
   }
 }
-async function sendEmail(sendAt=null) {
-  if (!validForSend()) return;
+async function sendEmail(sendAt=null,trigger=null) {
+  if (!validForSend(trigger)) return;
   const prompt = sendConfirmation(form);
   if (prompt && !window.confirm(prompt)) {
     editor.value?.focus?.();
@@ -1598,7 +1599,9 @@ defineExpose({
 <style scoped>
 .recipient-dialog {
   box-sizing: border-box;
-  width: min(280px, calc(100% - 32px));
+  width: max-content;
+  min-width: min(280px, calc(100% - 32px));
+  max-width: min(560px, calc(100% - 32px));
   margin: auto;
   padding: 0;
   border: 0;
@@ -1608,10 +1611,11 @@ defineExpose({
 }
 .recipient-dialog::backdrop { background: rgb(0 0 0 / 32%); }
 .recipient-dialog h2 { margin: 0; padding: 24px 24px 16px; font-size: 24px; line-height: 32px; font-weight: 400; }
-.recipient-dialog p { overflow-wrap:anywhere; margin: 0; padding: 0 24px; font-size: 14px; line-height: 20px; }
-.recipient-dialog form { display: flex; justify-content: flex-end; padding: 24px 16px; }
-.recipient-dialog button { min-width: 64px; height: 40px; border-radius: 20px; color: var(--mail-blue, #0b57d0); font-weight: 500; cursor: pointer; }
-.recipient-dialog button:hover { background: var(--base-fill); }
+.recipient-dialog p { overflow-wrap:anywhere; margin:0; padding:0 24px 20px; color:var(--regular-text-color); font-size:14px; line-height:20px; }
+.recipient-dialog form { display:flex; justify-content:flex-end; padding:4px 24px 24px; }
+.recipient-dialog button {min-width:68px;height:40px;padding:0 24px;border-radius:20px;border:0;background:var(--send-blue);color:var(--send-ink);font:500 14px/20px Arial,sans-serif;cursor:pointer;}
+.recipient-dialog button:hover {background:color-mix(in srgb,var(--send-blue),var(--send-ink) 8%);}
+.recipient-dialog button:active {background:color-mix(in srgb,var(--send-blue),var(--send-ink) 16%);}
 .compose-backdrop {
   position: fixed;
   inset: 0;
@@ -1796,11 +1800,6 @@ defineExpose({
   min-height: 64px;
   flex-shrink: 0;
 }
-.compose-footer .el-button {
-  height: 36px;
-  min-width: 76px;
-  font-weight: 600;
-}
 .compose-tool {
   width: 32px;
   height: 32px;
@@ -1959,11 +1958,6 @@ defineExpose({
   min-height: 64px;
   gap: 3px;
 }
-.inline .compose-footer .el-button {
-  height: 40px;
-  min-width: 76px;
-  font-weight: 500;
-}
 .formatting-toggle {
   font:
     20px Arial,
@@ -2005,19 +1999,6 @@ defineExpose({
     font-size: 10px;
   }
 }
-.send.separate:not(.inline):not(.expanded) {
-  inset:0; margin:0 auto; width:min(100%,1202px); max-width:none;
-}
-.send.separate:not(.inline):not(.expanded) .write-box {
-  height:100%; border-radius:0; box-shadow:none; border-inline:1px solid var(--compose-divider);
-}
-.send.separate .separate-title { height:36px; padding:0 4px 0 13px; }
-.send.separate .compose-caption { cursor:default; }
-.send.separate:not(.inline):not(.expanded):not(.minimized) .compose-container { height:calc(100% - 36px); }
-</style>
-
-<style scoped>
-.split-send{display:inline-flex;align-items:stretch;flex-shrink:0}.split-send :deep(.el-button){border-radius:24px 0 0 24px;margin:0}.split-send :deep(.el-dropdown){display:flex}.send-options{height:100%;min-width:29px;background:var(--el-color-primary);color:var(--mail-surface);border-left:1px solid #ffffff70;border-radius:0 24px 24px 0;display:grid;place-items:center;cursor:pointer}.send-options:hover{background:var(--el-color-primary-dark-2)}
 .send.separate:not(.inline):not(.expanded) {
   inset:0; margin:0 auto; width:min(100%,1202px); max-width:none;
 }

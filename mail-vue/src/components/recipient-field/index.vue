@@ -133,7 +133,7 @@ function remove(targetIndex) {
   emit('update:modelValue', updated);
   nextTick(() => focusAt(index));
 }
-async function edit(index, name=false) {
+async function edit(index, name=false, focus=true) {
   if (index === null) return;
   menuIndex.value = null;
   editingName.value = name;
@@ -141,8 +141,8 @@ async function edit(index, name=false) {
   const address=props.modelValue[index], shown=display(address);
   pending.value = name ? (shown===address ? '' : shown) : address;
   await nextTick();
-  input.value?.focus();
-  input.value?.select();
+  if (focus) input.value?.focus();
+  input.value?.setSelectionRange(0,input.value.value.length);
 }
 function keydown(event) {
   if (event.isComposing || event.keyCode === 229 || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -276,10 +276,10 @@ watch(menuIndex,(index,_,onCleanup) => {
     window.removeEventListener('scroll',reposition,true);
   });
 });
-function focusAddress(address) {
+function focusAddress(address,focus=true) {
   const index=props.modelValue.indexOf(address);
-  if(index>=0) return edit(index);
-  input.value?.focus();
+  if(index>=0) return edit(index,false,focus);
+  if (focus) input.value?.focus();
 }
 defineExpose({ pendingChange, commit, focus: () => input.value?.focus(), focusAddress, clear });
 </script>
