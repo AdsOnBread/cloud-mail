@@ -135,6 +135,7 @@
         v-if="item"
         :key="item.draftId"
         :row="item"
+        :labels="visibleLabels(item)"
         :detail="detail"
         :status="status(item)"
         :short-recipients="who(item)"
@@ -165,6 +166,7 @@
         @importance="mark(row, 'important', $event)"
         :participants="'To: ' + who(row)"
         :subject="row.subject"
+        :labels="visibleLabels(row)"
         :preview="row.preview"
         :date="
           row.state === 'scheduled'
@@ -228,6 +230,7 @@ import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import SearchOptions from "@/components/mail-search-options.vue";
+import {useMailLabels} from "@/store/mail-labels";
 import ScheduledMessage from "./message.vue";
 
 const router = useRouter(),
@@ -237,6 +240,10 @@ const router = useRouter(),
   drafts = userDraftStore(),
   feedback = useMailFeedback(),
   search = useMailSearchStore();
+const labelStore = useMailLabels();
+function visibleLabels(row) {
+  return labelStore.items.filter(label=>label.messages!=="hide" && row.labelIds?.includes(label.id));
+}
 const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
 const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important"].includes(route.query.from) ? route.query.from : "");
 const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label"}[originFolder.value] || "Scheduled"));

@@ -2,6 +2,8 @@
   <article class="scheduled-message">
     <div class="subject-line">
       <h1>{{ row.subject || "(no subject)" }}</h1>
+      <RouterLink v-for="label in labels" :key="label.id" :to="{name:'label',params:{labelId:label.id}}"
+        class="schedule-label" :style="labelStyle(label)" :title="label.name">{{ label.name }}</RouterLink>
       <MailImportance :reason="row.importanceReason" :disabled="busy || !canCancel" @toggle="$emit('importance',$event)" />
     </div>
     <div class="sender">
@@ -92,6 +94,7 @@
   </article>
 </template>
 <script setup>
+import {labelStyle} from "@/components/mail-labels/colors";
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import http from "@/axios";
@@ -100,6 +103,7 @@ import ShadowHtml from "@/components/shadow-html/index.vue";
 import FilePreview from "@/components/mail-attachments/preview.vue";
 const props = defineProps({
   row: Object,
+  labels: Array,
   detail: Object,
   shortRecipients: String,
   status: String,
@@ -158,6 +162,7 @@ async function download(file) {
 .subject-line { display:flex; align-items:center; gap:8px; margin:0 0 24px 52px; }
 .message-star { margin-left:auto; flex-shrink:0; }
 .message-star[aria-pressed="true"] { color:#e9a900; }
+.schedule-label {padding:1px 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:4px;font-size:12px;color:inherit;background:var(--base-fill)}
 h1 {
   margin:0;
   font:
