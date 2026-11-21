@@ -263,6 +263,23 @@
           <button type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
             <Icon icon="material-symbols:image-outline" width="20" />
           </button>
+          <el-dropdown trigger="click" placement="top-start" :show-arrow="false"
+            popper-class="mail-action-menu compose-format-popup signature-menu" @visible-change="loadSignatureMenu" @command="signatureCommand">
+            <button class="compose-tool" ref="signatureButton" aria-label="Insert signature" data-tip="Insert signature" :disabled="sending || preparing" @mousedown.prevent>
+              <Icon icon="material-symbols:ink-pen-outline" width="20"/>
+            </button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item command="manage"><span class="signature-check"></span>Manage signatures</el-dropdown-item>
+              <el-dropdown-item v-if="signatureError" disabled>{{signatureError}}</el-dropdown-item>
+              <el-dropdown-item v-for="(item,index) in menuItems" :key="item.id" :divided="index===0" :command="'insert/'+item.id"
+                role="menuitemcheckbox" :aria-checked="selectedSignature===item.id">
+                <span class="signature-check"><Icon v-if="selectedSignature===item.id" icon="material-symbols:check" width="17"/></span>{{item.name}}
+              </el-dropdown-item>
+              <el-dropdown-item :divided="!menuItems.length" command="none" role="menuitemcheckbox" :aria-checked="!selectedSignature">
+                <span class="signature-check"><Icon v-if="!selectedSignature" icon="material-symbols:check" width="17"/></span>No signature
+              </el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
           <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
@@ -280,6 +297,7 @@
         </div>
       </div>
     </div>
+    <SignatureManager v-if="managerMounted" v-model="managingSignatures" :account-id="form.accountId" @closed="signatureButton?.focus()"/>
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
     <el-dialog
       v-model="showContacts"
@@ -322,6 +340,8 @@
 import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
+import SignatureManager from "@/components/mail-signatures/manager.vue";
+import {useMailSignatures} from "@/store/mail-signatures";
 import SchedulePicker from "./schedule.vue";
 import {useMailFeedback} from "@/store/mail-feedback";
 import tinyEditor from "@/components/tiny-editor/index.vue";
@@ -467,7 +487,50 @@ const form = reactive(emptyForm());
 function commitRecipients() {
   [toField, ccField, bccField].forEach((field) => field.value?.commit());
 }
+const signatures=useMailSignatures(), managingSignatures=ref(false), managerMounted=ref(false);
+const signatureButton=ref(null), menuItems=ref([]), selectedSignature=ref(""), signatureError=ref("");
+let signatureGeneration=0, pendingDefault=Promise.resolve(), automaticBaseline="";
+async function loadSignatureMenu(visible){
+  if(!visible)return;
+  const generation=signatureGeneration;
+  selectedSignature.value=editor.value?.currentSignature?.() || "";
+  signatureError.value="";
+  try{
+    const data=await signatures.load();
+    if(data && generation===signatureGeneration)menuItems.value=data.items;
+  }catch{if(generation===signatureGeneration)signatureError.value="Could not load signatures";}
+}
+async function signatureCommand(command){
+  if(command==="manage"){
+    managerMounted.value=true;managingSignatures.value=true;return;
+  }
+  const generation=++signatureGeneration, owner=userStore.user.email;
+  await editor.value?.ready?.();
+  if(generation!==signatureGeneration || owner!==userStore.user.email || !show.value || sending.value)return;
+  const item=command==="none"?null:menuItems.value.find(item=>"insert/"+item.id===command);
+  if(command!=="none" && !item)return;
+  editor.value?.setSignature?.(item, signatures.data?.beforeQuote, Boolean(form.sendType));
+  editor.value?.focus?.();
+}
+function startSignatureDefault(){
+  const generation=signatureGeneration, account=form.accountId, owner=form.ownerEmail;
+  pendingDefault=(async()=>{
+    let data;
+    try{data=await signatures.load();}catch{return;}
+    await nextTick();await editor.value?.ready?.();
+    if(!data || generation!==signatureGeneration || !show.value || form.ownerEmail!==owner || userStore.user.email!==owner || form.accountId!==account)return;
+    menuItems.value=data.items;
+    const id=data.defaults[account]?.[form.sendType?"reply":"newMail"];
+    const item=data.items.find(item=>item.id===id);
+    if(!item || !editor.value?.setSignature)return;
+    const pristine=!hasDraftContent(form) || (baseline && draftFingerprint(form)===baseline);
+    editor.value.setSignature(item,data.beforeQuote,Boolean(form.sendType),false);
+    if(pristine)automaticBaseline=draftFingerprint(form);
+  })();
+}
 function resetForm() {
+  signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
+  selectedSignature.value="";signatureError.value="";managingSignatures.value=false;
   Object.keys(form).forEach((key) => delete form[key]);
   Object.assign(form, emptyForm());
   [toField, ccField, bccField].forEach((field) => field.value?.clear());
@@ -521,6 +584,7 @@ function open() {
   resetForm();
   setSender();
   reveal();
+  startSignatureDefault();
 }
 async function openDraft(draft) {
   if (!available()) return;
@@ -628,7 +692,7 @@ async function prepareMessage(message, mode, all = false) {
             },
       );
       const quote = `<div>${escapeHTML(formatDetailDate(email.createTime))} ${escapeHTML(email.name)} &lt;${escapeHTML(email.sendEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${html}</blockquote>`;
-      form.content = `<div><br></div>${props.inline ? `<div class="cloudmail-reply-quote">${quote}</div>` : quote}`;
+      form.content = `<div><br></div><div class="cloudmail-reply-quote">${quote}</div>`;
       if (props.inline) {
         form.replyRecipientNames = {};
         for (const list of [email.recipient, email.cc]) {
@@ -647,13 +711,14 @@ async function prepareMessage(message, mode, all = false) {
         if (email.sendEmail && email.name)
           form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
       }
-    } else form.content = html;
+    } else form.content = `<div><br></div><div class="cloudmail-reply-quote">${html}</div>`;
     defValue.value = form.content;
     reveal();
     await nextTick();
     await editor.value?.ready?.();
     // TinyMCE normalizes HTML; compare against its actual representation after loading.
     baseline = draftFingerprint(form);
+    startSignatureDefault();
   } catch (error) {
     ElMessage.error(
       error.message || "Could not load the message. Please try again.",
@@ -702,7 +767,7 @@ async function removeSavedDraft() {
 let cloudSaveTimer;
 watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.sendType,form.emailId]),()=>{
   if(preparing.value||sending.value||!show.value||!hasDraftContent(form))return;
-  if (restoredUntouched && draftFingerprint(form) === baseline) return;
+  if (draftFingerprint(form)===automaticBaseline || (restoredUntouched && draftFingerprint(form) === baseline)) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
   const localSave=persistDraft().catch(()=>{form.syncState="offline";});
@@ -726,7 +791,7 @@ async function saveAndClose() {
     commitRecipients();
     clearTimeout(cloudSaveTimer);
     if (!restoredUntouched || draftFingerprint(form) !== baseline) {
-      if (hasDraftContent(form) && (form.draftId || draftFingerprint(form) !== baseline))
+      if (hasDraftContent(form) && draftFingerprint(form)!==automaticBaseline && (form.draftId || draftFingerprint(form) !== baseline))
         await persistDraft();
       else await removeSavedDraft();
       syncCloudDrafts().catch(() => {});
@@ -795,6 +860,7 @@ async function sendEmail(sendAt=null) {
   sendError.value = "";
   try {
     await editor.value?.ready?.();
+    await pendingDefault;
     // Save first so authentication/network failures cannot lose a message or its Bcc recipients.
     await persistDraft();
     if(sendAt){
@@ -910,7 +976,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
-  if(scheduling.value || event.target.closest?.(".schedule-dialog"))return;
+  if(managingSignatures.value || scheduling.value || event.target.closest?.(".schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (
     event.key === "Tab" &&
@@ -1185,7 +1251,11 @@ defineExpose({
 .compose-tool:hover {
   background: var(--base-fill);
 }
+.signature-check { width:22px;flex:none;display:inline-flex; }
+:global(.signature-menu .el-dropdown-menu) { min-width:216px;max-width:min(340px,90vw); }
+:global(.signature-menu .el-dropdown-menu__item) { min-height:32px;overflow-wrap:anywhere; }
 .draft-status {
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   flex: 1;
   color: var(--regular-text-color);
   font-size: 11px;

@@ -24,6 +24,7 @@ import {
   nextTick,
   shallowRef,
 } from "vue";
+import {replaceSignature,signatureId} from "../mail-signatures/content";
 import ComposeFormat from "./compose-format.vue";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
@@ -35,6 +36,8 @@ defineExpose({
   getContent,
   ready,
   openLink,
+  setSignature,
+  currentSignature: () => editor.value?.initialized ? signatureId(editor.value.getBody()) : "",
   openEmoji,
   insertPhoto,
   command,
@@ -47,6 +50,7 @@ const props = defineProps({
   },
   showToolbar: { type: Boolean, default: true },
   mailCompose: Boolean,
+  signatureEditor: Boolean,
   collapseQuote: Boolean,
   showQuote: Boolean,
   editorId: {
@@ -69,6 +73,15 @@ async function ready() {
 const editor = shallowRef(null);
 const linkPanel = ref();
 function openLink() { linkPanel.value?.open(); }
+function setSignature(item, beforeQuote, reply, manual = true) {
+  const ed = editor.value;
+  if (!ed?.initialized || ed.removed) return;
+  const apply = () => replaceSignature(ed.getBody(), item, beforeQuote, reply);
+  if (manual) ed.undoManager.transact(apply);
+  else ed.undoManager.ignore(apply);
+  ed.nodeChanged();
+  ed.dispatch("change");
+}
 function openEmoji() { command("mceEmoticons"); }
 function command(name) {
   if (!isInitialized.value) return;
@@ -177,7 +190,11 @@ function initEditor(initialContent) {
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
-    toolbar: props.mailCompose ? false :
+    ...(props.signatureEditor ? {
+      iframe_aria_text:"Signature text", paste_data_images:false,relative_urls:false,remove_script_host:false,
+      valid_elements:"div[style],p[style],br,strong,b,em,i,u,s,span[style],a[href],ul,ol,li,blockquote,sub,sup",
+    } : {}),
+    toolbar: props.mailCompose ? false : props.signatureEditor ? "bold italic underline | fontsize forecolor | link removeformat" :
       "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
     toolbar_location: "bottom",
     toolbar_mode: props.mailCompose ? "floating" : "sliding",

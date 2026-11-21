@@ -30,6 +30,12 @@
         </div>
       </div>
     </div>
+    <div class="container">
+      <div class="title">Signatures</div>
+      <div class="item"><span>Signatures and defaults for outgoing messages</span>
+        <el-button @click="manageSignatures=true">Manage signatures</el-button></div>
+    </div>
+    <SignatureManager v-if="manageSignatures" v-model="manageSignatures" :account-id="accountStore.currentAccountId"/>
     <ConnectedApps />
     <div class="del-email" v-perm="'my:delete'">
       <div class="title">{{$t('deleteUser')}}</div>
@@ -50,6 +56,7 @@
   </div>
 </template>
 <script setup>
+import SignatureManager from "@/components/mail-signatures/manager.vue";
 import ConnectedApps from "@/components/connected-apps/index.vue";
 import {reactive, ref, defineOptions} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
@@ -63,6 +70,7 @@ const { t } = useI18n()
 const accountStore = useAccountStore()
 const userStore = useUserStore();
 const setPwdLoading = ref(false)
+const manageSignatures=ref(false);
 const setNameShow = ref(false)
 const accountName = ref(null)
 

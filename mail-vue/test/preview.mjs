@@ -74,6 +74,7 @@ function matchesFilters(row,p) {
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     (!p.days || new Date(row.createTime).getTime()>=Date.now()-Number(p.days)*86400000);
 }
+let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  res.setHeader('Access-Control-Allow-Origin','http://127.0.0.1:3001');res.setHeader('Access-Control-Allow-Credentials','true');res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, Accept-Language');res.setHeader('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');
@@ -90,7 +91,15 @@ const api=createHTTPServer(async(req,res)=>{
    if(!file){res.writeHead(404);res.end();return;}
    res.setHeader('Content-Type',file.mimeType||'application/octet-stream');res.end(Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64'));return;
  }
- if(path==='/v1/connections')data={connections:[]};
+ if(path==='/v1/signatures'){
+   if(req.method==='PUT'){
+     const update=JSON.parse(body);
+     if(update.version!==signatures.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Signatures changed elsewhere.'}));return;}
+     signatures={...update,version:signatures.version+1};
+   }
+   data=signatures;
+ }
+ else if(path==='/v1/connections')data={connections:[]};
  else if(path==='/v1/drafts/changes')data={changes:draftEvents.filter(e=>e.seq>Number(url.searchParams.get('after')||0)).map(e=>{
    const latest=cloudDrafts.get(e.draftId), draft=latest && latest.state==='draft' ? latest : null;
    return {...e,operation:draft?'upsert':'delete',draft};

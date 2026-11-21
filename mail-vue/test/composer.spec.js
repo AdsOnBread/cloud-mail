@@ -39,6 +39,10 @@ vi.mock("../src/db/db.js", () => {
     },
   };
 });
+vi.mock("../src/store/mail-signatures",()=>({useMailSignatures:()=>({
+  load:async()=>({items:[],defaults:{},beforeQuote:false}),
+})}));
+
 // Composer tests isolate persistence/networking; synchronization has separate integration tests.
 vi.mock("../src/services/cloud-drafts.js",()=>({
   saveLocalDraft:async input=>{
