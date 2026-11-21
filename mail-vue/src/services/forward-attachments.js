@@ -24,7 +24,7 @@ export function useForwardAttachments(view) {
   onBeforeUnmount(cancel);
   onDeactivated(cancel);
 
-  async function forwardMessages(ids, { trash = false, mailbox, sender } = {}) {
+  async function forwardMessages(ids, { trash = false, mailbox, pinnedSender } = {}) {
     if (pending || !ids.length || !hasPerm("email:send")) return;
     if (ids.length > 10) {
       ElMessage.error("Choose up to 10 messages to forward as attachments.");
@@ -47,6 +47,7 @@ export function useForwardAttachments(view) {
     try {
       const { messageFile, messageFilename } = await import("@/utils/message-file");
       const attachments = [], sizes = [];
+      let sender;
       const checkSize = bytes => {
         if (bytes > MAX_MESSAGE_BYTES) throw new Error("These messages exceed the 5 MiB message limit, including encoding overhead.");
       };
@@ -57,6 +58,11 @@ export function useForwardAttachments(view) {
         if (!message || message.emailId !== id || message.userId !== owner || Boolean(message.trashedAt) !== trash ||
             message.scheduledDraftId || (mailbox && message.accountId !== mailbox))
           throw new Error("A selected message is no longer available here.");
+        if (pinnedSender) {
+          if (message.accountId !== pinnedSender || !message.mailboxEmail)
+            throw new Error("Reopen this mailbox to choose its sending address.");
+          sender = {accountId:message.accountId, email:message.mailboxEmail, name:message.mailboxName};
+        }
         // Reject oversized originals before downloading or encoding their contents.
         let sourceBytes = (message.text?.length || 0) + (message.content?.length || 0);
         checkSize(sourceBytes);
@@ -76,8 +82,10 @@ export function useForwardAttachments(view) {
         checkSize(messageSize({ attachments:sizes }));
         attachments.push({filename, size:blob.size, contentType:blob.type, content:await fileToBase64(blob)});
       }
+      // Opening a separate editor can unmount its mailbox. Once preparation is
+      // complete, the dock owns the handoff and checks the session before opening.
       if (current() && hasPerm("email:send"))
-        await ui.writerRef.openAttachedMessages({ attachments, sender, signal });
+        await ui.writerRef.openAttachedMessages({ attachments, sender:sender || (account.currentAccount.email ? account.currentAccount : user.user.account) });
     } catch (error) {
       if (current()) ElMessage.error(error.message || "Couldn’t attach the selected messages. Try again.");
     } finally {

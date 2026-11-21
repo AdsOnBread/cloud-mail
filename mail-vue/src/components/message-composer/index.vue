@@ -1748,9 +1748,7 @@ defineExpose({
   prepareDiscard,finishDiscard,unlockDiscard,
   discardEditor,
   open,
-  openAttachedMessages({attachments, sender, signal}) {
-    if (!signal.aborted) open(null, sender, attachments);
-  },
+  openAttachedMessages({attachments, sender}) { open(null, sender, attachments); },
   openDraft,
   restoreWindow: async (state,draft) => {
     if (draft) await openDraft(draft);

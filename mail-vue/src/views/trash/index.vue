@@ -341,10 +341,9 @@ const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean)
 const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
 const {forwarding, forwardMessages} = useForwardAttachments(() => JSON.stringify([mailbox.value, targets.value, search.query, search.filters]));
 function forwardTrash() {
-  const sender = windowAccount.value && detail.value?.mailboxEmail
-    ? {accountId:detail.value.accountId, email:detail.value.mailboxEmail, name:detail.value.mailboxName}
-    : undefined;
-  return forwardMessages(selectedRows.value.map(row => row.emailId), {trash:true, mailbox:mailbox.value, sender});
+  return forwardMessages(selectedRows.value.map(row => row.emailId), {
+    trash:true, mailbox:mailbox.value, pinnedSender:windowAccount.value,
+  });
 }
 const restoreLabel=computed(()=>hasScheduled.value && selectedRows.value.every(row=>row.scheduledDraftId) ? 'Restore to Drafts' : 'Restore to previous location');
 const moreButton=ref(),trashPicker=ref();

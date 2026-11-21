@@ -355,7 +355,7 @@ const api=createHTTPServer(async(req,res)=>{
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(rows[i].scheduledDraftId && !path.endsWith('/trash')){
    const d=cloudDrafts.get(rows[i].scheduledDraftId);d.state=path.endsWith('/purge')?'deleted':'draft';d.version++;delete d.trashEdit;delete d.trashSendAt;d.labelIds=[...(membership.get(rows[i].emailId)||[])];recordDraft(d);rows.splice(i,1);
  }else if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
- else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
+ else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));const mailbox=accounts.find(a=>a.accountId===row?.accountId);data=row&&{...row,mailboxEmail:mailbox?.email,mailboxName:mailbox?.name,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
  else if(path==='/my/lastSchedule')data=lastSchedule;
  else if(path==='/my/loginUserInfo')data={...user,generalSettings,lastSchedule};
