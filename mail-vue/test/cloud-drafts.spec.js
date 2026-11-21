@@ -319,3 +319,17 @@ it('advances the displayed date when an old draft is edited locally', async () =
   const {userDraftStore} = await import('../src/store/draft.js');
   expect(userDraftStore().items[0]).toMatchObject({draftId:old.draftId,preview:'Edited'});
 });
+
+it('drops deleted CID photos during editing and upload while keeping regular attachments and referenced photos', async () => {
+ const photos=Array.from({length:10},(_,i)=>({filename:'photo'+i+'.png',mimeType:'image/png',contentId:'id'+i,content:'data:image/png;base64,'+btoa(String(i))}));
+ const note={filename:'original.txt',content:'aGk=',contentType:'text/plain'};
+ const content=photos.slice(1).map(photo=>'<img src="'+photo.content+'">').join('')+'<img src="data:image/png;base64,eA==">';
+ const row=await saveLocalDraft(input({content,attachments:[...photos,note]}));
+ expect((await db.value.att.get(row.draftId)).attachments).toEqual([...photos.slice(1),note]);
+ // A pending edit from an older client can still contain the deleted CID file on disk.
+ await db.value.att.put({draftId:row.draftId,attachments:[...photos,note]});
+ await syncCloudDrafts();
+ const payload=http.post.mock.calls.find(([path])=>path==='/v1/drafts')[1];
+ expect(payload.attachments).toEqual([...photos.slice(1),note]);
+ expect(payload.content).toContain('base64,eA==');
+});
