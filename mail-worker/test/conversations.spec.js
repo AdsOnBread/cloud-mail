@@ -362,3 +362,18 @@ it('keeps manual importance through replies, filing, and changes to read or star
   await expect(action('importance',[ordinary.email_id],{important:1})).rejects.toMatchObject({code:400});
   expect((await list({folder:'important',accountId:3})).total).toBe(0);
 });
+
+it('keeps label colors across rename, rejects foreign labels and clears only the colors', async () => {
+ const {saveLabel,listLabels,setLabelColor,removeLabel}=await import('../src/service/mailbox-labels');
+ const label=await saveLabel(env.db,1,'Palette');
+ const colors={background:'#C2185B',foreground:'#FFFFFF'};
+ await expect(setLabelColor(env.db,2,label.id,colors)).rejects.toThrow(/not found/);
+ await expect(setLabelColor(env.db,1,label.id,{...colors,background:'red'})).rejects.toThrow(/Choose/);
+ await setLabelColor(env.db,1,label.id,colors);
+ await saveLabel(env.db,1,'Renamed palette',label.id);
+ expect(await listLabels(env.db,1)).toContainEqual({id:label.id,name:'Renamed palette',background:'#c2185b',foreground:'#ffffff'});
+ await setLabelColor(env.db,1,label.id,{background:null,foreground:null});
+ expect(await listLabels(env.db,1)).toContainEqual({id:label.id,name:'Renamed palette'});
+ await removeLabel(env.db,1,label.id);
+ expect(await env.db.prepare('SELECT * FROM mailbox_label_colors WHERE label_id=?').bind(label.id).first()).toBeNull();
+});

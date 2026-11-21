@@ -2,7 +2,7 @@ import app from '../hono/hono';
 import emailService from '../service/email-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
-import { listLabels, saveLabel, removeLabel } from '../service/mailbox-labels';
+import { listLabels, saveLabel, removeLabel, setLabelColor } from '../service/mailbox-labels';
 import attService from '../service/att-service';
 import { conversationList, conversationMessages, conversationAction, draftThreads } from '../service/conversation-service';
 
@@ -52,6 +52,9 @@ app.post('/email/conversation/draft-threads', async c => c.json(result.ok(await 
 app.get('/email/conversation/labels', async c => c.json(result.ok(await listLabels(c.env.db,userContext.getUserId(c)))));
 app.post('/email/conversation/labels', async c => c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),(await c.req.json()).name))));
 app.put('/email/conversation/labels/:id', async c => c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),(await c.req.json()).name,c.req.param('id')))));
+app.put('/email/conversation/labels/:id/color', async c => c.json(result.ok(
+  await setLabelColor(c.env.db, userContext.getUserId(c), c.req.param('id'), await c.req.json())
+)));
 app.delete('/email/conversation/labels/:id', async c => {
   await removeLabel(c.env.db,userContext.getUserId(c),c.req.param('id'));
   return c.json(result.ok());

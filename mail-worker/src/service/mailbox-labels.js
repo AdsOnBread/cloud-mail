@@ -7,14 +7,17 @@ export const labelSchema = [
 	`CREATE TABLE IF NOT EXISTS mailbox_label_members (
     user_id INTEGER NOT NULL, label_id INTEGER NOT NULL REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
     email_id INTEGER NOT NULL, PRIMARY KEY(user_id,label_id,email_id))`,
+	`CREATE TABLE IF NOT EXISTS mailbox_label_colors (
+      label_id INTEGER PRIMARY KEY REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
+      background TEXT, foreground TEXT)`,
 	'CREATE INDEX IF NOT EXISTS idx_labels_for_email ON mailbox_label_members(user_id,email_id,label_id)',
 ];
 export function listLabels(db, userId) {
 	return db
-		.prepare('SELECT label_id AS id,name FROM mailbox_labels WHERE user_id=? ORDER BY name COLLATE NOCASE')
+		.prepare('SELECT l.label_id AS id,l.name,c.background,c.foreground FROM mailbox_labels l LEFT JOIN mailbox_label_colors c ON c.label_id=l.label_id WHERE l.user_id=? ORDER BY l.name COLLATE NOCASE')
 		.bind(userId)
 		.all()
-		.then((result) => result.results);
+		.then(({results}) => results.map(({id,name,background,foreground}) => background ? {id,name,background,foreground} : {id,name}));
 }
 export async function saveLabel(db, userId, name, id) {
 	if (typeof name !== 'string' || !name.trim() || name.trim().length > 100)
@@ -37,6 +40,20 @@ export async function saveLabel(db, userId, name, id) {
 		throw error;
 	}
 }
+export async function setLabelColor(db, userId, id, colors) {
+	const {background, foreground} = colors || {};
+	const reset = background === null && foreground === null;
+	const valid = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+	if (!reset && !(valid(background) && valid(foreground))) throw new BizError('Choose a background and text color.', 400);
+	const updated = await db.prepare(`INSERT INTO mailbox_label_colors(label_id,background,foreground)
+    SELECT label_id,?,? FROM mailbox_labels WHERE user_id=? AND label_id=?
+    ON CONFLICT(label_id) DO UPDATE SET background=excluded.background,foreground=excluded.foreground
+    RETURNING label_id AS id,background,foreground`)
+		.bind(background?.toLowerCase() ?? null, foreground?.toLowerCase() ?? null, userId, id).first();
+	if (!updated) throw new BizError('Label not found.', 404);
+	return updated;
+}
+
 export async function removeLabel(db, userId, id) {
 	const result = await db.prepare('DELETE FROM mailbox_labels WHERE user_id=? AND label_id=? RETURNING label_id').bind(userId, id).first();
 	if (!result) throw new BizError('Label not found.', 404);
