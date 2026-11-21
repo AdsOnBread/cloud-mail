@@ -24,25 +24,26 @@ const drafts=userDraftStore(), user=useUserStore(), ui=useUiStore();
 const editorType=shallowRef(), composer=ref(), editing=ref(false), opening=ref(false), activeId=ref(null);
 const saved=computed(()=>drafts.items.filter(d=>(d.trashSource===props.sourceId || d.reply && d.emailId===props.sourceId) &&
   d.draftId!==(composer.value?.draftId || activeId.value)));
-let mounted=true, generation=0;
+let mounted=true, generation=0, activeCommand, pendingSave;
 onBeforeUnmount(()=>{mounted=false;});
-async function save() {
-  if (opening.value && !composer.value?.visible) {
-    generation++;
-    opening.value=false;
-    closed();
-    return true;
+function saveEditor() {
+  if (!pendingSave && composer.value?.visible) {
+    pendingSave = composer.value.saveAndClose().finally(()=>{pendingSave=null;});
   }
-  return (await composer.value?.saveAndClose()) ?? true;
+  return pendingSave || Promise.resolve(true);
+}
+async function save() {
+  generation++;
+  opening.value=false;
+  if (!composer.value?.visible) {closed();return true;}
+  return saveEditor();
 }
 onBeforeRouteLeave(save);
 onBeforeRouteUpdate(save);
-function closed() {editing.value=false;activeId.value=null;}
+function closed() {editing.value=false;activeId.value=null;activeCommand=null;}
 async function open(command,summary) {
   if (opening.value) return;
-  if (!summary && editing.value) {
-    if (!(await save())) return;
-  }
+  if (!summary && command===activeCommand && composer.value?.visible) {composer.value.focusBody();return;}
   if (!props.message || props.message.scheduledDraftId) return;
   const run=++generation, source=props.sourceId, owner=user.user.userId, token=user.authenticatedToken;
   const current=()=>mounted && run===generation && props.sourceId===source && props.message?.userId===owner && token &&
@@ -50,6 +51,8 @@ async function open(command,summary) {
   if (!current()) return;
   opening.value=true;
   try {
+    if (editing.value && !await saveEditor()) return;
+    if (!current()) return;
     let draft;
     if (summary) {
       if (await ui.writerRef?.focusDraft?.(summary.draftId) || !current()) return;
@@ -58,15 +61,17 @@ async function open(command,summary) {
       if (!current()) return;
       if ((draft.trashSource || draft.emailId)!==source || (draft.ownerEmail && draft.ownerEmail!==user.user.email) ||
           (summary.clientId && draft.clientId!==summary.clientId)) throw new Error("This draft is no longer available.");
-      if (editing.value && !(await composer.value?.saveAndClose())) return;
+
     }
     if (!current()) return;
     editorType.value ??= (await import("@/components/message-composer/index.vue")).default;
     if (!current()) return;
+    activeCommand=command || (draft.sendType==="forward" ? "openForward" :
+      draft.receiveEmail.length + draft.cc.length > 1 ? "openReplyAll" : "openReply");
     activeId.value=draft?.draftId;
     editing.value=true;
     await nextTick();
-    if (!current() || !composer.value) {closed();return;}
+    if (!current() || !composer.value) return;
     if (draft) await composer.value.openDraft(draft);
     else if (!await composer.value[command](props.message)) {if(current())closed();return;}
     composer.value?.scrollIntoView?.();
