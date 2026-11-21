@@ -196,7 +196,7 @@ function configureComposeMode(ed) {
   if (!props.mailCompose) return;
   const body = ed.getBody();
   body.setAttribute("contenteditable", props.plainText ? "plaintext-only" : "true");
-  for (const [name, value] of Object.entries({paste_as_text:true, paste_data_images:false, paste_block_drop:true, contextmenu:false})) {
+  for (const [name, value] of Object.entries({paste_as_text:true, paste_data_images:false, paste_block_drop:true, contextmenu:false, text_patterns:false})) {
     if (props.plainText) ed.options.set(name, value);
     else ed.options.unset(name);
   }
@@ -233,6 +233,13 @@ function observeFileTransfers(ed) {
   const doc = ed.getDoc();
   const handle = event => {
     const transfer = event.clipboardData || event.dataTransfer;
+    if (event.type === "paste" && props.plainText && (!hasFiles(transfer) || hasRichSelection(transfer))) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const text = transfer?.getData("text/plain") || plainMarkup(transfer?.getData("text/html")).text;
+      if (text) doc.execCommand("insertText", false, text);
+      return;
+    }
     if (!hasFiles(transfer)) return;
     if (event.type === "paste" && hasRichSelection(transfer)) return;
     if (event.type === "dragleave") {
@@ -311,7 +318,7 @@ function initEditor(initialContent) {
       }
       if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {
-          if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+          if (!props.plainText && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();
           }
         }, true);
