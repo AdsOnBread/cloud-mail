@@ -140,13 +140,14 @@ const api=createHTTPServer(async(req,res)=>{
      return (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
- }else if(['/v1/scheduled/read','/v1/scheduled/inbox'].includes(path) && req.method==='POST'){
-   const {messages,unread,inbox,previousEdit}=JSON.parse(body);
+ }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/labels'].includes(path) && req.method==='POST'){
+   const {messages,unread,inbox,previousEdit,add,remove}=JSON.parse(body);
    if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version && (!previousEdit || d.scheduledInboxEdit===previousEdit);})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
    const edit=crypto.randomUUID(),changed=[];
    for(const m of messages){
      const d=cloudDrafts.get(m.draftId);
-     if(path.endsWith('/inbox')){
+     if(path.endsWith('/labels')) d.labelIds=[...new Set([...(d.labelIds || []).filter(id=>!remove.includes(id)),...add])];
+     else if(path.endsWith('/inbox')){
        if(Boolean(d.scheduledInbox)!==inbox)changed.push(m.draftId);
        d.scheduledInbox=Number(inbox);d.scheduledInboxEdit=edit;
      }else d.scheduledUnread=Number(unread);

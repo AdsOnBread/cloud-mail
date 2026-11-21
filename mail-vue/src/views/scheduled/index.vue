@@ -98,6 +98,19 @@
         :disabled="busy || readTargets.some(row=>!canCancel(row))" @click="fileInbox(readTargets, moveIntoInbox)">
         <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
       </button>
+      <template v-if="readTargets.length">
+        <el-dropdown trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
+          <button ref="moreButton" class="mail-icon" aria-label="More email options" data-tip="More"
+            :disabled="busy"><Icon icon="material-symbols:more-vert" width="20"/></button>
+          <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item :disabled="labelsDisabled" @click="scheduledPicker?.show()">Label as
+              <Icon icon="material-symbols:arrow-right" width="16" aria-hidden="true"/>
+            </el-dropdown-item>
+          </el-dropdown-menu></template>
+        </el-dropdown>
+        <LabelPicker v-if="moreButton" ref="scheduledPicker" scheduled external :reference="moreButton" :rows="readTargets"
+          :disabled="labelsDisabled" @apply="applyLabels"/>
+      </template>
       <div class="scheduled-pager">
       <span class="total">{{ range }}</span>
       <button
@@ -134,7 +147,7 @@
         v-if="item"
         :key="item.draftId"
         :row="item"
-        :labels="visibleLabels(item)"
+        :labels="visibleLabels(item,true)"
         :detail="detail"
         :status="status(item)"
         :short-recipients="who(item)"
@@ -243,6 +256,7 @@ import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
+import LabelPicker from "@/components/mail-labels/picker.vue";
 import ScheduledMessage from "./message.vue";
 
 const router = useRouter(),
@@ -253,8 +267,8 @@ const router = useRouter(),
   feedback = useMailFeedback(),
   search = useMailSearchStore();
 const labelStore = useMailLabels();
-function visibleLabels(row) {
-  return labelStore.items.filter(label=>label.messages!=="hide" && row.labelIds?.includes(label.id));
+function visibleLabels(row,reader=false) {
+  return labelStore.items.filter(label=>(reader || label.messages!=="hide") && row.labelIds?.includes(label.id));
 }
 const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
 const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important","inbox"].includes(route.query.from) ? route.query.from : "");
@@ -320,6 +334,25 @@ const range = computed(() => {
     : "";
 });
 const canCancel = (row) => ["scheduled", "schedule_failed"].includes(row.state);
+const scheduledPicker=ref(), moreButton=ref();
+const labelsDisabled=computed(()=>busy.value || !readTargets.value.length || readTargets.value.some(row=>!canCancel(row)));
+async function applyLabels(ops,messages) {
+  if (labelsDisabled.value) return;
+  const owner=identity.value, token=user.authenticatedToken, navigation=navigations;
+  const current=()=>!disposed && identity.value===owner && token===user.authenticatedToken && navigations===navigation;
+  busy.value=true;
+  error.value='';
+  try {
+    await labelStore.labelScheduled(messages,ops);
+    if (current()) feedback.show('Labels updated.');
+  } catch (e) {
+    if (current()) error.value=e.message || 'Could not update labels.';
+  } finally {
+    busy.value=false;
+    await nextTick();
+    if (current() && document.activeElement===document.body) moreButton.value?.focus();
+  }
+}
 function status(row) {
   if (row.state === "scheduled")
     return "Send scheduled for " + formatDetailDate(row.sendAt * 1000);

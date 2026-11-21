@@ -24,12 +24,12 @@ import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import FilingMenu from "./filing-menu.vue";
 import { useMailLabels } from "@/store/mail-labels";
-const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean });
+const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean, scheduled:Boolean });
 const emit = defineEmits(["apply"]);
 const router=useRouter(), labels=useMailLabels();
 const open=ref(false), query=ref(""), changes=ref({}), menu=ref(), trigger=ref();
 const filtered=computed(()=>labels.items.filter(item=>item.name.toLowerCase().includes(query.value.trim().toLowerCase())));
-const rowIds=computed(()=>props.rows.map(row=>row.lastEmailId));
+const rowIds=computed(()=>props.scheduled ? props.rows.map(({draftId,version})=>({draftId,version})) : props.rows.map(row=>row.lastEmailId));
 let anchors=[];
 defineExpose({show:()=>{if (!props.disabled && rowIds.value.length) open.value=true;}});
 watch(open,value=>{
@@ -39,12 +39,12 @@ watch(open,value=>{
     anchors=[...rowIds.value];
   }
 });
-watch(()=>rowIds.value.join(","),()=>{open.value=false;});
+watch(()=>JSON.stringify(rowIds.value),()=>{open.value=false;});
 function restoreFocus() { (props.reference || trigger.value)?.focus(); }
 function dismiss() { open.value=false; restoreFocus(); }
 function createLabel() {
   dismiss();
-  labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,restoreFocus};
+  labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,scheduled:props.scheduled,restoreFocus};
 }
 function manageLabels() { dismiss(); router.push({name:'label-settings'}); }
 function currentState(id) {

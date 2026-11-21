@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import http from "@/axios";
+import { userDraftStore } from "./draft";
 import { conversationAction } from "@/request/conversation";
 const path = "/email/conversation/labels";
 
@@ -73,6 +74,14 @@ export const useMailLabels = defineStore("mail-labels", {
       await labelAPI(this).put('/v1/system-labels/'+folder,{mode});
       if (owner===this.owner) {++this.systemRequest;this.system={...this.system,[folder]:mode};}
     },
+    async labelScheduled(messages,ops) {
+      const owner=this.owner, token=this.sessionToken;
+      try {
+        await labelAPI(this).post('/v1/scheduled/labels',{messages,...ops});
+      } finally {
+        if (this.owner===owner && this.sessionToken===token) userDraftStore().scheduledRevision++;
+      }
+    },
     async save(id, name, anchors = [], parentId = null, move = null) {
       const owner = this.owner;
       const destination=move && this.edit?.destination;
@@ -98,12 +107,13 @@ export const useMailLabels = defineStore("mail-labels", {
         else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId},labelAPI(this));
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {
-        const trash=Boolean(this.edit?.trash);
+        const trash=Boolean(this.edit?.trash), scheduled=Boolean(this.edit?.scheduled);
         this.edit = { ...this.edit, id: label.id, name: label.name };
         const ops={add:[label.id],remove:[]};
-        if (trash) await labelAPI(this).post("/v1/messages/trash-labels",{emailIds:anchors,...ops});
+        if (scheduled) await this.labelScheduled(anchors,ops);
+        else if (trash) await labelAPI(this).post("/v1/messages/trash-labels",{emailIds:anchors,...ops});
         else await conversationAction("label",anchors,ops,labelAPI(this));
-        if (this.owner === owner)
+        if (!scheduled && this.owner === owner)
           this.applied = { anchors: [...anchors], labelId: label.id, ...(trash ? {trash:true} : {}) };
       }
       if (owner !== this.owner) return;
