@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia';
 
 export const useMailSearchStore = defineStore('mail-search', {
-  state: () => ({ query: '', folder: 'email' }),
+  state: () => ({ query: '', folder: 'email', labelId:'', filters: {} }),
   actions: {
-    visit(folder) {
+    visit(folder,labelId = "") {
       if (folder === 'content') return;
-      if (folder !== this.folder) this.query = '';
-      this.folder = folder;
+      if (folder !== this.folder || labelId !== this.labelId) { this.query = ''; this.filters = {}; }
+      this.folder = folder; this.labelId=labelId;
     },
   },
 });

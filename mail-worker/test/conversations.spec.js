@@ -287,3 +287,19 @@ it('keeps label names, membership and folder results scoped to their owner', asy
  await removeLabel(env.db,1,tag.id);
  expect((await messages(reply.email_id)).labelIds).toEqual([]);
 });
+
+it('filters before pagination and retains full thread state when viewing a single page', async () => {
+ const first=await insert({subject:'Roadmap 50%',message_id:'<filter@example.com>',send_email:'search@example.com',unread:0});
+ const last=await insert({in_reply_to:'<filter@example.com>',subject:'Later',unread:1});
+ await insert({subject:'Different',bcc:'private@example.com'});
+ const page=await messages(last.email_id,{limit:1});
+ expect(page).toMatchObject({unreadCount:1,incoming:2,filedAway:false});
+ await action('archive',[last.email_id]);
+ expect((await messages(last.email_id)).filedAway).toBe(true);
+ expect((await list({folder:'all',subject:'50%',from:'SEARCH@',isUnread:'1'})).total).toBe(1);
+ expect((await list({folder:'all',to:'private@example.com'})).total).toBe(0);
+ await cloudMail.trash(context(),1,[first.email_id,last.email_id]);
+ const trash=await cloudMail.list(context(),1,{folder:'trash',from:'SEARCH@',subject:'50%',isUnread:'1',limit:1});
+ expect(trash.messages.map(row=>row.emailId)).toEqual([first.email_id]);
+ expect((await cloudMail.list(context(),1,{folder:'trash',hasAttachment:'1'})).messages).toEqual([]);
+});

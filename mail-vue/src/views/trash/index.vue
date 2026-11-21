@@ -1,5 +1,12 @@
 <template>
   <section class="trash-view" aria-label="Trash">
+    <div v-if="!messageId" class="filter-row" aria-label="Filter Trash">
+      <SearchOptions chips field="from" /><SearchOptions chips field="days" />
+      <button class="filter-chip" :aria-pressed="Boolean(search.filters.hasAttachment)" @click="toggleFilter('hasAttachment')">Has attachment</button>
+      <SearchOptions chips field="to" />
+      <button class="filter-chip" :aria-pressed="Boolean(search.filters.isUnread)" @click="toggleFilter('isUnread')">Is unread</button>
+      <SearchOptions chips />
+    </div>
     <div class="mail-toolbar">
       <button
         v-if="messageId"
@@ -26,6 +33,10 @@
           "
         />
       </label>
+      <el-dropdown v-if="!messageId" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu" @command="selectGroup">
+        <button class="mail-icon select-options" aria-label="Selection options" data-tip="Select"><Icon icon="material-symbols:arrow-drop-down" width="16"/></button>
+        <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in ['All','None','Read','Unread']" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
+      </el-dropdown>
       <template v-if="targets.length">
         <button
           v-if="canDelete"
@@ -56,6 +67,10 @@
       >
         <Icon icon="material-symbols:refresh" width="20" />
       </button>
+      <el-dropdown v-if="!messageId && !targets.length" trigger="click" :show-arrow="false" popper-class="mail-action-menu">
+        <button class="mail-icon" aria-label="More Trash options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
+        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="search.filters={}; search.query=''; load([])">Clear filters and refresh</el-dropdown-item></el-dropdown-menu></template>
+      </el-dropdown>
       <template v-if="!messageId">
         <span class="total">{{
           messages.length
@@ -132,7 +147,7 @@
         Messages that have been in Trash more than 30 days will be automatically
         deleted.
         <button
-          v-if="canDelete && messages.length && !search.query"
+          v-if="canDelete && messages.length && !search.query && !filtered"
           class="text-button"
           :disabled="busy || loading"
           @click="emptyTrash"
@@ -144,6 +159,7 @@
         v-for="message in messages"
         :key="message.emailId"
         hide-star
+        trash
         :participants="message.name || message.sendEmail"
         :subject="message.subject"
         :preview="message.preview"
@@ -183,7 +199,7 @@
         {{
           loading
             ? "Loading…"
-            : search.query
+            : search.query || filtered
               ? "No messages match your search."
               : "No conversations in Trash."
         }}
@@ -197,6 +213,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
+import SearchOptions from "@/components/mail-search-options.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
@@ -234,14 +251,24 @@ const targets = computed(() =>
       : []
     : selected.value,
 );
+const filtered=computed(()=>Object.keys(search.filters).length>0);
+function toggleFilter(key) {
+  const next={...search.filters};
+  if(next[key])delete next[key]; else next[key]=1;
+  search.filters=next;
+}
+function selectGroup(option) {
+  if (busy.value || loading.value) return;
+  selected.value=messages.value.filter(m=>option==='All' || (option==='Read' && m.unread!==0) || (option==='Unread' && m.unread===0)).map(m=>m.emailId);
+}
 const offset = computed(() => history.value.length * 50);
 let revision = 0,
   noticeTimer,
   disposed = false;
-function list(cursor, q, accountId = mailbox.value) {
+function list(cursor, q, accountId = mailbox.value, filters = search.filters) {
   return http.get("/v1/messages", {
     params: {
-      folder: "trash",
+      ...filters, folder: "trash",
       accountId,
       cursor: cursor || undefined,
       limit: 50,
@@ -317,7 +344,7 @@ function reload() {
 }
 watch(() => useMailFeedback().restored, reload);
 watch(messageId, reload, { immediate: true });
-watch([() => search.query, mailbox], () => {
+watch([() => search.query, () => search.filters, mailbox], () => {
   history.value = [];
   messages.value = [];
   selected.value = [];
@@ -350,7 +377,7 @@ async function act(action, ids) {
       ids = [];
       let cursor;
       do {
-        const page = await list(cursor, "", scope);
+        const page = await list(cursor, "", scope, {});
         if (request !== revision) return;
         ids.push(...page.messages.map((m) => m.emailId));
         cursor = page.nextCursor;

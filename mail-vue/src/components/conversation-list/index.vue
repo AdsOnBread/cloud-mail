@@ -185,12 +185,12 @@
           <template #actions>
             <button
               class="mail-icon"
-              :data-tip="filingLabel"
-              :aria-label="filingLabel"
+              :data-tip="row.filedAway ? 'Move to Inbox' : 'Archive'"
+              :aria-label="row.filedAway ? 'Move to Inbox' : 'Archive'"
               :disabled="busy"
-              @click="mutate(filingAction, {}, [row.lastEmailId])"
+              @click="mutate(row.filedAway ? 'inbox' : 'archive', {}, [row.lastEmailId])"
             >
-              <Icon :icon="filingIcon" width="20" />
+              <Icon :icon="row.filedAway ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20" />
             </button>
             <button
               class="mail-icon"
@@ -390,7 +390,7 @@ const key = computed(() =>
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
     ascending.value,
-    search.query,
+    search.query, JSON.stringify(search.filters),
   ].join("|"),
 );
 function deliveryState(status) {
@@ -413,7 +413,7 @@ function params() {
     accountId: account.currentAccountId,
     allReceive: account.currentAccount.allReceive ? 1 : 0,
     timeSort: ascending.value ? 1 : 0,
-    q: search.query,
+    q: search.query, ...search.filters,
     limit: 50,
   };
 }
@@ -426,7 +426,7 @@ const selectedUnread = computed(() =>
   ),
 );
 const filingAction = computed(() =>
-  ["archived", "snoozed"].includes(props.folder) ? "inbox" : "archive",
+  ["archived", "snoozed"].includes(props.folder) || selected.value.length>0 && rows.value.filter(row=>selected.value.includes(row.lastEmailId)).every(row=>row.filedAway) ? "inbox" : "archive",
 );
 const filingLabel = computed(() =>
   filingAction.value === "archive" ? "Archive" : "Move to Inbox",

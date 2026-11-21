@@ -6,7 +6,7 @@
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
                       :class="activeFolder === 'email' ? 'choose-item' : ''">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span>
+          <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread" class="menu-name draft-count">{{ unread }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" data-tip="Starred"
                       :class="activeFolder === 'star' ? 'choose-item' : ''">
@@ -100,6 +100,8 @@
 </template>
 
 <script setup>
+import {conversationList} from '@/request/conversation';
+import { useEmailStore } from '@/store/email';
 import { userDraftStore } from '@/store/draft';
 import Account from '@/layout/account/index.vue';
 import { useAccountStore } from '@/store/account.js';
@@ -125,6 +127,21 @@ const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.
 watch(activeFolder,folder=>{if(["archived","trash","all","setting"].includes(folder))more.value=true;},{immediate:true});
 watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
 const accountStore = useAccountStore();
+const emailStore=useEmailStore();
+const unread=ref(0);
+watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),()=>emailStore.conversationRevision],
+  ([owner,accountId,allReceive],previous,onCleanup)=>{
+    let current=true;
+    if (!previous || previous[0]!==owner || previous[1]!==accountId || previous[2]!==allReceive) unread.value=0;
+    if (!owner || !accountId) return;
+    const timer=setTimeout(async()=>{
+      try {
+        const data=await conversationList({folder:"inbox",accountId,allReceive:allReceive?1:0,countOnly:1});
+        if(current)unread.value=data.unreadThreads;
+      } catch { /* Keep the last known count until the next refresh. */ }
+    },100);
+    onCleanup(()=>{current=false;clearTimeout(timer);});
+  },{immediate:true});
 const uiStore = useUiStore();
 
 </script>

@@ -31,3 +31,14 @@ describe('isolated message rendering',()=>{
   await wrapper.get('button').trigger('click');await flushPromises();expect(wrapper.get('iframe').attributes('srcdoc')).toContain('img-src blob: data: https: http:');wrapper.unmount();
  });
 });
+
+it('renders simple paragraphs at their natural height as escaped text and keeps rich mail isolated',async()=>{
+ const wrapper=mount(MessageBody,{props:{html:'<p>Hi,<br>See &lt;b&gt;the notes&lt;/b&gt;.</p>'}});
+ await flushPromises();
+ expect(wrapper.get('.plain-paragraphs p').text()).toBe('Hi,\nSee <b>the notes</b>.');
+ expect(wrapper.find('b').exists()).toBe(false);
+ await wrapper.setProps({html:'<p style="font-size:20px">Styled paragraph</p>'});
+ await flushPromises();
+ expect(wrapper.get('iframe').attributes('sandbox')).not.toContain('allow-scripts');
+ wrapper.unmount();
+});

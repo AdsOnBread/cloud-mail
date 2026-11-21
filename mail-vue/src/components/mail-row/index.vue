@@ -35,7 +35,7 @@
       @click="$emit('open')"
     >
       <span class="participants">
-        <span v-if="participants" class="names">{{ participants }}</span>
+        <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="17" aria-hidden="true" /><span v-if="participants" class="names">{{ participants }}</span>
         <span v-if="draftCount" class="draft-marker"
           ><span v-if="participants">, </span
           >{{ draftCount > 1 ? "Drafts (" + draftCount + ")" : "Draft" }}</span
@@ -74,6 +74,7 @@ defineProps({
   starred: Boolean,
   draftOnly: Boolean,
   hideStar: Boolean,
+  trash: Boolean,
 });
 defineEmits(["select", "star", "open"]);
 </script>
@@ -134,6 +135,7 @@ defineEmits(["select", "star", "open"]);
   align-items: baseline;
   white-space: nowrap;
 }
+.trash-marker { align-self:center; flex:none; }
 .names,
 .summary {
   overflow: hidden;

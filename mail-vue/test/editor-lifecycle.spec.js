@@ -13,7 +13,7 @@ function fakeEditor() {
     content = "";
   const ed = {
     on: (name, callback) => {
-      handlers[name] = callback;
+      for (const event of name.split(" ")) handlers[event] = callback;
     },
     setContent: vi.fn((value) => {
       if (!initialized) throw new Error("Editor not initialized");
@@ -169,5 +169,18 @@ it("folds quoted text without removing it from the message and toggles it indepe
   await wrapper.setProps({ showToolbar: true });
   expect(wrapper.classes()).not.toContain("hide-toolbar");
   expect(fake.ed.getContent()).toBe(html);
+  wrapper.unmount();
+});
+
+it("publishes the editor body for draft saving immediately after Undo and Redo", () => {
+  const fake=fakeEditor();
+  window.tinymce={init:options=>options.setup(fake.ed)};
+  const wrapper=mount(Editor,{props:{defValue:"<p>Original</p>"}});
+  fake.initialize();
+  for (const [event,html] of [["input","<p>Edit</p>"],["undo","<p>Original</p>"],["redo","<p>Edit</p>"]]) {
+    fake.edit(html);
+    fake.handlers[event]();
+    expect(wrapper.emitted("change").at(-1)[0]).toBe(html);
+  }
   wrapper.unmount();
 });

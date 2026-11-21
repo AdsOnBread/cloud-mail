@@ -1,3 +1,4 @@
+import { addMailFilters } from '../service/mail-search-filters';
 import { ensureThreads } from '../mobile/threads';
 import { filedConversations, inboxMember } from '../service/conversation-filing';
 import emailUtils from '../utils/email-utils';
@@ -18,6 +19,7 @@ export async function list(c,userId,p={}) {
   if(folder==='starred') filters.push('s.star_id IS NOT NULL');
   if(p.accountId) {filters.push('e.account_id=?');args.push(positive(p.accountId));}
   if(p.cursor) {filters.push('e.email_id<?');args.push(positive(p.cursor));}
+  addMailFilters(p,filters,args);
   if(p.q?.trim()) {
     const term='%'+p.q.trim().slice(0,200).replace(/[\\%_]/g,'\\$&')+'%';
     filters.push(`(e.name LIKE ? ESCAPE '\\' OR e.subject LIKE ? ESCAPE '\\' OR e.send_email LIKE ? ESCAPE '\\' OR e.text LIKE ? ESCAPE '\\' OR e.content LIKE ? ESCAPE '\\' OR e.recipient LIKE ? ESCAPE '\\' OR e.cc LIKE ? ESCAPE '\\' OR (e.type=1 AND e.bcc LIKE ? ESCAPE '\\'))`);

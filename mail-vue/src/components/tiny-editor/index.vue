@@ -215,7 +215,7 @@ function initEditor(initialContent) {
         isInitialized.value = true;
         emit("change", ed.getContent(), ed.getContent({ format: "text" }));
       });
-      ed.on("input change", () => {
+      ed.on("input change undo redo", () => {
         const content = ed.getContent();
         const text = ed.getContent({ format: "text" });
         emit("change", content, text);

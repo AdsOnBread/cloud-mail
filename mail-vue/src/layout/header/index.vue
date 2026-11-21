@@ -4,11 +4,15 @@
       <button type="button" class="icon-button" aria-label="Toggle navigation" data-tip="Main menu" :aria-expanded="uiStore.asideShow" @click="changeAside"><Icon icon="material-symbols:menu" width="24" /></button>
       <router-link to="/inbox" class="brand-name"><Icon icon="material-symbols:mail-outline-rounded" width="32" /><span>{{ settingStore.settings.title || 'Cloudmail' }}</span></router-link>
     </div>
-    <form v-if="searchable" class="mail-search" role="search" @submit.prevent="submitSearch">
+    <div v-if="searchable" class="mail-search" role="search">
+      <form class="search-entry" @submit.prevent="submitSearch">
       <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
-      <input v-model="searchText" aria-label="Search mail" placeholder="Search mail" @keydown.esc="clearSearch" />
-      <button v-if="searchText || mailSearch.query" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
-    </form>
+      <span v-if="route.name==='trash'" class="search-folder">in:trash</span>
+      <input v-model="searchText" aria-label="Search mail" :placeholder="route.name==='trash' ? '' : 'Search mail'" @keydown.esc="clearSearch" />
+      <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
+      </form>
+      <SearchOptions v-if="route.name!=='draft'" :query-text="searchText" @applied="query=>{searchText=query;returnToResults()}" />
+    </div>
     <div v-else class="page-title">{{ $t(route.meta.title) }}</div>
     <div class="toolbar">
       <button type="button" v-if="uiStore.dark" class="icon-button" aria-label="Switch to light mode" data-tip="Light mode" @click="openDark($event)">
@@ -72,6 +76,7 @@
 </template>
 
 <script setup>
+import SearchOptions from "@/components/mail-search-options.vue";
 import router from "@/router";
 import {logout} from "@/request/login.js";
 import {Icon} from "@iconify/vue";
@@ -89,13 +94,16 @@ const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','trash','all','label'].includes(route.name));
-watch(() => route.name, name => { mailSearch.visit(name); searchText.value = mailSearch.query; }, { immediate:true });
+watch([() => route.name,()=>route.params.labelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {
   mailSearch.query = searchText.value.trim();
+  returnToResults();
+}
+function returnToResults() {
   if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder});
 }
-function clearSearch() { searchText.value = ''; mailSearch.query = ''; }
+function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
 
 const settingStore = useSettingStore();
 const userStore = useUserStore();
@@ -321,6 +329,8 @@ function formatName(email) {
 .icon-button { width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:50%; cursor:pointer; color:var(--regular-text-color); }
 .icon-button:hover { background:var(--mail-hover); }
 .mail-search { display:flex; align-items:center; height:48px; min-width:0; border-radius:24px; background:var(--mail-search); padding:0 6px; }
+.search-entry { flex:1; min-width:0; display:flex; align-items:center; }
+.search-folder { font-size:16px; margin-left:8px; white-space:nowrap; }
 .mail-search:focus-within { background:var(--mail-surface); box-shadow:0 1px 3px #0003; }
 .mail-search input { flex:1; width:0; min-width:0; color:var(--el-text-color-primary); font-size:16px; padding:0 8px; }
 .mail-search input::placeholder { color:var(--regular-text-color); opacity:1; }

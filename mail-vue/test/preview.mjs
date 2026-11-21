@@ -49,6 +49,12 @@ function filingAnchor(members) {
  const received=members.filter(row=>row.type===0 && row.status===0);
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
 }
+function matchesFilters(row,p) {
+ const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
+ return matches([row.name,row.sendEmail],p.from) && matches([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])],p.to) &&
+    matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
+    (!p.days || new Date(row.createTime).getTime()>=Date.now()-Number(p.days)*86400000);
+}
 const api=createHTTPServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
  res.setHeader('Access-Control-Allow-Origin','http://127.0.0.1:3001');res.setHeader('Access-Control-Allow-Credentials','true');res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, Accept-Language');res.setHeader('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');
@@ -61,7 +67,10 @@ const api=createHTTPServer(async(req,res)=>{
    res.setHeader('Content-Type',file.mimeType||'application/octet-stream');res.end(Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64'));return;
  }
  if(path==='/v1/connections')data={connections:[]};
- else if(path==='/v1/drafts/changes')data={changes:draftEvents.filter(e=>e.seq>Number(url.searchParams.get('after')||0)),cursor:draftEvents.length,hasMore:false};
+ else if(path==='/v1/drafts/changes')data={changes:draftEvents.filter(e=>e.seq>Number(url.searchParams.get('after')||0)).map(e=>{
+   const latest=cloudDrafts.get(e.draftId), draft=latest && !['deleted','sent'].includes(latest.state) ? latest : null;
+   return {...e,operation:draft?'upsert':'delete',draft};
+ }),cursor:draftEvents.length,hasMore:false};
  else if(path==='/v1/drafts'&&req.method==='POST'){
    const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);
    if(!draft){draft={...input,draftId:nextDraft++,version:1,state:'draft',createTime:new Date().toISOString(),attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:Buffer.from(f.content.replace(/^data:[^,]*;base64,/,''),'base64').length}))};cloudDrafts.set(draft.draftId,draft);recordDraft(draft);}
@@ -74,7 +83,7 @@ const api=createHTTPServer(async(req,res)=>{
    else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
- else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,preview:r.text})),hasMore:false,nextCursor:null};}
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/'))data=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));
  else if(path==='/setting/websiteConfig')data=settings;
@@ -91,6 +100,7 @@ const api=createHTTPServer(async(req,res)=>{
      if(p.folder==='archived' && state!==null)continue;
      if(p.folder==='snoozed' && !(state>now))continue;
      const matches=members.some(row=>{
+       if(!matchesFilters(row,p))return false;
        if(p.folder!=='starred' && p.allReceive!=='1' && row.accountId!==Number(p.accountId))return false;
        if(p.folder==='starred' && !row.isStar || p.folder==='sent' && row.type!==1)return false;
        if(p.folder==='inbox' && row.type!==0 && !(row.emailId===anchor && typeof state==='number' && state<=now))return false;
@@ -98,17 +108,18 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
+     threads.push({threadId,filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
        participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});
    }
-   const total=threads.length;threads=threads.filter(row=>!Number(p.cursor)||(asc?row.lastEmailId>Number(p.cursor):row.lastEmailId<Number(p.cursor))).sort((a,b)=>asc?a.lastEmailId-b.lastEmailId:b.lastEmailId-a.lastEmailId);
-   const limit=Number(p.limit)||30;data={threads:threads.slice(0,limit),total,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore:threads.length>limit,nextCursor:threads.length>limit?threads[limit-1].lastEmailId:null};
+   const unreadThreads=threads.filter(row=>row.unreadCount>0).length,total=threads.length;threads=threads.filter(row=>!Number(p.cursor)||(asc?row.lastEmailId>Number(p.cursor):row.lastEmailId<Number(p.cursor))).sort((a,b)=>asc?a.lastEmailId-b.lastEmailId:b.lastEmailId-a.lastEmailId);
+   const limit=Number(p.limit)||30;data={threads:threads.slice(0,limit),total,unreadThreads,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore:threads.length>limit,nextCursor:threads.length>limit?threads[limit-1].lastEmailId:null};
  }else if(path==='/email/conversation/messages'){
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);
-   data={labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
+   const state=filing.get(filingAnchor(members));
+   data={filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
    data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId})));

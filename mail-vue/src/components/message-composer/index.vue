@@ -258,7 +258,7 @@
           <button type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
             <Icon icon="material-symbols:image-outline" width="20" />
           </button>
-          <input ref="photoInput" type="file" accept="image/*" hidden @change="insertPhoto" />
+          <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
           }}</span>
@@ -314,6 +314,7 @@
 </template>
 <script setup>
 import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft } from "@/services/cloud-drafts";
+import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import tinyEditor from "@/components/tiny-editor/index.vue";
 import RecipientField from "@/components/recipient-field/index.vue";
@@ -370,13 +371,23 @@ const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
 const photoInput = ref();
+const photoTypes = ["image/png","image/jpeg","image/gif","image/webp","image/heic","image/avif"];
 async function insertPhoto(event) {
   const input = event.target, file = input.files?.[0];
   input.value = "";
   if (!file) return;
   attaching.value = true;
   try {
-    if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+    if (!photoTypes.includes(file.type)) throw new Error("Choose a PNG, JPEG, GIF, WebP, HEIC or AVIF image.");
+    if (file.size === 0) throw new Error("This photo is empty.");
+    const content = editor.value?.getContent?.() ?? form.content ?? "";
+    const images = new DOMParser().parseFromString(content,"text/html").images;
+    if ([...images].filter(img=>/^(data:image|cid:)/.test(img.getAttribute("src") || "")).length >= 10)
+      throw new Error("A message can contain up to 10 inline photos.");
+    const bytes = new TextEncoder().encode(JSON.stringify({...form,attachments:[]})).length;
+    const files = form.attachments.reduce((sum,attachment)=>sum+(Number(attachment.size)||0),0);
+    if (bytes + files + 4*Math.ceil(file.size/3) + 256 > 5*1024*1024)
+      throw new Error("This photo would exceed the 5 MiB message limit.");
     const data = await fileToBase64(file, true);
     await editor.value?.ready();
     editor.value?.insertPhoto(data, file.name);
@@ -388,7 +399,8 @@ const ccField = ref();
 const bccField = ref();
 const show = ref(false);
 const editingRecipients = ref(false);
-const showFormatting = ref(false);
+const uiPreferences=useUiStore();
+const showFormatting=computed({get:()=>uiPreferences.composeFormatting,set:value=>{uiPreferences.composeFormatting=value;}});
 const quoteExpanded = ref(false);
 const hasQuotedContent = computed(() =>
   /\bcloudmail-reply-quote\b/.test(form.content),
@@ -451,7 +463,6 @@ function resetForm() {
   Object.assign(form, emptyForm());
   [toField, ccField, bccField].forEach((field) => field.value?.clear());
   editingRecipients.value = false;
-  showFormatting.value = false;
   quoteExpanded.value = false;
   recipientErrors.value = {};
   sendError.value = "";
@@ -974,7 +985,7 @@ defineExpose({
   position: fixed;
   bottom: 0;
   right: 48px;
-  width: 520px;
+  width: clamp(510px,39vw,590px);
   max-width: calc(100vw - 32px);
   z-index: 200;
   color: var(--el-text-color-primary);
@@ -1031,7 +1042,7 @@ defineExpose({
 .compose-container {
   display: flex;
   flex-direction: column;
-  height: min(500px, calc(100dvh - 100px));
+  height: min(512px, calc(100dvh - 100px));
   padding: 0 16px;
 }
 .compose-fields {

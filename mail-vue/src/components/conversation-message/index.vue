@@ -93,7 +93,7 @@
               : "Delivery delayed"
         }}
       </div>
-      <ShadowHtml v-if="email.content" :html="email.content" />
+      <ShadowHtml class="message-html" v-if="email.content" :html="email.content" />
       <pre v-else class="message-text">{{ email.text }}</pre>
       <div v-if="email.attList?.length" class="attachments">
         <button
@@ -339,6 +339,7 @@ time {
   flex-shrink: 0;
   color: var(--regular-text-color);
 }
+.message-html { margin-left:48px; }
 .message-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -381,6 +382,7 @@ time {
   color: var(--el-color-warning);
 }
 @media (max-width: 767px) {
+  .message-html { margin-left:0; }
   .message-toggle {
     flex-wrap: wrap;
     gap: 4px;

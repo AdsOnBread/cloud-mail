@@ -78,7 +78,7 @@
         :expanded="expanded.has(message.emailId)"
         @toggle="toggle(message)"
         @reply="reply(message, $event)"
-        @changed="Object.assign(message, $event)"
+        @changed="updateMessage(message,$event)"
         @deleted="deleted(message)"
       >
         <MessageComposer
@@ -135,10 +135,19 @@ import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useUiStore } from "@/store/ui";
 const labels=useMailLabels(), ui=useUiStore(), labelIds=ref([]);
+watch(()=>labels.applied,change=>{
+  if(change?.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
+});
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
-const hasUnread=computed(()=>messages.value.some(item=>item.type===0 && item.unread===0));
+const unreadCount=ref(0), incoming=ref(0), filedAway=ref(false);
+const hasUnread=computed(()=>unreadCount.value>0);
+function updateMessage(message,change) {
+  if (message.type===0 && change.unread!==undefined && change.unread!==message.unread)
+    unreadCount.value=Math.max(0,unreadCount.value+(change.unread===0?1:-1));
+  Object.assign(message,change);
+}
 const readTitle=computed(()=>hasUnread.value?"Mark conversation read":"Mark conversation unread");
-const filingAction=computed(()=>["archived","snoozed"].includes(route.query.folder)?"inbox":"archive");
+const filingAction=computed(()=>filedAway.value?"inbox":"archive");
 const filingTitle=computed(()=>filingAction.value==="archive"?"Archive":"Move to Inbox");
 const drafts = userDraftStore();
 const threadId = ref(null);
@@ -218,6 +227,9 @@ async function load(older = false) {
       : data.messages;
     threadId.value = data.threadId;
     labelIds.value=data.labelIds || [];
+    unreadCount.value=data.unreadCount ?? messages.value.filter(m=>m.type===0 && m.unread===0).length;
+    incoming.value=data.incoming ?? messages.value.filter(m=>m.type===0).length;
+    filedAway.value=Boolean(data.filedAway);
     threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
     hasMore.value = data.hasMore;
@@ -386,22 +398,27 @@ function back() {
     );
 }
 async function mutate(action, extra = {}) {
-  if (busy.value || (action !== "label" && !(await save()))) return;
+  if (busy.value) return;
+  const epoch=viewEpoch, anchor=Number(route.query.emailId);
   busy.value = true;
   try {
-    const result = await conversationAction(action, [Number(route.query.emailId)], extra);
+    if ((action !== "label" && !(await save())) || epoch!==viewEpoch) return;
+    const result = await conversationAction(action, [anchor], extra);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
+    if (epoch!==viewEpoch) return;
     if (["delete","archive","inbox"].includes(action)) back();
     else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
-    else
+    else {
+      unreadCount.value=extra.unread===0?incoming.value:0;
       messages.value.forEach((message) => {
         message.unread = extra.unread ?? 1;
         if (store.detailMap[message.emailId])
           store.detailMap[message.emailId].unread = message.unread;
       });
+    }
   } catch (e) {
-    error.value = e.message || "Could not update conversation.";
+    if (epoch===viewEpoch) error.value = e.message || "Could not update conversation.";
   } finally {
     busy.value = false;
   }
@@ -431,7 +448,8 @@ async function deleted(message) {
 }
 function keydown(event) {
   if (
-    event.key === "Escape" &&
+    event.key === "Escape" && !event.defaultPrevented &&
+    ![...document.querySelectorAll(".el-popper,.el-dialog")].some(el=>el.getClientRects().length) &&
     !activeTarget.value &&
     !document.querySelector(".el-message-box,.tox-dialog") &&
     ![...document.querySelectorAll(".send:not(.inline)")].some(

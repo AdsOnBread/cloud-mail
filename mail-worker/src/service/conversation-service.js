@@ -1,3 +1,4 @@
+import { addMailFilters } from '../service/mail-search-filters';
 import { changeLabels } from './mailbox-labels';
 import { filedConversations, inboxMember } from './conversation-filing';
 import { ensureThreads } from '../mobile/threads';
@@ -55,6 +56,7 @@ export async function conversationList(c, p, userId) {
 		filters.push('e.account_id=?');
 		args.push(Number(p.accountId) || 0);
 	}
+	addMailFilters(p,filters,args);
 	if (p.q?.trim()) {
 		const term =
 			'%' +
@@ -80,7 +82,11 @@ export async function conversationList(c, p, userId) {
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id)`;
 	const bound = [userId, userId, ...args, userId];
-	const asc = Number(p.timeSort) === 1;
+	if (String(p.countOnly) === '1') {
+    const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM grouped WHERE unread_count>0`).bind(...bound).first();
+    return {unreadThreads:result.unreadThreads};
+  }
+  const asc = Number(p.timeSort) === 1;
 	const limit = limitOf(p.limit);
 	const chronological = ['inbox', 'sent', 'starred','all','label'].includes(p.folder);
 	// Older clients may submit a numeric cursor. The new opaque cursor also carries reminder time.
@@ -93,7 +99,7 @@ export async function conversationList(c, p, userId) {
 	const byTime = chronological && parts.length === 2 && Number.isFinite(Number(parts[0]));
 	const after = byTime ? `(${orderTime},g.last_email_id) ${comparison} (?,?)` : `g.last_email_id ${comparison} ?`;
 	const [count, page, nextWake] = await db.batch([
-		db.prepare(`${base} SELECT COUNT(*) total FROM grouped`).bind(...bound),
+		db.prepare(`${base} SELECT COUNT(*) total, COALESCE(SUM(unread_count>0),0) unread_threads FROM grouped`).bind(...bound),
 		db
 			.prepare(
 				`${base}, draft_times AS (
@@ -105,7 +111,7 @@ export async function conversationList(c, p, userId) {
         JOIN mailbox_label_members lm ON lm.email_id=tm.email_id AND lm.user_id=tm.user_id JOIN email member ON member.email_id=tm.email_id
         JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0
         WHERE tm.user_id=e.user_id AND tm.thread_id=g.thread_id AND member.is_del=0 AND member.trashed_at IS NULL AND member.status NOT IN (6,7)) label_ids,
-        sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
+        CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
       SUBSTR(COALESCE(e.text,''),1,180) preview FROM grouped g JOIN email e ON e.email_id=g.last_email_id JOIN email first ON first.email_id=g.first_email_id LEFT JOIN email sent ON sent.email_id=g.last_sent_id LEFT JOIN filed f ON f.thread_id=g.thread_id LEFT JOIN draft_times d ON d.thread_id=g.thread_id
       ${cursor ? 'WHERE ' + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
 			)
@@ -118,6 +124,7 @@ export async function conversationList(c, p, userId) {
 			const { sent_recipients, first_email_id, last_sent_id, ...summary } = row;
 			return { ...camel(summary), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
+		unreadThreads: count.results[0].unread_threads,
 		nextWakeAt: nextWake.results[0].wake,
 		total: count.results[0].total,
 		hasMore: page.results.length > limit,
@@ -153,9 +160,14 @@ export async function conversationMessages(c, p, userId) {
 	const [count, page, accounts, labels] = await db.batch([
 		db
 			.prepare(
-				`SELECT COUNT(*) total, MIN(e.email_id) first_id, e.subject FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id WHERE ${visible} AND m.thread_id=?`,
-			)
-			.bind(userId, threadId),
+				`WITH ${filedConversations} SELECT COUNT(*) total,
+        SUM(e.type=0) incoming, SUM(e.type=0 AND e.unread=0) unread_count,
+        CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,
+        MIN(e.email_id) first_id, e.subject FROM email e JOIN account a ON a.account_id=e.account_id
+        JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id
+        WHERE ${visible} AND m.thread_id=?`,
+            )
+            .bind(userId,userId,userId,threadId),
 		db
 			.prepare(
 				`SELECT e.email_id,e.user_id,e.account_id,e.send_email,e.name,e.subject,e.type,e.status,e.unread,e.create_time,e.recipient,e.cc,
@@ -176,6 +188,7 @@ export async function conversationMessages(c, p, userId) {
 	return {
 		threadId,
 		subject: count.results[0].subject,
+    unreadCount: count.results[0].unread_count, incoming: count.results[0].incoming, filedAway: Boolean(count.results[0].filed_away),
 		labelIds: labels.results.map(row=>row.label_id),
 		ownedAddresses: accounts.results.map((row) => row.email),
 		total: count.results[0].total,
