@@ -389,6 +389,7 @@ async function markImportance(message,important) {
   const current=()=>!disposed && revision===request && token && token===user.authenticatedToken && token===localStorage.getItem('token');
   if (!current()) return;
   const trigger=root.value?.querySelector(`[data-message-id="${message.emailId}"] .row-importance:focus`);
+  error.value="";
   busy.value=true;
   try {
     const result=await http.post(`/v1/messages/${message.emailId}/trash-importance`,{important},{headers:{Authorization:token}});

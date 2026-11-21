@@ -311,7 +311,7 @@ const api=createHTTPServer(async(req,res)=>{
    if(!row){res.writeHead(409);res.end(JSON.stringify({code:409,message:'This message is no longer in Trash.'}));return;}
    const {important}=JSON.parse(body);
    if(row.scheduledDraftId)cloudDrafts.get(row.scheduledDraftId).mailboxImportant=Number(important);
-   else importanceChoices.set(row.emailId,{revision:++importanceRevision,important});
+   else if(importanceChoices.get(row.emailId)?.important!==important)importanceChoices.set(row.emailId,{revision:++importanceRevision,important});
    data={importanceReason:important?'user':null};
  }
  else if(path==='/v1/messages/trash-read'){

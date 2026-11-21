@@ -428,7 +428,9 @@ describe('Recoverable Trash',()=>{
    await expect(mark(1,direct.email_id,1)).rejects.toMatchObject({code:400});
    await mark(1,direct.email_id,false);await mark(1,reply.email_id,true);
    expect((await list()).map(m=>m.importanceReason)).toEqual(['user',null]);
-   await mail.trash(c(),1,[reply.email_id],'restore');
+   // Repeating the older sibling's choice must not override the later mark.
+   await mark(1,direct.email_id,false);
+   await mail.trash(c(),1,[direct.email_id,reply.email_id],'restore');
    await expect(mark(1,reply.email_id,false)).rejects.toMatchObject({code:409});
    expect((await conversationList(c(),{folder:'important',accountId:1},1)).threads).toMatchObject([{importanceReason:'user'}]);
  });
