@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import {changeQuotedBody} from "../src/components/message-composer/response";
+import {plainMarkup} from "../src/components/message-composer/plain-text";
 import { quotedMessage } from "../src/components/message-composer/quoted-message";
 import { attachmentBlob } from "@/components/mail-attachments/content";
 
@@ -82,4 +84,22 @@ it("stops a canceled request before it reads attachments", async () => {
     quotedMessage(message, "forward", controller.signal, "session"),
   ).rejects.toMatchObject({ name: "AbortError" });
   expect(attachmentBlob).not.toHaveBeenCalled();
+});
+
+it.each([true,false])("keeps authored and quoted edits through a response switch in plain text %s", async plain=>{
+  const source={...message,attList:[],content:"<p>First line</p><p>Second line</p>"};
+  const reply=(await quotedMessage(source,"reply",signal,"session")).content;
+  const forward=(await quotedMessage(source,"forward",signal,"session")).content;
+  const edited="<p>Authored line</p>"+reply.replace("First line","Edited line");
+  const switched=changeQuotedBody(plain ? plainMarkup(edited).content : edited,forward,plain,"forward");
+  const back=changeQuotedBody(switched,reply,plain,"reply");
+  for (const body of [switched,back]) {
+    expect(body).toContain("Authored line");
+    expect(body).toContain("Edited line");
+    expect(body).toContain("Second line");
+    expect(body).not.toContain("First line");
+  }
+  expect(plainMarkup(switched).text).toContain("Edited line\nSecond line");
+  expect(plainMarkup(back).text).toContain("> Edited line\n> Second line");
+  expect(back).not.toContain("Forwarded message");
 });

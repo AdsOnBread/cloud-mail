@@ -30,8 +30,7 @@ const placement={modifiers:[{name:"offset",options:{offset:[0,0]}}]};
 :global(.response-menu .el-dropdown-menu) {min-width:180px;padding:6px 0;background:var(--mail-surface);}
 :global(.response-menu .el-dropdown-menu__item) {position:relative;height:32px;padding:6px 30px 6px 48px;color:var(--regular-text-color);font:14px/20px Arial,sans-serif;}
 :global(.response-menu .el-dropdown-menu__item svg) {position:absolute;left:16px;}
-:global(.response-menu .el-dropdown-menu__item--divided) {margin-top:13px;}
-:global(.response-menu .el-dropdown-menu__item--divided::before) {position:absolute;top:-7px;left:0;width:100%;height:1px;margin:0;background:var(--compose-divider);}
+:global(.response-menu .el-dropdown-menu__item--divided) {height:1px;margin:6px 0;border:0;background:var(--compose-divider);}
 :global(.response-menu .el-dropdown-menu__item:focus),:global(.response-menu .el-dropdown-menu__item:hover) {background:var(--mail-hover);color:var(--el-text-color-primary);}
 @media(forced-colors:active){:global(.response-menu.el-popper){border:1px solid ButtonText;}:global(.response-menu .el-dropdown-menu__item:focus){outline:2px solid Highlight;outline-offset:-2px;}}
 </style>

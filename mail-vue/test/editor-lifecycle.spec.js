@@ -160,12 +160,11 @@ it("folds quoted text without removing it from the message and toggles it indepe
   fake.initialize();
   expect(wrapper.classes()).toContain("hide-toolbar");
   expect(fake.ed.getContent()).toBe(html);
+  expect(fake.ed.dom.toggleClass).toHaveBeenLastCalledWith(expect.anything(),"hide-reply-quote",true);
   await wrapper.setProps({ showQuote: true });
-  expect(fake.ed.dom.toggleClass).toHaveBeenLastCalledWith(
-    expect.anything(),
-    "show-reply-quote",
-    true,
-  );
+  expect(fake.ed.dom.toggleClass).toHaveBeenLastCalledWith(expect.anything(),"hide-reply-quote",false);
+  await wrapper.setProps({ collapseQuote:false, showQuote:false });
+  expect(fake.ed.dom.toggleClass).toHaveBeenLastCalledWith(expect.anything(),"hide-reply-quote",false);
   await wrapper.setProps({ showToolbar: true });
   expect(wrapper.classes()).not.toContain("hide-toolbar");
   expect(fake.ed.getContent()).toBe(html);
