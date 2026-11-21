@@ -17,12 +17,12 @@
             @pointerdown.prevent @click="remove(index)"> <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button>
         </span>
       </template>
-      <input ref="input" :id="inputId" v-model="pending" role="combobox" aria-autocomplete="list"
-        :aria-expanded="!!options.length" :aria-controls="options.length ? listId : undefined"
+      <input ref="input" :id="inputId" v-model="pending" :role="editingName ? 'textbox' : 'combobox'" :aria-autocomplete="editingName ? undefined : 'list'"
+         :aria-expanded="editingName ? undefined : !!options.length" :aria-controls="options.length ? listId : undefined"
         :aria-activedescendant="options[active] ? listId+'-'+active : undefined"
-        :style="{order:editing ?? modelValue.length}" :aria-label="`${label} recipients`"
+        :style="{order:editing ?? modelValue.length}" :aria-label="editingName ? 'Name for '+modelValue[editing] : label+' recipients'"
         :aria-invalid="!!error" :aria-describedby="error ? `${inputId}-error` : undefined"
-        autocomplete="off" autocapitalize="off" spellcheck="false" @input="typing=true" @keydown="keydown" @blur="commit" @paste="paste" />
+        autocomplete="off" autocapitalize="off" spellcheck="false" @input="typing=!editingName" @keydown="keydown" @blur="commit" @paste="paste" />
     </div>
     <slot />
     <p v-if="error" :id="`${inputId}-error`" class="recipient-error" role="alert">{{ error }}</p>
@@ -40,10 +40,14 @@
         </div>
       </div>
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
-        class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @mousedown.prevent @focusout="leaveMenu">
-        <button type="button" role="menuitem" @click="clipboardAction(false)">Copy email address</button>
-        <button type="button" role="menuitem" @click="clipboardAction(true)">Cut</button>
-        <button type="button" role="menuitem" @click="edit(menuIndex)">Change email address <kbd>Shift+F</kbd></button>
+        class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @copy="clipboardEvent($event,menuIndex)" @cut="clipboardEvent($event,menuIndex)" @mousedown.prevent @focusout="leaveMenu">
+        <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'copy')">Copy <kbd>{{ modifier }}C</kbd></button>
+        <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'address')"><span>Copy “{{ modelValue[menuIndex] }}”</span><kbd>{{ alt }}C</kbd></button>
+        <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'cut')">Cut <kbd>{{ modifier }}X</kbd></button>
+        <hr />
+        <button v-if="isEmail(modelValue[menuIndex])" type="button" role="menuitem" @click="edit(menuIndex,true)">Change name <kbd>{{ shift }}E</kbd></button>
+        <button type="button" role="menuitem" @click="edit(menuIndex)">Change email address <kbd>{{ shift }}F</kbd></button>
+        <span v-if="clipboardError" class="clipboard-error" role="status">{{ clipboardError }}</span>
       </div>
     </Teleport>
   </div>
@@ -51,7 +55,8 @@
 <script setup>
 import { nextTick, ref, useId, watch } from 'vue';
 import {useRecipientSuggestions} from './suggestions';
-import { splitRecipients } from '@/utils/recipients.js';
+import {cleanRecipientName} from '../../../../shared/recipient-names';
+import { formatRecipient, parseRecipientList, splitRecipients } from '@/utils/recipients.js';
 import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
@@ -59,6 +64,10 @@ const props = defineProps({ modelValue: { type: Array, default: () => [] }, labe
 const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
+const editingName=ref(false), clipboardError=ref('');
+const apple=/Mac|iPhone|iPad/.test(navigator.platform);
+const modifier=apple?'⌘':'Ctrl+', alt=apple?'⌥':'Alt+', shift=apple?'⇧':'Shift+';
+let clipboardVersion=0;
 const inputId = `recipient-${useId()}`;
 function display(address) {
   const key = address.toLowerCase();
@@ -75,6 +84,9 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
   });
 function clear() {
   hideSuggestions();
+  clipboardVersion++;
+  clipboardError.value='';
+  editingName.value=false;
   pending.value = '';
   editing.value = null;
   menuIndex.value = null;
@@ -84,7 +96,16 @@ function clear() {
 function resolveInput(targetIndex) {
   hideSuggestions();
   const updated = [...props.modelValue];
-  const entered = splitRecipients(pending.value);
+  if (editingName.value) {
+    emit('choosePerson',{email:props.modelValue[editing.value],name:cleanRecipientName(pending.value)});
+    editingName.value=false;
+    editing.value=null;
+    pending.value='';
+    return {updated,index:targetIndex,changed:false};
+  }
+  const people = parseRecipientList(pending.value);
+  for (const person of people) if (person.name) emit('choosePerson',{email:person.address,name:person.name});
+  const entered = people.map(person=>person.address);
   const source = editing.value;
   const changed = entered.length > 0 || source !== null;
   if (changed) updated.splice(source ?? updated.length, source === null ? 0 : 1, ...entered);
@@ -106,11 +127,12 @@ function remove(targetIndex) {
   emit('update:modelValue', updated);
   nextTick(() => focusAt(index));
 }
-async function edit(index) {
+async function edit(index, name=false) {
   if (index === null) return;
   menuIndex.value = null;
+  editingName.value = name;
   editing.value = index;
-  pending.value = props.modelValue[index];
+  pending.value = name && display(props.modelValue[index])===props.modelValue[index] ? '' : name ? display(props.modelValue[index]) : props.modelValue[index];
   await nextTick();
   input.value?.focus();
   input.value?.select();
@@ -123,6 +145,11 @@ function keydown(event) {
     event.preventDefault(); event.stopPropagation(); clear();
     nextTick(() => focusAt(index)); return;
   }
+  if (editingName.value) {
+    if (event.key==='Enter') { event.preventDefault();commit(); }
+    if (event.key==='Tab') commit();
+    return;
+  }
   if (['Backspace','ArrowLeft'].includes(event.key) && !pending.value && editing.value === null && props.modelValue.length) {
     event.preventDefault(); focusAt(props.modelValue.length - 1); return;
   }
@@ -133,12 +160,14 @@ function keydown(event) {
   if (event.key === 'Tab') commit();
 }
 function chipKey(event,index) {
+  if (clipboardShortcut(event,index)) return;
   if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
   switch (event.key) {
     case 'Backspace': case 'Delete': remove(index); break;
     case 'ArrowLeft': focusAt(Math.max(0,index-1)); break;
     case 'ArrowRight': focusAt(index+1); break;
     case 'Escape': input.value?.focus(); break;
+    case 'E': case 'e': if (!event.shiftKey || !isEmail(props.modelValue[index])) return; edit(index,true); break;
     case 'F': case 'f': if (!event.shiftKey) return; edit(index); break;
     case 'Enter': case ' ': case 'ArrowDown': openMenu(index); break;
     default: return;
@@ -146,6 +175,7 @@ function chipKey(event,index) {
   event.preventDefault(); event.stopPropagation();
 }
 function paste(event) {
+  if (editingName.value) return;
   const text = event.clipboardData.getData('text');
   if (!/[,，;\n\r<>]/.test(text)) return;
   event.preventDefault();
@@ -153,25 +183,51 @@ function paste(event) {
   pending.value = pending.value.slice(0,selectionStart) + text + pending.value.slice(selectionEnd);
   commit();
 }
-function clipboardEvent(event,index) {
-  if (!event.clipboardData) return;
-  event.clipboardData.setData('text/plain', props.modelValue[index]);
-  event.preventDefault();
-  if (event.type === 'cut') remove(index);
+function copiedText(index,action) {
+  const address=props.modelValue[index];
+  return action==='address' ? address : formatRecipient(address,display(address));
 }
-async function clipboardAction(cut) {
-  const index = menuIndex.value, address = props.modelValue[index];
-  try { await navigator.clipboard.writeText(address); }
-  catch { if (menuIndex.value === index) await edit(index); return; }
-  if (menuIndex.value !== index || props.modelValue[index] !== address) return;
-  if (cut) remove(index);
-  else closeMenu(true);
+function clipboardEvent(event,index) {
+  if (!event.clipboardData || index===null) return;
+  event.clipboardData.setData('text/plain', copiedText(index,'copy'));
+  event.preventDefault();
+  if (event.type==='cut') remove(index);
+  else if (menuIndex.value!==null) closeMenu(true);
+}
+function clipboardShortcut(event,index) {
+  if (index===null || event.isComposing || event.shiftKey) return false;
+  const key=(event.code || '').replace(/^Key/,'').toLowerCase() || event.key.toLowerCase();
+  const standard=apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  const addressOnly=key==='c' && event.altKey && !event.ctrlKey && !event.metaKey;
+  if (!addressOnly && !(standard && !event.altKey && ['c','x'].includes(key))) return false;
+  // Let the browser's trusted copy/cut event populate its clipboard synchronously.
+  if (!addressOnly) return false;
+  event.preventDefault();event.stopPropagation();
+  clipboardAction(index,'address');return true;
+}
+async function clipboardAction(index,action) {
+  if (index===null) return;
+  const address=props.modelValue[index], source=menuIndex.value, version=++clipboardVersion;
+  const current=()=>version===clipboardVersion && props.modelValue[index]===address && menuIndex.value===source;
+  try { await navigator.clipboard.writeText(copiedText(index,action)); }
+  catch {
+    if (current()) {
+      if (source===null) await openMenu(index);
+      clipboardError.value='Clipboard unavailable. Use the keyboard to copy or cut this recipient.';
+    }
+    return;
+  }
+  if (!current()) return;
+  if (action==='cut') remove(index);
+  else if (source!==null) closeMenu(true);
 }
 function reposition() {
   const anchor = chip(menuIndex.value);
-  if (menu.value && anchor) menuStyle.value = positionMailboxPopup(menu.value,anchor,252);
+  if (menu.value && anchor) menuStyle.value = positionMailboxPopup(menu.value,anchor,Math.max(252,Math.min(480,menu.value.scrollWidth)));
 }
 async function openMenu(targetIndex) {
+  clipboardVersion++;clipboardError.value='';
+  menuStyle.value={};
   const {updated,index,changed} = resolveInput(targetIndex);
   if (changed) emit('update:modelValue', updated);
   menuIndex.value = index;
@@ -180,6 +236,7 @@ async function openMenu(targetIndex) {
   menu.value?.querySelector('button')?.focus({preventScroll:true});
 }
 function closeMenu(restore) {
+  clipboardVersion++;
   const index = menuIndex.value;
   menuIndex.value = null;
   if (restore && index !== null) focusAt(index);
@@ -188,6 +245,7 @@ function leaveMenu(event) {
   if (!menu.value?.contains(event.relatedTarget)) closeMenu(false);
 }
 function menuKey(event) {
+  if (clipboardShortcut(event,menuIndex.value)) return;
   const items = [...menu.value.querySelectorAll('button')];
   const index = items.indexOf(document.activeElement);
   if (event.key === 'Escape') closeMenu(true);
@@ -197,6 +255,7 @@ function menuKey(event) {
   }
   else if (event.key === 'ArrowDown') items[(index + 1) % items.length].focus();
   else if (event.key === 'ArrowUp') items[(index + items.length - 1) % items.length].focus();
+  else if (event.key.toLowerCase()==='e' && event.shiftKey && isEmail(props.modelValue[menuIndex.value])) edit(menuIndex.value,true);
   else if (event.key.toLowerCase() === 'f' && event.shiftKey) edit(menuIndex.value);
   else return;
   event.stopPropagation(); event.preventDefault();
@@ -235,6 +294,11 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .recipient-error { width:100%; font-size:12px; color:var(--el-color-danger); padding-left:40px; }
 .recipient-menu { position:fixed; z-index:10000; box-sizing:border-box; padding:8px 0; overflow:auto; border-radius:8px; background:var(--el-bg-color,#fff); color:var(--regular-text-color); box-shadow:0 2px 8px #0003,0 1px 3px #0002; }
 .recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 16px; height:34px; cursor:pointer; text-align:left; color:inherit; font:400 14px/20px Roboto,Arial,sans-serif; }
+.recipient-menu hr { margin:4px 0; border:0; border-top:1px solid var(--compose-divider,var(--light-border-color)); }
+.recipient-menu button { gap:16px; }
+.recipient-menu button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.recipient-menu kbd { flex:none; }
+.clipboard-error { display:block; padding:8px 16px; font-size:12px; }
 .recipient-menu button:hover,.recipient-menu button:focus-visible { background:var(--base-fill); outline:none; }
 .recipient-menu kbd { color:var(--placeholder-text-color); font:inherit; }
 .recipient-suggestions { position:fixed; z-index:2450; box-sizing:border-box; padding:4px 0; overflow:auto; overscroll-behavior:contain; border-radius:8px; background:var(--mail-surface,#fff); color:var(--el-text-color-primary); box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d; font:14px/20px Roboto,Arial,sans-serif; }

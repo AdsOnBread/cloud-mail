@@ -1255,7 +1255,11 @@ function attachUndo(cancel, session) {
   };
 }
 function rememberPerson({email,name}) {
-  if (name && name!==email) form.replyRecipientNames={...form.replyRecipientNames,[email.toLowerCase()]:name};
+  if (!email) return;
+  const names={...form.replyRecipientNames}, key=email.toLowerCase();
+  if (name && name.toLowerCase()!==key) names[key]=name;
+  else delete names[key];
+  form.replyRecipientNames=names;
 }
 function rememberRecipients(recent, accountId) {
   writerStore.rememberAddresses(userStore.user.email,accountId,recent);
