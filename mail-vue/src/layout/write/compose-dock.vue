@@ -74,6 +74,7 @@ const router = useRouter(), accounts = useAccountStore();
 const feedback = useMailFeedback(),
   user = useUserStore();
 const editors = new Map();
+const separateIdle = ref(false);
 const menuVersion = ref(0);
 const mailboxTitle = document.title;
 let serial = 0,
@@ -117,11 +118,15 @@ function position(item) {
     : {};
 }
 function update(item, state) {
+  const previousId = item.draftId;
   Object.assign(item, state);
-  if (props.separateWindow && state.draftId) {
+  if (props.separateWindow && (state.draftId || previousId)) {
     const saved = windowState(props.separateWindow);
-    if (saved.owner === user.user.email && saved.draftId !== state.draftId)
-      saveWindowState(props.separateWindow, {...saved, draftId:state.draftId});
+    if (saved.owner === user.user.email && saved.draftId !== state.draftId) {
+      notifyWindowDraft(props.separateWindow);
+      saveWindowState(props.separateWindow, {...saved, draftId:state.draftId || null});
+      notifyWindowDraft(props.separateWindow);
+    }
   }
   if (props.separateWindow && state.caption) document.title = state.caption + " - phooey! mail";
 }
@@ -135,7 +140,12 @@ function remove(item) {
     notifyWindowDraft(props.separateWindow);
     // Keep action feedback and Undo available in this window after sending,
     // scheduling or discarding. A plain save-and-close closes the window.
-    if (feedback.notice) { document.title = mailboxTitle; router.replace("/inbox"); }
+    if (feedback.notice) {
+      document.title = mailboxTitle;
+      separateIdle.value = true;
+      const state = windowState(props.separateWindow);
+      saveWindowState(props.separateWindow,{...state,draftId:null,idle:true});
+    }
     else window.close();
   }
   const owned = editors.get(item.key)?.ownsFocus();
@@ -195,6 +205,11 @@ async function launch(method, arg, extra) {
       await switchTo(existing.key);
       return;
     }
+  }
+  if (props.separateWindow && separateIdle.value) {
+    const state = windowState(props.separateWindow);
+    saveWindowState(props.separateWindow,{...state,idle:false,draftId:arg?.draftId || null});
+    separateIdle.value = false;
   }
   let item = windows.value.find((row) => !row.open);
   if (!item) {
@@ -291,7 +306,8 @@ onMounted(async () => {
   try {
     const state = windowState(id), session = draftSession();
     await checkWindowSession(state,session);
-    await restoreWindow(state,session.check);
+    separateIdle.value = Boolean(state.idle);
+    if (!separateIdle.value) await restoreWindow(state,session.check);
     await endpoint.opened();
   } catch (error) {
     endpoint.failed();
@@ -311,7 +327,7 @@ defineExpose({
   focusDraft,
   followDelivery,
   discardEditor,
-  modalOpen,
+  modalOpen, separateIdle,
 });
 </script>
 <style scoped>

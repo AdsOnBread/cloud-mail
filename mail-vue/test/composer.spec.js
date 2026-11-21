@@ -58,6 +58,10 @@ vi.mock("../src/services/cloud-drafts.js",()=>({
     });
     return {...data,draftId:id,attachments};
   },
+  discardDrafts:async ids=>{
+    for (const id of ids) { await db.value.draft.delete(id); await db.value.att.delete(id); }
+    return {dispose:async()=>{}};
+  },
   removeLocalDraft:async id=>{await db.value.draft.delete(id);await db.value.att.delete(id);},
   syncCloudDrafts:async()=>{},
   sendCloudDraft:async id=>{
@@ -236,6 +240,25 @@ describe("composer persistence and sending", () => {
     });
     expect(wrapper.get('[aria-label="Subject"]').element.value).toBe("Report");
     wrapper.unmount();
+  });
+  it("autosaves a separate window’s unfinished Bcc before native close", async () => {
+    const wrapper = composer({separateWindow:"test-window"});
+    try {
+      wrapper.vm.open();
+      await flushPromises();
+      await wrapper.findAll("button").find(button => button.text() === "Bcc").trigger("click");
+      const input = wrapper.get('[aria-label="Bcc recipients"]');
+      await input.setValue("Private Person <private@example.com>");
+      await vi.waitFor(() => expect([...state.drafts.values()][0]).toMatchObject({
+        cc:[], receiveEmail:[], bcc:["private@example.com"],
+        replyRecipientNames:{"private@example.com":"Private Person"},
+      }));
+      expect(input.element.value).toBe("Private Person <private@example.com>");
+      await input.setValue("");
+      await vi.waitFor(() => expect(state.drafts.size).toBe(0));
+      await input.setValue("new@example.com");
+      await vi.waitFor(() => expect([...state.drafts.values()][0]?.bcc).toEqual(["new@example.com"]));
+    } finally { wrapper.unmount(); }
   });
   it("saves a Bcc-only draft without requiring the Drafts screen to be mounted", async () => {
     const wrapper = composer();

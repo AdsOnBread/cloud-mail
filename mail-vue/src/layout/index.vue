@@ -3,7 +3,7 @@
     <header :inert="composeModal" v-show="!conversationWindow" class="mail-header"><Header /></header>
     <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="composeModal || (isMobile && !uiStore.asideShow)" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" :inert="composeModal" aria-label="Close navigation" @click="uiStore.asideShow = false" />
-    <main class="mail-main" :inert="composeModal"><Main v-if="!separateWindow" /></main>
+    <main class="mail-main" :inert="composeModal"><Main v-if="!separateWindow || writerRef?.separateIdle" /></main>
     <div v-if="sideAvailable" class="side-tools" :inert="composeModal">
       <SidePanel :key="user.authenticatedToken" v-model="contactsOpen" :account-id="sideAccountId"/>
     </div>
@@ -75,8 +75,9 @@ function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.lab
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
+const writerRef = ref();
 const separateWindow=computed(()=>route.name === "email" && typeof route.query.composeWindow === "string" ? route.query.composeWindow : "");
-const conversationWindow=computed(()=>!!separateWindow.value || route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
+const conversationWindow=computed(()=>(!!separateWindow.value && !writerRef.value?.separateIdle) || route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
 const wideEnough = ref(window.innerWidth >= 900);
 const sideAvailable = computed(()=>wideEnough.value && !conversationWindow.value);
 const contactsOpen = ref(false);
@@ -87,10 +88,10 @@ watch([sideAccountId, ()=>user.user.email, ()=>user.authenticatedToken,sideAvail
 },{flush:'sync'});
 const sessionEnded = ref(false);
 function checkSession(event) {
-  if ((!conversationWindow.value && !contactsOpen.value) || sessionEnded.value) return;
+  if ((!separateWindow.value && !conversationWindow.value && !contactsOpen.value) || sessionEnded.value) return;
   if (event?.type === "storage" && (event.storageArea !== localStorage || (event.key !== null && event.key !== "token"))) return;
   if (user.authenticatedToken && user.authenticatedToken === localStorage.getItem("token")) return;
-  if (!conversationWindow.value) {
+  if (!conversationWindow.value && !separateWindow.value) {
     contactsOpen.value=false;
     return;
   }
@@ -109,7 +110,7 @@ onBeforeUnmount(() => {
   for (const event of sessionEvents) window.removeEventListener(event, checkSession, true);
   document.removeEventListener("visibilitychange",checkSession);
 });
-const writerRef = ref();
+
 const composeModal=computed(()=>Boolean(writerRef.value?.modalOpen));
 const isMobile = ref(window.innerWidth < 768);
 let stopDraftSync, stopDraftList;

@@ -1151,8 +1151,18 @@ function persistDraft(options) {
   operation.then(() => { pendingWrites--; saveFailed=false; }, () => { pendingWrites--; saveFailed=true; });
   saveQueue=operation;return operation;
 }
-async function persistDraftNow(options) {
+async function persistDraftNow({autosave=false, ...options} = {}) {
   const draft = snapshot();
+  if (autosave && props.separateWindow && !hasDraftContent(draft)) {
+    if (!draft.draftId) return;
+    const recovery = await discardDrafts([draft.draftId], draft);
+    // The empty document remains editable. Later typing starts a fresh draft
+    // and cannot overwrite the cloud row queued for deletion.
+    for (const key of ["draftId","cloudDraftId","clientId","cloudVersion","editToken","starEditBase",
+      "sendAttemptId","sendFingerprint","localRevision","syncState","uploadIntent"]) delete form[key];
+    recovery.dispose().catch(() => {});
+    return;
+  }
   const { attachments, draftId, ...data } = draft;
   if (props.inline && form.sendType === "reply") data.inlineReply = true;
   data.createTime =
@@ -1181,7 +1191,7 @@ watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingF
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
-  const localSave=persistDraft().catch(()=>{form.syncState="offline";});
+  const localSave=persistDraft({autosave:true}).catch(()=>{form.syncState="offline";});
   cloudSaveTimer=setTimeout(async()=>{
     const draftId = (await localSave)?.draftId;
     if (!draftId || form.draftId !== draftId) return;
