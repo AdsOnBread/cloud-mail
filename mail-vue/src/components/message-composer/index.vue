@@ -2,6 +2,7 @@
   <div v-if="modal" class="compose-backdrop" aria-hidden="true" />
   <section
     @keydown="keydown"
+    @dragenter="dragFiles" @dragover="dragFiles" @dragleave="leaveFiles" @drop="dropFiles"
     ref="composeRoot"
     v-show="show"
     class="send"
@@ -10,6 +11,9 @@
     :aria-modal="modal || undefined"
     aria-label="Compose message"
   >
+    <div v-if="dragHint && !minimized" class="file-drop-hint" aria-hidden="true">
+      <Icon icon="material-symbols:upload-file-outline" width="36" /><span>{{ dragHint }}</span>
+    </div>
     <div class="write-box" :aria-busy="sending || preparing" :inert="preparing || undefined">
       <div v-if="inline" class="inline-reply-header">
         <button
@@ -168,7 +172,7 @@
           />
         </fieldset>
         <div
-          class="compose-editor" :inert="sending"
+          class="compose-editor" :inert="sending || attaching"
           :class="{
             'editor-disabled': sending,
             'formatting-open': inline && !form.plainText && showFormatting,
@@ -186,6 +190,8 @@
             ref="editor"
             @focus="focusBody"
             @compose-keydown="addressShortcut"
+            @file-drag="dragFiles($event, true)" @file-leave="dragHint = ''"
+            @file-drop="dropFiles($event, true)" @file-paste="pasteFiles"
             @change="change"
           />
         </div>
@@ -288,7 +294,7 @@
             :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
             :label-ids="form.labelIds" :read-star="readComposeStar"
             @labels="form.labelIds = $event" @star="chooseStar" @error="sendError=$event" @command="moreCommand"/>
-          <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
+          <input ref="photoInput" type="file" multiple :accept="photoTypes.join(',')" hidden @change="photoSelected" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
           }}</span>
@@ -358,6 +364,7 @@ import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
+import { hasFiles, transferFiles, photoTypes, planFiles } from "./files";
 import ComposeEmoji from "./emoji-picker.vue";
 import ComposeMore from "./more-options.vue";
 import { useMailLabels } from "@/store/mail-labels";
@@ -430,29 +437,63 @@ const editor = ref();
 const emojiPicker = ref();
 const photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
 const feedback=useMailFeedback();
-const photoTypes = ["image/png","image/jpeg","image/gif","image/webp","image/heic","image/avif"];
-async function insertPhoto(event) {
-  const input = event.target, file = input.files?.[0];
-  input.value = "";
-  if (!file) return;
-  attaching.value = true;
-  try {
-    if (!photoTypes.includes(file.type)) throw new Error("Choose a PNG, JPEG, GIF, WebP, HEIC or AVIF image.");
-    if (file.size === 0) throw new Error("This photo is empty.");
-    const content = editor.value?.getContent?.() ?? form.content ?? "";
-    const images = new DOMParser().parseFromString(content,"text/html").images;
-    if ([...images].filter(img=>/^(data:image|cid:)/.test(img.getAttribute("src") || "")).length >= 10)
-      throw new Error("A message can contain up to 10 inline photos.");
-    const bytes = new TextEncoder().encode(JSON.stringify({...form,attachments:[]})).length;
-    const files = form.attachments.reduce((sum,attachment)=>sum+(Number(attachment.size)||0),0);
-    if (bytes + files + 4*Math.ceil(file.size/3) + 256 > 5*1024*1024)
-      throw new Error("This photo would exceed the 5 MiB message limit.");
-    const data = await fileToBase64(file, true);
-    await editor.value?.ready();
-    editor.value?.insertPhoto(data, file.name);
-  } catch (e) { sendError.value = e.message || "Could not insert the photo."; }
-  finally { attaching.value = false; }
+const dragHint = ref("");
+const fileBusy = () => !show.value || minimized.value || preparing.value || sending.value || attaching.value;
+function dragFiles(event, body = false) {
+  if (!hasFiles(event.dataTransfer)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = fileBusy() ? "none" : "copy";
+  if (fileBusy()) return;
+  const items = Array.from(event.dataTransfer.items || []).filter(item => item.kind === "file");
+  dragHint.value = body && !form.plainText && items.length && items.every(item => photoTypes.includes(item.type))
+    ? "Drop photos here to insert inline" : "Drop files here";
 }
+function leaveFiles(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) dragHint.value = "";
+}
+function dropFiles(event, body = false) {
+  if (!hasFiles(event.dataTransfer)) return;
+  event.preventDefault();
+  dragHint.value = "";
+  if (fileBusy()) return;
+  try { addFiles(transferFiles(event.dataTransfer), body ? "auto" : "attachments"); }
+  catch (error) { sendError.value = error.message; }
+}
+function pasteFiles(event) {
+  if (fileBusy()) return;
+  try { addFiles(transferFiles(event.clipboardData), "auto"); }
+  catch (error) { sendError.value = error.message; }
+}
+function photoSelected(event) {
+  const files = Array.from(event.target.files);
+  event.target.value = "";
+  if (files.length) addFiles(files, "photos");
+}
+async function addFiles(files, mode) {
+  if (fileBusy() || !files.length) return false;
+  const owner = form.ownerEmail, generation = fileGeneration;
+  const current = () => mounted && show.value && owner === userStore.user.email && generation === fileGeneration;
+  attaching.value = true;
+  sendError.value = "";
+  try {
+    await editor.value?.ready();
+    if (!current()) return false;
+    const content = editor.value?.getContent() ?? form.content;
+    const plan = planFiles(files, mode, form, content);
+    const photos = await Promise.all(plan.photos.map(async file => ({ src: await fileToBase64(file, true), name: file.name })));
+    const attachments = await Promise.all(plan.attachments.map(async file => ({
+      filename: file.name, size: file.size, contentType: file.type || "application/octet-stream", content: await fileToBase64(file),
+    })));
+    if (!current()) return false;
+    if (photos.length) editor.value.insertPhotos(photos);
+    form.attachments.push(...attachments);
+    return true;
+  } catch (error) {
+    if (current()) sendError.value = error.message || "Could not add these files.";
+    return false;
+  } finally { attaching.value = false; }
+}
+let fileGeneration = 0;
 const toField = ref();
 const ccField = ref();
 const bccField = ref();
@@ -659,6 +700,8 @@ function startSignatureDefault(){
   })();
 }
 function resetForm() {
+  fileGeneration++;
+  dragHint.value = "";
   starChoice.value=null;
   missingRecipient.value = false;
   lastInput = null;
@@ -1126,30 +1169,7 @@ function chooseFile() {
   const input = document.createElement("input");
   input.type = "file";
   input.multiple = true;
-  input.onchange = async (event) => {
-    attaching.value = true;
-    try {
-      for (const file of event.target.files) {
-        if (form.attachments.length >= 10)
-          throw new Error("A message can have at most 10 attachments.");
-        if (file.size > 4 * 1024 * 1024)
-          throw new Error(
-            "This file is too large. The complete message must fit the 5 MiB sending limit.",
-          );
-        const content = await fileToBase64(file);
-        form.attachments.push({
-          content,
-          filename: file.name,
-          size: file.size,
-          contentType: file.type,
-        });
-      }
-    } catch (error) {
-      ElMessage.error(error.message);
-    } finally {
-      attaching.value = false;
-    }
-  };
+  input.onchange = () => addFiles(Array.from(input.files), "attachments");
   input.click();
 }
 function openContacts(field) {
@@ -1460,6 +1480,7 @@ defineExpose({
   padding-top: 8px;
   overflow: hidden;
 }
+.file-drop-hint {position:absolute;inset:8px;z-index:3;display:flex;gap:12px;align-items:center;justify-content:center;flex-direction:column;border:2px dashed var(--el-color-primary);border-radius:12px;background:color-mix(in srgb,var(--mail-surface) 94%,transparent);color:var(--el-color-primary);pointer-events:none;font-size:18px}
 .editor-disabled {
   pointer-events: none;
   opacity: 0.65;

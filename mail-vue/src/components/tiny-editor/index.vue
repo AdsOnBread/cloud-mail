@@ -25,6 +25,7 @@ import {
   shallowRef,
 } from "vue";
 import {replaceSignature,signatureId} from "../mail-signatures/content";
+import {hasFiles,hasRichSelection} from "../message-composer/files";
 import {plainBodyText, plainMarkup} from "../message-composer/plain-text";
 import {fonts, formattingShortcut} from "./format-options";
 import ComposeFormat from "./compose-format.vue";
@@ -44,7 +45,7 @@ defineExpose({
   setSignature,
   currentSignature: () => editor.value?.initialized ? signatureId(editor.value.getBody()) : "",
   insertEmoji,
-  insertPhoto,
+  insertPhotos,
   command,
 });
 
@@ -65,7 +66,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["change", "focus", "compose-keydown"]);
+const emit = defineEmits(["change", "focus", "compose-keydown", "file-drag", "file-leave", "file-drop", "file-paste"]);
 let pendingInit = Promise.resolve();
 let themeRevision = 0,
   disposed = false;
@@ -106,13 +107,18 @@ function command(name) {
   editor.value.focus();
   editor.value.execCommand(name);
 }
-function insertPhoto(data, name) {
+function insertPhotos(photos) {
   if (props.plainText || !isInitialized.value) return;
   const ed = editor.value;
   ed.focus();
-  const image = ed.getDoc().createElement("img");
-  image.src = data; image.alt = name; image.style.maxWidth = "100%";
-  ed.insertContent(image.outerHTML);
+  const html = photos.map(photo => {
+    const image = ed.getDoc().createElement("img");
+    image.src = photo.src;
+    image.alt = photo.name;
+    image.style.maxWidth = "100%";
+    return image.outerHTML;
+  }).join("");
+  ed.insertContent(html);
   ed.dispatch("change");
 }
 const isInitialized = ref(false);
@@ -196,6 +202,35 @@ async function initTinyMCE() {
   return initEditor();
 }
 
+function observeFileTransfers(ed) {
+  const doc = ed.getDoc();
+  const handle = event => {
+    const transfer = event.clipboardData || event.dataTransfer;
+    if (!hasFiles(transfer)) return;
+    if (event.type === "paste" && hasRichSelection(transfer)) return;
+    if (event.type === "dragleave") {
+      if (!doc.body.contains(event.relatedTarget)) emit("file-leave");
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.type === "drop") {
+      const { clientX: x, clientY: y } = event;
+      const position = doc.caretPositionFromPoint?.(x, y);
+      const range = position ? doc.createRange() : doc.caretRangeFromPoint?.(x, y);
+      if (position) { range.setStart(position.offsetNode, position.offset); range.collapse(true); }
+      if (range && doc.body.contains(range.startContainer)) ed.selection.setRng(range);
+      emit("file-drop", event);
+    } else if (event.type === "paste") emit("file-paste", event);
+    else emit("file-drag", event);
+  };
+  const events = ["dragenter", "dragover", "dragleave", "drop", "paste"];
+  for (const type of events) doc.addEventListener(type, handle, true);
+  ed.on("remove", () => {
+    for (const type of events) doc.removeEventListener(type, handle, true);
+  });
+}
+
 function initEditor(initialContent) {
   pendingInit = window.tinymce.init({
     selector: `#${props.editorId}`,
@@ -264,6 +299,7 @@ function initEditor(initialContent) {
       const messageText = () => props.plainText ? plainBodyText(ed.getBody()) : ed.getContent({format:"text"});
       ed.on("init", () => {
         if (disposed) return;
+        if (props.mailCompose) observeFileTransfers(ed);
         if (props.plainText) ed.getBody().setAttribute("contenteditable","plaintext-only");
         writeContent(ed, initialContent ?? props.defValue);
         if (props.collapseQuote)
