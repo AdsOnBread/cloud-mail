@@ -137,7 +137,7 @@ const api=createHTTPServer(async(req,res)=>{
      if(p.folder==='archived' && state!==null)continue;
      if(p.folder==='snoozed' && !(state>now))continue;
      const matches=members.some(row=>{
-       if(!matchesFilters(row,p))return false;
+       if(!matchesFilters(row,{...p,hasAttachment:false}) || (p.hasAttachment && !members.some(member=>member.attList?.length)))return false;
        if(p.folder==='label' && !membership.get(row.emailId)?.has(Number(p.labelId)))return false;
        if(p.folder!=='starred' && p.allReceive!=='1' && row.accountId!==Number(p.accountId))return false;
        if(p.folder==='starred' && !row.isStar || p.folder==='sent' && row.type!==1)return false;

@@ -31,7 +31,17 @@ async function load(){
   try{
     const data=await http.get('/v1/attachments/'+props.file.attId+'/content',{responseType:'blob',signal:controller.signal,noMsg:true});
     if(controller.signal.aborted)return;
-    const mime=data.type.split(';')[0].toLowerCase(), name=props.file.filename;
+    let mime=data.type.split(';')[0].toLowerCase();
+    const name=props.file.filename;
+    if(!mime || mime==='application/octet-stream'){
+      const bytes=new Uint8Array(await data.slice(0,12).arrayBuffer());
+      if(controller.signal.aborted)return;
+      const prefix=String.fromCharCode(...bytes);
+      if(bytes[0]===0xff && bytes[1]===0xd8 && bytes[2]===0xff)mime='image/jpeg';
+      else if(prefix.startsWith('\x89PNG\r\n\x1a\n'))mime='image/png';
+      else if(/^GIF8[79]a/.test(prefix))mime='image/gif';
+      else if(prefix.startsWith('RIFF') && prefix.slice(8)==='WEBP')mime='image/webp';
+    }
     if(/^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(mime))kind.value='image';
     else if(mime==='application/pdf' || /\.pdf$/i.test(name))kind.value='pdf';
     else if(mime.startsWith('text/') || ['application/json','application/xml'].includes(mime) || /\.(txt|csv|md|log)$/i.test(name)){
@@ -41,7 +51,7 @@ async function load(){
       kind.value='text';
     }
     blob.value=data;
-    objectURL.value=URL.createObjectURL(data);
+    if(kind.value==='image')objectURL.value=URL.createObjectURL(data.slice(0,data.size,mime));
   }catch{if(!controller.signal.aborted)error.value='Could not load attachment.';}
 }
 function download(){

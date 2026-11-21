@@ -82,7 +82,7 @@ export async function conversationList(c, p, userId) {
 		filters.push('e.account_id=?');
 		args.push(Number(p.accountId) || 0);
 	}
-	addMailFilters(p,filters,args);
+	addMailFilters(p,filters,args,{conversation:true});
 	if (p.q?.trim()) {
 		const term =
 			'%' +
