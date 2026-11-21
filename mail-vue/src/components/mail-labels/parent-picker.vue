@@ -46,6 +46,7 @@ function focusOpenedList() {
 }
 async function show(index = props.labels.findIndex(label => label.id === props.modelValue) + 1) {
   requestedRow = index;
+  trigger.value?.focus({ preventScroll: true });
   open.value = true;
   await nextTick();
   focusOpenedList();
