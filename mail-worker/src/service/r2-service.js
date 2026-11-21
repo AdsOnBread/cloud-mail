@@ -48,7 +48,14 @@ const r2Service = {
 		}
 
 		if (storageType === 'R2') {
-			return await c.env.r2.get(key, prefixBytes ? {range:{offset:0,length:prefixBytes}} : undefined);
+			if (!prefixBytes) return c.env.r2.get(key);
+      try {
+        return await c.env.r2.get(key,{range:{offset:0,length:prefixBytes}});
+      } catch(error) {
+        // An empty object has no satisfiable byte range.
+        if ((await c.env.r2.head(key))?.size===0) return new Response(new Uint8Array());
+        throw error;
+      }
 		}
 
 		if (storageType === 'S3') {

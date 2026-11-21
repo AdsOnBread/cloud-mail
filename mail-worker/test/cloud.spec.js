@@ -81,6 +81,17 @@ describe('Cloud drafts',()=>{
      await expect(get(2,true)).rejects.toMatchObject({code:404});
    }
  });
+ it('reads small and empty thumbnail samples from R2 and KV',async()=>{
+   const {default:storage}=await import('../src/service/r2-service');
+   const {default:kv}=await import('../src/service/kv-obj-service');
+   for (const store of [storage,kv]) {
+     for (const content of ['', 'abc', 'z'.repeat(2048)]) {
+       await store.putObj(c(),'attachments/sample',new TextEncoder().encode(content),{contentType:'text/plain'});
+       const sample=await store.getObj(c(),'attachments/sample',1024);
+       expect(await new Response(sample.body || sample).text()).toBe(content.slice(0,1024));
+     }
+   }
+ });
  it('allows only one concurrent draft writer',async()=>{
    const d=await draft();const edits=await Promise.allSettled(['A','B'].map(subject=>drafts.save(c(),1,{version:d.version,subject},d.draftId)));
    expect(edits.filter(e=>e.status==='fulfilled')).toHaveLength(1);

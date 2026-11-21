@@ -49,7 +49,7 @@ async function thumbnail(signal){
 onMounted(()=>{
   const file=props.file;
   const canSampleText=kind.value==="text" && (file.attId || file.attachmentId);
-  if (!window.IntersectionObserver || (!canSampleText && (file.size==null || file.size>(kind.value==="text" ? 16384 : 5*1024*1024))) ||
+  if (file.size===0 || !window.IntersectionObserver || (!canSampleText && (file.size==null || file.size>(kind.value==="text" ? 16384 : 5*1024*1024))) ||
       (kind.value==="other" && !/\.(png|jpe?g|gif|webp|bmp)$/i.test(filename.value))) return;
   observer=new IntersectionObserver(entries=>{
     if (entries.at(-1)?.isIntersecting) {

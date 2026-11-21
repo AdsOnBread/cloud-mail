@@ -98,12 +98,13 @@ const api=createHTTPServer(async(req,res)=>{
  if(path==='/v1/attachments/501/content'||path==='/v1/attachments/502/content'){
    const text=path.includes('/501/');
    res.writeHead(200,{'Content-Type':text?'text/plain':'image/png'});
-   res.end(text?fixtureText:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jnt8AAAAASUVORK5CYII=','base64'));return;
+   res.end(text?(url.searchParams.get('preview')==='text' ? fixtureText.slice(0,1024) : fixtureText):Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jnt8AAAAASUVORK5CYII=','base64'));return;
  }
  if(path.startsWith('/v1/drafts/attachments/')){
    const id=path.split('/')[4],file=[...cloudDrafts.values()].flatMap(d=>d.attachments).find(f=>f.attachmentId===id);
    if(!file){res.writeHead(404);res.end();return;}
-   res.setHeader('Content-Type',file.mimeType||'application/octet-stream');res.end(Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64'));return;
+   res.setHeader('Content-Type',file.mimeType||'application/octet-stream');const bytes=Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64');
+   res.end(url.searchParams.get('preview')==='text' ? bytes.subarray(0,1024) : bytes);return;
  }
  if(path==='/v1/system-labels')data=systemLabels;
  else if(path.startsWith('/v1/system-labels/') && req.method==='PUT'){

@@ -78,11 +78,16 @@ const s3Service = {
 	async getObj(c, key, prefixBytes) {
 		const client = await this.client(c);
 		const { bucket } = await settingService.query(c);
-		const result = await client.send(new GetObjectCommand({
-			Bucket: bucket,
-			Key: key,
-			...(prefixBytes ? {Range: "bytes=0-"+(prefixBytes-1)} : {})
-		}));
+		let result;
+    try {
+      result = await client.send(new GetObjectCommand({
+        Bucket: bucket, Key: key,
+        ...(prefixBytes ? {Range: "bytes=0-"+(prefixBytes-1)} : {})
+      }));
+    } catch(error) {
+      if (prefixBytes && error.$metadata?.httpStatusCode===416) return new Response(new Uint8Array());
+      throw error;
+    }
 
 		return new Response(result.Body, {
 			headers: {
