@@ -100,7 +100,7 @@ import { useMailFeedback } from "@/store/mail-feedback";
 import {useUiStore} from "@/store/ui";
 import { userDraftStore } from "@/store/draft";
 import { useMailSearchStore } from "@/store/mail-search";
-import { discardDrafts, syncCloudDrafts } from "@/services/cloud-drafts";
+import { draftSession, discardDrafts, syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
@@ -176,9 +176,9 @@ async function discard(ids) {
   try {
     error.value = "";
     const current = [...ids];
-    if (ui.writerRef && !await ui.writerRef.closeSelectedDraft(current))
-      throw new Error("Finish editing the open draft before discarding it.");
-    feedback.dismissedDrafts(await discardDrafts(current));
+    const session = draftSession();
+    if (await ui.writerRef?.discardEditor(current, session)) return;
+    feedback.dismissedDrafts(await discardDrafts(current, undefined, session));
   } catch (e) {
     error.value = e.message || "Could not discard draft.";
   } finally {

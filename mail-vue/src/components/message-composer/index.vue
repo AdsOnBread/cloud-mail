@@ -354,7 +354,7 @@
   </section>
 </template>
 <script setup>
-import { discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
+import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
@@ -811,17 +811,17 @@ function snapshot() {
   return restoreDraft(toRaw(form));
 }
 let saveQueue=Promise.resolve();
-function persistDraft() {
-  const operation=saveQueue.catch(()=>{}).then(persistDraftNow);
+function persistDraft(options) {
+  const operation=saveQueue.catch(()=>{}).then(() => persistDraftNow(options));
   saveQueue=operation;return operation;
 }
-async function persistDraftNow() {
+async function persistDraftNow(options) {
   const draft = snapshot();
   const { attachments, draftId, ...data } = draft;
   if (props.inline && form.sendType === "reply") data.inlineReply = true;
   data.createTime =
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
-  const saved=await saveLocalDraft({...data,draftId,attachments});
+  const saved=await saveLocalDraft({...data,draftId,attachments}, options);
   Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
   return saved;
 }
@@ -876,7 +876,14 @@ async function close() {
 }
 let mounted = true;
 async function discard() {
-  if (!show.value || preparing.value || sending.value || attaching.value) return;
+  try { await discardEditor(); }
+  catch (error) { sendError.value = error.message || "Could not discard this draft."; }
+}
+async function discardEditor(selected, session = draftSession()) {
+  if (selected && (!show.value || !selected.includes(form.draftId))) return false;
+  if (!show.value || preparing.value || sending.value || attaching.value)
+    throw new Error("Finish the current action before discarding.");
+  session.check();
   preparing.value = true;
   try {
     clearTimeout(cloudSaveTimer);
@@ -884,29 +891,27 @@ async function discard() {
     commitRecipients();
     await pendingDefault;
     await saveQueue.catch(() => {});
+    session.check();
     const changed = draftFingerprint(form) !== baseline && draftFingerprint(form) !== automaticBaseline;
-    if ((form.draftId && (!restoredUntouched || changed)) || (!form.draftId && changed && hasDraftContent(form))) await persistDraft();
+    if ((form.draftId && (!restoredUntouched || changed)) || (!form.draftId && changed && hasDraftContent(form))) await persistDraft({requireCurrent:true, session});
     if (form.draftId) {
-      const recovery = await discardDrafts([form.draftId]);
-      feedback.dismissedDrafts(recovery, async ([id]) => {
+      const recovery = await discardDrafts(selected || [form.draftId], {draftId:form.draftId, editToken:form.editToken, cloudVersion:form.cloudVersion, localRevision:form.localRevision}, session);
+      feedback.dismissedDrafts(recovery, selected ? undefined : async ([id]) => {
         if (!mounted || props.inline || show.value || preparing.value) return;
         const {readSavedDraft} = await import("@/services/draft-list");
+        session.check();
         const draft = await readSavedDraft(id);
+        session.check();
         if (mounted && !show.value && !preparing.value) await openDraft(draft);
       });
     }
     show.value = false;
     resetForm();
     emit("closed");
-  } catch (error) {
-    sendError.value = error.message || "Could not discard the saved draft. Please try again.";
+    return true;
   } finally {
     preparing.value = false;
   }
-}
-async function closeSelectedDraft(ids) {
-  if (!show.value || !ids.includes(form.draftId)) return true;
-  return saveAndClose();
 }
 function validForSend() {
   if (sending.value || attaching.value) return false;
@@ -1142,7 +1147,7 @@ onUnmounted(() => {
   document.removeEventListener("focusin", containFocus);
 });
 defineExpose({
-  closeSelectedDraft,
+  discardEditor,
   open,
   openDraft,
   openReply,

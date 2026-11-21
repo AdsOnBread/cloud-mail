@@ -16,13 +16,15 @@ vi.mock('../src/db/db',()=>{
    }})])),
  };
  const table=(rows,key)=>({get:async id=>structuredClone(rows.get(id)),toArray:async()=>structuredClone([...rows.values()]),put:async row=>{rows.set(row[key],structuredClone(row));return row[key];},add:async row=>{const id=state.next++;rows.set(id,structuredClone({...row,[key]:id}));return id;},delete:async id=>rows.delete(id)});
- return {default:{value:{discardUndo,draft:table(state.rows,'draftId'),att:table(state.files,'draftId'),meta:table(state.meta,'key'),transaction:async(...args)=>args.at(-1)()}}};
+ return {default:{value:{name:'writer@example.net',discardUndo,draft:table(state.rows,'draftId'),att:table(state.files,'draftId'),meta:table(state.meta,'key'),transaction:async(...args)=>args.at(-1)()}}};
 });
 vi.mock('../src/axios',()=>({default:{get:vi.fn(),post:vi.fn(),put:vi.fn(),delete:vi.fn()}}));
 function event(remote){state.events.push({seq:state.events.length+1,draftId:remote.draftId,operation:'upsert',draft:structuredClone(remote)});}
 const input=extra=>({accountId:1,subject:'Draft',content:'<p>Hello</p>',text:'Hello',receiveEmail:['person@example.net'],cc:[],bcc:[],attachments:[],...extra});
 beforeEach(()=>{
- setActivePinia(createPinia());for(const map of [state.rows,state.files,state.meta,state.remote,state.attempts])map.clear();state.events=[];state.next=1;state.cloudNext=1;
+ setActivePinia(createPinia());
+ const user=useUserStore();user.user.email='writer@example.net';user.authenticatedToken='test-session';localStorage.setItem('token','test-session');
+ for(const map of [state.rows,state.files,state.meta,state.remote,state.attempts])map.clear();state.events=[];state.next=1;state.cloudNext=1;
  Object.defineProperty(navigator,'onLine',{value:true,configurable:true});vi.resetAllMocks();
  http.get.mockImplementation(async(path,options)=>{
   if(path==='/v1/drafts/changes'){const after=options.params.after;return {changes:state.events.filter(e=>e.seq>after),cursor:state.events.at(-1)?.seq||after,hasMore:false};}
