@@ -1,5 +1,5 @@
 // Draft HTML keeps the signature and quote boundaries so either editor can reopen it.
-const blocks = new Set(['ADDRESS','ARTICLE','BLOCKQUOTE','DIV','H1','H2','H3','H4','H5','H6','LI','OL','P','PRE','SECTION','TABLE','TR','UL']);
+const blocks = new Set(['ADDRESS','ARTICLE','BLOCKQUOTE','DIV','H1','H2','H3','H4','H5','H6','LI','OL','P','PRE','SECTION','TABLE','TBODY','THEAD','TFOOT','TR','UL']);
 const skip = new Set(['HEAD','SCRIPT','STYLE','TEMPLATE','NOSCRIPT','SVG','IFRAME','OBJECT']);
 const escape = value => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
@@ -7,6 +7,7 @@ function inlineText(node) {
   if(node.nodeType===3)return node.data.replace(/\u00a0/g,' ');
   if(node.nodeType!==1 || skip.has(node.tagName) || node.hasAttribute('data-mce-bogus'))return '';
   if(node.tagName==='BR')return '\n';
+  if(node.tagName==='TR')return Array.from(node.children).filter(cell=>cell.tagName==='TH' || cell.tagName==='TD').map(plainBodyText).join('\t');
   if(node.tagName==='IMG')return node.getAttribute('alt') || '';
   const value=plainBodyText(node);
   if(node.tagName==='A'){
@@ -38,7 +39,9 @@ export function plainBodyText(root) {
 }
 
 export function plainMarkup(html) {
-  const doc=new DOMParser().parseFromString(html || '', 'text/html');
+  const template=document.createElement('template');
+  template.innerHTML=html || '';
+  const doc=template.content.ownerDocument;
   const out=doc.createElement('div'), group=doc.createElement('div');
   function append(source,kind){
     const value=plainBodyText(source);
@@ -55,7 +58,7 @@ export function plainMarkup(html) {
       dest.append(paragraph);
     }
   }
-  for(const node of [...doc.body.childNodes]){
+  for(const node of [...template.content.childNodes]){
     const kind=['cloudmail-signature','cloudmail-reply-quote'].find(name=>node.classList?.contains(name));
     if(kind){append(group);group.replaceChildren();append(node,kind);}
     else if(node.nodeType!==3 || node.data.trim() || !node.data.includes('\n'))group.append(node);

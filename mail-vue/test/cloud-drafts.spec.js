@@ -46,6 +46,19 @@ describe('Cloud draft synchronization',()=>{
   expect([...state.rows.values()]).toMatchObject([{draftId:row.draftId,cloudVersion:2,dirty:false,plainText:true}]);
   expect(state.remote.size).toBe(1);
  });
+ it('recognizes an acknowledged inline photo after the server rewrites it as a CID attachment',async()=>{
+  const row=await saveLocalDraft(input());
+  await syncCloudDrafts();
+  const image='data:image/png;base64,eA==';
+  const local=await saveLocalDraft({...await db.value.draft.get(row.draftId),content:'<div><img src="'+image+'"></div>',attachments:[]});
+  const remote=state.remote.get(local.cloudDraftId);
+  Object.assign(remote,{version:2,ui:{editToken:local.editToken},content:'<div><img src="cid:photo"></div>',
+    attachments:[{filename:'photo.png',attachmentId:37,mimeType:'image/png',contentId:'photo'}]});
+  const get=http.get.getMockImplementation();
+  http.get.mockImplementation((path,...args)=>path.includes('/attachments/37/') ? Promise.resolve(new Blob(['x'],{type:'image/png'})) : get(path,...args));
+  expect((await syncCloudDrafts()).conflicts).toEqual({});
+  expect([...state.rows.values()]).toMatchObject([{draftId:row.draftId,cloudVersion:2,dirty:false}]);
+ });
  it('preserves both versions on conflict and points the editor at its saved copy',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const local=await db.value.draft.get(row.draftId),remote=state.remote.get(local.cloudDraftId);remote.subject='Edited on iOS';remote.version++;event(remote);
   await saveLocalDraft({...local,subject:'My browser edits',attachments:[]});const result=await syncCloudDrafts();

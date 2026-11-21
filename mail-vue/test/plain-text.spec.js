@@ -13,3 +13,8 @@ it('preserves deliberate blank lines, literal markup and the editable signature'
  expect(converted.content).toContain('data-signature-id="work"');
  expect(plainMarkup(converted.content)).toEqual(converted);
 });
+
+it('preserves distinct cells and rows when converting a pasted table',()=>{
+  const result=plainMarkup('<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>10</td><td>20</td></tr></tbody></table>');
+  expect(result.text).toBe('A\tB\n10\t20');
+});

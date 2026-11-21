@@ -15,6 +15,15 @@ function sessionAPI(database) {
 const locks=new WeakMap();
 const apiError=e=>e.response?.data||e;
 const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
+// The server stores pasted photos as CID attachments. Compare the restored image
+// in the HTML once, while retaining separately attached files in the comparison.
+function savedFingerprint(row) {
+  const template=document.createElement('template');
+  template.innerHTML=row.content || '';
+  const photos=new Set(Array.from(template.content.querySelectorAll('img[src]'), image=>image.getAttribute('src')));
+  const attachments=(row.attachments || []).filter(file=>!file.contentId || !photos.has(file.content));
+  return fingerprint({...row, content:template.innerHTML, attachments});
+}
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
 const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','hasFiles','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
@@ -113,7 +122,7 @@ async function push(database,row,api) {
         // then receives a conflict containing the exact revision this browser wrote.
         if (other && row.editToken && other.editToken === row.editToken &&
             other.cloudDraftId === row.cloudDraftId && other.cloudVersion === row.cloudVersion + 1 &&
-            other.name === value.name && fingerprint(other) === fingerprint(value)) {
+            (other.name || '') === (value.name || '') && savedFingerprint(other) === savedFingerprint(value)) {
           const acknowledged = current.editToken === row.editToken;
           await database.draft.put({...current, cloudVersion:other.cloudVersion, dirty:!acknowledged,
             syncState:acknowledged ? (current.conflictCopy ? 'conflict' : 'saved') : 'saving'});
