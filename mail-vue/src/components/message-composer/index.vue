@@ -380,7 +380,6 @@
 </template>
 <script setup>
 import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft, cancelScheduledReceipt } from "@/services/cloud-drafts";
-import {lockComposeBackground} from '@/layout/write/compose-modal';
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
@@ -1460,16 +1459,10 @@ function keydown(event) {
   event.preventDefault();
   close();
 }
-let previousFocus,unlockBackground;
-function releaseModal(){
-  unlockBackground?.();
-  unlockBackground=undefined;
-}
+let previousFocus;
 watch(modal,async active=>{
-  releaseModal();
   if(active){
     previousFocus=document.activeElement;
-    unlockBackground=lockComposeBackground();
     await nextTick();
     if(modal.value && props.dockActive && !restoreFocus) composeRoot.value?.querySelector("button")?.focus();
     return;
@@ -1510,7 +1503,6 @@ onUnmounted(() => {
   stopStarActions?.();
   mounted = false;
   clearTimeout(cloudSaveTimer);
-  releaseModal();
   window.removeEventListener("keydown", keydown);
   window.removeEventListener("resize", resize);
   document.removeEventListener("focusin", containFocus);

@@ -31,6 +31,8 @@ function empty(){return {key:++serial,used:0,open:false,minimized:false,expanded
 const windows=ref([empty()]),active=ref(windows.value[0].key),viewport=ref(window.innerWidth);
 const occupied=computed(()=>windows.value.filter(item=>item.open));
 const layout=computed(()=>dockLayout(occupied.value,viewport.value,active.value));
+const modalOpen=computed(()=>viewport.value>=768 && occupied.value.some(item=>
+  item.key===active.value && item.expanded && !item.minimized));
 const hidden=computed(()=>occupied.value.filter(item=>!layout.value.positions.has(item.key)));
 function remember(key,node){if(node) editors.set(key,node);else editors.delete(key);}
 function position(item){
@@ -120,7 +122,7 @@ function resize(){viewport.value=window.innerWidth;}
 onMounted(()=>window.addEventListener('resize',resize));
 onBeforeUnmount(()=>window.removeEventListener('resize',resize));
 defineExpose({open:()=>launch('open'),openReply:email=>launch('openReply',email),openReplyAll:email=>launch('openReplyAll',email),
-  openForward:email=>launch('openForward',email),openDraft:draft=>launch('openDraft',draft),focusDraft,followDelivery,discardEditor});
+  openForward:email=>launch('openForward',email),openDraft:draft=>launch('openDraft',draft),focusDraft,followDelivery,discardEditor,modalOpen});
 </script>
 <style scoped>
 .writer-slot{display:contents}
