@@ -54,3 +54,17 @@ it('keeps each recovered Undo available before resolving the next pending operat
   }
   expect(http.post).toHaveBeenCalledTimes(6);
 });
+
+it('reconciles in a new session while the original response is still in flight',async()=>{
+  let finish;
+  http.post.mockImplementationOnce((_path,op)=>new Promise(resolve=>{finish=()=>resolve({edit:op.edit,count:2});}));
+  const first=deleteScheduled(rows);
+  const user=useUserStore();user.authenticatedToken='new-session';localStorage.setItem('token','new-session');
+  http.post.mockImplementationOnce(async(_path,op)=>({edit:op.edit,count:2}));
+  await retryPendingTrash();
+  const edit=http.post.mock.calls[0][1].edit;
+  expect(http.post.mock.calls[1][1].edit).toBe(edit);
+  expect(useMailFeedback().notice.scheduledTrash).toBe(edit);
+  finish();expect(await first).toBe(false);
+  expect(useMailFeedback().notice.scheduledTrash).toBe(edit);
+});

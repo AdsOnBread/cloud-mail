@@ -17,7 +17,8 @@ function forget(key,edit) {
 }
 
 function confirmTrash(context,op) {
-  if (requests.has(op.edit)) return requests.get(op.edit);
+  const requestKey=JSON.stringify([context.owner,context.token,op.edit]);
+  if (requests.has(requestKey)) return requests.get(requestKey);
   const feedback=useMailFeedback(), drafts=userDraftStore();
   const task=(async()=>{
     let receipt;
@@ -26,7 +27,7 @@ function confirmTrash(context,op) {
     } catch(e) {
       const status=Number(e.response?.status || e.code);
       if (status>=400 && status<500 && ![401,408,429].includes(status)) {
-        forget(context.key,op.edit);
+        if (context.current()) forget(context.key,op.edit);
         throw e;
       }
       if (context.current()) {
@@ -54,8 +55,8 @@ function confirmTrash(context,op) {
       }
     };
     return true;
-  })().finally(()=>requests.delete(op.edit));
-  requests.set(op.edit,task);
+  })().finally(()=>requests.delete(requestKey));
+  requests.set(requestKey,task);
   return task;
 }
 export async function deleteScheduled(rows) {
