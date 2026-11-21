@@ -38,6 +38,10 @@ it('keeps saved contacts with the sending mailbox and includes their names in au
   expect(await readContact(c(),1,person)).toBeNull();
   expect(await mail.searchPeople(c(),1,search)).toEqual([]);
   await setContact(c(),1,person);
+  await setContact(c(),1,{...person,accountId:3});
+  await env.db.prepare('DELETE FROM account WHERE account_id=3').run();
+  expect(await env.db.prepare('SELECT email FROM mailbox_contacts WHERE account_id=3').first()).toBeNull();
+  expect(await readContact(c(),1,person)).toBeTruthy();
   await drafts.deleteUserData(c(),[1]);
   expect(await readContact(c(),1,person)).toBeNull();
 });

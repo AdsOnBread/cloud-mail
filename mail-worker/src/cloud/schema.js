@@ -11,8 +11,8 @@ export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_se
 export const lastScheduleSchema = `CREATE TABLE IF NOT EXISTS mail_last_schedule (
   user_id INTEGER PRIMARY KEY, send_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1)`;
 export const contactSchema = `CREATE TABLE IF NOT EXISTS mailbox_contacts (
-  user_id INTEGER NOT NULL,account_id INTEGER NOT NULL,address_key TEXT NOT NULL,
-  email TEXT NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL,PRIMARY KEY(user_id,account_id,address_key))`;
+  user_id INTEGER NOT NULL,account_id INTEGER NOT NULL REFERENCES account(account_id) ON DELETE CASCADE,address_key TEXT NOT NULL,
+  email TEXT NOT NULL,name TEXT NOT NULL,name_key TEXT NOT NULL,PRIMARY KEY(account_id,user_id,address_key))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
