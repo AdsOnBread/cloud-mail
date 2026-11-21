@@ -108,7 +108,7 @@ export const useMailLabels = defineStore("mail-labels", {
       if (owner !== this.owner) return;
       this.edit = null;
       await this.load(owner);
-      if(owner===this.owner)this.revealed={id:label.id};
+      if(owner===this.owner) {this.revealed={id:label.id}; return label;}
     },
     async setDisplay(id, list, mode, ownsFocus) {
       const owner = this.owner;

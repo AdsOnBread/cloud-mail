@@ -103,7 +103,7 @@ watch(
 );
 async function submit() {
   if (!labels.edit || saving.value || !name.value.trim()) return;
-  const { id, remove, anchors, move } = labels.edit;
+  const { id, remove, anchors, move, onCreated } = labels.edit;
   saving.value = true;
   try {
     if (!remove && !labels.edit.destination && nested.value && !parentId.value) return;
@@ -111,14 +111,16 @@ async function submit() {
       await labels.remove(id);
       if (route.name === "label" && Number(route.params.labelId) === id)
         await router.replace("/inbox");
-    } else
-      await labels.save(
+    } else {
+      const saved = await labels.save(
         id,
         name.value.trim(),
         anchors,
         nested.value ? parentId.value : null,
         move,
       );
+      if (!id && saved) onCreated?.(saved.id);
+    }
     mail.conversationRevision++;
   } catch (e) {
     error.value = e.message || "Could not update label.";

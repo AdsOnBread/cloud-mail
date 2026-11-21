@@ -66,6 +66,7 @@
         :draft-count="1"
         :participants="draft.recipients"
         :subject="draft.subject"
+        :labels="labels.items.filter(label=>draft.labelIds?.includes(label.id) && label.messages!=='hide')"
         :attachment-count="draft.hasFiles ? 1 : 0"
         :preview="draft.preview"
         :date="mailboxDate(draft.lastDate)"
@@ -93,6 +94,7 @@
   </section>
 </template>
 <script setup>
+import {useMailLabels} from "@/store/mail-labels";
 import { computed, onActivated, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
@@ -109,6 +111,7 @@ const feedback = useMailFeedback(), ui = useUiStore();
 const drafts = userDraftStore(),
   search = useMailSearchStore(),
   router = useRouter();
+const labels=useMailLabels();
 const selected = ref([]),
   offset = ref(0),
   error = ref(""),

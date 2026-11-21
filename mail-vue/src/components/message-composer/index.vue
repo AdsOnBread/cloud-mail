@@ -285,20 +285,10 @@
               </el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
-          <el-dropdown trigger="click" placement="top-end" :show-arrow="false" popper-class="mail-action-menu compose-format-popup compose-more-menu" @command="moreCommand">
-            <button type="button" class="compose-tool" aria-label="More options" data-tip="More options" :disabled="sending || preparing || attaching">
-              <Icon icon="material-symbols:more-vert" width="20"/>
-            </button>
-            <template #dropdown><el-dropdown-menu>
-              <el-dropdown-item command="fullscreen" role="menuitemcheckbox" :aria-checked="Boolean(composeMode.fullScreen)">
-                <span class="signature-check"><Icon v-if="composeMode.fullScreen" icon="material-symbols:check" width="18"/></span>Default to full screen
-              </el-dropdown-item>
-              <el-dropdown-item command="plain" role="menuitemcheckbox" :aria-checked="form.plainText">
-                <span class="signature-check"><Icon v-if="form.plainText" icon="material-symbols:check" width="18"/></span>Plain text mode
-              </el-dropdown-item>
-              <el-dropdown-item command="print" divided><span class="signature-check"></span>Print</el-dropdown-item>
-            </el-dropdown-menu></template>
-          </el-dropdown>
+          <ComposeMore :disabled="sending || preparing || attaching" :active="show && !minimized"
+            :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
+            :label-ids="form.labelIds" :starred="form.mailboxStarred"
+            @labels="form.labelIds = $event" @star="form.mailboxStarred = $event" @command="moreCommand"/>
           <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
@@ -369,6 +359,9 @@ import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
+import ComposeMore from "./more-options.vue";
+import { useMailLabels } from "@/store/mail-labels";
+import { useRouter } from "vue-router";
 import SchedulePicker from "./schedule.vue";
 import {useMailFeedback} from "@/store/mail-feedback";
 import tinyEditor from "@/components/tiny-editor/index.vue";
@@ -411,6 +404,8 @@ import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
 const props = defineProps({ inline: Boolean });
 const emit = defineEmits(["sent", "closed"]);
 const composeRoot = ref();
+const labelStore=useMailLabels();
+const router=useRouter();
 const recipientDialog = ref();
 const missingRecipient = ref(false);
 const recipientNoticeId = useId();
@@ -574,6 +569,8 @@ let restoredUntouched = false;
 const preparing = ref(false);
 const emptyForm = () => ({
   sendEmail: "",
+  labelIds: [],
+  mailboxStarred: false,
   receiveEmail: [],
   cc: [],
   bcc: [],
@@ -848,6 +845,16 @@ async function moreCommand(command) {
   const generation = signatureGeneration;
   const current = () => show.value && !sending.value && owner === userStore.user.email && generation === signatureGeneration;
   if (!current()) return;
+  if (command === "new-label") {
+    labelStore.edit = {onCreated(id) {
+      if (current() && !form.labelIds.includes(id)) form.labelIds = [...form.labelIds,id];
+    }};
+    return;
+  }
+  if (command === "manage-labels") {
+    if (await saveAndClose()) await router.push({name:"label-settings"});
+    return;
+  }
   if (command === "fullscreen") {
     const fullScreen = !composeMode.value.fullScreen;
     uiPreferences.composeModes[owner] = {...composeMode.value, fullScreen};
@@ -1149,6 +1156,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
+  if (labelStore.edit) return;
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
@@ -1463,8 +1471,6 @@ defineExpose({
   background: var(--base-fill);
 }
 .signature-check { width:22px;flex:none;display:inline-flex; }
-:global(.compose-more-menu .el-dropdown-menu) { min-width:228px; padding:8px 0; }
-:global(.compose-more-menu .el-dropdown-menu__item) { min-height:32px; font-size:14px; line-height:20px; }
 :global(.signature-menu .el-dropdown-menu) { min-width:216px;max-width:min(340px,90vw); }
 :global(.signature-menu .el-dropdown-menu__item) { min-height:32px;overflow-wrap:anywhere; }
 .draft-status {
