@@ -29,6 +29,7 @@ describe('System label visibility',()=>{
    await setSystemLabel(env.db,1,'trash','hide');
    expect(await systemLabels(env.db,1)).toEqual({draft:'unread',trash:'hide'});
    expect(await systemLabels(env.db,2)).toEqual({});
+   await drafts.deleteUserData(c(),[1]);expect(await systemLabels(env.db,1)).toEqual({});
    await expect(setSystemLabel(env.db,1,'trash','unread')).rejects.toMatchObject({code:400});
    await expect(setSystemLabel(env.db,1,'email','hide')).rejects.toMatchObject({code:400});
  });
@@ -140,6 +141,18 @@ describe('Recoverable Trash',()=>{
    await mail.trash(c(),1,[target.email_id]);await ensureThreads(env.db,1);
    const active=await relatedActiveMail(env.db,1,[target]);
    expect(active.map(m=>m.email_id).sort()).toEqual([one.email_id,two.email_id].sort());
+ });
+ it('replays a committed label creation and Trash move after interrupted responses',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {moveFromTrash}=await import('../src/cloud/trash-actions');
+   const token='test-label-move-01', create=()=>saveLabel(env.db,1,'Recovered',undefined,null,token);
+   const label=await create();expect(await create()).toEqual(label);
+   await expect(saveLabel(env.db,1,'Other',undefined,null,token)).rejects.toMatchObject({code:409});
+   await expect(saveLabel(env.db,1,'Recovered',undefined,null,'another-request')).rejects.toMatchObject({code:409});
+   const row=await message();await mail.trash(c(),1,[row.email_id]);
+   const move=()=>moveFromTrash(env.db,1,[row.email_id],label.id,token);
+   expect(await move()).toEqual({messageCount:1});expect(await move()).toEqual({messageCount:1});
+   await expect(moveFromTrash(env.db,1,[row.email_id+1],label.id,token)).rejects.toMatchObject({code:409});
  });
  it('purges only after 30 days and age-based cleanup enters Trash first',async()=>{
    const old=await message({create_time:'2020-01-01 00:00:00'});

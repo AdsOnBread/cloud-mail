@@ -37,8 +37,8 @@ app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c
 app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
 app.post(root+'/messages/move-from-trash',async c=>{
   await permission(c,uid(c),'email:delete');
-  const {emailIds,labelId}=await c.req.json();
-  return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),emailIds,labelId)));
+  const {emailIds,labelId,clientId}=await c.req.json();
+  return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),emailIds,labelId,clientId)));
 });
 app.post(root+'/messages/trash-read',async c=>{
   const {emailIds,read}=await c.req.json();

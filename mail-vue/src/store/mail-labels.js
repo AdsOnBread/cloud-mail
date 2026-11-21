@@ -3,10 +3,26 @@ import http from "@/axios";
 import { conversationAction } from "@/request/conversation";
 const path = "/email/conversation/labels";
 
+function labelAPI(store) {
+  const owner=store.owner, token=store.sessionToken;
+  const check=()=>{
+    if (!owner || !token || owner!==store.owner || token!==store.sessionToken || token!==localStorage.getItem('token'))
+      throw new Error('Your signed-in account changed. Reload to manage labels.');
+  };
+  async function call(method,path,...args) {
+    check();
+    const result=await http[method](path,...args,{noMsg:true,headers:{Authorization:token}});
+    check();
+    return result;
+  }
+  return {get:path=>call('get',path),delete:path=>call('delete',path),
+    post:(path,body)=>call('post',path,body),put:(path,body)=>call('put',path,body)};
+}
+
 export const useMailLabels = defineStore("mail-labels", {
   state: () => ({
     items: [],
-    system: {}, systemRequest:0, systemError:"", moved:null,
+    system: {}, systemRequest:0, systemReady:false, systemError:"", moved:null,
     recentColors: [],
     optionsAnchor: null,
     colorRequest: 0,
@@ -16,13 +32,14 @@ export const useMailLabels = defineStore("mail-labels", {
     revealed: null,
     displayChanged: null,
     owner: "",
+    sessionToken:null,
     request: 0,
   }),
   actions: {
     async load(owner = this.owner) {
       if (this.owner !== owner) {
         this.items = [];
-        this.system = {}; this.systemRequest++; this.systemError=""; this.moved=null;
+        this.system = {}; this.systemReady=false; this.systemRequest++; this.systemError=""; this.moved=null;
         this.optionsAnchor = null;
         this.recentColors = [];
         this.colorRequest++;
@@ -31,12 +48,13 @@ export const useMailLabels = defineStore("mail-labels", {
         this.revealed = null;
         this.displayChanged = null;
         this.owner = owner;
+        this.sessionToken=owner ? localStorage.getItem("token") : null;
       }
       const request = ++this.request;
       this.error = "";
       if (!owner) return;
       try {
-        const items = await http.get(path, { noMsg: true });
+        const items = await labelAPI(this).get(path);
         if (request === this.request) this.items = items;
       } catch (e) {
         if (request === this.request)
@@ -47,22 +65,28 @@ export const useMailLabels = defineStore("mail-labels", {
       const request=++this.systemRequest;
       if (!owner) return;
       try {
-        const choices=await http.get('/v1/system-labels',{noMsg:true});
-        if (request===this.systemRequest && owner===this.owner) {this.system=choices;this.systemError="";}
+        const choices=await labelAPI(this).get('/v1/system-labels');
+        if (request===this.systemRequest && owner===this.owner) {this.system=choices;this.systemReady=true;this.systemError="";}
       } catch(e) {
         if (request===this.systemRequest && owner===this.owner) this.systemError=e.message || "Could not load folder settings.";
       }
     },
     async setSystem(folder,mode) {
       const owner=this.owner;
-      await http.put('/v1/system-labels/'+folder,{mode},{noMsg:true});
+      await labelAPI(this).put('/v1/system-labels/'+folder,{mode});
       if (owner===this.owner) {++this.systemRequest;this.system={...this.system,[folder]:mode};}
     },
     async save(id, name, anchors = [], parentId = null, move = null) {
       const owner = this.owner;
-      const label = move && this.edit?.destination || (id
-        ? await http.put(path + "/" + id, { name, parentId }, { noMsg: true })
-        : await http.post(path, { name, parentId }, { noMsg: true }));
+      const destination=move && this.edit?.destination;
+      if (move && !destination) {
+        const intent=JSON.stringify([name,parentId]);
+        if (move.intent && move.intent!==intent) move.clientId=crypto.randomUUID();
+        move.intent=intent;
+      }
+      const label = destination || (id
+        ? await labelAPI(this).put(path + "/" + id, { name, parentId })
+        : await labelAPI(this).post(path, { name, parentId, ...(move ? {clientId:move.clientId} : {}) }));
       if (owner !== this.owner) return;
       ++this.request;
       this.items = [
@@ -72,15 +96,15 @@ export const useMailLabels = defineStore("mail-labels", {
       if (move) {
         // The label can outlive a failed move. Keep its ID for a retry.
         this.edit = {...this.edit,destination:label,name:label.name,move};
-        if (move.trash) await http.post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id},{noMsg:true});
-        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId});
+        if (move.trash) await labelAPI(this).post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id,clientId:move.clientId});
+        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId},labelAPI(this));
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {
         this.edit = { ...this.edit, id: label.id, name: label.name };
         await conversationAction("label", anchors, {
           add: [label.id],
           remove: [],
-        });
+        },labelAPI(this));
         if (this.owner === owner)
           this.applied = { anchors: [...anchors], labelId: label.id };
       }
@@ -91,7 +115,7 @@ export const useMailLabels = defineStore("mail-labels", {
     },
     async setDisplay(id, list, mode, ownsFocus) {
       const owner = this.owner;
-      const changed = await http.put(path + "/" + id + "/display", { list, mode }, { noMsg: true });
+      const changed = await labelAPI(this).put(path + "/" + id + "/display", { list, mode });
       if (owner !== this.owner) return;
       const item = this.items.find(label => label.id === id);
       const restore = ownsFocus?.();
@@ -102,13 +126,13 @@ export const useMailLabels = defineStore("mail-labels", {
     async loadRecentColors() {
       const request = ++this.colorRequest;
       try {
-        const recent = await http.get("/email/conversation/label-colors", { noMsg: true });
+        const recent = await labelAPI(this).get("/email/conversation/label-colors");
         if (request === this.colorRequest) this.recentColors = recent;
       } catch { /* The palette remains usable when history is offline. */ }
     },
     async setColor(id, background, foreground, custom = false) {
       const owner = this.owner;
-      const changed = await http.put(path + "/" + id + "/color", { background, foreground, custom }, { noMsg: true });
+      const changed = await labelAPI(this).put(path + "/" + id + "/color", { background, foreground, custom });
       if (owner !== this.owner) return;
       const item = this.items.find(label => label.id === id);
       if (item) Object.assign(item, changed);
@@ -121,7 +145,7 @@ export const useMailLabels = defineStore("mail-labels", {
     },
     async remove(id) {
       const owner = this.owner;
-      await http.delete(path + "/" + id, { noMsg: true });
+      await labelAPI(this).delete(path + "/" + id);
       if (owner !== this.owner) return;
       ++this.request;
       this.items = this.items.filter((item) => item.id !== id);

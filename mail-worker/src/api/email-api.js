@@ -56,8 +56,8 @@ app.put('/email/conversation/labels/:id/display', async c => c.json(result.ok(
 app.get('/email/conversation/label-colors', async c => c.json(result.ok(await recentLabelColors(c.env.db,userContext.getUserId(c)))));
 app.get('/email/conversation/labels', async c => c.json(result.ok(await listLabels(c.env.db,userContext.getUserId(c)))));
 async function writeLabel(c) {
-  const {name,parentId}=await c.req.json();
-  return c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),name,c.req.param('id'),parentId)));
+  const {name,parentId,clientId}=await c.req.json();
+  return c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),name,c.req.param('id'),parentId,clientId)));
 }
 app.post('/email/conversation/labels', writeLabel);
 app.put('/email/conversation/labels/:id', writeLabel);

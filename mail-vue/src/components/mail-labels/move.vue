@@ -101,7 +101,7 @@ watch(open, (value) => {
   }
 });
 function createLabel(){
-  const move={ids:[...anchors],fromLabelId:props.fromLabelId || 0,trash:props.trash,path:route.fullPath};
+  const move={clientId:crypto.randomUUID(),ids:[...anchors],fromLabelId:props.fromLabelId || 0,trash:props.trash,path:route.fullPath};
   dismiss();
   labels.edit={name:query.value.trim(),move};
 }

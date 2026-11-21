@@ -1,8 +1,5 @@
 import BizError from '../error/biz-error';
 
-export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
-  user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
-  PRIMARY KEY(user_id,folder))`;
 const folders=new Set(['star','snoozed','important','send','scheduled','draft','all','archived','trash']);
 
 export async function systemLabels(db,userId) {

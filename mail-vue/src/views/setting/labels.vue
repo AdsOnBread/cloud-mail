@@ -9,7 +9,7 @@
         <tr v-for="folder in folders" :key="folder.id">
           <th scope="row">{{folder.name}}</th><td colspan="3">
             <button v-for="mode in folder.conditional ? modes : basic" :key="mode" class="action" :aria-pressed="folderMode(folder,labels.system)===mode"
-              :disabled="busy || Boolean(labels.systemError)" @click="save(()=>labels.setSystem(folder.id,mode))">{{names[mode]}}</button>
+              :disabled="busy || !labels.systemReady || Boolean(labels.systemError)" @click="save(()=>labels.setSystem(folder.id,mode))">{{names[mode]}}</button>
           </td>
         </tr>
       </tbody>

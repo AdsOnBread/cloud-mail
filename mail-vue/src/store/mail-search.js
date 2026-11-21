@@ -4,7 +4,7 @@ export const useMailSearchStore = defineStore('mail-search', {
   state: () => ({ query: '', folder: 'email', labelId:'', filters: {} }),
   actions: {
     visit(folder,labelId = "") {
-      if (folder === 'content') return;
+      if (folder === 'content' || folder === 'label-settings') return;
       if (folder !== this.folder || labelId !== this.labelId) { this.query = ''; this.filters = {}; }
       this.folder = folder; this.labelId=labelId;
     },

@@ -647,6 +647,10 @@ watch(
     if (active && !busy.value) refresh();
   },
 );
+watch(()=>labels.moved,change=>{
+  if(change && !change.trash && change.path===route.fullPath)
+    selected.value=selected.value.filter(id=>!change.ids.includes(id));
+});
 function toggle(id) {
   if (selected.value.includes(id))
     selected.value = selected.value.filter((value) => value !== id);

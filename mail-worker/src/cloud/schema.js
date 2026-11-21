@@ -1,4 +1,6 @@
-import {systemLabelSchema} from './system-labels';
+export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
+  user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
+  PRIMARY KEY(user_id,folder))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 export async function migrateCloud(db) {

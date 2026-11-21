@@ -29,10 +29,16 @@ function anchor(current,row) {
   return (incoming(row) ? row.email_id>current.email_id : row.email_id<current.email_id) ? row : current;
 }
 
-export async function moveFromTrash(db,userId,ids,labelId) {
+export async function moveFromTrash(db,userId,ids,labelId,clientId) {
   const selected=selectedIds(ids);
   if (!Number.isSafeInteger(labelId) || labelId<0) throw new BizError('Choose a destination.',400);
-  const idList=JSON.stringify(selected);
+  const idList=JSON.stringify(selected.sort((a,b)=>a-b));
+  if (clientId!==undefined) {
+    if (typeof clientId!=='string' || !/^[a-zA-Z0-9-]{8,80}$/.test(clientId)) throw new BizError('Invalid label request.',400);
+    const receipt=await db.prepare('SELECT label_id,moved_ids FROM mailbox_label_creations WHERE user_id=? AND token=?').bind(userId,clientId).first();
+    if (!receipt || receipt.label_id!==labelId || (receipt.moved_ids && receipt.moved_ids!==idList)) throw new BizError('This request is for a different move.',409);
+    if (receipt.moved_ids===idList) return {messageCount:selected.length};
+  }
   // Project just the selected messages back into the normal thread grouping. Trash
   // may contain a newer reply, an older anchor, or an entirely deleted conversation.
   await ensureThreads(db,userId);
@@ -83,6 +89,8 @@ export async function moveFromTrash(db,userId,ids,labelId) {
         SELECT ?,value,? FROM json_each(?) WHERE ${guard}`).bind(userId,labelId ? null : 0,JSON.stringify(filed),...check));
     }
   }
+  if (clientId) statements.push(db.prepare(`UPDATE mailbox_label_creations SET moved_ids=? WHERE user_id=? AND token=? AND label_id=? AND ${guard}`)
+    .bind(idList,userId,clientId,labelId,...check));
   statements.push(db.prepare(`UPDATE email SET trashed_at=NULL WHERE email_id IN
     (SELECT value FROM json_each(?) WHERE ${guard}) AND user_id=? RETURNING email_id`).bind(idList,...check,userId));
   const results=await db.batch(statements);
