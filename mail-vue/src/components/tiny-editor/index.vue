@@ -17,6 +17,22 @@
   </div>
 </template>
 
+<script>
+// The signature editor and the mailbox composer can mount before either has loaded TinyMCE.
+let libraryLoad;
+function loadEditorLibrary() {
+  if (!libraryLoad) {
+    libraryLoad = new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='/tinymce/tinymce.min.js';
+      script.onload=resolve;
+      script.onerror=()=>{script.remove();reject(new Error('Could not load the editor.'));};
+      document.head.appendChild(script);
+    }).finally(()=>{libraryLoad=null;});
+  }
+  return libraryLoad;
+}
+</script>
 <script setup>
 import {
   ref,
@@ -224,17 +240,12 @@ function clearEditor() {
 async function initTinyMCE() {
   if (!window.tinymce) {
     showLoading.value = true;
-    await new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "/tinymce/tinymce.min.js";
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Could not load the editor."));
-      document.head.appendChild(script);
-    });
+    await loadEditorLibrary();
+    if (disposed) return;
     showLoading.value = false;
     await nextTick();
   }
-  return initEditor();
+  if (!disposed) return initEditor();
 }
 
 function observeFileTransfers(ed) {

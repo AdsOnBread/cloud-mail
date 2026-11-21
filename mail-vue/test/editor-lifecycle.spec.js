@@ -184,3 +184,16 @@ it("publishes the editor body for draft saving immediately after Undo and Redo",
   }
   wrapper.unmount();
 });
+
+it("loads TinyMCE once when two editors mount together and skips a disposed editor", async () => {
+  const first=mount(Editor), second=mount(Editor);
+  const scripts=document.head.querySelectorAll('script[src="/tinymce/tinymce.min.js"]');
+  expect(scripts).toHaveLength(1);
+  first.unmount();
+  window.tinymce={init:vi.fn().mockResolvedValue([])};
+  scripts[0].dispatchEvent(new Event("load"));
+  await second.vm.ready();
+  expect(window.tinymce.init).toHaveBeenCalledTimes(1);
+  second.unmount();
+  scripts[0].remove();
+});
