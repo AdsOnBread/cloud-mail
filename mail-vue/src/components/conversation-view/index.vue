@@ -82,7 +82,7 @@
           ref="composer"
           inline
           @sent="sent"
-          @closed="closed"
+          @closed="inlineClosed(message.emailId)"
         />
       </ConversationMessage>
       <SavedReplies v-if="draftsByMessage.has(message.emailId)" :drafts="draftsByMessage.get(message.emailId)" @open="chooseDraft"/>
@@ -190,6 +190,18 @@ function closed() {
   activeTarget.value = 0;
   activeDraft.value = null;
 }
+let savingInline=0;
+async function inlineClosed(id) {
+  const draft=activeDraft.value, current=readerCurrent();
+  const focus=document.activeElement;
+  const restore=!savingInline && !switching && (focus===document.body || Boolean(focus?.closest('.send.inline')));
+  closed();
+  if (!restore) return;
+  await nextTick();
+  if (!current() || activeTarget.value || document.activeElement!==document.body || readerObscured()) return;
+  const row=draft && scroll.value?.querySelector('[data-reader-draft="'+draft+'"]');
+  (row || scroll.value?.querySelector('[data-reader-message="'+id+'"] .message-toggle'))?.focus({preventScroll:true});
+}
 const accountStore = useAccountStore();
 const route = useRoute(),
   router = useRouter(),
@@ -259,6 +271,10 @@ async function printMail(message) {
 watch([()=>user.user.userId,()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>{
   sessionEpoch++;draftRun++;draftFailure.value=null;currentMessage.value=null;
   printController?.abort();
+  if (loading.value && !messages.value.length) {
+    const current=readerCurrent();
+    nextTick(()=>{ if (current() && user.user.userId && user.authenticatedToken) load(); });
+  }
 },{flush:'sync'});
 async function toggleAll() {
   if (loading.value) return;
@@ -285,13 +301,16 @@ async function toggleAll() {
   finally {if(run===expandRun)expanding.value=false;}
 }
 async function save() {
-  return (await currentComposer()?.saveAndClose()) ?? true;
+  savingInline++;
+  try { return (await currentComposer()?.saveAndClose()) ?? true; }
+  finally { savingInline--; }
 }
 onBeforeRouteLeave(async () => await save());
 onBeforeRouteUpdate(async () => await save());
 async function load(older = false) {
   if (older && (loading.value || expanding.value)) return;
   expandRun++;expanding.value=false;
+  const current=readerCurrent();
   const requestedImportanceRevision = importanceRevision;
   const request = ++generation,
     anchor = Number(route.query.emailId);
@@ -303,7 +322,7 @@ async function load(older = false) {
       before: older ? cursor.value : undefined,
       limit: 30,
     });
-    if (request !== generation) return;
+    if (request !== generation || !current()) return;
     if (data.ownedAddresses)
       accountStore.recipientOwnAddresses = data.ownedAddresses;
     const prior = scroll.value?.scrollHeight || 0;
@@ -333,7 +352,7 @@ async function load(older = false) {
     if (!older && data.messages.length) open.add(data.messages.at(-1).emailId);
     expanded.value = open;
     await nextTick();
-    if (request !== generation) return;
+    if (request !== generation || !current()) return;
     if (older && scroll.value)
       scroll.value.scrollTop += scroll.value.scrollHeight - prior;
     if (!older) {
@@ -346,7 +365,7 @@ async function load(older = false) {
     }
     return true;
   } catch (e) {
-    if (request === generation)
+    if (request === generation && current())
       error.value = e.message || "Could not load conversation.";
   } finally {
     if (request === generation) loading.value = false;
@@ -580,8 +599,8 @@ async function deleted(message) {
   else await load();
 }
 function rememberMessage(event) {
-  const card=event.target.closest?.('[data-reader-message]');
-  if (card) currentMessage.value=Number(card.dataset.readerMessage);
+  const card=event.target.closest?.('[data-reader-message],[data-draft-anchor]');
+  if (card) currentMessage.value=Number(card.dataset.readerMessage ?? card.dataset.draftAnchor);
 }
 function canNavigate(event) {
   if (event.defaultPrevented || event.isComposing || event.keyCode===229 ||

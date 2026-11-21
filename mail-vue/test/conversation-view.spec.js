@@ -5,6 +5,7 @@ import { createRouter, createMemoryHistory } from "vue-router";
 import ConversationView from "../src/components/conversation-view/index.vue";
 import { conversationMessages, conversationAction } from "../src/request/conversation";
 import { userDraftStore } from "../src/store/draft";
+import {useUserStore} from "../src/store/user";
 import { useEmailStore } from "../src/store/email";
 const state = vi.hoisted(() => ({
   save: vi.fn(async () => true),
@@ -58,7 +59,7 @@ vi.mock("../src/components/conversation-message/index.vue", () => ({
   default: {
     props: ["message", "expanded"],
     template:
-      '<article><button :aria-expanded="expanded" @click="$emit(\'toggle\')">Message {{message.emailId}}</button><button @click="$emit(\'reply\',false)">Reply to {{message.emailId}}</button><button @click="$emit(\'reply\',true)">Reply all to {{message.emailId}}</button><slot /></article>',
+      '<article><button class="message-toggle" :aria-expanded="expanded" @click="$emit(\'toggle\')">Message {{message.emailId}}</button><button @click="$emit(\'reply\',false)">Reply to {{message.emailId}}</button><button @click="$emit(\'reply\',true)">Reply all to {{message.emailId}}</button><slot /></article>',
   },
 }));
 const message = (id, unread = 1) => ({
@@ -74,7 +75,7 @@ const page = (messages, extra = {}) => ({
   nextCursor: null,
   ...extra,
 });
-async function setup(query = "emailId=10") {
+async function setup(query = "emailId=10", attachTo) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -87,6 +88,7 @@ async function setup(query = "emailId=10") {
   const wrapper = mount(
     { template: "<router-view />" },
     {
+      attachTo,
       global: {
         plugins: [router],
         stubs: {
@@ -296,4 +298,41 @@ it('serializes older-page loading and Expand all and keeps the latest message op
  expect(wrapper.findAll('button[aria-expanded="true"]')).toHaveLength(1);
  expect(wrapper.get('button[aria-expanded="true"]').text()).toContain('Message 10');
  wrapper.unmount();
+});
+
+it('lets Retry open the original saved reply after a temporary read failure',async()=>{
+  const summary={emailId:10,draftId:3,cloudDraftId:5,reply:true,preview:'A saved reply'};
+  userDraftStore().items=[summary];
+  state.readSaved.mockRejectedValueOnce(new Error('Temporarily unavailable')).mockResolvedValueOnce({...summary,content:'Saved'});
+  conversationMessages.mockResolvedValue(page([message(10)]));
+  const {wrapper}=await setup('emailId=10&draft=cloud-5');
+  expect(wrapper.get('[role=alert]').text()).toContain('Temporarily unavailable');
+  await wrapper.get('[role=alert] button').trigger('click');await flushPromises();
+  expect(state.draft).toHaveBeenCalledTimes(1);
+  expect(wrapper.find('[role=alert]').exists()).toBe(false);
+  expect(wrapper.find('.thread-drafts').exists()).toBe(false);
+  expect(wrapper.get('a[aria-label="In new window"]').attributes('href')).toContain('draft=cloud-5');
+  wrapper.unmount();
+});
+it('keeps a late keyboard page out of a changed session',async()=>{
+  let finish;
+  conversationMessages.mockResolvedValueOnce(page([message(10),message(11)],{hasMore:true,nextCursor:10,total:3}))
+    .mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}));
+  const {wrapper}=await setup('emailId=10',document.body);
+  const first=wrapper.get('.message-toggle');first.element.focus();
+  await first.trigger('keydown',{key:'p'});expect(finish).toBeTypeOf('function');
+  useUserStore().authenticatedToken='different';
+  finish(page([message(7)]));await flushPromises();
+  expect(wrapper.text()).not.toContain('Message 7');
+  wrapper.unmount();
+});
+it('places the saved row after its source and opens it directly from the toolbar',async()=>{
+  const summary={emailId:10,draftId:3,reply:true,preview:'A saved reply'};
+  userDraftStore().items=[summary];state.readSaved.mockResolvedValueOnce(summary);
+  conversationMessages.mockResolvedValue(page([message(10),message(12)]));
+  const {wrapper}=await setup();
+  expect(wrapper.get('[data-reader-message="10"]').element.nextElementSibling.className).toBe('thread-drafts');
+  await wrapper.get('button[aria-label="Open saved reply"]').trigger('click');await flushPromises();
+  expect(state.draft).toHaveBeenCalledWith(summary);
+  wrapper.unmount();
 });

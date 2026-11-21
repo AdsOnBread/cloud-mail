@@ -1,6 +1,6 @@
 <template>
   <div v-if="drafts.length" class="thread-drafts" role="group" aria-label="Saved replies">
-    <button v-for="draft in drafts" :key="draft.draftId" type="button" @click="$emit('open',draft)">
+    <button v-for="draft in drafts" :key="draft.draftId" :data-draft-anchor="draft.emailId" :data-reader-draft="draft.draftId" type="button" @click="$emit('open',draft)">
       <span class="draft-avatar" aria-hidden="true"><Icon icon="material-symbols:edit-outline" width="20"/></span>
       <span class="draft-label">Draft</span>
       <span class="draft-snippet" dir="auto">{{draft.preview || draft.recipients || '(empty draft)'}}</span>
