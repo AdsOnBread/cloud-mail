@@ -98,6 +98,8 @@ export async function saveLocalDraft(input, {requireCurrent = false, session, st
     // A different edit token means the editor must keep its own base version for conflict detection.
     const sameEdit = current && ((input.editToken && input.editToken === current.editToken) ||
       current.starEditBase === draftEditBase(input));
+    if (!sameEdit && input.clientId && current?.clientId && input.clientId !== current.clientId)
+      throw new Error('The draft changed elsewhere. Reopen it before changing it.');
     return writeDraft(database, {
       ...input,
       attachments:starOnly ? input.attachments : referencedAttachments(input),
@@ -451,13 +453,15 @@ async function finishSentAttempt(database, id, attemptId, messages) {
       if (!matchesEditor(current, snapshot)) return 'retry';
       const keep = !current.deleted && changed;
       if (keep) {
-        const {draftId, cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, uploadIntent, ...copy} = await withFiles(database, current);
-        await writeDraft(database, {...copy, clientId:crypto.randomUUID(), editToken:crypto.randomUUID(),
-          dirty:true, conflictCopy:true, syncState:'conflict'});
+        // The editor holding this unsent revision can keep autosaving to its
+        // local ID. Give the copy a new cloud identity and keep its files in place.
+        const {cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, uploadIntent, ...copy} = current;
+        await database.draft.put({...copy, clientId:crypto.randomUUID(), dirty:true, conflictCopy:true, syncState:'conflict'});
+        return 'preserved';
       }
       await database.draft.delete(id);
       await database.att.delete(id);
-      return keep ? 'preserved' : 'finished';
+      return 'finished';
     });
   } while (outcome === 'retry');
   userDraftStore().refreshList++;

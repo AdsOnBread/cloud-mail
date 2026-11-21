@@ -364,10 +364,16 @@ describe('Cloud draft synchronization',()=>{
    });
    const deliver = sendCloudDraft(row.draftId,row.editToken);
    await started;
-   await saveLocalDraft({...await db.value.draft.get(row.draftId), subject:'Edited elsewhere',attachments:[]});
+   const editor = await saveLocalDraft({...await db.value.draft.get(row.draftId), subject:'Edited elsewhere',attachments:[]});
    release();
    await expect(deliver).rejects.toThrow(resultState === 'sent' ? 'newer edits are preserved' : 'Uncertain result');
    expect([...state.rows.values()]).toMatchObject([{subject:'Edited elsewhere'}]);
+   if (resultState === 'sent') {
+     const next = await saveLocalDraft({...editor,subject:'Still editing'});
+     expect(next.draftId).toBe(editor.draftId);
+     expect(next.cloudDraftId).toBeUndefined();
+     expect(next.clientId).not.toBe(editor.clientId);
+   }
  });
  it('preserves newer edits when recovering an earlier successful send',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const original=http.post.getMockImplementation();http.post.mockImplementationOnce(async(...args)=>{await original(...args);throw new Error('Reply lost');});
