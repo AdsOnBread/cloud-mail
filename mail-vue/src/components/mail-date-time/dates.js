@@ -72,10 +72,11 @@ export function moveMonth(date, step) {
   );
 }
 export function suggestions(now = new Date()) {
+  const earliest = now.getTime() + 3600000;
   function nextAt(hour) {
     const date = new Date(now);
     date.setHours(hour, 0, 0, 0);
-    if (date <= now) date.setDate(date.getDate() + 1);
+    if (+date < earliest) date.setDate(date.getDate() + 1);
     return date;
   }
   const morning = nextAt(8),
@@ -83,7 +84,7 @@ export function suggestions(now = new Date()) {
   const monday = new Date(now);
   monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7));
   monday.setHours(8, 0, 0, 0);
-  if (monday <= now) monday.setDate(monday.getDate() + 7);
+  if (+monday < earliest) monday.setDate(monday.getDate() + 7);
   const choices = [
     {
       label:

@@ -51,7 +51,7 @@ describe("mail date and time picker", () => {
     );
   });
   it("offers future local presets in chronological order, including today where available", () => {
-    const friday = new Date(2026, 10, 20, 7, 30);
+    const friday = new Date(2026, 10, 20, 6, 30);
     expect(suggestions(friday).map((s) => s.label)).toEqual([
       "This morning",
       "This afternoon",
@@ -59,6 +59,9 @@ describe("mail date and time picker", () => {
     ]);
     expect(suggestions(new Date(2026, 10, 20, 11)).map((s) => s.label)).toEqual(
       ["This afternoon", "Tomorrow morning", "Monday morning"],
+    );
+    expect(suggestions(new Date(2026,10,21,12,53)).map(s=>s.label)).toEqual(
+      ["Tomorrow morning", "Tomorrow afternoon", "Monday morning"],
     );
     for (const hour of [0, 8, 13, 23])
       for (let day = 15; day < 22; day++) {

@@ -1,5 +1,10 @@
 <template>
-  <form class="date-form" novalidate @submit.prevent="submit">
+  <form
+    class="date-form"
+    :class="{ scheduling }"
+    novalidate
+    @submit.prevent="submit"
+  >
     <div class="picker-body">
       <div class="calendar">
         <div class="month-nav">
@@ -62,32 +67,56 @@
         </table>
       </div>
       <div class="fields">
-        <input
-          ref="dateInput"
-          v-model="dateText"
-          aria-label="Date"
-          :aria-invalid="invalid === 'date'"
-          :aria-describedby="invalid === 'date' ? errorId : undefined"
-          :placeholder="formatDay(initial)"
-          autocomplete="off"
-          spellcheck="false"
-          @input="clearError"
-        />
-        <input
-          ref="timeInput"
-          v-model="timeText"
-          aria-label="Time"
-          :aria-invalid="invalid === 'time'"
-          :aria-describedby="invalid === 'time' ? errorId : undefined"
-          placeholder="8:00 AM"
-          autocomplete="off"
-          spellcheck="false"
-          @input="clearError"
-        />
-        <span class="zone" :title="zoneId">{{ zone }}</span>
+        <div class="field">
+          <input
+            ref="dateInput"
+            v-model="dateText"
+            aria-label="Date"
+            :aria-invalid="Boolean(dateIssue)"
+            :aria-describedby="
+              dateIssue ? (scheduling ? errorId + '-date' : errorId) : undefined
+            "
+            :placeholder="formatDay(initial)"
+            autocomplete="off"
+            spellcheck="false"
+            @input="clearError('date')"
+            @blur="checkFormat('date')"
+          />
+          <p
+            v-if="scheduling && dateIssue"
+            :id="errorId + '-date'"
+            role="alert"
+          >
+            {{ dateIssue }}
+          </p>
+        </div>
+        <div class="field">
+          <input
+            ref="timeInput"
+            v-model="timeText"
+            aria-label="Time"
+            :aria-invalid="Boolean(timeIssue)"
+            :aria-describedby="
+              timeIssue ? (scheduling ? errorId + '-time' : errorId) : undefined
+            "
+            placeholder="8:00 AM"
+            autocomplete="off"
+            spellcheck="false"
+            @input="clearError('time')"
+            @blur="checkFormat('time')"
+          />
+          <p
+            v-if="scheduling && timeIssue"
+            :id="errorId + '-time'"
+            role="alert"
+          >
+            {{ timeIssue }}
+          </p>
+        </div>
+        <span v-if="!scheduling" class="zone" :title="zoneId">{{ zone }}</span>
       </div>
     </div>
-    <p v-if="error" :id="errorId" role="alert">{{ error }}</p>
+    <p v-if="!scheduling && error" :id="errorId" role="alert">{{ error }}</p>
     <div class="dialog-actions">
       <button type="button" @click="$emit('cancel')">Cancel</button
       ><button class="primary" type="submit">{{ action }}</button>
@@ -109,6 +138,7 @@ import {
 const props = defineProps({
   initial: { type: Date, required: true },
   action: { type: String, required: true },
+  scheduling: Boolean,
 });
 const emit = defineEmits(["choose", "cancel"]);
 const weekdays = [
@@ -170,7 +200,22 @@ const weeks = computed(() => calendarWeeks(cursor.value));
 const error = ref(""),
   invalid = ref("");
 const sameDate = (a, b) => b && a.getTime() === b.getTime();
-function clearError() {
+const formatErrors = ref({ date: "", time: "" });
+const dateIssue = computed(() =>
+  invalid.value === "date" ? error.value : formatErrors.value.date,
+);
+const timeIssue = computed(() =>
+  invalid.value === "time" ? error.value : formatErrors.value.time,
+);
+function checkFormat(field) {
+  if (!props.scheduling) return;
+  const valid =
+    field === "date" ? selectedDay.value : parseTime(timeText.value);
+  formatErrors.value[field] = valid ? "" : "Invalid " + field;
+}
+function clearError(field) {
+  formatErrors.value[field] = "";
+  if (props.scheduling && invalid.value !== field) return;
   error.value = "";
   invalid.value = "";
 }
@@ -188,7 +233,7 @@ function focusCursor() {
 function pick(date) {
   cursor.value = date;
   dateText.value = formatDay(date);
-  clearError();
+  clearError("date");
   focusCursor();
 }
 function browse(step) {
@@ -379,6 +424,89 @@ td {
   font:
     13px/18px Arial,
     sans-serif;
+}
+.scheduling .picker-body {
+  min-height: 288px;
+  gap: 40px;
+}
+.scheduling .calendar {
+  margin: 8px 0 0 20px;
+}
+.scheduling .month-nav {
+  height: 40px;
+  margin: 0;
+}
+.scheduling .month-nav strong {
+  padding-left: 8px;
+}
+.scheduling .nav {
+  width: 40px;
+  height: 40px;
+}
+.scheduling th,
+.scheduling td,
+.scheduling .calendar td button {
+  height: 32px;
+}
+.scheduling .calendar td button {
+  width: 32px;
+}
+.scheduling .fields {
+  flex: none;
+  width: 200px;
+  padding: 16px 0 0;
+  gap: 0;
+}
+.scheduling .field {
+  min-height: 92px;
+}
+.scheduling .fields input {
+  height: 56px;
+  padding: 0 15px;
+  font:
+    16px/24px Arial,
+    sans-serif;
+}
+.scheduling .fields input[aria-invalid="true"] {
+  border-color: var(--mail-draft);
+}
+.scheduling .field [role="alert"] {
+  margin: 4px 8px;
+}
+.scheduling .dialog-actions {
+  padding: 24px;
+}
+.scheduling .dialog-actions button {
+  min-height: 40px;
+  padding: 0 12px;
+  min-width: 69px;
+}
+.scheduling .dialog-actions .primary {
+  min-width: 145px;
+}
+@media (max-width: 540px) {
+  .scheduling .picker-body {
+    flex-direction: column;
+    align-items: center;
+    min-height: 0;
+    gap: 12px;
+  }
+  .scheduling .calendar {
+    margin: 0;
+  }
+  .scheduling .fields {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0 16px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .scheduling .field {
+    min-height: 56px;
+  }
+  .scheduling .dialog-actions {
+    padding: 16px;
+  }
 }
 @media (max-width: 480px) {
   .picker-body {
