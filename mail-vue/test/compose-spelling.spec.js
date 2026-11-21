@@ -1,4 +1,4 @@
-import {expect, it} from 'vitest';
+import {expect, it, vi} from 'vitest';
 import {dictionaryData} from '../src/components/tiny-editor/spelling/dictionary-data';
 import {collectWords, liveWords, replaceWord, spellingTarget, spellingShortcut} from '../src/components/tiny-editor/spelling/words';
 import {languages, preferredDictionary} from '../src/components/tiny-editor/spelling/languages';
@@ -22,6 +22,17 @@ it('preserves surrounding whitespace and style runs when correcting typed text',
   expect(body.querySelector('b').textContent).toBe('ex');
   expect(body.querySelector('i').textContent.length).toBeGreaterThan(0);
   expect(caret.collapsed).toBe(true);
+});
+
+it('keeps short styled corrections aligned even when the browser pauses', () => {
+  const body = editor('<b>ex</b>amp<i>el</i>');
+  const [item] = collectWords(body);
+  let time = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => time += 100);
+  try {
+    replaceWord(item.range, 'example');
+    expect(body.innerHTML).toBe('<b>ex</b>amp<i>le</i>');
+  } finally { clock.mockRestore(); }
 });
 
 it('keeps untouched highlights and rejects a corrected word or an outdated prefix', () => {

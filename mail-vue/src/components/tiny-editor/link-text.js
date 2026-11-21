@@ -103,7 +103,10 @@ export function rewriteTextRuns(runs, original, label) {
 
   const options = {timeout: 35, maxEditLength: 1024};
   const deadline = Date.now() + options.timeout;
-  const changes = diffWordsWithSpace(original, label, options);
+  // A short single-word correction has bounded work even if the browser pauses
+  // mid-edit. Keep its character alignment independent of elapsed wall time.
+  const shortWord = original.length + label.length <= 128 && !/\s/.test(original + label);
+  const changes = shortWord ? diffChars(original, label) : diffWordsWithSpace(original, label, options);
   if (!changes) {
     // Bound work on very large pasted replacements and retain each run's formatting.
     let offset = 0;
@@ -118,7 +121,7 @@ export function rewriteTextRuns(runs, original, label) {
   const pieces = [];
   for (let i = 0; i < changes.length; i++) {
     const change = changes[i], next = changes[i + 1];
-    if (change.removed && next?.added && !/\s/.test(change.value + next.value)) {
+    if (!shortWord && change.removed && next?.added && !/\s/.test(change.value + next.value)) {
       const timeout = deadline - Date.now();
       const letters = timeout > 0 && diffChars(change.value, next.value, {...options, timeout});
       pieces.push(...(letters || [change, next]));
