@@ -229,7 +229,9 @@ export function syncCloudDrafts() {
     while(more) {
       const page=await api.get('/v1/drafts/changes',{params:{after:cursor,limit:100},noMsg:true});
       for(const event of page.changes) {
-        const local=(await database.draft.toArray()).find(r=>r.cloudDraftId===event.draftId);
+        const local = (await database.draft.toArray()).find(row =>
+          row.cloudDraftId === event.draftId ||
+          (row.deleted && !row.cloudDraftId && row.clientId && row.clientId === event.draft?.clientId));
         if(local?.deleted || local?.dirty || local?.pendingSchedule)continue; // The local revision is reconciled before subsequent changes.
         if(event.operation==='delete') {
           if(local)await database.transaction('rw',database.draft,database.att,async()=>{

@@ -887,9 +887,9 @@ async function discardEditor(selected, session = draftSession()) {
   preparing.value = true;
   try {
     clearTimeout(cloudSaveTimer);
+    signatureGeneration++;
     await editor.value?.ready?.();
     commitRecipients();
-    await pendingDefault;
     await saveQueue.catch(() => {});
     session.check();
     const changed = draftFingerprint(form) !== baseline && draftFingerprint(form) !== automaticBaseline;

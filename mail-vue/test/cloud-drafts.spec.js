@@ -186,7 +186,14 @@ describe('Cloud draft synchronization',()=>{
    const first=syncCloudDrafts();await requested;
    const operation=await discardDrafts([row.draftId]);
    expect((await db.value.draft.get(row.draftId)).deleted).toBe(true);
-   release();await first;await syncCloudDrafts();
+   let finishDelete, deleting;
+   const deletingSignal=new Promise(resolve=>{deleting=resolve;});
+   const pauseDelete=new Promise(resolve=>{finishDelete=resolve;});
+   const remove=http.delete.getMockImplementation();
+   http.delete.mockImplementationOnce(async(...args)=>{deleting();await pauseDelete;return remove(...args);});
+   release();await first;await deletingSignal;
+   expect([...state.rows.values()].filter(value=>!value.deleted)).toHaveLength(0);
+   finishDelete();await syncCloudDrafts();
    expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);await operation.dispose();
  });
  it('keeps a newer draft when a stale unchanged editor tries to discard',async()=>{
