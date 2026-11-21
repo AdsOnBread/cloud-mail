@@ -363,6 +363,7 @@ import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
+import {sendConfirmation} from "./send-confirmation";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
 import { hasFiles, transferFiles, photoTypes, planFiles } from "./files";
@@ -1170,15 +1171,13 @@ function validForSend() {
   });
   return true;
 }
-function isEmptyMessage() {
-  if (form.subject.trim() || attachedFiles.value.length) return false;
-  if (form.plainText) return !form.text.trim();
-  const body = new DOMParser().parseFromString(form.content, "text/html").body;
-  return !body.textContent.trim() && !body.querySelector("img,hr,table");
-}
 async function sendEmail(sendAt=null) {
   if (!validForSend()) return;
-  if (isEmptyMessage() && !window.confirm("Send this message without a subject or text in the body?")) return;
+  const prompt = sendConfirmation(form);
+  if (prompt && !window.confirm(prompt)) {
+    editor.value?.focus?.();
+    return;
+  }
   clearTimeout(cloudSaveTimer);
   sending.value = true;
   sendError.value = "";

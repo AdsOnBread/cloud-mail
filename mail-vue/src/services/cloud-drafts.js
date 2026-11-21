@@ -1,3 +1,4 @@
+import {referencedAttachments} from "../components/message-composer/files";
 import { draftEditBase, draftFilingFingerprint } from '@/utils/recipients';
 import { draftSummary, newestDraft } from '@/utils/draft-summary';
 import { useUserStore } from '@/store/user';
@@ -36,21 +37,6 @@ const apiError=e=>e.response?.data||e;
 const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
 // The server stores pasted photos as CID attachments. Compare the restored image
 // in the HTML once, while retaining separately attached files in the comparison.
-function referencedAttachments(row) {
-  const files = row.attachments || [];
-  if (!files.some(file => file.contentId)) return files;
-  const template = document.createElement("template");
-  template.innerHTML = row.content || "";
-  const sources = new Set(Array.from(template.content.querySelectorAll("img[src]"), image => image.getAttribute("src")));
-  return files.filter(file => {
-    if (!file.contentId) return true;
-    const id = file.contentId.replace(/^<|>$/g, "");
-    if (sources.has("cid:" + id) || sources.has("/api/v1/drafts/attachments/" + file.attachmentId + "/content")) return true;
-    if (!file.content || typeof file.content !== "string") return false;
-    const src = file.content.startsWith("data:") ? file.content : "data:"+(file.contentType || file.mimeType)+";base64,"+file.content;
-    return sources.has(src);
-  });
-}
 function savedFingerprint(row) {
   const template=document.createElement('template');
   template.innerHTML=row.content || '';
