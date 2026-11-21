@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_BYTES, messageSize } from "../../../../shared/message-size";
+
 export const photoTypes = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/heic", "image/avif"];
 export const hasFiles = transfer => Array.from(transfer?.types || []).includes("Files");
 
@@ -15,6 +17,7 @@ export function hasRichSelection(transfer) {
   if (!html) return false;
   const template = document.createElement("template");
   template.innerHTML = html;
+  template.content.querySelectorAll("style,script,title").forEach(node => node.remove());
   return Boolean(template.content.textContent.trim());
 }
 
@@ -36,10 +39,46 @@ export function planFiles(files, mode, form, content) {
     throw new Error("A message can contain up to 10 inline photos.");
   if (attachments.length && existing.length + attachments.length > 10)
     throw new Error("A message can have at most 10 attachments.");
-  const encoded = bytes => 4 * Math.ceil(bytes / 3);
-  const bodyBytes = new TextEncoder().encode(content).length;
-  const fileBytes = [...existing, ...files].reduce((sum, file) => sum + encoded(Number(file.size) || 0), 0);
-  if (bodyBytes + fileBytes > 5 * 1024 * 1024)
-    throw new Error("These files would exceed the 5 MiB message limit.");
+  const filePart = file => ({
+    filename: file.name || file.filename,
+    type: file.type || file.contentType || file.mimeType || "application/octet-stream",
+    size: file.size || file.content?.byteLength || base64Length(file.content || ""),
+  });
+  const parts = [...existing, ...attachments].map(filePart);
+  const cid = "cid:" + "0".repeat(32);
+  for (const image of embedded) {
+    const src = image.getAttribute("src");
+    if (src.startsWith("data:")) {
+      const type = src.slice(5, src.indexOf(";"));
+      parts.push({filename: "inline-image-" + Date.now() + "." + type.slice(6), type, size: base64Length(src)});
+      image.setAttribute("src", cid);
+    } else {
+      const file = form.attachments.find(item => item.contentId === src.slice(4));
+      if (file) parts.push(filePart(file));
+    }
+  }
+  for (const photo of photos) {
+    parts.push(filePart(photo));
+    const image = document.createElement("img");
+    image.src = cid;
+    image.alt = photo.name;
+    image.style.maxWidth = "100%";
+    template.content.append(image);
+  }
+  const size = messageSize({
+    html: form.plainText ? "" : template.innerHTML,
+    text: form.text || template.content.textContent,
+    from: {email: form.sendEmail, name: form.name},
+    to: form.receiveEmail, cc: form.cc, bcc: form.bcc, subject: form.subject,
+    attachments: parts,
+  });
+  if (size > MAX_MESSAGE_BYTES)
+    throw new Error("These files would exceed the 5 MiB message limit, including encoding overhead.");
   return { photos, attachments };
+}
+
+
+function base64Length(content) {
+  const data = content.slice(content.indexOf(",") + 1).replace(/\s/g, "");
+  return Math.max(0, Math.floor(data.length * 3 / 4) - (data.endsWith("==") ? 2 : Number(data.endsWith("="))));
 }

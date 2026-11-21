@@ -94,7 +94,7 @@ function remove(photo) {
   photos.value=photos.value.filter(other=>other!==photo);
   error.value="";
 }
-function close() { dialog.value?.close(); emit("close"); }
+function close(inserted = false) { dialog.value?.close(); emit("close", inserted); }
 function cancel() { if (!busy.value) close(); }
 async function insert() {
   if (!canInsert.value || busy.value) return;

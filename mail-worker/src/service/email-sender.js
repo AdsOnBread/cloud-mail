@@ -2,7 +2,8 @@ import BizError from '../error/biz-error';
 import { parseHTML } from 'linkedom';
 import verifyUtils from '../utils/verify-utils';
 
-export const MAX_MESSAGE_BYTES = 5 * 1024 * 1024;
+import { MAX_MESSAGE_BYTES, messageSize } from '../../../shared/message-size';
+export { MAX_MESSAGE_BYTES };
 export const MAX_ATTACHMENTS = 10;
 
 export function validateRecipients(recipients) {
@@ -81,20 +82,8 @@ export async function normalizeAttachment(attachment) {
 	return normalized;
 }
 
-function encodedSize(bytes) {
-	const base64Length = 4 * Math.ceil(bytes / 3);
-	return base64Length + 2 * Math.ceil(base64Length / 76);
-}
-
 export function validateMessageSize(message) {
-	const bytes = value => new TextEncoder().encode(value || '').byteLength;
-	// Reserve MIME boundaries and headers, and include base64 expansion and line wrapping.
-	let size = 16 * 1024 + encodedSize(bytes(message.html)) + encodedSize(bytes(message.text));
-	size += bytes(JSON.stringify({ from: message.from, to: message.to, cc: message.cc, bcc: message.bcc, subject: message.subject, headers: message.headers }));
-	for (const attachment of message.attachments || []) {
-		size += encodedSize(attachment.content.byteLength) + bytes(attachment.filename) * 3 + bytes(attachment.type) + 1024;
-	}
-	if (size > MAX_MESSAGE_BYTES) {
+	if (messageSize(message) > MAX_MESSAGE_BYTES) {
 		throw new BizError('Message exceeds the 5 MiB limit, including attachments and encoding overhead. Reduce the message or attachments.', 413);
 	}
 }

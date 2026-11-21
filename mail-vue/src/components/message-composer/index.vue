@@ -318,7 +318,7 @@
       <p :id="recipientNoticeId">Please specify at least one recipient.</p>
       <form method="dialog"><button type="submit" autofocus>OK</button></form>
     </dialog>
-    <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="photosOpen=false" />
+    <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="closePhotos" />
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
     <el-dialog
       v-model="showContacts"
@@ -466,15 +466,28 @@ function pasteFiles(event) {
   try { addFiles(transferFiles(event.clipboardData), "auto"); }
   catch (error) { sendError.value = error.message; }
 }
-let photoSelection;
-function showPhotos() {
+let photoSelection, photoTrigger;
+function closePhotos(inserted) {
+  photosOpen.value = false;
+  if (!inserted) {
+    const resume = photoSelection, trigger = photoTrigger, generation = fileGeneration;
+    nextTick(() => {
+      if (generation !== fileGeneration || !show.value || form.ownerEmail !== userStore.user.email) return;
+      if (resume) resume();
+      else trigger?.focus();
+    });
+    photoSelection = undefined;
+  }
+}
+function showPhotos(event) {
   if (fileBusy()) return;
+  photoTrigger = event.currentTarget;
   photoSelection = editor.value?.rememberSelection();
   photosOpen.value = true;
 }
 async function insertPickerPhotos({files, url}, closePicker) {
   if (!photosOpen.value || fileBusy()) throw new Error("This message is no longer ready to edit.");
-  const resume = () => { closePicker(); photoSelection?.(); photoSelection = undefined; };
+  const resume = () => { closePicker(true); photoSelection?.(); photoSelection = undefined; };
   if (files) {
     if (!await addFiles(files, "photos", resume)) throw new Error(sendError.value || "Could not insert the photos.");
   } else {
