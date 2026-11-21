@@ -1,3 +1,4 @@
+import {saveFilter,previewFilter,listFilters,deleteFilter} from '../src/cloud/message-filters';
 import {env,createExecutionContext} from 'cloudflare:test';
 import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
 import {dbInit} from '../src/init/init';
@@ -23,6 +24,47 @@ beforeEach(async()=>{
  await env.db.prepare('UPDATE setting SET send=0').run();await settingService.refresh(c());
 });
 afterEach(()=>vi.restoreAllMocks());
+describe('Incoming mail filters',()=>{
+ const db=env.db;
+ const create=(criteria,actions,extra={})=>saveFilter(db,1,crypto.randomUUID(),{version:0,criteria,actions,...extra});
+ it('previews and files existing mail only on request, then files future received copies across owned aliases',async()=>{
+   const original=await message(), label=await db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Team') RETURNING label_id").first();
+   const criteria={from:'outside@example.net',subject:'Origi',words:'"Original body"',excluded:'unrelated',to:'copy@example.net'};
+   expect(await previewFilter(db,1,criteria)).toEqual({conversations:1});
+   const actions={read:true,star:true,archive:true,category:'updates',important:false,labelId:label.label_id};
+   const r=await create(criteria,actions);
+   expect((await db.prepare('SELECT unread FROM email WHERE email_id=?').bind(original.email_id).first()).unread).toBe(0);
+   const other=await message({account_id:2,user_id:2}), sent=await message({type:1}), alias=await message({account_id:3});
+   const changed=await saveFilter(db,1,r.id,{version:r.version,criteria,actions,applyExisting:true});
+   expect(changed.version).toBe(2);
+   const rows=(await db.prepare('SELECT email_id FROM email WHERE unread=1 ORDER BY email_id').all()).results;
+   expect(rows.map(r=>r.email_id)).toEqual([original.email_id,alias.email_id]);
+   for (const table of ['star','conversation_filing','mailbox_categories','mailbox_importance','mailbox_label_members'])
+     expect((await db.prepare('SELECT email_id FROM '+table+' ORDER BY email_id').all()).results).toEqual(rows);
+   expect(await previewFilter(db,1,{to:'hidden@example.net'})).toEqual({conversations:0});
+   expect((await listFilters(db,2))).toEqual([]);
+   await expect(deleteFilter(db,2,r.id,2)).rejects.toMatchObject({code:409});
+   await expect(saveFilter(db,1,r.id,{version:1,criteria,actions})).rejects.toMatchObject({code:409});
+   await deleteFilter(db,1,r.id,2);
+   const after=await message();expect((await db.prepare('SELECT unread FROM email WHERE email_id=?').bind(after.email_id).first()).unread).toBe(0);
+ });
+ it('waits for completed mail and real attachments, and never files hidden, sent, or unrelated messages',async()=>{
+   await create({hasAttachment:true},{read:true,star:true});
+   const incoming=await message({status:6,is_del:1}),local=await message(),sent=await message({type:1});
+   const file=(id,disposition)=>db.prepare("INSERT INTO attachments(user_id,email_id,account_id,key,type,disposition) VALUES(1,?,1,'k',0,?)").bind(id,disposition).run();
+   await file(incoming.email_id,'attachment');await file(local.email_id,'inline');await file(sent.email_id,'attachment');
+   expect((await db.prepare('SELECT count(*) n FROM star').first()).n).toBe(0);
+   await emailService.completeReceive(c(),0,incoming.email_id);await file(local.email_id,'attachment');await file(local.email_id,'attachment');
+   expect((await db.prepare('SELECT email_id FROM star ORDER BY email_id').all()).results).toEqual([{email_id:incoming.email_id},{email_id:local.email_id}]);
+   expect((await db.prepare('SELECT count(*) n FROM mail_filter_hits').first()).n).toBe(0);
+ });
+ it('keeps label ownership and empty criteria out of saved rules',async()=>{
+   const label=await db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(2,'Private') RETURNING label_id").first();
+   await expect(create({from:'x'},{labelId:label.label_id})).rejects.toMatchObject({code:404});
+   await expect(create({},{read:true})).rejects.toMatchObject({code:400});
+   await expect(create({from:'x'},{})).rejects.toMatchObject({code:400});
+ });
+});
 describe('General mail settings',()=>{
  it('commits both forms together and preserves both when either revision is stale',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');

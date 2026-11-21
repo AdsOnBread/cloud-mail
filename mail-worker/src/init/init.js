@@ -1,3 +1,4 @@
+import {messageFilterSchema} from '../service/message-filter-schema.js';
 import { defaultNotice, upgradeEnglishDefaults } from './english-defaults';
 import settingService from '../service/setting-service';
 import emailUtils from '../utils/email-utils';
@@ -31,6 +32,7 @@ const dbInit = {
 		await this.v3_3DB(c);
 		await migrateCloud(c.env.db);
 		await migrateMobile(c.env.db);
+		await c.env.db.batch(messageFilterSchema.map(sql=>c.env.db.prepare(sql)));
 		await upgradeEnglishDefaults(c.env.db);
 		await settingService.refresh(c);
 		return c.text('success');

@@ -1,3 +1,4 @@
+import {messageFilterSchema} from '../src/service/message-filter-schema.js';
 // Apply the additive mailbox schema before switching traffic to a version that reads it.
 import { execFileSync } from 'node:child_process';
 import {mailWordSchema,seedWordIndex,wordIndexProgress} from '../src/service/mail-word-schema.js';
@@ -30,4 +31,5 @@ if (existing.has('email') && existing.has('cloud_drafts')) {
   for (const statement of scheduledTrashSchema) execute(statement);
 }
 await ensureDeliveredWakeColumn(()=>execute('PRAGMA table_info(scheduled_inbox_deliveries)')[0].results,execute);
+if (existing.has('email')) for (const statement of messageFilterSchema) execute(statement);
 console.log('Mailbox filing schema is ready.');

@@ -1,3 +1,4 @@
+import {listFilters,previewFilter,saveFilter,deleteFilter} from '../cloud/message-filters';
 import app from '../hono/hono';
 import result from '../model/result';
 import userContext from '../security/user-context';
@@ -13,6 +14,10 @@ import { moveFromTrash,setTrashRead,setTrashLabels } from '../cloud/trash-action
 import {systemLabels,setSystemLabel} from '../cloud/system-labels';
 const root='/v1';const uid=c=>userContext.getUserId(c);
 app.use(root+'/*',async(c,next)=>{await activeUser(c,uid(c));await next();c.header('Cache-Control','private, no-store');});
+app.get(root+'/filters',async c=>c.json(result.ok(await listFilters(c.env.db,uid(c)))));
+app.post(root+'/filters/preview',async c=>c.json(result.ok(await previewFilter(c.env.db,uid(c),await c.req.json()))));
+app.put(root+'/filters/:id',async c=>c.json(result.ok(await saveFilter(c.env.db,uid(c),c.req.param('id'),await c.req.json()))));
+app.delete(root+'/filters/:id',async c=>c.json(result.ok(await deleteFilter(c.env.db,uid(c),c.req.param('id'),Number(c.req.query('version'))))));
 app.get(root+'/system-labels',async c=>c.json(result.ok(await systemLabels(c.env.db,uid(c)))));
 app.put(root+'/system-labels/:folder',async c=>c.json(result.ok(await setSystemLabel(c.env.db,uid(c),c.req.param('folder'),(await c.req.json()).mode))));
 app.get(root+'/general-settings',async c=>c.json(result.ok(await readGeneralSettings(c.env.db,uid(c)))));
