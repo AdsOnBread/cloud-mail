@@ -116,8 +116,17 @@ const detail = ref(null),
   busy = ref(false);
 function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
-const contact=computed(()=>({address:email.value.sendEmail,name:email.value.name,accountId:email.value.accountId,
-  userId:email.value.userId,mailboxEmail:email.value.mailboxEmail || props.message.mailboxEmail,mailboxName:email.value.mailboxName || props.message.mailboxName}));
+const contact = computed(() => {
+  const message = props.message;
+  const loaded = detail.value;
+  const mailbox = loaded && loaded.emailId === message.emailId && loaded.userId === message.userId &&
+    loaded.accountId === message.accountId ? loaded : message;
+  return {
+    address: message.sendEmail, name: message.name, accountId: message.accountId, userId: message.userId,
+    mailboxEmail: mailbox.mailboxEmail || message.mailboxEmail,
+    mailboxName: mailbox.mailboxName || message.mailboxName,
+  };
+});
 const sender=computed(()=>props.message.name || props.message.sendEmail || 'Unknown sender');
 const stamp=computed(()=>readerTimestamp(props.message.createTime,props.now));
 const dateId=useId(),snippetId=useId();

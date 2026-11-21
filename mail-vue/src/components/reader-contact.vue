@@ -4,11 +4,11 @@
     :aria-haspopup="available ? 'dialog' : undefined" :aria-expanded="available ? Boolean(target) : undefined"
     @pointerenter="enter" @pointerleave="leave" @click="select" @keydown.alt.right="shortcut">
     <slot/>
-  <Teleport to="body">
-    <ContactCard v-if="target" ref="card" :email="address" :name="name" :owner="user.user.email"
-      :account-id="accountId" :can-send="canSend" :anchor="target.anchor" :pointer-offset="target.offset" :focused="pinned"
-      @hold="hold" @leave="leave" @close="close" @send="compose"/>
-  </Teleport>
+    <Teleport to="body">
+      <ContactCard v-if="target" ref="card" :email="address" :name="name" :owner="user.user.email"
+        :account-id="accountId" :can-send="canSend" :anchor="target.anchor" :pointer-offset="target.offset" :focused="pinned"
+        @hold="hold" @leave="leave" @close="close" @send="compose"/>
+    </Teleport>
   </component>
 </template>
 <script setup>

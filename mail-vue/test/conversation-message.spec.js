@@ -159,3 +159,20 @@ it("keeps named and empty groups in message details and the printed headers", as
   expect(doc.body.textContent).not.toContain("secret@example.net");
   wrapper.unmount();
 });
+it("gives owned expanded senders a contact trigger and removes it for another owner", async () => {
+  vi.spyOn(useEmailStore(), "ensureDetail").mockImplementation(async (m) => m);
+  useUserStore().authenticatedToken = "reader-session";
+  const wrapper = card({expanded: true});
+  await flushPromises();
+  expect(wrapper.get("button.sender-person").attributes("aria-label")).toBe("Contact info for Sender");
+  expect(wrapper.get("button.sender-photo").attributes("tabindex")).toBe("-1");
+  await wrapper.get(".sender-person").trigger("click");
+  expect(wrapper.emitted("toggle")).toBeUndefined();
+
+  await wrapper.setProps({message: {...message, userId: 2}});
+  expect(wrapper.find("button.sender-person").exists()).toBe(false);
+  expect(wrapper.get("span.sender-person").text()).toBe("Sender");
+  await wrapper.get(".message-toggle").trigger("click");
+  expect(wrapper.emitted("toggle")).toHaveLength(1);
+  wrapper.unmount();
+});
