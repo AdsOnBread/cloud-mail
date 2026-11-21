@@ -6,7 +6,7 @@
     ref="composeRoot"
     v-show="show"
     class="send"
-    :class="{ expanded, minimized, inline: inline }"
+    :class="{ expanded, minimized, inline, 'compose-open': show }"
     :role="modal ? 'dialog' : undefined"
     :aria-modal="modal || undefined"
     aria-label="Compose message"

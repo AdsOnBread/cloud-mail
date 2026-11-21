@@ -14,6 +14,13 @@ describe('recipient and draft behavior', () => {
     expect(splitRecipients(' a@example.com;b@example.com\nc@example.com，d@example.com, ')).toHaveLength(4);
     expect(normalizeRecipients({ receiveEmail:['a@example.com'], cc:[], bcc:[] }, { bcc:'private@example.com' }).bcc).toEqual(['private@example.com']);
   });
+  it('extracts addresses from pasted names while preserving malformed addresses for validation', () => {
+    expect(splitRecipients('"Rivera, Sam" <sam@example.net>; Customer <customer@example.net>')).toEqual(['sam@example.net','customer@example.net']);
+    const headers = 'To: <alice@example.com>\r\nBcc: <private@example.com>';
+    expect(normalizeRecipients({}, { receiveEmail: headers }).errors.receiveEmail).toContain('Bcc:');
+    expect(splitRecipients('alice@example.com <bob@example.com>')).toEqual(['alice@example.com <bob@example.com>']);
+    expect(splitRecipients('Broken <broken>,x@example.com')).toEqual(['Broken <broken>','x@example.com']);
+  });
   it('deduplicates across fields case-insensitively with To/Cc/Bcc precedence', () => {
     expect(normalizeRecipients({ receiveEmail:['A@example.com'], cc:['a@example.com','B@example.com'], bcc:['b@example.com','c@example.com'] })).toEqual({ receiveEmail:['a@example.com'], cc:['b@example.com'], bcc:['c@example.com'], errors:{} });
   });

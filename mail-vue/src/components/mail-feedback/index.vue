@@ -71,5 +71,8 @@ button:hover,a:hover { background:#ffffff14; }
 .mail-feedback-enter-active,.mail-feedback-leave-active { transition:opacity .14s,transform .14s; }
 .mail-feedback-enter-from,.mail-feedback-leave-to { opacity:0; transform:translateY(5px); }
 @media(max-width:767px){.mail-feedback-stack{bottom:16px;left:12px;max-width:calc(100vw - 24px)}}
+@media(max-width:767px){
+  :global(body:has(.send.compose-open:not(.inline,.minimized)) .mail-feedback-stack) {bottom:calc(80px + env(safe-area-inset-bottom,0px))}
+}
 @media(prefers-reduced-motion:reduce){.mail-feedback-enter-active,.mail-feedback-leave-active{transition:none}}
 </style>

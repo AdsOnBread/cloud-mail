@@ -6,8 +6,11 @@ export function splitRecipients(value = '') {
   let token = '', quoted = false, escaped = false;
   function finish() {
     const text = token.trim();
-    const named = text.match(/^[^<>]*<([^<>]+)>$/);
-    if (text) tokens.push(named && isEmail(named[1].trim()) ? named[1].trim() : text);
+    const named = text.match(/^([^<>]*)<([^<>]+)>$/);
+    // Only discard a display name. Headers and stray addresses must stay visible for validation.
+    const name = named?.[1].replace(/"(?:[^"\\]|\\.)*"/g, '').trim();
+    const address = named?.[2].trim();
+    if (text) tokens.push(named && !/[":@;,，()\[\]\\]/.test(name) && isEmail(address) ? address : text);
     token = '';
   }
   for (const character of String(value)) {

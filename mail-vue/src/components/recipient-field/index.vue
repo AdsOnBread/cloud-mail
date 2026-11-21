@@ -1,6 +1,6 @@
 <template>
   <div class="recipient-field" :class="{ 'has-error': error }">
-    <button type="button" class="field-label" :aria-label="`Choose ${label} contacts`"
+    <button type="button" class="field-label" ref="labelButton" :aria-label="`Choose ${label} contacts`"
       :data-tip="`${label} - Select contacts`" @click="$emit('contacts')">{{ label }}</button>
     <div ref="entry" class="recipient-entry" @click.self="input?.focus()">
       <template v-for="(address, index) in modelValue" :key="index">
@@ -29,7 +29,7 @@
     <p v-if="error" :id="`${inputId}-error`" class="recipient-error" role="alert">{{ error }}</p>
     <Teleport to="body">
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
-        class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @focusout="leaveMenu">
+        class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @mousedown.prevent @focusout="leaveMenu">
         <button type="button" role="menuitem" @click="clipboardAction(false)">Copy email address</button>
         <button type="button" role="menuitem" @click="clipboardAction(true)">Cut</button>
         <button type="button" role="menuitem" @click="edit(menuIndex)">Change email address <kbd>Shift+F</kbd></button>
@@ -45,7 +45,7 @@ import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
   names: Object, contacts: { type: Array, default: () => [] }, error: String });
 const emit = defineEmits(['update:modelValue', 'contacts']);
-const input = ref(), entry = ref(), menu = ref(), menuStyle = ref({});
+const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
 const inputId = `recipient-${useId()}`;
 const display = address => props.names?.[address.toLowerCase()] || address;
@@ -59,7 +59,7 @@ function clear() {
 }
 function commit() {
   const entered = splitRecipients(pending.value);
-  if (entered.length) {
+  if (entered.length || editing.value !== null) {
     const updated = [...props.modelValue];
     updated.splice(editing.value ?? updated.length, editing.value === null ? 0 : 1, ...entered);
     emit('update:modelValue', updated);
@@ -156,6 +156,10 @@ function menuKey(event) {
   const items = [...menu.value.querySelectorAll('button')];
   const index = items.indexOf(document.activeElement);
   if (event.key === 'Escape') closeMenu(true);
+  else if (event.key === 'Tab') {
+    closeMenu(false);
+    (event.shiftKey ? labelButton.value : input.value)?.focus();
+  }
   else if (event.key === 'ArrowDown') items[(index + 1) % items.length].focus();
   else if (event.key === 'ArrowUp') items[(index + items.length - 1) % items.length].focus();
   else if (event.key.toLowerCase() === 'f' && event.shiftKey) edit(menuIndex.value);
