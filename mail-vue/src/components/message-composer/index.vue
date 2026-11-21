@@ -1,7 +1,7 @@
 <template>
   <div v-if="modal" class="compose-backdrop" aria-hidden="true" />
   <section
-    @keydown="keydown"
+    @keydown="keydown" :inert="discardLocked || dockHidden"
     @dragenter="dragFiles" @dragover="dragFiles" @dragleave="leaveFiles" @drop="dropFiles"
     ref="composeRoot"
     v-show="show"
@@ -433,8 +433,8 @@ import db from "@/db/db.js";
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-const props = defineProps({ inline: Boolean });
-const emit = defineEmits(["sent", "closed"]);
+const props = defineProps({ inline: Boolean, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
+const emit = defineEmits(["sent", "closed", "dock-state", "editor-focus"]);
 const composeRoot = ref();
 const labelStore=useMailLabels();
 const moreOptions=ref();
@@ -446,7 +446,7 @@ const desktop = ref(window.innerWidth >= 768);
 const modal = computed(
   () =>
     show.value &&
-    expanded.value &&
+    expanded.value && !props.dockHidden &&
     !minimized.value &&
     desktop.value &&
     !props.inline,
@@ -573,6 +573,7 @@ function rememberInput(event) {
   if (event.target.matches("input")) lastInput = event.target;
 }
 function focusBody() {
+  emit("editor-focus");
   lastInput = null;
   collapseAddresses();
 }
@@ -839,16 +840,17 @@ function reveal() {
   show.value = true;
   minimized.value = false;
   nextTick(() => {
-    if (!props.inline) toField.value?.focus();
+    if (!props.inline && props.dockActive) toField.value?.focus();
   });
 }
+function focusWindow(){
+  if (!show.value || props.dockHidden) return;
+  if (minimized.value) restoreCompose();
+  else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
+  else editor.value?.focus();
+}
 function open() {
-  if (show.value) {
-    if (minimized.value) restoreCompose();
-    else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
-    else editor.value?.focus();
-    return;
-  }
+  if (show.value) return focusWindow();
   if (preparing.value) return;
   resetForm();
   setSender();
@@ -883,6 +885,7 @@ async function openDraft(draft) {
     preparing.value = false;
   }
   await nextTick();
+  if (!mounted || !props.dockActive) return;
   if (props.inline || replyRecipientTitle.value) {
     collapseAddresses();
     editor.value?.resumeDraft?.();
@@ -917,11 +920,14 @@ async function prepareMessage(message, mode, all = false) {
   if (!available()) return;
   preparing.value = true;
   try {
+    const session=draftSession();
     const email = await emailStore.ensureDetail(message);
     if (hasPerm("account:query")) await accountStore.loadAll();
     const html =
       (await inlineDataHTML(email.content)) ||
       `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHTML(email.text)}</pre>`;
+    if (!mounted) return;
+    session.check();
     resetForm();
     setSender();
     const originalAccount =
@@ -988,6 +994,7 @@ async function prepareMessage(message, mode, all = false) {
     preparing.value = false;
   }
   await nextTick();
+  if (!mounted || !props.dockActive) return;
   if (props.inline) editor.value?.focus?.(true);
   else toField.value?.focus();
 }
@@ -1160,39 +1167,45 @@ async function discard() {
   try { await discardEditor(); }
   catch (error) { sendError.value = error.message || "Could not discard this draft."; }
 }
-async function discardEditor(selected, session = draftSession()) {
-  if (selected && (!show.value || !selected.includes(form.draftId))) return false;
+const discardLocked=ref(false);
+async function prepareDiscard(session){
   if (!show.value || preparing.value || sending.value || attaching.value)
     throw new Error("Finish the current action before discarding.");
   session.check();
-  preparing.value = true;
-  try {
+  discardLocked.value=true;
+  preparing.value=true;
+  try{
     clearTimeout(cloudSaveTimer);
     signatureGeneration++;
     await editor.value?.ready?.();
     commitRecipients();
     await saveQueue.catch(() => {});
     session.check();
-    const changed = draftFingerprint(form) !== baseline && draftFingerprint(form) !== automaticBaseline;
-    if ((form.draftId && (!restoredUntouched || changed)) || (!form.draftId && changed && hasDraftContent(form))) await persistDraft({requireCurrent:true, session});
-    if (form.draftId) {
-      const recovery = await discardDrafts(selected || [form.draftId], {draftId:form.draftId, editToken:form.editToken, cloudVersion:form.cloudVersion, localRevision:form.localRevision}, session);
-      feedback.dismissedDrafts(recovery, selected ? undefined : async ([id]) => {
-        if (!mounted || props.inline || show.value || preparing.value) return;
-        const {readSavedDraft} = await import("@/services/draft-list");
+    const changed=draftFingerprint(form)!==baseline && draftFingerprint(form)!==automaticBaseline;
+    if ((form.draftId && (!restoredUntouched || changed)) || (!form.draftId && changed && hasDraftContent(form)))
+      await persistDraft({requireCurrent:true,session});
+    return {draftId:form.draftId,editToken:form.editToken,cloudVersion:form.cloudVersion,localRevision:form.localRevision};
+  }catch(error){unlockDiscard();throw error;}
+}
+function unlockDiscard(){discardLocked.value=false;preparing.value=false;}
+function finishDiscard(){show.value=false;resetForm();emit("closed");}
+async function discardEditor(selected,session=draftSession()){
+  if (selected && (!show.value || !selected.includes(form.draftId))) return false;
+  const expected=await prepareDiscard(session);
+  try {
+    if(expected.draftId){
+      const recovery=await discardDrafts(selected || [expected.draftId],expected,session);
+      feedback.dismissedDrafts(recovery,selected || props.inline ? undefined : async ([id])=>{
         session.check();
-        const draft = await readSavedDraft(id);
+        const {readSavedDraft}=await import("@/services/draft-list");
+        const draft=await readSavedDraft(id);
         session.check();
-        if (mounted && !show.value && !preparing.value) await openDraft(draft);
+        await uiPreferences.writerRef?.openDraft(draft);
       });
     }
-    show.value = false;
-    resetForm();
-    emit("closed");
+    finishDiscard();
     return true;
-  } finally {
-    preparing.value = false;
-  }
+  }finally{unlockDiscard();}
 }
 function dismissRecipientError() {
   missingRecipient.value = false;
@@ -1407,6 +1420,9 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
+  if (props.dockHidden || discardLocked.value) return;
+  const inside=composeRoot.value?.contains(event.target);
+  if(!inside && (!props.dockActive || event.target.closest?.('.send,dialog[open],input,textarea,select,[role="dialog"],[role="menu"]'))) return;
   if (labelStore.edit || photosOpen.value || event.target.closest?.(".photo-picker")) return;
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".label-dialog,.recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
@@ -1468,7 +1484,7 @@ watch(modal, async (active) => {
       await nextTick();
       composeRoot.value?.querySelector("button")?.focus();
     }
-  } else previousFocus?.isConnected && previousFocus.focus();
+  } else if (!props.dockHidden && previousFocus?.isConnected) previousFocus.focus();
 });
 function containFocus(event) {
   if (
@@ -1505,9 +1521,13 @@ onUnmounted(() => {
   window.removeEventListener("resize", resize);
   document.removeEventListener("focusin", containFocus);
 });
+watch([()=>form.draftId,minimized,expanded,caption],([draftId,minimized,expanded,caption])=>{
+  if (!props.inline) emit("dock-state",{draftId,minimized,expanded,caption});
+},{flush:"sync"});
 defineExpose({
   focusBody: () => editor.value?.focus(),
   followDelivery,
+  visible:show,focusWindow,prepareDiscard,finishDiscard,unlockDiscard,
   discardEditor,
   open,
   openDraft,
@@ -1543,8 +1563,8 @@ defineExpose({
 .send {
   position: fixed;
   bottom: 0;
-  right: 48px;
-  width: clamp(510px,39vw,590px);
+  right: var(--dock-right,48px);
+  width: var(--dock-width,clamp(510px,39vw,590px));
   max-width: calc(100vw - 32px);
   z-index: 200;
   color: var(--el-text-color-primary);
@@ -1773,7 +1793,8 @@ defineExpose({
   top: auto;
   bottom: 0;
   left: auto;
-  width: 328px;
+  width: var(--dock-width,328px);
+  right:var(--dock-right,48px);
 }
 .minimized .write-box {
   height: 40px;
@@ -1809,9 +1830,9 @@ defineExpose({
   .send.minimized:not(.inline) {
     top: auto;
     left: auto;
-    right: 8px;
+    right: var(--dock-right,8px);
     bottom: 0;
-    width: min(328px, calc(100% - 16px));
+    width: var(--dock-width,min(328px, calc(100% - 16px)));
   }
   .minimized .write-box,
   .minimized .compose-title {

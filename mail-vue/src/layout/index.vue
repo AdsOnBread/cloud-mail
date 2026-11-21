@@ -4,7 +4,7 @@
     <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main"><Main /></main>
-    <writer ref="writerRef" />
+    <writer ref="writerRef" :key="user.authenticatedToken" />
     <MailTooltip />
     <MailFeedback />
     <LabelEditor /><QuickSettings />
@@ -37,6 +37,8 @@ const shellStyle=computed(()=>{
     '--mail-canvas':!['light','dark'].includes(active.id) && !uiStore.dark ? active.color : undefined,
     '--theme-image': active.image?'url("'+active.image+'")':undefined};
 });
+import {useUserStore} from '@/store/user';
+const user=useUserStore();
 const labels=useMailLabels();
 const pointerInRail=ref(false),keyboardInRail=ref(false);
 const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));

@@ -313,6 +313,7 @@ async function finishDiscard(database, row, api) {
 export async function discardDrafts(ids, expectedEditor, session = draftSession()) {
   const {database, owner, check:checkOwner} = session;
   const operation = crypto.randomUUID(), originals = [...new Set(ids)];
+  const editors=new Map([].concat(expectedEditor || []).map(editor=>[editor.draftId,editor]));
   const expires = Date.now() + 86400000;
   checkOwner();
   // A definite failure or stale, never-started operation is safe to discard.
@@ -334,7 +335,7 @@ export async function discardDrafts(ids, expectedEditor, session = draftSession(
     for (const id of originals) {
       const row = await database.draft.get(id);
       if (!row || row.deleted) throw new Error('This draft is no longer available.');
-      if (expectedEditor?.draftId === id && !matchesEditor(row, expectedEditor))
+      if (editors.has(id) && !matchesEditor(row, editors.get(id)))
         throw new Error('The draft changed elsewhere. Reopen it before changing it.');
       if (row.pendingSchedule || (row.sendAttemptId && resolvedAttempts.get(id) !== row.sendAttemptId) ||
           (!resolvedAttempts.has(id) && ['sending','uncertain'].includes(row.syncState)))
