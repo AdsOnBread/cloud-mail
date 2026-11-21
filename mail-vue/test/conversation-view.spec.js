@@ -5,6 +5,7 @@ import { createRouter, createMemoryHistory } from "vue-router";
 import ConversationView from "../src/components/conversation-view/index.vue";
 import { conversationMessages, conversationAction } from "../src/request/conversation";
 import { userDraftStore } from "../src/store/draft";
+import {useUiStore} from "../src/store/ui";
 import {useUserStore} from "../src/store/user";
 import { useEmailStore } from "../src/store/email";
 const state = vi.hoisted(() => ({
@@ -80,6 +81,7 @@ async function setup(query = "emailId=10", attachTo) {
     history: createMemoryHistory(),
     routes: [
       { path: "/mail", component: ConversationView },
+      { path: "/drafts", component: {template:"<p>Drafts</p>"} },
       { path: "/inbox", component: { template: "<p>Inbox</p>" } },
     ],
   });
@@ -189,6 +191,19 @@ describe("conversation navigation and inline targets", () => {
     );
     await router.push("/inbox");
     expect(router.currentRoute.value.path).toBe("/inbox");
+    wrapper.unmount();
+  });
+  it("reopens a late-synced forward from Drafts after its source disappears", async()=>{
+    conversationMessages.mockRejectedValueOnce(new Error("Conversation not found"));
+    const {wrapper,router}=await setup("emailId=10&draft=cloud-17&folder=draft");
+    const openDraft=vi.fn(async()=>true);
+    useUiStore().writerRef={openDraft};
+    const draft={draftId:4,cloudDraftId:17,sendType:"forward",inlineReply:true,responseSourceId:10,emailId:0,subject:"Fwd: Project"};
+    state.readSaved.mockResolvedValueOnce(draft);
+    userDraftStore().items=[{draftId:4,cloudDraftId:17,emailId:10,reply:true}];
+    await flushPromises();
+    expect(openDraft).toHaveBeenCalledWith(draft);
+    expect(router.currentRoute.value.path).toBe("/drafts");
     wrapper.unmount();
   });
   it("restores a saved inline draft into its anchor and refreshes sent replies without reopening context-menu reply", async () => {

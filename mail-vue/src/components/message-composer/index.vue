@@ -1111,6 +1111,7 @@ async function changeResponse(command) {
       form.content=defValue.value=html;
       form.text=plainMarkup(form.content).text;
       form.subject=responseSubject(source.subject,mode);
+      subjectCaption.value=form.subject.trim();
       form.emailId=mode==="reply" ? source.emailId : 0;
     }
     loadedSource.value=source;
@@ -1690,6 +1691,7 @@ watch([()=>form.draftId,minimized,expanded,caption],([draftId,minimized,expanded
   if (!props.inline) emit("dock-state",{draftId,minimized,expanded,caption});
 },{flush:"sync"});
 defineExpose({
+  responseMode,
   focusBody: () => editor.value?.focus(),
   draftId: computed(() => form.draftId),
   scrollIntoView: () => composeRoot.value?.scrollIntoView({block:"nearest"}),

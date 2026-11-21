@@ -67,6 +67,20 @@ describe('Web conversations', () => {
     const [row]=(await list({allReceive:1})).threads;
     expect(row.senders.map(({name,unread})=>[name,unread])).toEqual([['me',true],['Other author',false]]);
   });
+  it('pages an older conversation by its inline forward activity',async()=>{
+    const other=await insert({subject:'Other',create_time:'2025-01-01'});
+    const earlier=await insert({subject:'Earlier',create_time:'2025-01-02'});
+    const recent=await insert({subject:'Recent',create_time:'2025-01-03'});
+    for (const [source,inlineReply,date] of [[earlier,true,'2025-01-04'],[other,false,'2025-01-05']]) {
+      const data={emailId:0,sendType:'forward',ui:{inlineReply,responseSourceId:source.email_id}};
+      await env.db.prepare('INSERT INTO cloud_drafts(user_id,account_id,client_id,data,updated_at) VALUES(1,1,?,?,?)')
+        .bind(String(source.email_id),JSON.stringify(data),date).run();
+    }
+    const first=await list({limit:1});
+    expect(first.threads[0].lastEmailId).toBe(earlier.email_id);
+    const rest=await list({cursor:first.nextCursor});
+    expect(rest.threads.map(row=>row.lastEmailId)).toEqual([recent.email_id,other.email_id]);
+  });
   it('keeps read state per sender and shares visible thread counts with saved replies',async()=>{
     const first=await insert({message_id:'<first@external.com>',name:'Taylor Ray',unread:1});
     const reply={in_reply_to:first.message_id};

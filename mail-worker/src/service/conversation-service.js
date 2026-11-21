@@ -171,8 +171,11 @@ export async function conversationList(c, p, userId) {
 				`${base}, draft_times AS (
         SELECT m.thread_id,MAX(unixepoch(d.updated_at)) draft_time FROM cloud_drafts d
         JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
-        JOIN mobile_thread_members m ON m.user_id=d.user_id AND m.email_id=json_extract(d.data,'$.emailId')
-        WHERE d.user_id=? AND d.state='draft' AND json_extract(d.data,'$.sendType')='reply' GROUP BY m.thread_id)
+        JOIN mobile_thread_members m ON m.user_id=d.user_id AND m.email_id=CASE
+          WHEN json_extract(d.data,'$.sendType')='reply' THEN json_extract(d.data,'$.emailId')
+          WHEN json_extract(d.data,'$.sendType')='forward' AND json_extract(d.data,'$.ui.inlineReply')=1
+            THEN json_extract(d.data,'$.ui.responseSourceId') END
+        WHERE d.user_id=? AND d.state='draft' GROUP BY m.thread_id)
       SELECT g.*,(SELECT json_group_array(DISTINCT lm.label_id) FROM mobile_thread_members tm
         JOIN mailbox_label_members lm ON lm.email_id=tm.email_id AND lm.user_id=tm.user_id JOIN email member ON member.email_id=tm.email_id
         JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0

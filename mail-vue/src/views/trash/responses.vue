@@ -28,7 +28,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
 import SavedReplies from "@/components/conversation-view/saved-replies.vue";
-import { addresses } from "@/utils/recipients";
+import { responseAnchor } from "@/utils/draft-summary";
 import { userDraftStore } from "@/store/draft";
 import { useUserStore } from "@/store/user";
 import { useUiStore } from "@/store/ui";
@@ -56,7 +56,6 @@ const saved = computed(() =>
 );
 let mounted = true,
   generation = 0,
-  activeCommand,
   pendingSave;
 onBeforeUnmount(() => {
   mounted = false;
@@ -83,11 +82,11 @@ onBeforeRouteUpdate(save);
 function closed() {
   editing.value = false;
   activeId.value = null;
-  activeCommand = null;
 }
 async function open(command, summary) {
   if (opening.value) return;
-  if (!summary && command === activeCommand && composer.value?.visible) {
+  const currentMode = composer.value?.responseMode;
+  if (!summary && command === ({reply:"openReply",all:"openReplyAll",forward:"openForward"})[currentMode] && composer.value?.visible) {
     composer.value.focusBody();
     return;
   }
@@ -118,7 +117,7 @@ async function open(command, summary) {
       draft = await readSavedDraft(summary.draftId);
       if (!current()) return;
       if (
-        (draft.trashSource || draft.emailId) !== source ||
+        (draft.trashSource || responseAnchor(draft)) !== source ||
         (draft.ownerEmail && draft.ownerEmail !== user.user.email) ||
         (summary.clientId && draft.clientId !== summary.clientId)
       )
@@ -129,13 +128,7 @@ async function open(command, summary) {
       await import("@/components/message-composer/index.vue")
     ).default;
     if (!current()) return;
-    activeCommand =
-      command ||
-      (draft.sendType === "forward"
-        ? "openForward"
-        : addresses(draft.receiveEmail).length + addresses(draft.cc).length > 1
-          ? "openReplyAll"
-          : "openReply");
+    if (draft) draft = {...draft,trashSource:source};
     activeId.value = draft?.draftId;
     editing.value = true;
     await nextTick();

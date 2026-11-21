@@ -391,15 +391,15 @@ watch(
 function matchingDraft() {
   const key = route.query.draft;
   if (!key) return;
-  return threadDrafts.value.find(
+  return drafts.items.find(
     (d) =>
-      d.emailId === Number(route.query.emailId) &&
+      d.reply && d.emailId === Number(route.query.emailId) &&
       (draftKey(d) === key || (d.clientId && "client-" + d.clientId === key)),
   );
 }
 async function openRequestedDraft() {
   const draft = matchingDraft();
-  if (!draft || handledReply || switching || !messages.value.length) return;
+  if (!draft || handledReply || switching) return;
   handledReply = true;
   await editSavedDraft(draft);
 }
@@ -444,17 +444,23 @@ async function editSavedDraft(summary) {
         (summary.clientId && draft.clientId!==summary.clientId) ||
         (draft.ownerEmail && draft.ownerEmail!==user.user.email))
       throw new Error('This draft is no longer available.');
-    if (draft.responseView) await ui.writerRef.openDraft(draft);
+    if (!messages.value.length) {
+      await openWithoutConversation(draft,current);
+    } else if (draft.responseView) await ui.writerRef.openDraft(draft);
     else await reply({emailId:summary.emailId},false,draft);
   } catch (e) {
     if (current() && run===draftRun) draftFailure.value={summary,current,message:e.message || "Could not open draft."};
   }
 }
+async function openWithoutConversation(draft,current) {
+  const opened=await ui.writerRef.openDraft(draft);
+  if (opened && current()) await router.replace({path:"/drafts",query:route.query.window==="1" ? {window:"1"} : {}});
+}
 function retryDraft() {
   const failure=draftFailure.value;
   draftFailure.value=null;
   if (!failure?.current()) return;
-  const item=threadDrafts.value.find(d=>d.draftId===failure.summary.draftId);
+  const item=drafts.items.find(d=>d.draftId===failure.summary.draftId);
   if (item && item.emailId===failure.summary.emailId &&
       (!failure.summary.cloudDraftId || item.cloudDraftId===failure.summary.cloudDraftId) &&
       (!failure.summary.clientId || item.clientId===failure.summary.clientId)) editSavedDraft(item);
@@ -468,7 +474,13 @@ async function reply(message, all, draft, forward=false) {
     if (!(await save()) || !current()) return;
     // A restored draft may target a message older than the currently loaded page.
     if (!messages.value.some((item) => item.emailId === message.emailId)) {
-      const detail = await store.ensureDetail(message);
+      let detail;
+      try { detail=await store.ensureDetail(message); }
+      catch (e) {
+        if (!draft) throw e;
+        if (current()) await openWithoutConversation(draft,current);
+        return;
+      }
       if (!current()) return;
       messages.value.push(detail);
       messages.value.sort((a, b) => a.emailId - b.emailId);
