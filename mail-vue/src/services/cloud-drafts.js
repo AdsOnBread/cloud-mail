@@ -522,6 +522,7 @@ async function updateSendAttempt(database, id, attemptId, state, version, basis)
 }
 
 const tracking = new Set();
+const trackingKey=(session,id)=>JSON.stringify([session.owner,session.token,id]);
 const receiptKey = key => 'ordinary-send/' + key;
 async function recoverDeliveries(database, follow) {
   if (!follow || !navigator.onLine) return;
@@ -529,7 +530,7 @@ async function recoverDeliveries(database, follow) {
   session.check();
   const entries=await database.meta.where('key').startsWith('ordinary-send/').toArray();
   for (const entry of entries) {
-    if (tracking.has(entry.attemptId)) continue;
+    if (tracking.has(trackingKey(session,entry.attemptId))) continue;
     const receipt=await api.get('/v1/send-attempts/'+entry.attemptId,{noMsg:true});
     if (receipt.state==='not_started') {
       // Never dispatch on startup. The original request could still be in flight.
@@ -548,14 +549,15 @@ async function recoverDeliveries(database, follow) {
 
 function heldDelivery(receipt, database, api, id) {
   const session=draftSession(database);
+  const ownerKey=trackingKey(session,receipt.attemptId);
   const path='/v1/send-attempts/'+encodeURIComponent(receipt.attemptId);
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   return {
     state:'holding', begin:()=>{
-      if(tracking.has(receipt.attemptId)) return false;
-      tracking.add(receipt.attemptId);
+      if(tracking.has(ownerKey)) return false;
+      tracking.add(ownerKey);
       return true;
-    },end:()=>tracking.delete(receipt.attemptId),delay: Math.max(0,receipt.remainingMs ?? receipt.undoUntil-Date.now()),
+    },end:()=>tracking.delete(ownerKey),delay: Math.max(0,receipt.state==='holding' ? receipt.remainingMs ?? receipt.undoUntil-Date.now() : 0),
     async cancel() {
       try { await api.post(path+'/undo',{}, {noMsg:true}); }
       catch(error) {
@@ -609,7 +611,7 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     const attempt=await api.get(`/v1/send-attempts/${before.sendAttemptId}`,{noMsg:true});
     if (attempt.state === 'sent') return finishSentAttempt(database, id, before.sendAttemptId, attempt.messages);
     if (attempt.state === 'uncertain') throw new Error(attempt.message || 'Delivery is uncertain. Check Sent before sending another copy.');
-    if (attempt.state === 'holding') return heldDelivery(attempt,database,api,id);
+    if (['holding','sending'].includes(attempt.state)) return heldDelivery(attempt,database,api,id);
     if (['failed','canceled'].includes(attempt.state)) {
       const latest = await updateSendAttempt(database, id, before.sendAttemptId, attempt.state);
       if (!latest || latest.editToken !== editToken) throw new Error('Reopen the current draft before sending.');
@@ -637,7 +639,7 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   } catch (raw) {
     if (undoSeconds) {
       const receipt=await api.get('/v1/send-attempts/'+sendAttemptId,{noMsg:true}).catch(()=>null);
-      if (receipt?.state==='holding') {
+      if (['holding','sending'].includes(receipt?.state)) {
         await updateSendAttempt(database,id,sendAttemptId,'holding');
         userDraftStore().refreshList++;
         return heldDelivery(receipt,database,api,id);
@@ -651,7 +653,7 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     }
     if(!result) throw raw;
   }
-  if(result.state==='holding') {
+  if(['holding','sending'].includes(result.state)) {
     await updateSendAttempt(database,id,sendAttemptId,'holding');
     userDraftStore().refreshList++;
     return heldDelivery(result,database,api,id);
@@ -664,13 +666,14 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   return finishSentAttempt(database,id,sendAttemptId,result.messages);
 }
 export function startDraftSync(follow) {
-  let checking=false;
+  const checking=new Set();
   const sync=()=>{
     if(document.visibilityState==='hidden') return;
     syncCloudDrafts().catch(()=>{});
-    if (!checking && follow) {
-      checking=true;
-      recoverDeliveries(db.value,follow).catch(()=>{}).finally(()=>{checking=false;});
+    const identity=useUserStore().authenticatedToken;
+    if (identity && !checking.has(identity) && follow) {
+      checking.add(identity);
+      recoverDeliveries(db.value,follow).catch(()=>{}).finally(()=>checking.delete(identity));
     }
   };
   const stop=watch([db,()=>useUserStore().authenticatedToken],sync);

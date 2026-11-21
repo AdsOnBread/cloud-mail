@@ -3,6 +3,7 @@ import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
 import {dbInit} from '../src/init/init';
 import * as drafts from '../src/cloud/drafts';
 import * as mail from '../src/cloud/mail';
+import emailService from '../src/service/email-service';
 import {send,prepare,undoSend,dispatchHeld,recoverHeld} from '../src/cloud/send';
 import * as mobile from '../src/mobile/service';
 import settingService from '../src/service/setting-service';
@@ -124,6 +125,31 @@ describe('Send attempts',()=>{
    const receipt=await env.db.prepare('SELECT state,result FROM send_attempts WHERE idempotency_key=?').bind(held.attemptId).first();
    expect(receipt.state).toBe('sent');
    expect(JSON.parse(receipt.result).messages[0].emailId).toBeGreaterThan(0);
+ });
+ it('recovers an interrupted preparation before any provider dispatch',async()=>{
+   const d=await draft();
+   const hold=await send(c(),1,{version:d.version,idempotencyKey:'interrupted-prepare',undoSeconds:30},{draftId:d.draftId});
+   await env.db.prepare("UPDATE send_attempts SET result=json_set(result,'$.undoUntil',1) WHERE idempotency_key=?").bind(hold.attemptId).run();
+   let entered, release;
+   const waiting=new Promise(done=>{entered=done;});
+   const original=emailService.send.bind(emailService);
+   vi.spyOn(emailService,'send').mockImplementationOnce(async (...args)=>{
+     entered();await new Promise(done=>{release=done;});return original(...args);
+   });
+   const stalled=dispatchHeld(c(),1,hold.attemptId);
+   await waiting;
+   expect((await env.db.prepare('SELECT state FROM send_attempts WHERE idempotency_key=?').bind(hold.attemptId).first()).state).toBe('holding');
+   try { await recoverHeld(c()); } finally {release();await stalled;}
+   expect((await env.db.prepare('SELECT COUNT(*) n FROM email WHERE type=1').first()).n).toBe(1);
+ });
+ it('retains the reason for a failed held delivery in its editable cloud draft',async()=>{
+   const d=await draft({receiveEmail:['outside@example.net']});
+   const hold=await send(c(),1,{version:d.version,idempotencyKey:'failed-undo-send',undoSeconds:5},{draftId:d.draftId});
+   await env.db.prepare("UPDATE send_attempts SET result=json_set(result,'$.undoUntil',1) WHERE idempotency_key=?").bind(hold.attemptId).run();
+   await recoverHeld(c());
+   const saved=await drafts.get(c(),1,d.draftId);
+   expect(saved.state).toBe('draft');expect(saved.deliveryError).toBeTruthy();
+   expect((await drafts.save(c(),1,{version:saved.version,subject:'Edited'},d.draftId)).deliveryError).toBeUndefined();
  });
  it('sends a saved draft once, replays its result and refuses changed key reuse',async()=>{
    const d=await draft();const input={version:d.version,idempotencyKey:'send-draft-0001'};

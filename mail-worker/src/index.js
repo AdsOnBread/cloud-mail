@@ -48,7 +48,7 @@ const worker = {
 	fetch(req,env,ctx) { return oauthFetch(req,env,ctx,(r,e,c)=>worker.appFetch(r,e,c)); },
 	email: email,
 	async scheduled(c, env, ctx) {
-		if (c.cron === '* * * * *') { await recoverHeld({env}); await deliverDue({env}); await indexWordBatch(env.db); return; }
+		if (c.cron === '* * * * *') { await Promise.all([recoverHeld({env}), deliverDue({env}).then(()=>indexWordBatch(env.db))]); return; }
 		if (c.cron === '*/30 * * * *') {
 			await analysisService.refreshEchartsCache({ env });
 			return;
