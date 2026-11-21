@@ -13,7 +13,7 @@
         <Icon icon="material-symbols:close" width="18" />
       </button>
     </div>
-    <span role="status" :class="{'spell-status':error, 'sr-only':!error}">{{ status }}</span>
+    <span role="status" :class="{'spell-status':error || noMatch, 'sr-only':!error && !noMatch}">{{ status }}</span>
   </div>
   <Teleport to="body">
     <div v-if="popup" ref="menu" role="menu" :aria-label="popup === 'language' ? 'Spelling language' : 'Spelling suggestions'"
@@ -42,7 +42,7 @@ const emit = defineEmits(['close']);
 const language = defineModel('language', {default:'auto'});
 const choices = [['auto','','Auto'], ...languages];
 const root = ref(), bar = ref(), menu = ref();
-const busy = ref(false), error = ref(false), status = ref('');
+const busy = ref(false), error = ref(false), noMatch=ref(false), status = ref('');
 const boxes = shallowRef([]), suggestions = ref([]), popup = ref(''), menuStyle = ref({});
 let entering = true, issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
 const ed = props.editor;
@@ -55,6 +55,7 @@ function sameSelection(range) {
     current.endContainer===range.endContainer && current.endOffset===range.endOffset;
 }
 function navigate(action) {
+  noMatch.value=false;
   dismiss();
   entering=false;
   keyboardRequest={action,range:ed.selection.getRng().cloneRange()};
@@ -69,6 +70,7 @@ async function runNavigation() {
   if (!ed.hasFocus() || !sameSelection(request.range)) return;
   const issue=spellingTarget(issues.filter(valid),request.range,request.action);
   if (!issue) {
+    noMatch.value=true;
     status.value=request.action==='next' ? 'No spelling errors found.' : 'No spelling suggestions at the cursor.';
     return;
   }
@@ -109,6 +111,16 @@ function outside(event) {
   if (!menu.value?.contains(event.target) && !root.value?.contains(event.target)) dismiss();
 }
 function menuKeys(event) {
+  const action=spellingShortcut(event,apple);
+  if (action && popup.value==='suggest' && selected && valid(selected)) {
+    event.preventDefault();event.stopPropagation();
+    if (action==='next') {
+      const range=selected.range.cloneRange();
+      dismiss();ed.focus();ed.selection.setRng(range);
+      navigate(action);
+    }
+    return;
+  }
   const items = Array.from(menu.value.querySelectorAll('button'));
   const index = items.indexOf(document.activeElement);
   if (event.key === 'Escape') { event.stopPropagation(); dismiss(true); }
@@ -219,6 +231,7 @@ function failed() {
 }
 function scan(resetIgnored=true) {
   if (resetIgnored) ignored=[];
+  noMatch.value=false;
   dismiss();
   busy.value = true;
   error.value = false;
@@ -233,7 +246,7 @@ function scan(resetIgnored=true) {
       words:Array.from(new Set(words.map(item => item.word))),
       base:new URL(import.meta.env.BASE_URL, document.baseURI).href}, ({wrong}) => {
       const invalid = new Set(wrong);
-      ignored=ignored.filter(valid);
+      if (ignored.length) ignored=liveWords(ed.getBody(),ignored);
       const skip=new Map();
       for (const {range} of ignored) {
         const node=range.startContainer;
@@ -287,7 +300,9 @@ function editorEscape(event) {
 function edited(event) {
   // TinyMCE can finalize the preceding undo level on shortcut keyup. Its change
   // event leaves the caret in place and must not cancel a pending first lookup.
-  if (event.type.toLowerCase()!=='change') keyboardRequest=undefined;
+  if (event.type.toLowerCase()!=='change') {
+    keyboardRequest=undefined;noMatch.value=false;
+  }
   needsScan=true;
   textChanged = true;
   if (selected && !valid(selected)) dismiss();
