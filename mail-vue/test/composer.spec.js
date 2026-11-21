@@ -271,6 +271,36 @@ describe("composer persistence and sending", () => {
     expect(state.attachments.size).toBe(0);
     wrapper.unmount();
   });
+  it("updates the docked caption on blur and keeps recipient shortcuts usable from a collapsed header", async () => {
+    const wrapper = composer();
+    wrapper.vm.open();
+    await flushPromises();
+    const subject = wrapper.get('[aria-label="Subject"]');
+    const caption = wrapper.get(".compose-caption");
+    await subject.trigger("focus");
+    expect(wrapper.get('[aria-label="Edit recipients"]').text()).toBe("Recipients");
+    await subject.setValue("Meeting notes");
+    expect(caption.text()).toBe("New Message");
+    await subject.trigger("blur");
+    expect(caption.text()).toBe("Meeting notes");
+    await subject.trigger("keydown", { key: "B", ctrlKey: true, shiftKey: true });
+    await flushPromises();
+    const blindCopy = wrapper.get('[aria-label="Bcc recipients"]');
+    expect(document.activeElement).toBe(blindCopy.element);
+    await blindCopy.setValue("private@example.com");
+    await blindCopy.trigger("blur");
+    await subject.trigger("focus");
+    expect(wrapper.get('[aria-label="Edit recipients"]').text()).toBe("private@example.com");
+    await wrapper.get('[aria-label="Minimize compose"]').trigger("click");
+    expect(caption.text()).toBe("Meeting notes");
+    expect(caption.attributes("aria-expanded")).toBe("false");
+    await caption.trigger("click");
+    expect(caption.attributes("aria-expanded")).toBe("true");
+    await subject.setValue("");
+    await subject.trigger("blur");
+    expect(caption.text()).toBe("New Message");
+    wrapper.unmount();
+  });
   it("opens older drafts with empty Cc/Bcc and opens populated rows for new drafts", async () => {
     const wrapper = composer();
     wrapper.vm.openDraft({
