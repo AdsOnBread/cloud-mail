@@ -35,7 +35,7 @@
         </select>
         <span v-else-if="key==='from' || key==='to'" class="people-terms">
           <input v-for="(_,i) in form[key]" :key="i" v-model="form[key][i]"
-            :aria-label="i ? names[key]+' '+(i+1) : names[key]" maxlength="200" type="text"/>
+            :aria-label="i ? names[key]+' '+(i+1) : names[key]" :maxlength="maxPersonTerm" type="text"/>
         </span>
         <input
           v-else
@@ -64,7 +64,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import {positionMailboxPopup} from "./mail-popup-position";
 import { Icon } from "@iconify/vue";
-import {peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
+import {maxPersonTerm,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {olderChoices,recentChoices,timeCaption,withoutTime} from "./mail-date-time/search-range";
 import { useMailSearchStore } from "@/store/mail-search";
 const props = defineProps({ chips: Boolean, queryText: String });

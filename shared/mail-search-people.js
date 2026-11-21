@@ -1,5 +1,6 @@
 // Keep the first term in the original query parameter for single-person searches.
 export const maxPeople = 12;
+export const maxPersonTerm = 320;
 
 export function peopleTerms(params, field) {
   let extra = [];
@@ -14,7 +15,7 @@ function normalizedPeople(values) {
   const seen = new Set(), terms = [];
   for (const value of values) {
     if (typeof value !== 'string') continue;
-    const term = value.trim().slice(0, 200), key = term.toLowerCase();
+    const term = value.trim().slice(0, maxPersonTerm), key = term.toLowerCase();
     if (term && !seen.has(key)) {
       terms.push(term);
       seen.add(key);

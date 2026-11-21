@@ -541,6 +541,11 @@ it('suggests scoped senders and recipients and matches either selected person in
  await insert({name:'Other alias',send_email:'alias@example.org',account_id:3});
  await cloudMail.trash(context(),1,[a,b,c].map(row=>row.email_id));
  const options=(field,q)=>cloudMail.searchPeople(context(),1,{folder:'trash',accountId:'1',field,q});
+ const longAddress='a'.repeat(63)+'@'+('d'.repeat(54)+'.').repeat(3)+'com';
+ const long=await insert({send_email:longAddress});
+ await cloudMail.trash(context(),1,[long.email_id]);
+ expect((await cloudMail.list(context(),1,{folder:'trash',from:longAddress})).messages.map(r=>r.emailId)).toEqual([long.email_id]);
+ expect((await options('from',longAddress))[0].email).toBe(longAddress);
  expect(await options('from','example.org')).toEqual([]);
  expect(await options('from','élodie')).toEqual([{name:'Élodie Chen',email:'ann@example.net'}]);
  expect((await cloudMail.list(context(),1,{folder:'trash',from:'ÉLODIE'})).messages.map(r=>r.emailId)).toEqual([a.email_id]);

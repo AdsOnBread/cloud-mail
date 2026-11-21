@@ -1,5 +1,5 @@
 import { mailboxAttachments } from '../service/mailbox-attachments';
-import {maxPeople} from '../../../shared/mail-search-people';
+import {maxPeople,maxPersonTerm} from '../../../shared/mail-search-people';
 import {peopleSuggestions} from '../../../shared/mail-people-suggestions';
 import { addMailFilters,addPeopleFilter } from '../service/mail-search-filters';
 import { ensureThreads } from '../mobile/threads';
@@ -16,7 +16,7 @@ export const owned = 'e.user_id=? AND a.user_id=e.user_id AND a.is_del=0 AND e.i
 export async function searchPeople(c,userId,params) {
   const {field,accountId,folder}=params;
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
-  const filters=[owned], args=[userId], term=params.q?.trim().slice(0,200) || '';
+  const filters=[owned], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';
   if (accountId) { filters.push('e.account_id=?'); args.push(positive(accountId)); }
   const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
   addPeopleFilter({[field]:term}, field, field==='from' ? ['e.send_email','e.name'] : to, filters, args, true);

@@ -16,7 +16,7 @@
         <input ref="input" v-model="query" role="combobox" aria-label="Name or email" placeholder="Name or email"
           :aria-controls="id" aria-autocomplete="list" :aria-expanded="true"
           :aria-activedescendant="index>=0 && options[index] ? id+'-'+index : undefined"
-          maxlength="200" autocomplete="off" spellcheck="false" @keydown="keys"/>
+          :maxlength="maxPersonTerm" @paste="paste" autocomplete="off" spellcheck="false" @keydown="keys"/>
       </div>
       <div :id="id" role="listbox" :aria-label="label+' suggestions'" class="people-list">
         <div v-for="(person,i) in options" :id="id+'-'+i" :key="person.email" role="option"
@@ -37,7 +37,7 @@ import http from '@/axios';
 import {useMailSearchStore} from '@/store/mail-search';
 import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
-import {maxPeople,peopleTerms,personSearchKey,setPeopleTerms} from '../../../shared/mail-search-people';
+import {fullAddress,maxPeople,maxPersonTerm,peopleTerms,personSearchKey,setPeopleTerms} from '../../../shared/mail-search-people';
 
 const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore(), account=useAccountStore(), user=useUserStore();
@@ -76,6 +76,18 @@ function update(terms) {
 function add(term) {
   if (!term.trim() || selected.value.length>=maxPeople) return;
   update([...selected.value,term]);close(true);
+}
+function paste(event) {
+  const field=event.currentTarget;
+  if (field.value && (field.selectionStart!==0 || field.selectionEnd!==field.value.length)) return;
+  const pasted=(event.clipboardData?.getData('text/plain') || '').trim();
+  if (!pasted) return;
+  const addresses=pasted.split(/[,;\r\n]+/).map(s=>s.trim()).filter(Boolean);
+  if (!addresses.length || addresses.some(s=>s.length>maxPersonTerm || !fullAddress(s))) return;
+  const terms=[...selected.value,...addresses];
+  if (new Set(terms.map(personSearchKey)).size>maxPeople) return;
+  event.preventDefault();
+  update(terms);close(true);
 }
 function remove(term) {
   update(selected.value.filter(value=>value!==term));
