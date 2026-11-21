@@ -401,7 +401,7 @@ import {
   restoreDraft,
   hasDraftContent,
   draftFingerprint,
-  replyAllRecipients,
+  replyRecipients,
   recipientFields,
 } from "@/utils/recipients.js";
 import db from "@/db/db.js";
@@ -793,19 +793,7 @@ async function prepareMessage(message, mode, all = false) {
     form.sendType = mode;
     form.emailId = mode === "reply" ? email.emailId : 0;
     if (mode === "reply") {
-      Object.assign(
-        form,
-        all
-          ? replyAllRecipients(email, accountStore.ownAddresses)
-          : {
-              receiveEmail:
-                email.type === 1
-                  ? addresses(email.recipient)
-                  : [email.sendEmail].filter(Boolean),
-              cc: [],
-              bcc: [],
-            },
-      );
+      Object.assign(form, replyRecipients(email, accountStore.ownAddresses, all));
       const quote = `<div>${escapeHTML(formatDetailDate(email.createTime))} ${escapeHTML(email.name)} &lt;${escapeHTML(email.sendEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${html}</blockquote>`;
       form.content = `<div><br></div><div class="cloudmail-reply-quote">${quote}</div>`;
       if (props.inline) {

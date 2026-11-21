@@ -98,6 +98,17 @@ describe('Send attempts',()=>{
    const input={accountId:1,subject:'External',content:'<p>Hello</p>',receiveEmail:['outside@example.net'],idempotencyKey:'uncertain-send-1'};
    expect((await send(context,1,input)).state).toBe('uncertain');expect((await send(context,1,input)).state).toBe('uncertain');expect(context.env.email.send).toHaveBeenCalledTimes(1);
  });
+ it('honors explicit blind-copy-only reply addresses and preserves the hidden field on a sent reply',async()=>{
+   const source = await message();
+   const explicit = await prepare(c(),1,{accountId:1,emailId:source.email_id,subject:'',bcc:['chosen@example.com']},'reply');
+   expect(explicit.receiveEmail || []).toEqual([]);
+   expect(explicit).toMatchObject({subject:'',bcc:['chosen@example.com']});
+   const sent = await message({type:1,recipient:'[]',cc:'[]',bcc:'[{"address":"private@example.com"}]'});
+   for (const replyAll of [true,false]) {
+     const reply=await prepare(c(),1,{accountId:1,emailId:sent.email_id,replyAll},'reply');
+     expect(reply).toMatchObject({receiveEmail:[],cc:[],bcc:['private@example.com']});
+   }
+ });
  it('prepares reply-all without aliases or Bcc and forwards ordinary files independently',async()=>{
    const original=await message();
    const reply=await prepare(c(),1,{accountId:1,emailId:original.email_id,text:'Reply',replyAll:true},'reply');

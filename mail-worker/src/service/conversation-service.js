@@ -29,9 +29,11 @@ async function resolve(db, userId, anchor) {
 function participants(row, folder) {
 	if (folder === 'sent') {
 		try {
-			const people = JSON.parse(row.sent_recipients || '[]');
-			const names = people.map((person) => person.name || person.address || (typeof person === 'string' ? person : '')).filter(Boolean);
-			if (names.length) return 'To: ' + names.join(', ');
+			for (const [label, field] of [['To', row.sent_recipients], ['Cc', row.sent_cc], ['Bcc', row.sent_bcc]]) {
+				const people = JSON.parse(field || '[]');
+				const names = people.map((person) => person.name || person.address || (typeof person === 'string' ? person : '')).filter(Boolean);
+				if (names.length) return label + ': ' + names.join(', ');
+			}
 		} catch {
 			/* Older rows may lack structured recipients. */
 		}
@@ -168,7 +170,7 @@ export async function conversationList(c, p, userId) {
         JOIN mailbox_label_members lm ON lm.email_id=tm.email_id AND lm.user_id=tm.user_id JOIN email member ON member.email_id=tm.email_id
         JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0
         WHERE tm.user_id=e.user_id AND tm.thread_id=g.thread_id AND member.is_del=0 AND member.trashed_at IS NULL AND member.status NOT IN (6,7)) label_ids,
-        CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
+        CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,sent.recipient sent_recipients,sent.cc sent_cc,sent.bcc sent_bcc,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
       SUBSTR(COALESCE(e.text,''),1,180) preview FROM ${groupSource} g JOIN email e ON e.email_id=g.last_email_id JOIN email first ON first.email_id=g.first_email_id LEFT JOIN email sent ON sent.email_id=g.last_sent_id LEFT JOIN filed f ON f.thread_id=g.thread_id LEFT JOIN draft_times d ON d.thread_id=g.thread_id
       ${category?'WHERE g.category=?':''} ${cursor ? (category?'AND ':'WHERE ') + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
 			)
@@ -180,7 +182,7 @@ export async function conversationList(c, p, userId) {
   const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
-			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
+			const { sent_recipients, sent_cc, sent_bcc, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
 			return { ...camel(summary), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
 		unreadThreads: totals?.unread_threads||0,

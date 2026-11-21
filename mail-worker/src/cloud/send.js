@@ -15,12 +15,15 @@ export async function prepare(c,userId,input,mode) {
     if(source.trashedAt)throw new BizError('Restore the original message before replying or forwarding.',400);
     value.emailId=source.emailId;value.sendType=mode;
     value.subject=input.subject??`${mode==='reply'?'Re:':'Fwd:'} ${source.subject||''}`;
-    if(mode==='reply' && !input.receiveEmail) {
+    if(mode==='reply' && !['receiveEmail','cc','bcc'].some(field=>Object.hasOwn(input,field))) {
       const own=new Set((await c.env.db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId).all()).results.map(r=>r.email.toLowerCase()));
       const seen=new Set();const unique=list=>list.filter(a=>{const k=a.toLowerCase();if(own.has(k)||seen.has(k))return false;seen.add(k);return true;});
       const sender=source.type===1?addresses(source.recipient):[source.sendEmail];
       value.receiveEmail=unique([...sender,...(input.replyAll?addresses(source.recipient):[])]);
-      value.cc=input.replyAll?unique(addresses(source.cc)):[];value.bcc=[];
+      const copyOnly = source.type === 1 && sender.length === 0;
+      const cc = addresses(source.cc);
+      value.cc = input.replyAll || copyOnly ? unique(cc) : [];
+      value.bcc = copyOnly && !cc.length ? unique(addresses(source.bcc)) : [];
     }
     let originalHTML=source.content||escape(source.text);
     for(const file of source.attList.filter(f=>f.contentId)) {

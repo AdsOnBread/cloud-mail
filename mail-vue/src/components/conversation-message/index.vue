@@ -54,26 +54,26 @@
         :aria-expanded="recipientsOpen"
 
       >
-        to {{ addresses(message.recipient).join(", ") || email.toEmail }}
+        {{ recipientSummary }}
         <Icon icon="material-symbols:expand-more" width="16" />
       </button>
       </template>
       <div class="recipient-details">
-        <div><span>From</span>{{ message.sendEmail }}</div>
-        <div><span>To</span>{{ addresses(message.recipient).join(", ") }}</div>
-        <div v-if="addresses(message.cc).length">
-          <span>Cc</span>{{ addresses(message.cc).join(", ") }}
+        <div><span>From</span>{{ email.sendEmail }}</div>
+        <div v-if="addresses(email.recipient).length"><span>To</span>{{ addresses(email.recipient).join(", ") }}</div>
+        <div v-if="addresses(email.cc).length">
+          <span>Cc</span>{{ addresses(email.cc).join(", ") }}
         </div>
         <div
           v-if="
-            message.type === 1 &&
-            message.userId === user.user.userId &&
-            addresses(message.bcc).length
+            email.type === 1 &&
+            email.userId === user.user.userId &&
+            addresses(email.bcc).length
           "
         >
-          <span>Bcc</span>{{ addresses(message.bcc).join(", ") }}
+          <span>Bcc</span>{{ addresses(email.bcc).join(", ") }}
         </div>
-        <div><span>Date</span>{{ formatDetailDate(message.createTime) }}</div>
+        <div><span>Date</span>{{ formatDetailDate(email.createTime) }}</div>
       </div>
       </el-popover>
       <p v-if="loading" role="status">Loading message…</p>
@@ -144,6 +144,18 @@ const detail = ref(null),
   busy = ref(false);
 const previewFile = ref(null);
 const email = computed(() => detail.value || props.message);
+const recipientSummary = computed(() => {
+  const message = email.value;
+  const to = addresses(message.recipient);
+  if (to.length) return "to " + to.join(", ");
+  const cc = addresses(message.cc);
+  if (cc.length) return "cc " + cc.join(", ");
+  if (message.type === 1 && message.userId === user.user.userId) {
+    const bcc = addresses(message.bcc);
+    if (bcc.length) return "bcc " + bcc.join(", ");
+  }
+  return email.value.toEmail ? "to " + email.value.toEmail : "Show details";
+});
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
 async function load() {
   if (loading.value) return;

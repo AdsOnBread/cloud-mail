@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeRecipients, replyAllRecipients, restoreDraft, hasDraftContent, draftFingerprint, splitRecipients, addresses } from '../src/utils/recipients.js';
+import { normalizeRecipients, replyRecipients, restoreDraft, hasDraftContent, draftFingerprint, splitRecipients, addresses } from '../src/utils/recipients.js';
 import { createRequestGuard } from '../src/utils/request-guard.js';
 
 describe('recipient and draft behavior', () => {
+  it('keeps blind recipients private when replying to a sent copy-only message', () => {
+    const sent = {type:1,sendEmail:'me@example.com',recipient:'[]',bcc:['blind@example.com']};
+    for (const all of [false,true]) {
+      expect(replyRecipients(sent,[sent.sendEmail],all)).toEqual({receiveEmail:[],cc:[],bcc:sent.bcc});
+      expect(replyRecipients({...sent, cc:['copy@example.com']},[sent.sendEmail],all)).toEqual({receiveEmail:[],cc:['copy@example.com'],bcc:[]});
+    }
+  });
   it('commits pending addresses and accepts comma, semicolon, newline and pasted full-width commas', () => {
     expect(splitRecipients(' a@example.com;b@example.com\nc@example.com，d@example.com, ')).toHaveLength(4);
     expect(normalizeRecipients({ receiveEmail:['a@example.com'], cc:[], bcc:[] }, { bcc:'private@example.com' }).bcc).toEqual(['private@example.com']);
@@ -33,7 +40,7 @@ describe('recipient and draft behavior', () => {
   });
   it('replies to sender and original To/Cc while excluding all owned aliases and Bcc', () => {
     const message = { sendEmail:'Sender@example.com', recipient:JSON.stringify([{address:'ME@example.com'},{address:'other@example.com'},{address:'alias@example.com'}]), cc:JSON.stringify([{address:'Other@example.com'},{address:'copy@example.com'},{address:'Alias@example.com'}]), bcc:'[{"address":"private@example.com"}]' };
-    expect(replyAllRecipients(message,['me@example.com','alias@example.com'])).toEqual({receiveEmail:['Sender@example.com','other@example.com'],cc:['copy@example.com'],bcc:[]});
+    expect(replyRecipients(message,['me@example.com','alias@example.com'],true)).toEqual({receiveEmail:['Sender@example.com','other@example.com'],cc:['copy@example.com'],bcc:[]});
   });
 });
 

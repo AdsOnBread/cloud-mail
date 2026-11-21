@@ -60,6 +60,12 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe('Web conversations', () => {
+	it('names the destination of a sent blind-copy-only message without returning its raw address fields', async () => {
+		await insert({ type: 1, status: 1, recipient: '[]', cc: '[]', bcc: '[{"address":"private@example.com"}]' });
+		const [row] = (await list({folder:'sent'})).threads;
+		expect(row.participants).toBe('Bcc: private@example.com');
+		expect(row).not.toHaveProperty('sentBcc');
+	});
 	it('shares iOS grouping, filters eligible conversations, and opens all owned messages', async () => {
 		const root = await insert({ message_id: '<project@external.com>' });
 		const sent = await insert({

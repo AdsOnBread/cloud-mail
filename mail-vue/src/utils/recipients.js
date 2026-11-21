@@ -29,8 +29,13 @@ export function normalizeRecipients(form, pending = {}) {
   return result;
 }
 
-export function replyAllRecipients(message, ownAddresses) {
-  const seen = new Set(ownAddresses.map(address => address.toLowerCase()));
+export function replyRecipients(message, ownAddresses, all = false) {
+  const sent = message.type === 1;
+  const to = addresses(message.recipient);
+  const cc = addresses(message.cc);
+  const copyOnly = sent && !to.length;
+  const targets = sent ? to : [message.sendEmail, ...(all ? to : [])].filter(Boolean);
+  const seen = new Set(all ? ownAddresses.map(address => address.toLowerCase()) : []);
   const unique = list => list.filter(address => {
     const key = address.toLowerCase();
     if (seen.has(key)) return false;
@@ -38,9 +43,9 @@ export function replyAllRecipients(message, ownAddresses) {
     return true;
   });
   return {
-    receiveEmail: unique([message.sendEmail, ...addresses(message.recipient)].filter(Boolean)),
-    cc: unique(addresses(message.cc)),
-    bcc: [],
+    receiveEmail: unique(targets),
+    cc: all || copyOnly ? unique(cc) : [],
+    bcc: copyOnly && !cc.length ? unique(addresses(message.bcc)) : [],
   };
 }
 
