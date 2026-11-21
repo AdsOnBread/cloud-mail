@@ -8,13 +8,13 @@
           :class="{ invalid: !isEmail(address), chosen: menuIndex === index }">
           <button type="button" class="chip-address" :data-index="index" :title="address" :aria-label="address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
-            @click="openMenu(index)" @contextmenu.prevent="openMenu(index)"
+            @pointerdown.prevent @click="openMenu(index)" @contextmenu.prevent="openMenu(index)"
             @keydown="chipKey($event,index)" @copy="clipboardEvent($event,index)" @cut="clipboardEvent($event,index)">
             <span class="avatar" aria-hidden="true">{{ display(address).charAt(0).toUpperCase() }}</span>
             <span class="chip-text">{{ display(address) }}</span>
           </button>
           <button type="button" class="remove" :aria-label="`Remove ${address} from ${label}`" tabindex="-1"
-            @click="remove(index)"> <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button>
+            @pointerdown.prevent @click="remove(index)"> <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12m0-12L6 18"/></svg></button>
         </span>
       </template>
       <input ref="input" :id="inputId" v-model="pending" :list="`${inputId}-suggestions`"
@@ -61,21 +61,30 @@ function clear() {
   editing.value = null;
   menuIndex.value = null;
 }
-function commit() {
+// A pointer can activate a different chip while the input still holds an edit.
+// Resolve both changes against one version of the list before Vue moves the chips.
+function resolveInput(targetIndex) {
+  const updated = [...props.modelValue];
   const entered = splitRecipients(pending.value);
-  if (entered.length || editing.value !== null) {
-    const updated = [...props.modelValue];
-    updated.splice(editing.value ?? updated.length, editing.value === null ? 0 : 1, ...entered);
-    emit('update:modelValue', updated);
-  }
+  const source = editing.value;
+  const changed = entered.length > 0 || source !== null;
+  if (changed) updated.splice(source ?? updated.length, source === null ? 0 : 1, ...entered);
+  const index = source !== null && targetIndex > source ? targetIndex + entered.length - 1 : targetIndex;
   pending.value = '';
   editing.value = null;
+  return {updated, index, changed};
+}
+function commit() {
+  const {updated,changed} = resolveInput();
+  if (changed) emit('update:modelValue', updated);
 }
 function chip(index) { return entry.value?.querySelector(`[data-index="${index}"]`); }
 function focusAt(index) { (chip(index) || input.value)?.focus(); }
-function remove(index) {
-  clear();
-  emit('update:modelValue', props.modelValue.filter((_, i) => i !== index));
+function remove(targetIndex) {
+  const {updated,index} = resolveInput(targetIndex);
+  menuIndex.value = null;
+  updated.splice(index,1);
+  emit('update:modelValue', updated);
   nextTick(() => focusAt(index));
 }
 async function edit(index) {
@@ -142,7 +151,9 @@ function reposition() {
   const anchor = chip(menuIndex.value);
   if (menu.value && anchor) menuStyle.value = positionMailboxPopup(menu.value,anchor,252);
 }
-async function openMenu(index) {
+async function openMenu(targetIndex) {
+  const {updated,index,changed} = resolveInput(targetIndex);
+  if (changed) emit('update:modelValue', updated);
   menuIndex.value = index;
   await nextTick();
   reposition();

@@ -51,6 +51,15 @@ describe('recipient entry', () => {
     expect(wrapper.vm.recipients).toEqual([]);
     wrapper.unmount();
   });
+  it('keeps both edits when removing a different chip by pointer', async () => {
+    const wrapper=field(), input=wrapper.get('input');
+    await input.setValue('first@example.com,next@example.com,last@example.com'); await input.trigger('blur');
+    await wrapper.get('.chip-address').trigger('keydown',{key:'F',shiftKey:true});
+    await input.setValue('');
+    await wrapper.get('[aria-label="Remove next@example.com from Bcc"]').trigger('click');
+    expect(wrapper.vm.recipients).toEqual(['last@example.com']);
+    wrapper.unmount();
+  });
   it('can cancel an address edit and cut the original address', async () => {
     const wrapper=field(), input=wrapper.get('input');
     await input.setValue('blind@example.com'); await input.trigger('blur');
