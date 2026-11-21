@@ -375,7 +375,7 @@ function initEditor(initialContent) {
         if (!props.signatureEditor) emit("change", getContent(), messageText());
       });
       ed.on("input change undo redo", () => {
-        if (disposed || !isInitialized.value) return;
+        if (disposed || (props.signatureEditor && !isInitialized.value)) return;
         const content = getContent();
         const text = messageText();
         emit("change", content, text);

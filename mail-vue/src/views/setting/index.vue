@@ -31,7 +31,7 @@
       <p v-if="preferencesError" role="alert">{{preferencesError}} <button type="button" :disabled="busy" @click="load('preferences')">Retry preferences</button></p>
       <p v-if="error" role="alert">{{error}} <button v-if="conflict" type="button" :disabled="busy" @click="load(conflict,true)">Reload saved settings</button></p>
       <footer>
-        <button type="submit" :disabled="!dirty || busy || conflict">Save Changes</button>
+        <button type="submit" :disabled="!dirty || busy || Boolean(conflict)">Save Changes</button>
         <button type="button" :disabled="busy" @click="cancel">Cancel</button>
       </footer>
     </form>
