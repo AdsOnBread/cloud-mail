@@ -68,7 +68,7 @@
           aria-label="Date"
           :aria-invalid="invalid === 'date'"
           :aria-describedby="invalid === 'date' ? errorId : undefined"
-          placeholder="Nov 20, 2026"
+          :placeholder="formatDay(initial)"
           autocomplete="off"
           spellcheck="false"
           @input="clearError"
@@ -244,7 +244,11 @@ function fail(field, message) {
 function submit() {
   const day = selectedDay.value,
     time = parseTime(timeText.value);
-  if (!day) return fail("date", "Enter a valid date, such as Nov 20, 2026.");
+  if (!day)
+    return fail(
+      "date",
+      "Enter a valid date, such as " + formatDay(props.initial) + ".",
+    );
   if (!time) return fail("time", "Enter a valid time, such as 8:00 AM.");
   const instant = localTime(day, time);
   if (!instant)

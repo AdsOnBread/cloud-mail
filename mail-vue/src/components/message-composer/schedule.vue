@@ -44,7 +44,7 @@
   </el-dialog>
 </template>
 <script setup>
-import { nextTick, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import MailDateTime from "@/components/mail-date-time/index.vue";
 import { suggestions } from "@/components/mail-date-time/dates";
@@ -57,7 +57,18 @@ const custom = ref(false),
   firstOption = ref(),
   error = ref("");
 const zoneId = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const zone = ref("");
+const zone = computed(() => {
+  const formatter = new Intl.DateTimeFormat("en-US", { timeZoneName: "long" });
+  const names = new Set(
+    options.value.map(
+      ({ when }) =>
+        formatter
+          .formatToParts(when)
+          .find((part) => part.type === "timeZoneName")?.value,
+    ),
+  );
+  return names.size === 1 ? [...names][0] || zoneId : zoneId;
+});
 let opener;
 function display(date) {
   return date.toLocaleDateString("en-US", {
@@ -72,10 +83,6 @@ function open(trigger) {
   const now = new Date();
   options.value = suggestions(now);
   initial.value = options.value[0].when;
-  zone.value =
-    new Intl.DateTimeFormat("en-US", { timeZoneName: "long" })
-      .formatToParts(now)
-      .find((part) => part.type === "timeZoneName")?.value || zoneId;
   custom.value = false;
   error.value = "";
   visible.value = true;
@@ -83,10 +90,7 @@ function open(trigger) {
 function focusInitial() {
   if (
     !custom.value &&
-    firstOption.value
-      ?.closest(".el-dialog")
-      ?.contains(document.activeElement) &&
-    !document.activeElement?.matches(".option")
+    firstOption.value?.closest(".el-dialog") === document.activeElement
   )
     firstOption.value.focus();
 }

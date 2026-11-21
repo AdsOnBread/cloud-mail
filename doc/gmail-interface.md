@@ -40,7 +40,10 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Collapsed navigation | Checked expansion on hover, folder names, pointer departure and the position of the mailbox under the open rail. |
 | Move to | Moved a selection to a label, opened the conversation there and moved it back to Inbox. |
 | Importance | Checked marking with Space, reload, folder membership, changing a mark in the reader, bulk marking and clearing, and separate touch targets for the star and marker. A sent reply marks a conversation automatically until the mailbox owner makes an explicit choice. |
+| Schedule and snooze calendars | Compared Gmail’s month grid, month arrows, and separate date and time fields against published Gmail screenshots. Verified month-end navigation, exact local delivery time, daylight-saving gaps, cancellation and narrow-screen layout using a fictional mailbox. |
 | Scheduled send | Compared Gmail’s Send dropdown and recipient validation. In Cloudmail, chose a custom time, checked the timezone and past-date validation, downloaded an attached file from Scheduled and canceled back to an editable draft. Delivery and interruption tests used fictional mailboxes. |
+
+Calendar references include the New Mexico Judiciary’s [Gmail scheduling walkthrough](https://supremecourt.nmcourts.gov/wp-content/uploads/sites/52/2024/02/Google-presentation-v-3-presented-7-31-2020.pdf).
 
 Cloudmail offers its own photos and supports choosing a personal image. Cloudmail uses sender and subject rules plus manual filing for category placement. Gmail uses a different classification service. The Google Workspace side panel remains a visible difference. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.
 

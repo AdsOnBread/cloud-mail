@@ -319,7 +319,7 @@
         </el-dropdown-menu>
       </template>
     </el-dropdown>
-    <el-dialog v-model="snoozeOpen" title="Pick date &amp; time" class="mail-dialog" width="492px" append-to-body align-center destroy-on-close @opened="snoozePicker?.focus()">
+    <el-dialog v-model="snoozeOpen" title="Pick date &amp; time" class="mail-dialog snooze-date-dialog" width="492px" append-to-body align-center destroy-on-close @opened="focusSnoozeCalendar" @closed="restoreSnoozeFocus">
       <MailDateTime v-if="snoozeOpen" ref="snoozePicker" :initial="snoozeOptions[0].date" action="Save" @choose="applySnooze" @cancel="snoozeOpen=false"/>
     </el-dialog>
   </section>
@@ -484,11 +484,23 @@ const snoozeOpen = ref(false),
 const snoozeAnchor = ref(null),
   snoozeMenu = ref(null),
   snoozeRow = ref(0);
+let snoozeOpener;
+function focusSnoozeCalendar() {
+  if(document.activeElement?.matches('.snooze-date-dialog'))snoozePicker.value?.focus();
+}
+function restoreSnoozeFocus() {
+  if (snoozeOpen.value || !snoozeOpener?.isConnected) return;
+  const current=document.activeElement;
+  if(current!==document.body && current?.getClientRects().length && !current.closest('.snooze-date-dialog,.snooze-menu'))return;
+  const target=snoozeOpener.getClientRects().length ? snoozeOpener : snoozeOpener.closest('.conversation-row')?.querySelector('.conversation-open');
+  target?.focus();
+}
 async function chooseSnooze(ids, event, row = 0) {
   if (snoozeAnchor.value === event.currentTarget) {
     snoozeAnchor.value = null;
     return;
   }
+  snoozeOpener = event.currentTarget;
   snoozeAnchor.value = event.currentTarget;
   snoozeRow.value = row;
   const tomorrow = new Date();
