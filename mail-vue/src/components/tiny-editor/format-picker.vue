@@ -5,11 +5,8 @@
     :tooltip="tooltip"
     centered
     :panel-class="
-      actions
-        ? (iconsOnly ? 'format-icon-menu' : 'format-more-menu')
-        : iconsOnly
-          ? 'format-icon-menu'
-          : 'format-type-menu ' + (sizePreview ? 'format-size-menu' : 'format-font-menu')
+      iconsOnly ? 'format-icon-menu' : actions ? 'format-more-menu' :
+        sizePreview ? 'format-type-menu format-size-menu' : 'format-type-menu'
     "
     @open="emit('open')"
     @ready="onShow"
@@ -131,8 +128,6 @@ function navigate(event) {
 </script>
 <style scoped>
 .choices {
-  max-height: min(370px, 55vh);
-  overflow: auto;
   padding: 6px 0;
 }
 .choices button {

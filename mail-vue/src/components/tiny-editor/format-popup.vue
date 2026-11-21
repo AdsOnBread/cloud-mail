@@ -63,16 +63,18 @@ function position() {
     bottom = top + (viewport?.height || document.documentElement.clientHeight);
   const x = props.centered ? anchor.left + (anchor.width - box.width) / 2 : anchor.left;
   const gap = props.centered ? 8 : 6;
-  const above = anchor.top - gap - box.height;
-  const y =
-    above >= top + 6 || anchor.bottom + box.height + gap > bottom
-      ? above
-      : anchor.bottom + gap;
+  const spaceAbove = Math.max(0, anchor.top - gap - top - 6);
+  const spaceBelow = Math.max(0, bottom - 6 - anchor.bottom - gap);
+  // Use the full list height even when the previous viewport made it scroll.
+  const height = Math.max(box.height, panel.value.scrollHeight);
+  const above = height <= spaceAbove || (height > spaceBelow && spaceAbove >= spaceBelow);
+  const maxHeight = props.centered ? (above ? spaceAbove : spaceBelow) : bottom - top - 12;
+  const y = above ? anchor.top - gap - Math.min(height, maxHeight) : anchor.bottom + gap;
   positionStyle.value = {
-    maxHeight: Math.max(0, bottom - top - 12) + "px",
+    maxHeight: Math.max(0, maxHeight) + "px",
     maxWidth: Math.max(0, right - left - 12) + "px",
     left: Math.max(left + 6, Math.min(x, right - box.width - 6)) + "px",
-    top: Math.max(top + 6, Math.min(y, bottom - box.height - 6)) + "px",
+    top: Math.max(top + 6, Math.min(y, bottom - Math.min(height, maxHeight) - 6)) + "px",
   };
 }
 function closeToTrigger() {
