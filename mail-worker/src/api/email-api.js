@@ -55,8 +55,12 @@ app.put('/email/conversation/labels/:id/display', async c => c.json(result.ok(
 )));
 app.get('/email/conversation/label-colors', async c => c.json(result.ok(await recentLabelColors(c.env.db,userContext.getUserId(c)))));
 app.get('/email/conversation/labels', async c => c.json(result.ok(await listLabels(c.env.db,userContext.getUserId(c)))));
-app.post('/email/conversation/labels', async c => c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),(await c.req.json()).name))));
-app.put('/email/conversation/labels/:id', async c => c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),(await c.req.json()).name,c.req.param('id')))));
+async function writeLabel(c) {
+  const {name,parentId}=await c.req.json();
+  return c.json(result.ok(await saveLabel(c.env.db,userContext.getUserId(c),name,c.req.param('id'),parentId)));
+}
+app.post('/email/conversation/labels', writeLabel);
+app.put('/email/conversation/labels/:id', writeLabel);
 app.put('/email/conversation/labels/:id/color', async c => c.json(result.ok(
   await setLabelColor(c.env.db, userContext.getUserId(c), c.req.param('id'), await c.req.json())
 )));

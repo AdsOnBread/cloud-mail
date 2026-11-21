@@ -41,27 +41,49 @@ export async function setLabelDisplay(db, userId, id, {list, mode} = {}) {
 	return row;
 }
 
-export async function saveLabel(db, userId, name, id) {
+// Paths are the wire format used by existing clients. Resolve the destination and
+// rewrite the whole branch in one statement so concurrent moves cannot split it.
+export async function saveLabel(db, userId, name, id, parentId = null) {
 	if (typeof name !== 'string' || !name.trim() || name.trim().length > 100)
 		throw new BizError('Enter a label name of up to 100 characters.', 400);
+	if (parentId !== null && (!Number.isSafeInteger(parentId) || parentId < 1))
+		throw new BizError('Choose an existing parent label.',400);
+	const target = `destination(path) AS MATERIALIZED (
+    SELECT ? WHERE ? IS NULL
+    UNION ALL SELECT name || '/' || ? FROM mailbox_labels WHERE user_id=? AND label_id=?
+  )`;
+	const args=[name.trim(),parentId,name.trim(),userId,parentId];
 	try {
-		const row =
-			id === undefined
-				? await db
-						.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id AS id,name')
-						.bind(userId, name.trim())
-						.first()
-				: await db
-						.prepare('UPDATE mailbox_labels SET name=? WHERE label_id=? AND user_id=? RETURNING label_id AS id,name')
-						.bind(name.trim(), id, userId)
-						.first();
-		if (!row) throw new BizError('Label not found.', 404);
+		if (id === undefined) {
+			const row=await db.prepare(`WITH ${target}
+        INSERT INTO mailbox_labels(user_id,name) SELECT ?,path FROM destination RETURNING label_id AS id,name`)
+				.bind(...args,userId).first();
+			if (!row) throw new BizError('Parent label not found.',404);
+			return row;
+		}
+		const [write,selected] = await db.batch([
+			db.prepare(`WITH ${target},
+        source(path) AS MATERIALIZED (SELECT name FROM mailbox_labels WHERE user_id=? AND label_id=?),
+        move(old_path,new_path) AS MATERIALIZED (
+          SELECT source.path,destination.path FROM source,destination
+          WHERE substr(destination.path,1,length(source.path)+1) != source.path || '/' COLLATE NOCASE
+        )
+        UPDATE mailbox_labels SET name=(SELECT new_path || substr(name,length(old_path)+1) FROM move)
+        WHERE user_id=? AND EXISTS (SELECT 1 FROM move WHERE label_id=?
+          OR substr(name,1,length(old_path)+1) = old_path || '/' COLLATE NOCASE)`)
+				.bind(...args,userId,id,userId,id),
+			db.prepare('SELECT label_id AS id,name FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(userId,id)
+		]);
+		const row=selected.results[0];
+		if (!row) throw new BizError('Label not found.',404);
+		if (!write.meta.changes) throw new BizError('Choose an existing parent outside this label.',400);
 		return row;
 	} catch (error) {
-		if (String(error.message).includes('UNIQUE constraint')) throw new BizError('A label with that name already exists.', 409);
+		if (String(error.message).includes('UNIQUE constraint')) throw new BizError('A label with that name already exists.',409);
 		throw error;
 	}
 }
+
 export async function recentLabelColors(db, userId) {
 	const {results} = await db.prepare('SELECT background,foreground FROM mailbox_custom_colors WHERE user_id=? ORDER BY change_id DESC LIMIT 6').bind(userId).all();
 	return results;

@@ -420,3 +420,34 @@ it('saves each label visibility preference independently for its owner', async (
  await setLabelDisplay(env.db,1,label.id,{list:'messages',mode:'show'});
  expect(await listLabels(env.db,1)).toEqual([{...label,sidebar:'unread'}]);
 });
+
+it('moves a label branch atomically while retaining identities, membership and colors', async () => {
+  const { saveLabel, listLabels, setLabelColor, removeLabel } = await import('../src/service/mailbox-labels');
+  const db=env.db, root=await saveLabel(db,1,'Work_%'), other=await saveLabel(db,1,'Personal');
+  const child=await saveLabel(db,1,'Planning',undefined,root.id);
+  const leaf=await saveLabel(db,1,'April',undefined,child.id);
+  const unrelated=await saveLabel(db,1,'WorkXX/Planning');
+  const foreign=await saveLabel(db,2,'Private');
+  const email=await insert({subject:'Quarterly review'});
+  await action('label',[email.email_id],{add:[leaf.id],remove:[]});
+  await setLabelColor(db,1,child.id,{background:'#123456',foreground:'#ffffff'});
+  expect(leaf.name).toBe('Work_%/Planning/April');
+  expect((await list({folder:'label',labelId:root.id})).total).toBe(0);
+  await expect(saveLabel(db,1,'Bad',root.id,leaf.id)).rejects.toMatchObject({code:400});
+  await expect(saveLabel(db,1,'Bad',undefined,foreign.id)).rejects.toMatchObject({code:404});
+  await expect(saveLabel(db,1,'Bad',child.id,foreign.id)).rejects.toMatchObject({code:400});
+  await saveLabel(db,1,'Team',root.id,other.id);
+  const changed=await listLabels(db,1);
+  expect(changed).toEqual(expect.arrayContaining([
+    {...root,name:'Personal/Team'}, {...child,name:'Personal/Team/Planning',background:'#123456',foreground:'#ffffff'},
+    {...leaf,name:'Personal/Team/Planning/April'},unrelated
+  ]));
+  expect((await list({folder:'label',labelId:leaf.id})).total).toBe(1);
+  // A previously standalone slash-containing label occupies the new descendant path.
+  await saveLabel(db,1,'Operations/Planning');
+  await expect(saveLabel(db,1,'Operations',root.id,null)).rejects.toMatchObject({code:409});
+  expect(await listLabels(db,1)).toContainEqual({...root,name:'Personal/Team'});
+  await removeLabel(db,1,root.id);
+  expect((await list({folder:'label',labelId:leaf.id})).total).toBe(1);
+  expect(await listLabels(db,1)).toContainEqual({...leaf,name:'Personal/Team/Planning/April'});
+});
