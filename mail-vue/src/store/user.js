@@ -4,6 +4,7 @@ import {loginUserInfo} from "@/request/my.js";
 export const useUserStore = defineStore('user', {
     state: () => ({
         user: {},
+        authenticatedToken:null,
         refreshList: 0,
     }),
     actions: {
@@ -13,8 +14,10 @@ export const useUserStore = defineStore('user', {
             })
         },
         refreshUserInfo() {
-            loginUserInfo().then(user => {
-                this.user = user
+            const token=this.authenticatedToken;
+            if (!token || token!==localStorage.getItem("token")) return;
+            loginUserInfo(token).then(user => {
+                if (token===this.authenticatedToken && token===localStorage.getItem("token")) this.user = user
             })
         }
     }

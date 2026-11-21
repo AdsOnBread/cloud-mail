@@ -128,7 +128,11 @@ const activeFolder = computed(() => route.name === 'content' ? mailSearch.folder
 const labels = useMailLabels(), user=useUserStore();
 const more=ref(false);
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
-watch(()=>user.user.email,email=>{labels.load(email);labels.loadSystem(email);},{immediate:true});
+watch([()=>user.user.email,()=>user.authenticatedToken],([email,token])=>{
+  if(!email || !token)return;
+  labels.bindSession(email,token);
+  labels.load(email);labels.loadSystem(email);
+},{immediate:true});
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();
 const unread=ref(0);

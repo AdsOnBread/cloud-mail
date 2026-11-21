@@ -151,7 +151,6 @@
 </template>
 
 <script setup>
-import {useMailLabels} from '@/store/mail-labels';
 import router from "@/router";
 import {useRoute} from "vue-router";
 import {computed, nextTick, reactive, ref} from "vue";
@@ -446,7 +445,7 @@ async function saveToken(token) {
   if(token!==localStorage.getItem("token"))return;
   accountStore.currentAccountId = user.account.accountId;
   accountStore.currentAccount = user.account;
-  useMailLabels().bindSession(user.email,token);
+  userStore.authenticatedToken=token;
   userStore.user = user;
   const routers = permsToRouter(user.permKeys);
   routers.forEach(routerData => {

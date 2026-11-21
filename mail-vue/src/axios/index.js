@@ -26,6 +26,10 @@ http.interceptors.response.use((res) => {
                 data.code === 200 ? resolve(data.data) : reject(data)
 
             } else if (data.code === 401) {
+                if (res.config.headers.Authorization !== localStorage.getItem('token')) {
+                    reject(data)
+                    return
+                }
                 ElMessage({
                     message: data.message,
                     type: 'error',
