@@ -210,6 +210,7 @@ async function remove() {
 .sender-line {grid-area:1 / 2;display:flex;align-items:baseline;gap:4px;min-width:0;pointer-events:none;font:14px/20px Arial,sans-serif;}
 .sender-person {position:relative;z-index:2;pointer-events:auto;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;}
 
+span.sender-person,span.sender-photo {pointer-events:none;}
 .message-toggle {
   grid-area:1 / 2;height:20px;
   display:flex;align-items:baseline;gap:4px;min-width:0;

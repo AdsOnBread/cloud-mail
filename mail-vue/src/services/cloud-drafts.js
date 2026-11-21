@@ -7,15 +7,15 @@ import { useUserStore } from '@/store/user';
 import db from '@/db/db.js';
 import http from '@/axios/index.js';
 import { userDraftStore } from '@/store/draft.js';
+import { mailboxSession } from './mailbox-session';
 export function draftSession(database = db.value) {
-  const token=localStorage.getItem('token');
-  const owner = useUserStore().user.email;
+  const session = mailboxSession();
   const check = () => {
-    if (!owner || !token || database.name !== owner || db.value !== database ||
-        useUserStore().user.email !== owner || useUserStore().authenticatedToken !== token ||
-        localStorage.getItem('token') !== token) throw new Error('The signed-in user changed. Draft synchronization stopped.');
+    session.check();
+    if (database.name !== session.owner || db.value !== database)
+      throw new Error('The signed-in user changed. Draft synchronization stopped.');
   };
-  return {database, owner, token, check};
+  return {...session, database, check};
 }
 function sessionAPI(database) {
   const {check, token} = draftSession(database);
