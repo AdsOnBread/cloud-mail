@@ -96,14 +96,16 @@
 import { computed, onActivated, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { ElMessageBox } from "element-plus";
+import { useMailFeedback } from "@/store/mail-feedback";
+import {useUiStore} from "@/store/ui";
 import { userDraftStore } from "@/store/draft";
 import { useMailSearchStore } from "@/store/mail-search";
-import { removeLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
+import { discardDrafts, syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 defineOptions({ name: "draft" });
+const feedback = useMailFeedback(), ui = useUiStore();
 const drafts = userDraftStore(),
   search = useMailSearchStore(),
   router = useRouter();
@@ -169,19 +171,14 @@ async function open(id) {
   }
 }
 async function discard(ids) {
-  if (busy.value) return;
-  try {
-    await ElMessageBox.confirm(
-      ids.length === 1 ? "Discard this draft?" : "Discard these drafts?",
-      { confirmButtonText: "Discard", cancelButtonText: "Cancel" },
-    );
-  } catch {
-    return;
-  }
+  if (busy.value || !ids.length) return;
   busy.value = true;
   try {
     error.value = "";
-    for (const id of ids) await removeLocalDraft(id);
+    const current = [...ids];
+    if (ui.writerRef && !await ui.writerRef.closeSelectedDraft(current))
+      throw new Error("Finish editing the open draft before discarding it.");
+    feedback.dismissedDrafts(await discardDrafts(current));
   } catch (e) {
     error.value = e.message || "Could not discard draft.";
   } finally {

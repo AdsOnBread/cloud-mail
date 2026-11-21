@@ -11,6 +11,7 @@ function createDB() {
     const database = new Dexie(userStore.user.email);
     database.version(1).stores({draft: '++draftId,createTime',att: 'draftId'});
     database.version(2).stores({draft:'++draftId,createTime,cloudDraftId',att:'draftId',meta:'key'});
+    database.version(3).stores({discardUndo:'[operation+originalId],operation,expires'});
     db.value = database;
 
 }

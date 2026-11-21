@@ -1,12 +1,22 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest';
 import {createPinia,setActivePinia} from 'pinia';
-import {saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
+import {useUserStore} from '../src/store/user';
+import {discardDrafts,saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
 import db from '../src/db/db';
 import http from '../src/axios';
 const state=vi.hoisted(()=>({rows:new Map(),files:new Map(),meta:new Map(),remote:new Map(),events:[],next:1,cloudNext:1,attempts:new Map()}));
 vi.mock('../src/db/db',()=>{
+ const backups = new Map();
+ const discardUndo = {
+   put:async row=>backups.set(JSON.stringify([row.operation,row.originalId]), structuredClone(row)),
+   get:async key=>structuredClone(backups.get(JSON.stringify(key))),
+   delete:async key=>backups.delete(JSON.stringify(key)),
+   where:field=>Object.fromEntries(['equals','below'].map(op=>[op,value=>({delete:async()=>{
+     for (const [key,row] of backups) if (op==='equals' ? row[field]===value : row[field]<value) backups.delete(key);
+   }})])),
+ };
  const table=(rows,key)=>({get:async id=>structuredClone(rows.get(id)),toArray:async()=>structuredClone([...rows.values()]),put:async row=>{rows.set(row[key],structuredClone(row));return row[key];},add:async row=>{const id=state.next++;rows.set(id,structuredClone({...row,[key]:id}));return id;},delete:async id=>rows.delete(id)});
- return {default:{value:{draft:table(state.rows,'draftId'),att:table(state.files,'draftId'),meta:table(state.meta,'key'),transaction:async(...args)=>args.at(-1)()}}};
+ return {default:{value:{discardUndo,draft:table(state.rows,'draftId'),att:table(state.files,'draftId'),meta:table(state.meta,'key'),transaction:async(...args)=>args.at(-1)()}}};
 });
 vi.mock('../src/axios',()=>({default:{get:vi.fn(),post:vi.fn(),put:vi.fn(),delete:vi.fn()}}));
 function event(remote){state.events.push({seq:state.events.length+1,draftId:remote.draftId,operation:'upsert',draft:structuredClone(remote)});}
@@ -128,6 +138,41 @@ describe('Cloud draft synchronization',()=>{
   const syncing=syncCloudDrafts();while(!release)await new Promise(resolve=>setTimeout(resolve,0));
   await saveLocalDraft({...await db.value.draft.get(row.draftId),subject:'Typed during upload',attachments:[]});release();await syncing;
   expect((await db.value.draft.get(row.draftId)).dirty).toBe(true);await syncCloudDrafts();expect([...state.remote.values()][0].subject).toBe('Typed during upload');
+ });
+ it('restores the complete discarded reply offline after its original is deleted from the cloud',async()=>{
+   const user=useUserStore(); user.user.email='writer@example.net'; user.authenticatedToken='test-session';
+   localStorage.setItem('token','test-session');
+   const file={filename:'note.txt',content:'aGk=',contentType:'text/plain'};
+   const saved=input({sendType:'reply',emailId:42,inlineReply:true,bcc:['private@example.net'],plainText:true,attachments:[file]});
+   const original=await saveLocalDraft(saved);
+   await syncCloudDrafts();
+   const operation=await discardDrafts([original.draftId]);
+   await syncCloudDrafts();
+   expect(state.remote.size).toBe(0);
+   Object.defineProperty(navigator,'onLine',{value:false});
+   localStorage.setItem('token','different');
+   await expect(operation.restore()).rejects.toThrow('original mailbox');
+   localStorage.setItem('token','test-session');
+   const [id]=await operation.restore();
+   expect(id).not.toBe(original.draftId);
+   expect(await db.value.draft.get(id)).toMatchObject({sendType:'reply',emailId:42,inlineReply:true,bcc:saved.bcc,plainText:true,dirty:true});
+   expect((await db.value.att.get(id)).attachments).toEqual([file]);
+   await expect(operation.restore()).rejects.toThrow('no longer');
+   Object.defineProperty(navigator,'onLine',{value:true});
+   await syncCloudDrafts();
+   expect(state.remote.size).toBe(1);
+   expect([...state.remote.values()][0].clientId).not.toBe(original.clientId);
+ });
+ it('finishes a discard after the first upload response was lost',async()=>{
+   const user=useUserStore(); user.user.email='writer@example.net'; user.authenticatedToken='discard';
+   localStorage.setItem('token','discard');
+   const original=await saveLocalDraft(input());
+   const post=http.post.getMockImplementation();
+   http.post.mockImplementationOnce(async(...args)=>{await post(...args);throw new Error('lost');});
+   await expect(syncCloudDrafts()).rejects.toThrow('lost');
+   const operation=await discardDrafts([original.draftId]);await syncCloudDrafts();
+   expect(state.remote.size).toBe(0);expect(state.rows.size).toBe(0);
+   await operation.dispose();await expect(operation.restore()).rejects.toThrow('no longer');
  });
  it('propagates discard tombstones and never recreates a remotely removed clean draft',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();await removeLocalDraft(row.draftId);await syncCloudDrafts();expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);

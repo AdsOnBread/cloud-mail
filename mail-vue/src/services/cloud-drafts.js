@@ -13,6 +13,17 @@ function sessionAPI(database) {
   return {get:(path,options)=>call('get',path,null,options),delete:(path,options)=>call('delete',path,null,options),post:(path,payload,options)=>call('post',path,payload,options),put:(path,payload,options)=>call('put',path,payload,options)};
 }
 const locks=new WeakMap();
+const draftWork = new WeakMap();
+function exclusive(database, work) {
+  const previous = draftWork.get(database) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(() => navigator.locks
+    ? navigator.locks.request('cloudmail-draft-sync:' + database.name, work)
+    : work());
+  draftWork.set(database, operation);
+  return operation.finally(() => {
+    if (draftWork.get(database) === operation) draftWork.delete(database);
+  });
+}
 const apiError=e=>e.response?.data||e;
 const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
 // The server stores pasted photos as CID attachments. Compare the restored image
@@ -70,7 +81,7 @@ export async function saveLocalDraft(input) {
   if(input.ownerEmail&&input.ownerEmail!==useUserStore().user.email)throw new Error('The signed-in user changed. Your previous draft was not moved.');
   const row = await database.transaction('rw', database.draft, database.att, async () => {
     const current = input.draftId ? await database.draft.get(input.draftId) : null;
-    if(current?.pendingSchedule || (!current && input.cloudDraftId && input.draftId))throw new Error('This draft has changed. Check Scheduled or reopen it from Drafts.');
+    if(current?.deleted || current?.pendingSchedule || (!current && input.draftId))throw new Error('This draft has changed. Check Scheduled or reopen it from Drafts.');
     // A background upload can advance the cloud version of precisely the edit still in the composer.
     // A different edit token means the editor must keep its own base version for conflict detection.
     const sameEdit = current && input.editToken && input.editToken === current.editToken;
@@ -166,6 +177,7 @@ export function syncCloudDrafts() {
   const api=sessionAPI(database);
   const sync=async()=>{
     const conflicts={};
+    await database.discardUndo.where('expires').below(Date.now()).delete();
     if(!navigator.onLine)return {conflicts};
     for(const row of await database.draft.toArray()) {
       if(row.pendingSchedule) {
@@ -173,8 +185,8 @@ export function syncCloudDrafts() {
         continue;
       }
       if(row.deleted) {
-        if(row.cloudDraftId) {try {await api.delete(`/v1/drafts/${row.cloudDraftId}`,{params:{version:row.cloudVersion},noMsg:true});}catch(e){const error=apiError(e);if(error.code===409){await database.draft.put({...row,deleted:false,syncState:'conflict'});if(error.current)await cloudRow(database,error.current,row.draftId,api);throw e;}if(error.code!==404)throw e;}}
-        await database.draft.delete(row.draftId);await database.att.delete(row.draftId);continue;
+        await finishDiscard(database, row, api);
+        continue;
       }
       // Pre-cloud rows have no dirty flag: adopt them with a persisted import UUID first.
       if(!row.cloudDraftId&&!row.clientId) {row.clientId=crypto.randomUUID();row.editToken=crypto.randomUUID();row.dirty=true;await database.draft.put(row);}
@@ -201,10 +213,103 @@ export function syncCloudDrafts() {
     userDraftStore().refreshList++;return {conflicts};
   };
   // Tabs share IndexedDB. Only one should upload edits and import cloud changes at a time.
-  const task = (navigator.locks ? navigator.locks.request('cloudmail-draft-sync:' + database.name, sync) : sync())
+  const task = exclusive(database, sync)
     .finally(() => locks.delete(database));
   locks.set(database,task);return task;
 }
+// Resolve a lost first upload by its idempotent import key. Only delete an
+// acknowledged base version or the immediately following write carrying our nonce.
+async function finishDiscard(database, row, api) {
+  let cloudId = row.cloudDraftId;
+  let version = row.cloudVersion;
+  if (!cloudId && row.uploadIntent) {
+    const remote = await api.post('/v1/drafts', {
+      clientId:row.clientId, accountId:row.accountId, ui:{uploadId:row.uploadIntent.id},
+    }, {noMsg:true});
+    if (remote.version === 1 && remote.ui?.uploadId === row.uploadIntent.id && remote.state === 'draft') {
+      cloudId = remote.draftId;
+      version = remote.version;
+    } else if (remote.state === 'draft' && !remote.scheduledAt) {
+      const value = await downloadDraft(remote, api);
+      await put(database, {...value, draftId:row.draftId}, value.attachments);
+      return;
+    }
+  }
+  if (cloudId) {
+    try {
+      await api.delete('/v1/drafts/' + cloudId, {params:{version},noMsg:true});
+    } catch (raw) {
+      const error = apiError(raw), remote = error.current;
+      if (Number(error.code) === 409 && remote?.state === 'draft' && !remote.scheduledAt) {
+        if (row.uploadIntent && remote.version === version + 1 && remote.ui?.uploadId === row.uploadIntent.id) {
+          await database.draft.put({...row, cloudDraftId:cloudId, cloudVersion:remote.version, uploadIntent:undefined});
+          return finishDiscard(database, await database.draft.get(row.draftId), api);
+        }
+        const value = await downloadDraft(remote, api);
+        await put(database, {...value, draftId:row.draftId}, value.attachments);
+        return;
+      }
+      if (Number(error.code) !== 404 && !(Number(error.code) === 409 && remote && (remote.scheduledAt || ['sent','deleted'].includes(remote.state)))) throw raw;
+    }
+  }
+  await database.transaction('rw', database.draft, database.att, async () => {
+    await database.draft.delete(row.draftId);
+    await database.att.delete(row.draftId);
+  });
+}
+
+export async function discardDrafts(ids) {
+  const database = db.value, owner = useUserStore().user.email, token = localStorage.getItem('token');
+  function checkOwner() {
+    if (!owner || !token || useUserStore().authenticatedToken !== token || db.value !== database ||
+        useUserStore().user.email !== owner || localStorage.getItem('token') !== token)
+      throw new Error('Reopen Drafts in the original mailbox.');
+  }
+  const operation = crypto.randomUUID(), originals = [...new Set(ids)];
+  const expires = Date.now() + 86400000;
+  await exclusive(database, () => database.transaction('rw', database.draft, database.att, database.discardUndo, async () => {
+    checkOwner();
+    for (const id of originals) {
+      const row = await database.draft.get(id);
+      if (!row || row.deleted) throw new Error('This draft is no longer available.');
+      if (row.pendingSchedule || row.sendAttemptId) throw new Error('Check the delivery status before discarding this draft.');
+      const saved = await withFiles(database, row);
+      await database.discardUndo.put({operation, originalId:id, expires, saved});
+      await database.draft.put({...row, deleted:true, dirty:false});
+    }
+    checkOwner();
+  }));
+  checkOwner();
+  userDraftStore().refreshList++;
+  syncCloudDrafts().catch(() => {});
+  return {
+    count:originals.length,
+    dispose:() => database.discardUndo.where('operation').equals(operation).delete(),
+    async restore() {
+      checkOwner();
+      const restored = await database.transaction('rw', database.draft, database.att, database.discardUndo, async () => {
+        const result = [];
+        for (const originalId of originals) {
+          const backup = await database.discardUndo.get([operation, originalId]);
+          if (!backup) throw new Error('This draft can no longer be restored.');
+          const saved = backup.saved;
+          const recovered = await writeDraft(database, {...strip(saved), attachments:saved.attachments,
+            clientId:crypto.randomUUID(), editToken:crypto.randomUUID(), dirty:true,
+            localRevision:1, ownerEmail:owner, syncState:navigator.onLine ? 'saving' : 'offline'});
+          result.push(recovered.draftId);
+          await database.discardUndo.delete([operation, originalId]);
+        }
+        checkOwner();
+        return result;
+      });
+      checkOwner();
+      userDraftStore().refreshList++;
+      syncCloudDrafts().catch(() => {});
+      return restored;
+    },
+  };
+}
+
 export async function removeLocalDraft(id,{sent=false,database:providedDatabase}={}) {
   const database=providedDatabase||db.value,row=await database.draft.get(id);if(!row)return;
   if(row.pendingSchedule)throw new Error('Wait for scheduling confirmation before discarding this draft.');
@@ -246,7 +351,7 @@ export async function scheduleCloudDraft(id,sendAt) {
   const synced=await syncCloudDrafts();
   const row=await database.transaction('rw',database.draft,async()=>{
     const current=await database.draft.get(id);
-    if(synced.conflicts[id] || !current || current.dirty || !current.cloudDraftId || current.sendAttemptId || current.pendingSchedule)
+    if(synced.conflicts[id] || !current || current.deleted || current.dirty || !current.cloudDraftId || current.sendAttemptId || current.pendingSchedule)
       throw new Error('Open the current saved draft before scheduling this message.');
     const pending={...current,schedulingError:null,pendingSchedule:{version:current.cloudVersion,sendAt},syncState:'scheduling'};
     await database.draft.put(pending);
@@ -275,8 +380,17 @@ export async function sendCloudDraft(id) {
     if(attempt.state==='failed')await database.draft.put({...before,sendAttemptId:null});
   }
   const synced=await syncCloudDrafts();if(synced?.conflicts?.[id])throw new Error('Both versions were saved in Drafts. Review the saved copy before sending.');const row=await database.draft.get(id);
-  if(!row||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
-  const sendAttemptId=row.sendAttemptId||crypto.randomUUID();await database.draft.put({...row,sendAttemptId,sendFingerprint:await signature(await withFiles(database,row)),syncState:'sending'});
+  if(!row||row.deleted||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
+  const sendFingerprint = await signature(await withFiles(database, row));
+  const sendAttemptId = await database.transaction('rw', database.draft, async () => {
+    const current = await database.draft.get(id);
+    if (!current || current.deleted || current.dirty || current.pendingSchedule ||
+        current.cloudVersion !== row.cloudVersion || current.editToken !== row.editToken)
+      throw new Error('Reopen the current draft before sending.');
+    const attempt = current.sendAttemptId || crypto.randomUUID();
+    await database.draft.put({...current, sendAttemptId:attempt, sendFingerprint, syncState:'sending'});
+    return attempt;
+  });
   const result=await api.post(`/v1/drafts/${row.cloudDraftId}/send`,{version:row.cloudVersion,idempotencyKey:sendAttemptId},{noMsg:true});
   if(result.state!=='sent') {
     const current=await api.get(`/v1/drafts/${row.cloudDraftId}`,{noMsg:true});

@@ -354,7 +354,7 @@
   </section>
 </template>
 <script setup>
-import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
+import { discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
@@ -874,22 +874,39 @@ async function close() {
   if (showContacts.value) return;
   return saveAndClose();
 }
+let mounted = true;
 async function discard() {
+  if (!show.value || preparing.value || sending.value || attaching.value) return;
+  preparing.value = true;
   try {
-    await ElMessageBox.confirm("Discard this message?", {
-      confirmButtonText: "Discard",
-      cancelButtonText: "Keep editing",
-      type: "warning",
-    });
+    clearTimeout(cloudSaveTimer);
     await editor.value?.ready?.();
-    await removeSavedDraft();
+    commitRecipients();
+    await pendingDefault;
+    await saveQueue.catch(() => {});
+    const changed = draftFingerprint(form) !== baseline && draftFingerprint(form) !== automaticBaseline;
+    if ((form.draftId && (!restoredUntouched || changed)) || (!form.draftId && changed && hasDraftContent(form))) await persistDraft();
+    if (form.draftId) {
+      const recovery = await discardDrafts([form.draftId]);
+      feedback.dismissedDrafts(recovery, async ([id]) => {
+        if (!mounted || props.inline || show.value || preparing.value) return;
+        const {readSavedDraft} = await import("@/services/draft-list");
+        const draft = await readSavedDraft(id);
+        if (mounted && !show.value && !preparing.value) await openDraft(draft);
+      });
+    }
     show.value = false;
     resetForm();
     emit("closed");
   } catch (error) {
-    if (error instanceof Error)
-      ElMessage.error("Could not discard the saved draft. Please try again.");
+    sendError.value = error.message || "Could not discard the saved draft. Please try again.";
+  } finally {
+    preparing.value = false;
   }
+}
+async function closeSelectedDraft(ids) {
+  if (!show.value || !ids.includes(form.draftId)) return true;
+  return saveAndClose();
 }
 function validForSend() {
   if (sending.value || attaching.value) return false;
@@ -1117,6 +1134,7 @@ onMounted(() => {
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  mounted = false;
   clearTimeout(cloudSaveTimer);
   releaseModal();
   window.removeEventListener("keydown", keydown);
@@ -1124,6 +1142,7 @@ onUnmounted(() => {
   document.removeEventListener("focusin", containFocus);
 });
 defineExpose({
+  closeSelectedDraft,
   open,
   openDraft,
   openReply,

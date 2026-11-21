@@ -6,7 +6,18 @@ export const useMailFeedback = defineStore("mail-feedback", {
   state: () => ({ notice: null, restored: 0 }),
   actions: {
     show(message, emailIds = []) {
+      this.dismiss();
       this.notice = { message, emailIds: [...emailIds], busy: false };
+    },
+    dismissedDrafts(recovery, reopen) {
+      this.show(recovery.count === 1 ? "Draft discarded." : recovery.count + " drafts discarded.");
+      this.notice.recovery = recovery;
+      this.notice.reopen = reopen;
+    },
+    dismiss() {
+      const notice = this.notice;
+      this.notice = null;
+      if (notice?.recovery && !notice.busy) notice.recovery.dispose().catch(() => {});
     },
     trashed(emailIds, count = 1, noun = "conversation") {
       this.show(count === 1 ? (noun === "message" ? "Message" : "Conversation") + " moved to Trash." :
@@ -14,10 +25,18 @@ export const useMailFeedback = defineStore("mail-feedback", {
     },
     async undo() {
       const notice = this.notice;
-      if (!notice?.emailIds.length || notice.busy) return;
+      if (!notice || (!notice.recovery && !notice.emailIds.length) || notice.busy) return;
       const session = localStorage.getItem("token");
       notice.busy = true;
       try {
+        if (notice.recovery) {
+          const ids = await notice.recovery.restore();
+          if (this.notice === notice) {
+            this.show(ids.length === 1 ? "Draft restored." : "Drafts restored.");
+            await notice.reopen?.(ids);
+          }
+          return;
+        }
         while (notice.emailIds.length) {
           if (localStorage.getItem("token") !== session) return;
           const batch = notice.emailIds.slice(0, 50);
@@ -31,6 +50,7 @@ export const useMailFeedback = defineStore("mail-feedback", {
         notice.message = error.message || "Could not restore the messages. Try Undo again.";
       } finally {
         notice.busy = false;
+        if (notice.recovery && this.notice !== notice) notice.recovery.dispose().catch(() => {});
       }
     },
   },
