@@ -97,7 +97,7 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
         filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO scheduled_inbox_deliveries(user_id,email_id)
           SELECT d.user_id,e.email_id ${sender} AND json_extract(d.data,'$.scheduledInbox')=1`).bind(...ids));
       }
-      if (draft.labelIds?.length) {
+      if (scheduled || draft.labelIds?.length) {
         filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)
           SELECT d.user_id,l.label_id,e.email_id FROM cloud_drafts d
           JOIN email e ON e.user_id=d.user_id AND e.account_id=d.account_id

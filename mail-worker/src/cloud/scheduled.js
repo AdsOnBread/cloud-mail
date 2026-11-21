@@ -1,3 +1,4 @@
+import {validateLabelChange} from '../service/mailbox-labels';
 import {blankMailText} from '../service/mail-word-schema';
 import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-words';
 import {addPeopleFilter,addSearchDates,addSizeFilter} from '../service/mail-search-filters';
@@ -63,10 +64,39 @@ export function setScheduledInbox(c,userId,input) {
   if (expected!==undefined && (typeof expected!=='string' || expected.length!==36)) throw new BizError('Invalid filing change.',400);
   return setScheduledFlag(c,userId,input?.messages,'$.scheduledInbox',input?.inbox,expected);
 }
-async function setScheduledFlag(c,userId,selection,path,value,previousEdit) {
-  if (!Array.isArray(selection) || !selection.length || selection.length>50 || typeof value!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
+function scheduledSelection(selection) {
+  if (!Array.isArray(selection) || !selection.length || selection.length>50) throw new BizError('Invalid scheduled message selection.',400);
   const messages=selection.map(row=>[positive(row?.draftId),positive(row?.version)]);
   if (new Set(messages.map(([id])=>id)).size!==messages.length) throw new BizError('Duplicate scheduled message.',400);
+  return messages;
+}
+export async function setScheduledLabels(c,userId,{messages,add,remove}) {
+  validateLabelChange(add,remove);
+  const selection=scheduledSelection(messages);
+  const labels=[...new Set([...add,...remove])];
+  // Compute each message's new set from its current labels inside the same write
+  // that checks ownership and every selected delivery revision.
+  const changed=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (
+    SELECT d.draft_id FROM cloud_drafts d
+    JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
+    JOIN json_each(?) r ON d.draft_id=json_extract(r.value,'$[0]') AND d.version=json_extract(r.value,'$[1]')
+    WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')
+  ) UPDATE cloud_drafts SET data=json_set(data,'$.labelIds',(
+    SELECT json_group_array(label_id) FROM (
+      SELECT l.label_id FROM mailbox_labels l WHERE l.user_id=cloud_drafts.user_id
+      AND (l.label_id IN (SELECT value FROM json_each(cloud_drafts.data,'$.labelIds')) OR l.label_id IN (SELECT value FROM json_each(?)))
+      AND l.label_id NOT IN (SELECT value FROM json_each(?)) ORDER BY l.label_id
+    )
+  )) WHERE draft_id IN (SELECT draft_id FROM eligible) AND (SELECT COUNT(*) FROM eligible)=?
+    AND (SELECT COUNT(*) FROM mailbox_labels WHERE user_id=? AND label_id IN (SELECT value FROM json_each(?)))=?
+    RETURNING draft_id`).bind(JSON.stringify(selection),userId,JSON.stringify(add),JSON.stringify(remove),
+      selection.length,userId,JSON.stringify(labels),labels.length).all();
+  if (changed.results.length!==selection.length) throw new BizError('A message or label changed. Refresh Scheduled.',409);
+  return {updated:selection.length};
+}
+async function setScheduledFlag(c,userId,selection,path,value,previousEdit) {
+  if (typeof value!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
+  const messages=scheduledSelection(selection);
   const inbox=path==='$.scheduledInbox', edit=inbox ? crypto.randomUUID() : null;
   // Materialize the old flags before updating. Undo restores only messages this action moved.
   const selectionArgs=[path,JSON.stringify(messages),userId];
