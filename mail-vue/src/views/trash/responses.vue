@@ -24,10 +24,16 @@ const drafts=userDraftStore(), user=useUserStore(), ui=useUiStore();
 const editorType=shallowRef(), composer=ref(), editing=ref(false), opening=ref(false), activeId=ref(null);
 const saved=computed(()=>drafts.items.filter(d=>(d.trashSource===props.sourceId || d.reply && d.emailId===props.sourceId) &&
   d.draftId!==(composer.value?.draftId || activeId.value)));
-let mounted=true;
+let mounted=true, generation=0;
 onBeforeUnmount(()=>{mounted=false;});
 async function save() {
-  return !opening.value && ((await composer.value?.saveAndClose()) ?? true);
+  if (opening.value && !composer.value?.visible) {
+    generation++;
+    opening.value=false;
+    closed();
+    return true;
+  }
+  return (await composer.value?.saveAndClose()) ?? true;
 }
 onBeforeRouteLeave(save);
 onBeforeRouteUpdate(save);
@@ -38,8 +44,8 @@ async function open(command,summary) {
     if (!(await save())) return;
   }
   if (!props.message || props.message.scheduledDraftId) return;
-  const source=props.sourceId, owner=user.user.userId, token=user.authenticatedToken;
-  const current=()=>mounted && props.sourceId===source && props.message?.userId===owner && token &&
+  const run=++generation, source=props.sourceId, owner=user.user.userId, token=user.authenticatedToken;
+  const current=()=>mounted && run===generation && props.sourceId===source && props.message?.userId===owner && token &&
     user.user.userId===owner && user.authenticatedToken===token && localStorage.getItem("token")===token;
   if (!current()) return;
   opening.value=true;
@@ -62,14 +68,14 @@ async function open(command,summary) {
     await nextTick();
     if (!current() || !composer.value) {closed();return;}
     if (draft) await composer.value.openDraft(draft);
-    else if (!await composer.value[command](props.message)) {closed();return;}
+    else if (!await composer.value[command](props.message)) {if(current())closed();return;}
     composer.value?.scrollIntoView?.();
   } catch(error) {
     if (current()) {
       if (!composer.value?.visible) closed();
       ElMessage.error(error.message || "Could not open the draft.");
     }
-  } finally {opening.value=false;}
+  } finally {if(run===generation)opening.value=false;}
 }
 function resume(summary) {
   if (composer.value?.draftId===summary.draftId) {composer.value.focusBody();return;}

@@ -21,8 +21,12 @@ export async function quotedMessage(message, mode, signal, token) {
   for (const image of template.content.querySelectorAll("img[src]")) {
     const src = image.getAttribute("src"), key = storedKey(src);
     const file = files.find(f => key && key === f.key || src.startsWith("cid:") && src.slice(4) === f.contentId?.replace(/^<|>$/g,""));
-    if (file) image.src = (await fileData(file)).content;
-    else if (key || src.startsWith("cid:")) throw new Error("An inline image is unavailable. Reopen the original message and try again.");
+    if (!file && !key && !src.startsWith("cid:")) continue;
+    if (file) {
+      try {image.src = (await fileData(file)).content;continue;}
+      catch {signal.throwIfAborted();}
+    }
+    image.replaceWith(document.createTextNode(image.alt || "[Inline image unavailable]"));
   }
   const body = template.innerHTML || '<pre style="font-family:inherit;white-space:pre-wrap">' + escape(message.text) + '</pre>';
   const sender = headerAddressText({address:message.sendEmail, name:message.name});
