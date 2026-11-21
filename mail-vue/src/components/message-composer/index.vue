@@ -920,14 +920,13 @@ async function prepareMessage(message, mode, all = false) {
   if (!available()) return;
   preparing.value = true;
   try {
-    const session=draftSession();
+    const owner=userStore.user.email, token=userStore.authenticatedToken;
     const email = await emailStore.ensureDetail(message);
     if (hasPerm("account:query")) await accountStore.loadAll();
     const html =
       (await inlineDataHTML(email.content)) ||
       `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHTML(email.text)}</pre>`;
-    if (!mounted) return;
-    session.check();
+    if (!mounted || owner!==userStore.user.email || token!==userStore.authenticatedToken || token!==localStorage.getItem('token')) return;
     resetForm();
     setSender();
     const originalAccount =
@@ -1422,7 +1421,7 @@ async function deleteContact() {
 function keydown(event) {
   if (props.dockHidden || discardLocked.value) return;
   const inside=composeRoot.value?.contains(event.target);
-  if(!inside && (!props.dockActive || event.target.closest?.('.send,dialog[open],input,textarea,select,[role="dialog"],[role="menu"]'))) return;
+  if(!inside && (props.inline || !props.dockActive || event.target.closest?.('.send,dialog[open],input,textarea,select,[role="dialog"],[role="menu"]'))) return;
   if (labelStore.edit || photosOpen.value || event.target.closest?.(".photo-picker")) return;
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".label-dialog,.recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
@@ -1527,7 +1526,10 @@ watch([()=>form.draftId,minimized,expanded,caption],([draftId,minimized,expanded
 defineExpose({
   focusBody: () => editor.value?.focus(),
   followDelivery,
-  visible:show,focusWindow,prepareDiscard,finishDiscard,unlockDiscard,
+  visible:show,focusWindow,
+  ownsFocus:()=>composeRoot.value?.contains(document.activeElement),
+  resumeFocus:()=>minimized.value ? composeRoot.value?.querySelector(".compose-caption")?.focus() : focusWindow(),
+  prepareDiscard,finishDiscard,unlockDiscard,
   discardEditor,
   open,
   openDraft,

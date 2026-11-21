@@ -22,7 +22,7 @@ import MailTooltip from '@/components/mail-tooltip/index.vue';
 import Aside from '@/layout/aside/index.vue';
 import Header from '@/layout/header/index.vue';
 import Main from '@/layout/main/index.vue';
-import writer from '@/layout/write/index.vue';
+import writer from '@/layout/write/compose-dock.vue';
 import { Icon } from '@iconify/vue';
 import { computed, provide, shallowRef, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';

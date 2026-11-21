@@ -122,6 +122,8 @@ export async function readSavedDraft(draftId) {
 export async function openSavedDraft(draftId, router, folder, labelId, category, canOpen) {
   const draft = await readSavedDraft(draftId);
   if (canOpen && !canOpen()) return;
+  if (await useUiStore().writerRef?.focusDraft?.(draft.draftId)) return;
+  if (canOpen && !canOpen()) return;
   if (
     draftKey(draft) &&
     draft.sendType === "reply" &&

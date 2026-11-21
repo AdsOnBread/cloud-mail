@@ -427,7 +427,8 @@ function initEditor(initialContent) {
         const reader = new FileReader();
         reader.onload = () => {
           const id = "blobid" + new Date().getTime();
-          const blobCache = tinymce.activeEditor.editorUpload.blobCache;
+          const blobCache = editor.value?.editorUpload?.blobCache;
+          if (!blobCache) return;
           const base64 = reader.result.split(",")[1];
           const blobInfo = blobCache.create(id, file, base64);
           blobCache.add(blobInfo);

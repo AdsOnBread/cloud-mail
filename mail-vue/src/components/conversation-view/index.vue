@@ -434,6 +434,7 @@ async function editSavedDraft(summary) {
   const run=++draftRun, current=readerCurrent();
   draftFailure.value=null;
   try {
+    if (await ui.writerRef?.focusDraft?.(summary.draftId)) return;
     const {readSavedDraft}=await import("@/services/draft-list");
     if (!current() || run!==draftRun) return;
     const draft=await readSavedDraft(summary.draftId);
