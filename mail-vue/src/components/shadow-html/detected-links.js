@@ -1,7 +1,7 @@
-import LinkifyIt from 'linkify-it';
+import { LinkifyIt } from 'linkify-it';
 import { h } from 'vue';
 
-const detector = new LinkifyIt();
+const detector = new LinkifyIt({ fuzzyLink: true });
 const linkProps = { target: '_blank', rel: 'noopener noreferrer' };
 
 function linkParts(text) {
@@ -10,9 +10,10 @@ function linkParts(text) {
   const parts = [];
   let offset = 0;
   for (const match of matches) {
-    if (!/^(?:https?:\/\/|mailto:)/i.test(match.url)) continue;
+    const href = match.schema === '' ? 'https://' + match.raw : match.url;
+    if (!/^(?:https?:\/\/|mailto:)/i.test(href)) continue;
     if (match.index > offset) parts.push(text.slice(offset, match.index));
-    parts.push({ href: match.url, text: match.raw });
+    parts.push({ href, text: match.raw });
     offset = match.lastIndex;
   }
   if (offset < text.length) parts.push(text.slice(offset));
