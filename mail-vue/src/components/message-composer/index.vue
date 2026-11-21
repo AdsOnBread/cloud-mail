@@ -180,7 +180,6 @@
           }"
         >
           <tinyEditor
-            :key="form.plainText ? 'plain' : 'rich'"
             :plain-text="form.plainText"
             :def-value="defValue"
             mail-compose

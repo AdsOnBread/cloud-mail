@@ -153,15 +153,16 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => props.defValue,
-  (newValue) => {
-    if (
-      isInitialized.value &&
-      editor.value &&
-      getContent() !== newValue
-    ) {
-      writeContent(editor.value, newValue);
-    }
+  [() => props.defValue, () => props.plainText],
+  ([html, plain], [, previousPlain]) => {
+    const ed = editor.value;
+    if (!isInitialized.value || !ed) return;
+    if (plain !== previousPlain) {
+      configureComposeMode(ed);
+      writeContent(ed, html);
+      ed.undoManager.reset();
+      ed.dispatch("change");
+    } else if (getContent() !== html) writeContent(ed, html);
   },
 );
 
@@ -191,6 +192,15 @@ watch(
   },
 );
 
+function configureComposeMode(ed) {
+  if (!props.mailCompose) return;
+  const body = ed.getBody();
+  body.setAttribute("contenteditable", props.plainText ? "plaintext-only" : "true");
+  for (const [name, value] of Object.entries({paste_as_text:true, paste_data_images:false, paste_block_drop:true, contextmenu:false})) {
+    if (props.plainText) ed.options.set(name, value);
+    else ed.options.unset(name);
+  }
+}
 function writeContent(ed, html) {
   if (props.plainText) ed.getBody().innerHTML = plainMarkup(html).content;
   else ed.setContent(html);
@@ -260,14 +270,11 @@ function initEditor(initialContent) {
     forced_root_block: "div",
     skin: `${uiStore.dark ? "oxide-dark" : "oxide"}`,
     content_css: `/tinymce/css/index.css,${uiStore.dark ? "dark" : "default"}`,
-    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:${props.mailCompose && !props.plainText ? "13px" : "14px"}; ${props.plainText ? "white-space:pre-wrap" : ""} } :root {
+    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:${props.mailCompose ? "13px" : "14px"}; } body[contenteditable="plaintext-only"] { white-space:pre-wrap; font-size:14px } :root {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
-    plugins: props.plainText ? "emoticons" : "link image advlist lists emoticons fullscreen table preview code",
-    ...(props.plainText ? {
-      valid_elements: "div[class|data-signature-id],p,br", paste_as_text:true, paste_data_images:false, paste_block_drop:true, contextmenu:false,
-    } : {}),
+    plugins: "link image advlist lists emoticons fullscreen table preview code",
     ...(props.signatureEditor ? {
       iframe_aria_text:"Signature text", contextmenu:false, paste_data_images:false,relative_urls:false,remove_script_host:false,
       valid_elements:"div[style],p[style],br,strong,b,em,i,u,s,span[style],a[href],ul,ol,li,blockquote,sub,sup",
@@ -289,25 +296,27 @@ function initEditor(initialContent) {
     noneditable_class: "mceNonEditable",
     setup: (ed) => {
       editor.value = ed;
-      if (props.mailCompose && !props.plainText) ed.on("keydown", event => formattingShortcut(ed,event), true);
       if (props.signatureEditor) {
         ed.ui.registry.addButton("signaturelink",{icon:"link", tooltip:"Insert link", onAction:openLink});
       }
-      if (props.plainText) {
+      if (props.mailCompose) {
         ed.on("keydown", event => {
+          if (!props.plainText) return formattingShortcut(ed, event);
           const shortcut = {b:"Bold", i:"Italic", u:"Underline", k:"link"}[event.key.toLowerCase()];
           if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !event.isComposing && shortcut) {
             event.preventDefault(); event.stopImmediatePropagation();
             requestFormat(shortcut);
           } else formattingShortcut(ed, event, requestFormat);
         }, true);
-      } else if (props.mailCompose || props.signatureEditor) {
+      }
+      if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {
           if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();
           }
         }, true);
         ed.on("click", event => {
+          if (props.plainText) return;
           if (props.mailCompose && event.target.nodeName === "IMG" && !event.altKey && !event.metaKey && !event.ctrlKey) {
             event.preventDefault();
             linkPanel.value?.close();
@@ -321,7 +330,8 @@ function initEditor(initialContent) {
           }
         });
       }
-      if (props.mailCompose && !props.plainText) ed.on("keydown", event => {
+      if (props.mailCompose) ed.on("keydown", event => {
+        if (props.plainText) return;
         if (event.key !== "Enter" || !event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
         const image = ed.selection.getNode();
         if (image?.nodeName !== "IMG") return;
@@ -334,7 +344,7 @@ function initEditor(initialContent) {
       ed.on("init", () => {
         if (disposed) return;
         if (props.mailCompose) observeFileTransfers(ed);
-        if (props.plainText) ed.getBody().setAttribute("contenteditable","plaintext-only");
+        configureComposeMode(ed);
         writeContent(ed, initialContent ?? props.defValue);
         if (props.collapseQuote)
           ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
