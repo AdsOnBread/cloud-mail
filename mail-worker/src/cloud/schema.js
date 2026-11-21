@@ -6,7 +6,8 @@ export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_displa
 export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_settings (
   user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1,
   undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)),
-  keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)))`;
+  keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)),
+  hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
@@ -22,13 +23,15 @@ export async function ensureEmailColumn(readColumns,addColumn,name) {
 }
 
 // Older installations already have the preferences table. Two initializers may race.
-export async function ensureKeyboardShortcuts(readColumns, execute) {
-  const exists = async () => (await readColumns()).some(column => column.name === 'keyboard_shortcuts');
-  if (await exists()) return;
-  try {
-    await execute('ALTER TABLE mail_general_settings ADD COLUMN keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1))');
-  } catch (error) {
-    if (!(await exists())) throw error;
+export async function ensureGeneralPreferenceColumns(readColumns, execute) {
+  const existing = new Set((await readColumns()).map(column => column.name));
+  for (const [name, initial] of [['keyboard_shortcuts', 0], ['hover_actions', 1]]) {
+    if (existing.has(name)) continue;
+    try {
+      await execute(`ALTER TABLE mail_general_settings ADD COLUMN ${name} INTEGER NOT NULL DEFAULT ${initial} CHECK(${name} IN (0,1))`);
+    } catch (error) {
+      if (!(await readColumns()).some(column => column.name === name)) throw error;
+    }
   }
 }
 
@@ -37,7 +40,7 @@ export async function migrateCloud(db) {
   await ensureRawSizeColumn(readColumns,sql=>db.prepare(sql).run());
   await ensureEmailColumn(readColumns,sql=>db.prepare(sql).run(),'scheduled_draft_id');
   await db.prepare(generalSettingsSchema).run();
-  await ensureKeyboardShortcuts(
+  await ensureGeneralPreferenceColumns(
     async () => (await db.prepare('PRAGMA table_info(mail_general_settings)').all()).results,
     sql => db.prepare(sql).run(),
   );
