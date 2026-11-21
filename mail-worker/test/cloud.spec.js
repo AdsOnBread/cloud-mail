@@ -354,6 +354,39 @@ describe('Scheduled send',()=>{
    expect((await drafts.get(c(),1,d.draftId))).toMatchObject({state:'draft',content:d.content});
    expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('upsert');
  });
+ it('keeps filing choices through cancellation, edits and delivery, on the sender copy only',async()=>{
+   const {schedule,scheduledList,cancel,setScheduledMark}=await import('../src/cloud/scheduled');
+   const draftRow=await draft(),id=draftRow.draftId,sendAt=Math.floor(Date.now()/1000)+3600;
+   const {version}=await schedule(c(),1,id,{version:draftRow.version,sendAt});
+   const mark=(field,value)=>setScheduledMark(c(),1,id,{version,field,value});
+   await expect(setScheduledMark(c(),2,id,{version,field:'starred',value:true})).rejects.toMatchObject({code:404});
+   await Promise.all([mark('starred',true),mark('important',true)]);
+   for(const filter of ['starred','important']) {
+     expect(await scheduledList(c(),1,1,{mark:filter})).toMatchObject([{draftId:id,version,sendAt,starred:1,importanceReason:'user'}]);
+     expect(await scheduledList(c(),1,3,{mark:filter})).toEqual([]);
+   }
+   await mark('starred',true);
+   await cancel(c(),1,id,version);
+   await expect(mark('important',false)).rejects.toMatchObject({code:409});
+   const edited=await drafts.save(c(),1,{version:version+1,subject:'After cancel',mailboxStarred:0},id);
+   expect(edited).toMatchObject({mailboxStarred:1,mailboxImportant:1});
+   const result=await send(c(),1,{version:edited.version,idempotencyKey:'send-after-filing'},{draftId:id});
+   expect(result.state).toBe('sent');
+   const sentId=result.messages[0].emailId;
+   expect((await env.db.prepare('SELECT user_id,email_id FROM star').all()).results).toEqual([{user_id:1,email_id:sentId}]);
+   expect((await env.db.prepare('SELECT user_id,email_id,important FROM mailbox_importance').all()).results).toEqual([{user_id:1,email_id:sentId,important:1}]);
+ });
+ it('respects an explicit unimportant choice on a scheduled message to yourself after dispatch',async()=>{
+   const {schedule,scheduledList,deliverDue,setScheduledMark}=await import('../src/cloud/scheduled');
+   const d=await draft({receiveEmail:['admin@example.com']}),id=d.draftId;
+   const {version}=await schedule(c(),1,id,{version:d.version,sendAt:Math.floor(Date.now()/1000)+120});
+   expect(await scheduledList(c(),1,1,{mark:'important'})).toMatchObject([{importanceReason:'direct'}]);
+   await setScheduledMark(c(),1,id,{version,field:'important',value:false});
+   expect(await scheduledList(c(),1,1,{mark:'important'})).toEqual([]);
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(id).run();
+   await deliverDue(c());
+   expect((await env.db.prepare('SELECT important FROM mailbox_importance').all()).results).toEqual([{important:0}]);
+ });
  it('finds scheduled mail by body, hidden recipients and downloadable files while keeping the folder count unfiltered',async()=>{
    const {schedule,scheduledList}=await import('../src/cloud/scheduled');
    const when=Math.floor(Date.now()/1000)+3600;

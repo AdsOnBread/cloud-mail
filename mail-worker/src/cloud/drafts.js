@@ -86,6 +86,9 @@ export async function save(c,userId,input,id) {
   if(old && (input.version!==old.version||old.state!=='draft')) throw conflict(old);
   const accountId=input.accountId??old?.accountId;await mailbox(c,userId,accountId);
   const data=normalize(input,old?Object.fromEntries(fields.map(k=>[k,old[k]]).filter(([,v])=>v!==undefined)):{});
+  for (const field of ['mailboxStarred','mailboxImportant']) {
+    if (old?.[field] != null) data[field] = old[field];
+  }
   if(data.emailId) {
     const source=await c.env.db.prepare('SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.email_id=? AND e.user_id=? AND a.user_id=e.user_id AND e.is_del=0 AND a.is_del=0 AND e.trashed_at IS NULL').bind(positive(data.emailId),userId).first();
     if(!source && (!old || data.emailId!==old.emailId)) throw new BizError('Original message not found.',404);

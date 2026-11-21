@@ -19,6 +19,7 @@ import { Icon } from "@iconify/vue";
 const props = defineProps({ reason: String, disabled: Boolean });
 defineEmits(["toggle"]);
 const explanation = computed(() => ({
+  direct: "Important mainly because it was sent directly to you.",
   user: "Important because you marked it as important.",
   reply: "Important because you replied to this conversation.",
 }[props.reason] || "Click to mark as important."));

@@ -81,7 +81,23 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
   try {
     const messages=await emailService.send(c,payload,userId,{beforeDispatch:()=>{dispatched=true;}});
     const result={state:'sent',attemptId:key,messages};
+    const filing = [];
+    if (draft) {
+      // The queue claim fences further edits. Read the choices committed before that claim.
+      const sender = `FROM cloud_drafts d JOIN email e ON e.user_id=d.user_id AND e.account_id=d.account_id
+        WHERE d.user_id=? AND d.draft_id=? AND d.state='sending' AND e.email_id=? AND e.type=1`;
+      const ids = [userId,draft.draftId,messages[0].emailId];
+      filing.push(
+        c.env.db.prepare(`INSERT INTO star(user_id,email_id) SELECT d.user_id,e.email_id ${sender}
+          AND json_extract(d.data,'$.mailboxStarred')=1
+          AND NOT EXISTS (SELECT 1 FROM star s WHERE s.user_id=d.user_id AND s.email_id=e.email_id)`).bind(...ids),
+        c.env.db.prepare(`INSERT OR REPLACE INTO mailbox_importance(user_id,email_id,important)
+          SELECT d.user_id,e.email_id,json_extract(d.data,'$.mailboxImportant') ${sender}
+          AND json_extract(d.data,'$.mailboxImportant') IS NOT NULL`).bind(...ids)
+      );
+    }
     await c.env.db.batch([
+      ...filing,
       c.env.db.prepare("UPDATE send_attempts SET state='sent',result=? WHERE user_id=? AND idempotency_key=?").bind(JSON.stringify(result),userId,key),
       ...(draft?[c.env.db.prepare("UPDATE cloud_drafts SET state='sent',data='{}',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=?").bind(userId,draft.draftId)]:[])
     ]);

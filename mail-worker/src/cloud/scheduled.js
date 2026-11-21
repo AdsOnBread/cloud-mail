@@ -35,6 +35,22 @@ export async function schedule(c, userId, id, input) {
 	return { draftId: id, sendAt, version: saved.version };
 }
 
+// Keep filing choices separate from the content revision used to claim or cancel delivery.
+export async function setScheduledMark(c, userId, rawId, { field, value, version }) {
+  const id = positive(rawId);
+  const path = field === 'starred' ? '$.mailboxStarred' : field === 'important' ? '$.mailboxImportant' : null;
+  if (!path || typeof value !== 'boolean') throw new BizError('Invalid scheduled message mark.', 400);
+  const changed = await c.env.db.prepare(`UPDATE cloud_drafts SET data=json_set(data,?,?)
+    WHERE user_id=? AND draft_id=? AND version=? AND state IN ('scheduled','schedule_failed')
+    AND EXISTS (SELECT 1 FROM account a WHERE a.account_id=cloud_drafts.account_id AND a.user_id=cloud_drafts.user_id AND a.is_del=0)
+    RETURNING draft_id`).bind(path, Number(value), userId, id, positive(version)).first();
+  if (!changed) {
+    await drafts.get(c,userId,id,true);
+    throw new BizError('This scheduled message changed. Refresh Scheduled.', 409);
+  }
+  return {draftId:id,field,value};
+}
+
 export async function scheduledList(c, userId, accountId, filters = {}) {
   const args = [userId];
   const conditions = ["d.user_id=?", "json_extract(d.data,'$.scheduledAt') IS NOT NULL"];
@@ -43,6 +59,13 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     args.push(positive(accountId));
   }
   const from = 'FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0';
+  const starred = "COALESCE(json_extract(d.data,'$.mailboxStarred'),0)";
+  const important = "json_extract(d.data,'$.mailboxImportant')";
+  const reason = `CASE WHEN ${important}=1 THEN 'user' WHEN ${important}=0 THEN NULL
+    WHEN json_extract(d.data,'$.sendType')='reply' AND json_extract(d.data,'$.emailId')>0 THEN 'reply'
+    WHEN EXISTS (SELECT 1 FROM json_each(d.data,'$.receiveEmail') address WHERE address.value=a.email COLLATE NOCASE) THEN 'direct' END`;
+  if (filters.mark==='starred') conditions.push(starred+'=1');
+  if (filters.mark==='important') conditions.push('('+reason+') IS NOT NULL');
   if (filters.countOnly === '1') {
     return c.env.db.prepare(`SELECT COUNT(*) count ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
   }
@@ -74,7 +97,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     args.push('-' + days + ' days');
   }
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
+    ${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
