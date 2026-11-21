@@ -33,7 +33,7 @@
           role="option" :aria-selected="active===i" @pointermove="active=i" @click="pick(person)">
           <span class="suggestion-avatar" aria-hidden="true">{{ person.name.charAt(0).toUpperCase() }}</span>
           <span class="suggestion-lines">
-            <span v-for="(line,n) in [person.name,person.email]" :key="n">
+            <span v-for="(line,n) in [person.name===person.email ? person.email.split('@')[0] : person.name,person.email]" :key="n">
               <template v-for="(part,j) in highlighted(line)" :key="j"><b v-if="j===1">{{ part }}</b><template v-else>{{ part }}</template></template>
             </span>
           </span>
@@ -55,7 +55,7 @@ import { splitRecipients } from '@/utils/recipients.js';
 import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
-  names: Object, accountId: Number, owner: String, error: String });
+  names: Object, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
 const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);

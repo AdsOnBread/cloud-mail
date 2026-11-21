@@ -10,9 +10,14 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   const options=computed(()=>{
     const needle=personSearchKey(query.value);
     if (!needle || needle.length>maxPersonTerm) return [];
-    const omit=new Set(props.modelValue.filter((_,index)=>index!==editing.value).map(personSearchKey));
+    const omit=new Set([...props.otherRecipients,...props.modelValue.filter((_,index)=>index!==editing.value)].map(personSearchKey));
+    const named=new Map(people.value.map(person=>[personSearchKey(person.email),person]));
+    const known=[...props.recent,...Object.keys(props.names || {})].map(email=>{
+      const name=props.names?.[email.toLowerCase()];
+      return named.get(personSearchKey(email)) || {email,name:typeof name==='string' && name || email};
+    });
     const result=[];
-    for (const person of people.value) {
+    for (const person of [...known,...people.value]) {
       const key=personSearchKey(person.email);
       if (omit.has(key) || !isEmail(person.email) ||
         ![person.name,person.email].some(text=>personSearchKey(text).includes(needle))) continue;
@@ -40,9 +45,11 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   function place() {
     if (panel.value && input.value) position.value=positionMailboxPopup(panel.value,input.value,420,input.value);
   }
-  watch(options,(items)=>{
+  watch(options,(items,previous)=>{
+    const selected=previous?.[active.value];
+    const retained=selected ? items.findIndex(person=>person.email===selected.email) : -1;
     const exact=items.findIndex(person=>person.email.toLowerCase()===query.value.toLowerCase());
-    active.value=exact>=0 ? exact : items.length && !isEmail(query.value) ? 0 : -1;
+    active.value=retained>=0 ? retained : exact>=0 ? exact : items.length && !isEmail(query.value) ? 0 : -1;
     nextTick(place);
   },{flush:'sync'});
   watch(()=>Boolean(options.value.length), (open,_,cleanup)=>{
@@ -57,7 +64,7 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   function pick(person) { close();choose(person); }
   function keys(event) {
     const items=options.value;
-    if (!typing.value || event.shiftKey) return false;
+    if (!items.length || event.shiftKey) return false;
     if (event.key==='Escape') close();
     else if (items.length && ['ArrowDown','ArrowUp'].includes(event.key)) {
       active.value=event.key==='ArrowDown' ? (active.value+1)%items.length :

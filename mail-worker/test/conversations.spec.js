@@ -533,6 +533,16 @@ it('filters Trash by message date across an inclusive local day before paginatio
  expect((await cloudMail.list(context(),1,{folder:'trash',...bounds,limit:1})).messages).toHaveLength(1);
 });
 
+it('finds compose correspondents only in the sending mailbox and omits received blind copies',async()=>{
+ await insert({name:'Arden Hart',send_email:'arden@example.net',recipient:'[{"name":"Arden Lee","address":"lee@example.net"}]',bcc:'[{"address":"arden-hidden@example.net"}]'});
+ await insert({type:1,status:2,bcc:'[{"name":"Arden Ray","address":"ray@example.net"}]'});
+ await insert({name:'Arden elsewhere',send_email:'elsewhere@example.net',account_id:3});
+ await insert({name:'Arden external',send_email:'external@example.net',account_id:2,user_id:2});
+ const options=await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'1',q:'arden'});
+ expect(options.map(p=>p.email).sort()).toEqual(['arden@example.net','lee@example.net','ray@example.net']);
+ expect(await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'2',q:'arden'})).toEqual([]);
+});
+
 it('suggests scoped senders and recipients and matches either selected person in Trash', async()=>{
  const a=await insert({name:'Élodie Chen',send_email:'ann@example.net',recipient:'[{"name":"Robin","address":"robin@example.net"}]',bcc:'[{"address":"hidden@example.net"}]'});
  const b=await insert({name:'Lee',send_email:'lee@example.net',type:1,status:2,bcc:'[{"address":"blind@example.net"}]'});

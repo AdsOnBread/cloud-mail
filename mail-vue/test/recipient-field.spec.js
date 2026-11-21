@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, ref } from 'vue';
 import RecipientField from '../src/components/recipient-field/index.vue';
+
+vi.mock('@/axios',()=>({default:{get:vi.fn()}}));
+import http from '@/axios';
 
 function field() {
   return mount(defineComponent({ components:{RecipientField}, setup() { return { recipients:ref([]), entry:ref() }; },
@@ -84,6 +87,28 @@ describe('recipient entry', () => {
       expect(document.activeElement).toBe(reverse ? wrapper.get('.field-label').element : input.element);
     }
     wrapper.unmount();
+  });
+  it('keeps the blind-copy address out of To suggestions and accepts a highlighted name on Tab',async()=>{
+    const wrapper=mount(RecipientField,{attachTo:document.body,props:{label:'To',owner:'owner',accountId:1,
+      otherRecipients:['secret@example.net'],recent:['secret@example.net','safe@example.net'],
+      names:{'safe@example.net':'Sample Safe','secret@example.net':'Sample Secret'}}});
+    const input=wrapper.get('input'); await input.setValue('Sample');
+    const choices=document.querySelectorAll('.recipient-suggestions [role=option]');
+    expect(choices.length).toBe(1); expect(choices[0].textContent).toContain('Sample Safe');
+    await input.trigger('keydown',{key:'Tab'});
+    expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([['safe@example.net']]);
+    wrapper.unmount();
+  });
+  it('ignores late mailbox matches after the sending identity changes',async()=>{
+    vi.useFakeTimers();
+    const wrapper=mount(RecipientField,{props:{label:'Cc',owner:'first',accountId:1}});
+    try {
+      let resolve; http.get.mockImplementationOnce(()=>new Promise(done=>{resolve=done}));
+      await wrapper.get('input').setValue('Ada');await vi.advanceTimersByTimeAsync(150);
+      await wrapper.setProps({owner:'second',accountId:2});
+      resolve([{email:'ada@example.net',name:'Ada'}]);await vi.advanceTimersByTimeAsync(0);
+      expect(wrapper.get('input').attributes('aria-expanded')).toBe('false');
+    } finally {wrapper.unmount();vi.useRealTimers();}
   });
   it('splits pasted recipient lists across all supported delimiters', async () => {
     const wrapper=field(); await wrapper.get('input').trigger('paste',{clipboardData:{getData:()=> 'one@example.com;two@example.com\nthree@example.com'}});

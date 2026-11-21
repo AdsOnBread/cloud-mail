@@ -117,9 +117,11 @@
             <RecipientField
               ref="toField"
               v-model="form.receiveEmail"
+              :other-recipients="[...form.cc,...form.bcc]"
               label="To"
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
+              :recent="mailboxRecents"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.receiveEmail"
@@ -148,9 +150,11 @@
               v-if="showCc"
               ref="ccField"
               v-model="form.cc"
+              :other-recipients="[...form.receiveEmail,...form.bcc]"
               label="Cc"
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
+              :recent="mailboxRecents"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.cc"
@@ -160,9 +164,11 @@
               v-if="showBcc"
               ref="bccField"
               v-model="form.bcc"
+              :other-recipients="[...form.receiveEmail,...form.cc]"
               label="Bcc"
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
+              :recent="mailboxRecents"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.bcc"
@@ -707,6 +713,7 @@ const emptyForm = () => ({
   draftId: null,
 });
 const form = reactive(emptyForm());
+const mailboxRecents = computed(()=>writerStore.recentAddresses(form.ownerEmail,form.accountId));
 const attachedFiles = computed(() => form.attachments.filter(file => !file.contentId));
 const starChoice = ref(null);
 const starRevision = ref(0);
@@ -1246,7 +1253,8 @@ function attachUndo(cancel, session) {
 function rememberPerson({email,name}) {
   if (name && name!==email) form.replyRecipientNames={...form.replyRecipientNames,[email.toLowerCase()]:name};
 }
-function rememberRecipients(recent) {
+function rememberRecipients(recent, accountId) {
+  writerStore.rememberAddresses(userStore.user.email,accountId,recent);
   writerStore.sendRecipientRecord = [...new Set([...recent, ...writerStore.sendRecipientRecord])].slice(0,500);
 }
 function recordSent(messages) {
@@ -1279,7 +1287,7 @@ async function followDelivery(delivery, recent, replyTo, subject, quiet=false) {
     }
     if (replyTo) feedback.deliveredReply={emailId:replyTo};
     recordSent(messages);
-    rememberRecipients(recent);
+    rememberRecipients(recent,messages[0]?.accountId);
     if (feedback.notice===notice) {
       feedback.show(preserved || "Message sent");
       if (messages[0]?.emailId) feedback.notice.sentEmailId=messages[0].emailId;
@@ -1325,7 +1333,7 @@ async function sendEmail(sendAt=null) {
       show.value=false;resetForm();emit("closed");return;
     }
     recordSent(sent);
-    rememberRecipients(recent);
+    rememberRecipients(recent,form.accountId);
     feedback.show(preservedNotice || "Message sent");
     if (sent[0]?.emailId) feedback.notice.sentEmailId=sent[0].emailId;
     show.value = false;
@@ -1385,9 +1393,7 @@ async function deleteContact() {
     const selected = contactsTabRef.value
       .getSelectionRows()
       .map((contact) => contact.email);
-    writerStore.sendRecipientRecord = writerStore.sendRecipientRecord.filter(
-      (email) => !selected.includes(email),
-    );
+    writerStore.forgetAddresses(selected);
   } catch {}
 }
 function keydown(event) {
