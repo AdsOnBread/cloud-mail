@@ -24,6 +24,22 @@ beforeEach(async()=>{
 });
 afterEach(()=>vi.restoreAllMocks());
 describe('General mail settings',()=>{
+ it('commits both forms together and preserves both when either revision is stale',async()=>{
+   const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
+   const {saveSignatures,readSignatures}=await import('../src/cloud/signatures');
+   const initial={version:0,undoSeconds:10,replyAll:false,signatures:{
+     version:0,items:[{id:'work',name:'Work',html:'<b>First</b><script>ignored()</script>'}],defaults:{},beforeQuote:false}};
+   const first=await saveGeneralSettings(env.db,1,initial);
+   expect(first.signatures).toMatchObject({version:1,items:[{html:'<b>First</b>'}]});
+   const second=await saveGeneralSettings(env.db,1,{...first,replyAll:true});
+   expect(second.version).toBe(2);expect(second.signatures.version).toBe(2);
+   const newer=await saveSignatures(env.db,1,{...second.signatures,beforeQuote:true});
+   await expect(saveGeneralSettings(env.db,1,{...second,undoSeconds:30})).rejects.toMatchObject({code:409});
+   await expect(saveGeneralSettings(env.db,1,{...first,signatures:newer})).rejects.toMatchObject({code:409});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:true});
+   expect(await readSignatures(env.db,1)).toEqual(newer);
+   expect((await readSignatures(env.db,2)).version).toBe(0);
+ });
  it('rejects stale edits, keeps preferences per user, and removes them on deletion',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const input={version:0,undoSeconds:30,replyAll:true};

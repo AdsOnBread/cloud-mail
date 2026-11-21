@@ -45,7 +45,7 @@ export async function readSignatures(db,userId) {
   const row=await db.prepare('SELECT version,data FROM mail_signatures WHERE user_id=?').bind(userId).first();
   return row ? {version:row.version,...JSON.parse(row.data)} : {version:0,...empty()};
 }
-export async function saveSignatures(db,userId,input) {
+export function validatedSignatures(input) {
   if(!input || !Number.isSafeInteger(input.version) || input.version<0 || !Array.isArray(input.items) ||
     input.items.length>100 || typeof input.beforeQuote!=='boolean' || !input.defaults ||
     typeof input.defaults!=='object' || Array.isArray(input.defaults) || JSON.stringify(input).length>500000)
@@ -66,7 +66,10 @@ export async function saveSignatures(db,userId,input) {
       throw new BizError('Choose an existing signature for each default.',400);
     if(pair.newMail || pair.reply) defaults[accountId]={newMail:pair.newMail,reply:pair.reply};
   }
-  const data={items,defaults,beforeQuote:input.beforeQuote};
+  return {items,defaults,beforeQuote:input.beforeQuote};
+}
+export async function saveSignatures(db,userId,input) {
+  const data=validatedSignatures(input);
   const json=JSON.stringify(data);
   const changed=input.version===0
     ? await db.prepare('INSERT INTO mail_signatures(user_id,version,data) VALUES(?,1,?) ON CONFLICT(user_id) DO NOTHING RETURNING version').bind(userId,json).first()
