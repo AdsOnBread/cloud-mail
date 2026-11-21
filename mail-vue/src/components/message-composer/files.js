@@ -84,21 +84,21 @@ function base64Length(content) {
   return Math.max(0, Math.floor(data.length * 3 / 4) - (data.endsWith("==") ? 2 : Number(data.endsWith("="))));
 }
 
-export function referencedAttachments(row, body) {
+export function inlineImageSources(file) {
+  if (!file.contentId) return [];
+  const sources = ['cid:' + file.contentId.replace(/^<|>$/g, '')];
+  if (file.attachmentId != null) sources.push('/api/v1/drafts/attachments/' + file.attachmentId + '/content');
+  if (file.content && typeof file.content === 'string') {
+    sources.push(file.content.startsWith('data:') ? file.content : 'data:' + (file.contentType || file.mimeType) + ';base64,' + file.content);
+  }
+  return sources;
+}
+
+export function referencedAttachments(row) {
   const files = row.attachments || [];
   if (!files.some(file => file.contentId)) return files;
-  if (!body) {
-    const template = document.createElement("template");
-    template.innerHTML = row.content || "";
-    body = template.content;
-  }
-  const sources = new Set(Array.from(body.querySelectorAll("img[src]"), image => image.getAttribute("src")));
-  return files.filter(file => {
-    if (!file.contentId) return true;
-    const id = file.contentId.replace(/^<|>$/g, "");
-    if (sources.has("cid:" + id) || sources.has("/api/v1/drafts/attachments/" + file.attachmentId + "/content")) return true;
-    if (!file.content || typeof file.content !== "string") return false;
-    const src = file.content.startsWith("data:") ? file.content : "data:"+(file.contentType || file.mimeType)+";base64,"+file.content;
-    return sources.has(src);
-  });
+  const template = document.createElement('template');
+  template.innerHTML = row.content || '';
+  const sources = new Set(Array.from(template.content.querySelectorAll('img[src]'), image => image.getAttribute('src')));
+  return files.filter(file => !file.contentId || inlineImageSources(file).some(src => sources.has(src)));
 }

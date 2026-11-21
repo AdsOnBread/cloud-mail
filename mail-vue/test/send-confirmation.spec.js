@@ -31,6 +31,9 @@ it('distinguishes files and uploaded photos from removed images and signature ar
   for (const src of ['cid:part','/api/v1/drafts/attachments/23/content','data:image/png;base64,YQ==']) {
     expect(sendConfirmation(draft(content+'<img src="'+src+'">', {attachments:[inline]}))).toBe('');
   }
+  for (const divider of ['-- ', 'On Wed, Pat wrote:']) {
+    expect(sendConfirmation(draft(content+'<div>'+divider+'</div><div><img src="cid:part"></div>',{attachments:[inline]}))).toContain('"See attached"');
+  }
   expect(sendConfirmation(draft(content+'<div class="cloudmail-signature"><img src="cid:part"></div>',{attachments:[inline]}))).toContain('"See attached"');
 });
 
