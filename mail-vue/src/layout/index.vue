@@ -3,16 +3,16 @@
     <header :inert="composeModal" v-show="!conversationWindow" class="mail-header"><Header /></header>
     <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="composeModal || (isMobile && !uiStore.asideShow)" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" :inert="composeModal" aria-label="Close navigation" @click="uiStore.asideShow = false" />
-    <main class="mail-main" :inert="composeModal"><Main /></main>
+    <main class="mail-main" :inert="composeModal"><Main v-if="!separateWindow" /></main>
     <div v-if="sideAvailable" class="side-tools" :inert="composeModal">
       <SidePanel :key="user.authenticatedToken" v-model="contactsOpen" :account-id="sideAccountId"/>
     </div>
-    <writer :side-inset="sideDockInset" ref="writerRef" :key="user.authenticatedToken" />
+    <writer :separate-window="separateWindow" :side-inset="sideDockInset" ref="writerRef" :key="user.authenticatedToken" />
     <MailTooltip />
     <MailFeedback />
     <LabelEditor /><QuickSettings />
     <FilterEditor v-if="filters.editor" :key="filters.editor.id" :rule="filters.editor"/>
-    <button v-if="!conversationWindow && route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" :inert="composeModal" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+    <button v-if="!conversationWindow && route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" :inert="composeModal" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
@@ -75,7 +75,8 @@ function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.lab
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
-const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
+const separateWindow=computed(()=>route.name === "email" && typeof route.query.composeWindow === "string" ? route.query.composeWindow : "");
+const conversationWindow=computed(()=>!!separateWindow.value || route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
 const wideEnough = ref(window.innerWidth >= 900);
 const sideAvailable = computed(()=>wideEnough.value && !conversationWindow.value);
 const contactsOpen = ref(false);

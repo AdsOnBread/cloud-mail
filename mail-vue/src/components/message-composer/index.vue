@@ -6,7 +6,7 @@
     ref="composeRoot"
     v-show="show"
     class="send"
-    :class="{ expanded, minimized, inline, 'compose-open': show }"
+    :class="{ expanded, minimized, inline, separate: !!separateWindow, 'compose-open': show }"
     :role="modal ? 'dialog' : undefined"
     :aria-modal="modal || undefined"
     aria-label="Compose message"
@@ -47,6 +47,13 @@
           <Icon icon="material-symbols:close" width="18" />
         </button>
       </div>
+      <div v-else-if="separateWindow" class="compose-title separate-title">
+        <span class="compose-caption">{{ caption }}</span>
+        <div class="window-actions"><button type="button" aria-label="Pop-in" data-tip="Pop-in"
+          :disabled="preparing || sending || attaching" @click="moveWindow">
+          <Icon icon="material-symbols:close-fullscreen" width="16"/>
+        </button></div>
+      </div>
       <div v-else class="compose-title">
         <button
           type="button"
@@ -69,8 +76,9 @@
             v-if="!inline"
             type="button"
             :aria-label="(expanded && !minimized) ? 'Exit full screen' : 'Expand compose'"
-            :data-tip="(expanded && !minimized) ? 'Exit full screen' : 'Full screen'"
-            @click="toggleFullScreen"
+            :data-tip="((expanded && !minimized) ? 'Exit full screen' : 'Full screen') + ' (Shift for pop-out)'"
+            :disabled="preparing || sending || attaching"
+            @click="$event.shiftKey ? moveWindow() : toggleFullScreen()"
           >
             <Icon
               :icon="
@@ -404,7 +412,8 @@ import db from "@/db/db.js";
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-const props = defineProps({ inline: Boolean, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
+import {openSeparateWindow, returnComposeWindow, saveWindowState} from "@/layout/write/separate-window";
+const props = defineProps({ inline: Boolean, separateWindow:String, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
 const emit = defineEmits(["sent", "closed", "dock-state", "editor-focus"]);
 const composeRoot = ref();
 const labelStore=useMailLabels();
@@ -583,6 +592,37 @@ function setFullScreen(value) {
   const resumeBody = editor.value?.rememberSelection?.();
   focusAfterResize = () => focusWritingField(resumeBody);
   expanded.value = value;
+}
+async function moveWindow() {
+  if (preparing.value || sending.value || attaching.value || !show.value) return;
+  const session = draftSession();
+  preparing.value = true;
+  async function saveForMove() {
+    await editor.value?.ready?.();
+    await pendingDefault;
+    commitRecipients();
+    await saveQueue;
+    session.check();
+    clearTimeout(cloudSaveTimer);
+    if (form.draftId || hasDraftContent(form) || form.labelIds?.length || form.mailboxStarred)
+      await persistDraft({requireCurrent:true,session});
+    session.check();
+    return {owner:session.owner, draftId:form.draftId, formatting:showFormatting.value, plainText:form.plainText,
+      sender:{accountId:form.accountId,email:form.sendEmail,name:form.name}};
+  }
+  try {
+    if (props.separateWindow) {
+      saveWindowState(props.separateWindow, await saveForMove());
+      await returnComposeWindow(props.separateWindow);
+      window.close();
+    } else {
+      await openSeparateWindow(saveForMove, session.check);
+      show.value = false;
+      resetForm();
+      emit("closed");
+    }
+  } catch (error) { sendError.value = error.message || "Could not move this draft."; }
+  finally { preparing.value = false; }
 }
 function toggleFullScreen() {
   if (minimized.value) {
@@ -805,10 +845,10 @@ function available() {
   }
   return true;
 }
-function setSender() {
-  const account = accountStore.currentAccount?.email
+function setSender(sender) {
+  const account = sender || (accountStore.currentAccount?.email
     ? accountStore.currentAccount
-    : userStore.user.account;
+    : userStore.user.account);
   form.plainText = Boolean(composeMode.value.plainText);
   form.ownerEmail=userStore.user.email;
   form.sendEmail = account.email;
@@ -818,7 +858,7 @@ function setSender() {
 function reveal() {
   subjectCaption.value = form.subject.trim();
   addressExpanded.value = true;
-  expanded.value = desktop.value && !props.inline && Boolean(composeMode.value.fullScreen);
+  expanded.value = desktop.value && !props.inline && !props.separateWindow && Boolean(composeMode.value.fullScreen);
   showCc.value = form.cc.length > 0;
   showBcc.value = form.bcc.length > 0;
   show.value = true;
@@ -833,11 +873,11 @@ function focusWindow(){
   else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
   else editor.value?.focus();
 }
-function open(person) {
+function open(person, sender) {
   if (show.value) return focusWindow();
   if (preparing.value) return;
   resetForm();
-  setSender();
+  setSender(sender);
   if (person && person.accountId !== form.accountId) return;
   if (person) {
     form.receiveEmail = [person.email];
@@ -1028,7 +1068,7 @@ async function moreCommand(command) {
   if (command === "fullscreen") {
     const fullScreen = !composeMode.value.fullScreen;
     uiPreferences.composeModes[owner] = {...composeMode.value, fullScreen};
-    if (desktop.value && !props.inline) setFullScreen(fullScreen);
+    if (desktop.value && !props.inline && !props.separateWindow) setFullScreen(fullScreen);
     return;
   }
   // An editor command already has a live selection. Switch immediately so a
@@ -1499,6 +1539,13 @@ defineExpose({
   discardEditor,
   open,
   openDraft,
+  restoreWindow: async (state,draft) => {
+    if (draft) await openDraft(draft);
+    else open(null,state.sender);
+    if (typeof state.formatting === "boolean") showFormatting.value = state.formatting;
+    if (!draft && typeof state.plainText === "boolean") form.plainText = state.plainText;
+    if (!show.value) throw new Error("Could not open the composer.");
+  },
   openReply,
   openReplyAll,
   openForward,
@@ -1915,8 +1962,26 @@ defineExpose({
     font-size: 10px;
   }
 }
+.send.separate:not(.inline):not(.expanded) {
+  inset:0; margin:0 auto; width:min(100%,1202px); max-width:none;
+}
+.send.separate:not(.inline):not(.expanded) .write-box {
+  height:100%; border-radius:0; box-shadow:none; border-inline:1px solid var(--compose-divider);
+}
+.send.separate .separate-title { height:36px; padding:0 4px 0 13px; }
+.send.separate .compose-caption { cursor:default; }
+.send.separate:not(.inline):not(.expanded):not(.minimized) .compose-container { height:calc(100% - 36px); }
 </style>
 
 <style scoped>
 .split-send{display:inline-flex;align-items:stretch;flex-shrink:0}.split-send :deep(.el-button){border-radius:24px 0 0 24px;margin:0}.split-send :deep(.el-dropdown){display:flex}.send-options{height:100%;min-width:29px;background:var(--el-color-primary);color:var(--mail-surface);border-left:1px solid #ffffff70;border-radius:0 24px 24px 0;display:grid;place-items:center;cursor:pointer}.send-options:hover{background:var(--el-color-primary-dark-2)}
+.send.separate:not(.inline):not(.expanded) {
+  inset:0; margin:0 auto; width:min(100%,1202px); max-width:none;
+}
+.send.separate:not(.inline):not(.expanded) .write-box {
+  height:100%; border-radius:0; box-shadow:none; border-inline:1px solid var(--compose-divider);
+}
+.send.separate .separate-title { height:36px; padding:0 4px 0 13px; }
+.send.separate .compose-caption { cursor:default; }
+.send.separate:not(.inline):not(.expanded):not(.minimized) .compose-container { height:calc(100% - 36px); }
 </style>

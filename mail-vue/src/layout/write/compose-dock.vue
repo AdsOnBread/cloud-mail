@@ -10,6 +10,7 @@
   >
     <MessageComposer
       :ref="(node) => remember(item.key, node)"
+      :separate-window="separateWindow"
       :dock-active="item.key === active"
       :dock-hidden="item.open && !layout.positions.has(item.key)"
       @editor-focus="activate(item)"
@@ -57,11 +58,18 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import MessageComposer from "@/components/message-composer/index.vue";
-import { discardDrafts } from "@/services/cloud-drafts";
+import {useRouter} from "vue-router";
+import {useAccountStore} from "@/store/account";
+import {hasPerm} from "@/perm/perm";
+import {readSavedDraft} from "@/services/draft-list";
+import {announceComposeWindow, focusSeparateDraft, openSeparateWindow, receiveComposeWindows, saveWindowState, windowState} from "./separate-window";
+import { ElMessage } from "element-plus";
+import { draftSession, discardDrafts } from "@/services/cloud-drafts";
 import { useMailFeedback } from "@/store/mail-feedback";
 import { useUserStore } from "@/store/user";
 import { dockLayout } from "./dock";
-const props = defineProps({ sideInset: { type:Number, default:0 } });
+const props = defineProps({ separateWindow:String, sideInset: { type:Number, default:0 } });
+const router = useRouter(), accounts = useAccountStore();
 const feedback = useMailFeedback(),
   user = useUserStore();
 const editors = new Map();
@@ -108,6 +116,12 @@ function position(item) {
 }
 function update(item, state) {
   Object.assign(item, state);
+  if (props.separateWindow && state.draftId) {
+    const saved = windowState(props.separateWindow);
+    if (saved.owner === user.user.email && saved.draftId !== state.draftId)
+      saveWindowState(props.separateWindow, {...saved, draftId:state.draftId});
+  }
+  if (props.separateWindow && state.caption) document.title = state.caption + " - phooey! mail";
 }
 function activate(item) {
   if (!item.open || active.value === item.key) return;
@@ -115,6 +129,12 @@ function activate(item) {
   item.used = ++usage;
 }
 function remove(item) {
+  if (props.separateWindow) {
+    // Keep action feedback and Undo available in this window after sending,
+    // scheduling or discarding. A plain save-and-close closes the window.
+    if (feedback.notice) router.replace("/inbox");
+    else window.close();
+  }
   const owned = editors.get(item.key)?.ownsFocus();
   windows.value = windows.value.filter((row) => row.key !== item.key);
   if (!windows.value.length) windows.value.push(empty());
@@ -146,6 +166,7 @@ async function switchTo(key) {
 }
 async function focusDraft(id) {
   if (!id) return false;
+  if (focusSeparateDraft(id)) return true;
   const existing = occupied.value.find(
     (item) => item.draftId === id || item.requestedId === id,
   );
@@ -153,10 +174,11 @@ async function focusDraft(id) {
   await switchTo(existing.key);
   return true;
 }
-async function launch(method, arg) {
+async function launch(method, arg, extra) {
   const owner = user.user.email,
     token = user.authenticatedToken;
   if (method === "openDraft") {
+    if (focusSeparateDraft(arg.draftId)) return;
     if (arg.ownerEmail && arg.ownerEmail !== owner)
       throw new Error("This draft belongs to a different account.");
     // Reserve the first request synchronously. Concurrent requests for the same
@@ -191,7 +213,7 @@ async function launch(method, arg) {
       token !== localStorage.getItem("token")
     )
       return;
-    await editor[method](arg);
+    await editor[method](arg, extra);
   } finally {
     item.requestedId = null;
     if (!editor.visible && windows.value.includes(item)) remove(item);
@@ -230,9 +252,41 @@ async function followDelivery(...args) {
 function resize() {
   viewport.value = window.innerWidth;
 }
-onMounted(() => window.addEventListener("resize", resize));
+async function restoreWindow(state, check) {
+  check();
+  if (state.owner !== user.user.email || !hasPerm("email:send"))
+    throw new Error("This window belongs to another mailbox.");
+  const draft = state.draftId ? await readSavedDraft(state.draftId) : null;
+  check();
+  await launch("restoreWindow", state, draft);
+  check();
+}
+async function openFromButton(event) {
+  if (!event.shiftKey) return launch("open");
+  try {
+    const session = draftSession(), account = accounts.currentAccount?.email ? accounts.currentAccount : user.user.account;
+    await openSeparateWindow(() => ({owner:session.owner,sender:{accountId:account.accountId,email:account.email,name:account.name || user.user.name}}),session.check);
+  } catch (error) { ElMessage.error(error.message); }
+}
+let stopReceiving;
+onMounted(async () => {
+  window.addEventListener("resize", resize);
+  stopReceiving = receiveComposeWindows(restoreWindow);
+  const id = props.separateWindow;
+  if (!id) return;
+  try {
+    await restoreWindow(windowState(id), draftSession().check);
+    announceComposeWindow(id,true);
+  } catch (error) {
+    announceComposeWindow(id,false);
+    ElMessage.error(error.message);
+    router.replace("/inbox");
+  }
+});
+onBeforeUnmount(() => stopReceiving?.());
 onBeforeUnmount(() => window.removeEventListener("resize", resize));
 defineExpose({
+  openFromButton,
   open: (person) => launch("open", person),
   openReply: (email) => launch("openReply", email),
   openReplyAll: (email) => launch("openReplyAll", email),

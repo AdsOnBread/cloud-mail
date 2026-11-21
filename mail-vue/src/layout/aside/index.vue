@@ -2,7 +2,7 @@
   <el-scrollbar class="scroll">
     <div>
       <router-link class="mobile-brand" to="/inbox"><MailBrand :title="settingStore.settings.title"/></router-link>
-      <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+      <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <el-menu :collapse="false"  >
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
                       :class="activeFolder === 'email' ? 'choose-item' : ''">
