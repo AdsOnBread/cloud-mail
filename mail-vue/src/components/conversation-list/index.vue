@@ -708,7 +708,11 @@ async function mutate(action, extra = {}, ids = selected.value) {
     selected.value = selected.value.filter((id) => !ids.includes(id));
     await refresh();
   } catch (e) {
-    if (sameSession() && active && path === route.fullPath && view === key.value) error.value = e.message || "Could not update the conversation.";
+    if (sameSession()) {
+      const message = e.message || "Could not update the conversation.";
+      if (active && path === route.fullPath && view === key.value) error.value = message;
+      else if (action === "move") feedback.show(message);
+    }
   } finally {
     busy.value = false;
   }
