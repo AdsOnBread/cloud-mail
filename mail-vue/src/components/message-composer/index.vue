@@ -968,11 +968,14 @@ async function prepareMessage(message, mode, all = false, rowView) {
   if (!available()) return false;
   preparing.value = true;
   const controller = sourceController = new AbortController();
+  const owner=userStore.user.email, token=userStore.authenticatedToken;
+  const current = () => (!rowView || rowView.current()) && mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
+  const cancel=()=>controller.abort();
+  rowView?.signal.addEventListener("abort",cancel,{once:true});
   try {
-    const owner=userStore.user.email, token=userStore.authenticatedToken;
-    const current = () => (!rowView || rowView.current()) && mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
+    if (!current()) return false;
     const email = (rowView || message.trashedAt)
-      ? await http.get("/v1/messages/" + message.emailId,{signal:controller.signal,headers:{Authorization:token}})
+      ? await http.get("/v1/messages/" + message.emailId,{signal:controller.signal,noMsg:true,headers:{Authorization:token}})
       : await emailStore.ensureDetail(message);
     if (!current()) return false;
     if (rowView && (!email || email.emailId!==message.emailId || email.userId!==userStore.user.userId || email.scheduledDraftId ||
@@ -1030,9 +1033,10 @@ async function prepareMessage(message, mode, all = false, rowView) {
     baseline = draftFingerprint(form);
     startSignatureDefault();
   } catch (error) {
-    if (!controller.signal.aborted) ElMessage.error(error.message || "Could not load the message. Please try again.");
+    if (current()) ElMessage.error(error.message || "Could not load the message. Please try again.");
     return false;
   } finally {
+    rowView?.signal.removeEventListener("abort",cancel);
     preparing.value = false;
   }
   await nextTick();

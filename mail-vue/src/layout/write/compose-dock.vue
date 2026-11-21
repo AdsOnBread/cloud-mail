@@ -246,9 +246,9 @@ async function openRowResponses(rows, command) {
   const current=()=>owner===user.user.email && token && token===user.authenticatedToken && token===localStorage.getItem("token") &&
     mailbox===accounts.currentAccountId && allReceive===accounts.currentAccount.allReceive && path===router.currentRoute.value.fullPath && hasPerm("email:send");
   if (!current()) return;
-  if (rows.length>1 && props.separateWindow && separateIdle.value) {
+  if (props.separateWindow && separateIdle.value) {
     // An idle detached composer has one persisted draft slot. Resume the ordinary
-    // mailbox dock before opening several independent responses there.
+    // mailbox dock to keep the rows visible alongside their responses.
     const {composeWindow,...query}=router.currentRoute.value.query;
     const location={path:router.currentRoute.value.path,query};
     path=router.resolve(location).fullPath;
@@ -257,9 +257,15 @@ async function openRowResponses(rows, command) {
     connectWindows();
     separateIdle.value=false;
   }
-  for (const message of rows) {
-    if (!current() || !await launch("openRowResponse", message, {command,current})) break;
-  }
+  const controller=new AbortController();
+  const stop=watch(current, valid=>{if (!valid) controller.abort();}, {flush:"sync"});
+  const view={command,current:()=>!controller.signal.aborted && current(),signal:controller.signal};
+  try {
+    for (const message of rows) {
+      if (!view.current() || !await launch("openRowResponse", message, view)) break;
+    }
+  } finally { stop(); }
+
 }
 async function discardEditor(ids, session) {
   const matches = occupied.value.filter(
