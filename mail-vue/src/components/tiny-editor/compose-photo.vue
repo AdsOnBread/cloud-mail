@@ -64,23 +64,53 @@ function close(restore = false) {
   photo.value = null;
   if (restore && current(image)) caretAfter(image);
 }
+function visibleFrame(frame, bounds) {
+  const area = {...bounds};
+  for (let parent = frame.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const rect = parent.getBoundingClientRect();
+    if (style.overflowX !== "visible") {
+      area.left = Math.max(area.left,rect.left + parent.clientLeft);
+      area.right = Math.min(area.right,rect.left + parent.clientLeft + parent.clientWidth);
+    }
+    if (style.overflowY !== "visible") {
+      area.top = Math.max(area.top,rect.top + parent.clientTop);
+      area.bottom = Math.min(area.bottom,rect.top + parent.clientTop + parent.clientHeight);
+    }
+  }
+  return area;
+}
 function place() {
   const image = photo.value, popup = bar.value;
   if (!current(image)) { close(); return; }
   const frame = props.editor.iframeElement;
   const rect = frame.getBoundingClientRect();
   if (!rect.width || !rect.height || frame.closest("[inert]")) { close(); return; }
-  if (!popup || editing.value) return;
+  if (!popup) return;
   loaded.value = image.naturalWidth > 0 && image.naturalHeight > 0;
   const viewport = window.visualViewport;
   const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
   const right = left + (viewport?.width || document.documentElement.clientWidth);
   const bottom = top + (viewport?.height || document.documentElement.clientHeight);
+  if (editing.value) {
+    if (altDialog.value) {
+      const modal = altDialog.value;
+      modal.style.width = Math.max(0,Math.min(560,right-left-16))+"px";
+      modal.style.maxHeight = Math.max(0,bottom-top-16)+"px";
+      modal.style.left = left+(right-left-modal.offsetWidth)/2+"px";
+      modal.style.top = top+(bottom-top-modal.offsetHeight)/2+"px";
+    }
+    return;
+  }
+  popup.style.maxWidth = Math.max(0,right-left-8)+"px";
+  const clip = visibleFrame(frame,{left:Math.max(rect.left,left),right:Math.min(rect.right,right),
+    top:Math.max(rect.top,top),bottom:Math.min(rect.bottom,bottom)});
   const imageRect = image.getBoundingClientRect();
-  const x = Math.max(rect.left + frame.clientLeft + imageRect.left, rect.left, left);
-  const y = Math.max(rect.top + frame.clientTop + imageRect.top, rect.top, top);
-  const endX = Math.min(rect.left + frame.clientLeft + imageRect.right, rect.right, right);
-  const endY = Math.min(rect.top + frame.clientTop + imageRect.bottom, rect.bottom, bottom);
+  const x = Math.max(rect.left + frame.clientLeft + imageRect.left, clip.left);
+  const y = Math.max(rect.top + frame.clientTop + imageRect.top, clip.top);
+  const endX = Math.min(rect.left + frame.clientLeft + imageRect.right, clip.right);
+  const endY = Math.min(rect.top + frame.clientTop + imageRect.bottom, clip.bottom);
   if (x >= endX || y >= endY) { close(); return; }
   const below = endY + 3;
   const popY = below + popup.offsetHeight <= bottom - 4 ? below : y - popup.offsetHeight - 3;
@@ -171,6 +201,7 @@ async function act(label) {
     await nextTick();
     if (!editing.value) return;
     altDialog.value.showModal();
+    place();
     field.value.focus();
     field.value.select();
   } else if (label==="Edit link") {
@@ -201,7 +232,7 @@ defineExpose({open,close});
 .photo-options button:disabled {color:var(--secondary-text-color);cursor:default}
 .photo-options button:enabled:hover {text-decoration:underline}
 .photo-options button:focus-visible,.alt-dialog button:focus-visible {outline:2px solid var(--el-color-primary);outline-offset:1px}
-.alt-dialog {position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 16px);overflow:auto;padding:24px;border:0;border-radius:28px;color:var(--el-text-color-primary);background:var(--mail-surface);box-shadow:0 8px 32px #0003;font:14px/20px Arial,sans-serif}
+.alt-dialog {position:fixed;inset:auto;margin:0;box-sizing:border-box;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 16px);overflow:auto;padding:24px;border:0;border-radius:28px;color:var(--el-text-color-primary);background:var(--mail-surface);box-shadow:0 8px 32px #0003;font:14px/20px Arial,sans-serif}
 .alt-dialog::backdrop {background:rgb(0 0 0 / .38)}
 form {min-height:min(230px,calc(100dvh - 68px));display:flex;flex-direction:column;gap:16px}
 h2 {font-size:24px;line-height:32px;font-weight:400;margin:0}

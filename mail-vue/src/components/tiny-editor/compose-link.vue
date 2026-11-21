@@ -161,13 +161,14 @@ function change(fn) {
 }
 function apply() {
   if (!safeUrl.value) return;
+  const hasImage = panel.value.hasImage;
   const href = safeUrl.value,
     text = panel.value.text || href;
   change((ed) => {
     if (anchor?.isConnected) {
       ed.dom.setAttrib(anchor, "href", href);
-      if (!panel.value.hasImage && text !== originalText) renameLink(anchor, text);
-    } else if (!ed.selection.isCollapsed() && (panel.value.hasImage || text === originalText)) {
+      if (!hasImage && text !== originalText) renameLink(anchor, text);
+    } else if (!ed.selection.isCollapsed() && (hasImage || text === originalText)) {
       ed.execCommand("mceInsertLink", false, { href });
     } else {
       const link = ed.getDoc().createElement("a");
