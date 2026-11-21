@@ -505,6 +505,21 @@ describe('Recoverable Trash',()=>{
    expect((await env.db.prepare('SELECT email_id FROM mailbox_label_members WHERE email_id IN (?,?)').bind(original.email_id,reply.email_id).all()).results).toEqual([]);
    expect((await env.db.prepare('SELECT email_id FROM conversation_filing WHERE user_id=1').all()).results).toEqual([]);
  });
+ it('clears filing history on expiry and permanent user removal',async()=>{
+   const {conversationAction}=await import('../src/service/conversation-service');
+   const first=await message();
+   const move=()=>conversationAction(c(),{emailIds:[first.email_id],labelId:0,undoable:true,requestId:crypto.randomUUID()},1,'move');
+   const tables=['conversation_move_requests','conversation_move_undo','conversation_move_prior'];
+   const counts=async()=>Promise.all(tables.map(t=>env.db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE user_id=1`).first('n')));
+   await move();
+   expect(await counts()).toEqual([1,1,1]);
+   await env.db.batch(tables.slice(0,2).map(t=>env.db.prepare(`UPDATE ${t} SET expires=0`)));
+   await mail.purgeExpired(c());
+   expect(await counts()).toEqual([0,0,0]);
+   await move();
+   await drafts.deleteUserData(c(),[1]);
+   expect(await counts()).toEqual([0,0,0]);
+ });
  it('rejects undo for the whole selection after another filing or a touched label changes',async()=>{
    const {saveLabel}=await import('../src/service/mailbox-labels');
    const {conversationAction}=await import('../src/service/conversation-service');

@@ -60,10 +60,16 @@ export async function withMoveRetry(db,userId,requestId,intent,apply) {
   }
 }
 
+export function expiredMoves(db) {
+  return [
+    db.prepare('DELETE FROM conversation_move_undo WHERE expires<=unixepoch()'),
+    db.prepare('DELETE FROM conversation_move_requests WHERE expires<=unixepoch()')
+  ];
+}
+
 export function captureMove(db, userId, token, source, destination, ids) {
   const statements = [
-    db.prepare('DELETE FROM conversation_move_undo WHERE expires<=unixepoch()'),
-    db.prepare('DELETE FROM conversation_move_requests WHERE expires<=unixepoch()'),
+    ...expiredMoves(db),
     db.prepare(`INSERT INTO conversation_move_undo(token,user_id,expires,state,source,destination)
       VALUES(?,?,unixepoch()+86400,'capturing',?,?)`).bind(token,userId,source || null,destination || null)
   ];

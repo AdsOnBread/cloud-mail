@@ -93,7 +93,7 @@ let nextLabel = 1;
 function threadLabels(members) {
  return [...new Set(members.flatMap(row=>[...(membership.get(row.emailId)||[])]))];
 }
-const filing = new Map(), moveUndos = new Map();
+const filing = new Map(), moveUndos = new Map(), moveRequests = new Map();
 function filingAnchor(members) {
  const received=members.filter(row=>row.type===0 && row.status===0);
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
@@ -410,6 +410,15 @@ const api=createHTTPServer(async(req,res)=>{
    move.members.clear(); data={restored:true};
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
+   const request=operation==='move' && (p.requestId || p.clientId);
+   const intent=request && JSON.stringify([p.fromLabelId||0,p.labelId,[...p.emailIds].sort((a,b)=>a-b)]);
+   if(request && moveRequests.has(request)){
+     const prior=moveRequests.get(request);
+     const same=prior.intent===intent;
+     const result=moveUndos.get(prior.token)?.members.size ? {undoToken:prior.token} : {alreadyProcessed:true};
+     res.writeHead(same?200:409,{'Content-Type':'application/json'});
+     res.end(JSON.stringify(same?{code:200,data:result}:{code:409,message:'This request is for a different move.'}));return;
+   }
    for(const [token,move] of moveUndos){
      const touchesLabel=operation==='label' && [...p.add,...p.remove].some(id=>id===move.source || id===move.destination);
      if((touchesLabel || ['move','inbox','archive','snooze','delete'].includes(operation)) && [...ids].some(id=>move.members.has(id)))moveUndos.delete(token);
@@ -424,7 +433,7 @@ const api=createHTTPServer(async(req,res)=>{
        members.set(id,{wakeAt:filing.get(id),source:set.has(p.fromLabelId),destination:set.has(p.labelId)});
        set.delete(p.fromLabelId);if(p.labelId)set.add(p.labelId);membership.set(id,set);filing.set(id,p.labelId?null:0);
      }
-     if(p.undoable){const token=crypto.randomUUID();moveUndos.set(token,{members,source:p.fromLabelId,destination:p.labelId});data={undoToken:token};}
+     if(p.undoable){const token=crypto.randomUUID();moveUndos.set(token,{members,source:p.fromLabelId,destination:p.labelId});data={undoToken:token};if(request)moveRequests.set(request,{intent,token});}
    }
    else if(operation==='label')for(const id of ids){
      const set=membership.get(id)||new Set();for(const lid of p.add)set.add(lid);for(const lid of p.remove)set.delete(lid);membership.set(id,set);

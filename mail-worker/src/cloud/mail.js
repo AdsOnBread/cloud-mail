@@ -1,3 +1,4 @@
+import {expiredMoves} from '../service/conversation-move-undo.js';
 import {savedContactSuggestions} from './contacts';
 import {prepareExcludedSearch} from '../service/mail-word-index';
 import { mailboxAttachments } from '../service/mailbox-attachments';
@@ -144,7 +145,7 @@ export async function trash(c,userId,ids,action='trash') {
   return {messageCount:ids.length};
 }
 export async function purgeExpired(c) {
-  await c.env.db.prepare("DELETE FROM scheduled_trash_operations WHERE created_at<=datetime('now','-30 days')").run();
+  await c.env.db.batch([...expiredMoves(c.env.db),c.env.db.prepare("DELETE FROM scheduled_trash_operations WHERE created_at<=datetime('now','-30 days')")]);
   for(;;) {
     const rows=(await c.env.db.prepare("SELECT email_id FROM email WHERE trashed_at IS NOT NULL AND trashed_at<=datetime('now','-30 days') LIMIT 80").all()).results;
     if(!rows.length) break;
