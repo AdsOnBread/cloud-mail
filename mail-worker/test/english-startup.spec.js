@@ -27,7 +27,7 @@ describe('English startup preferences', () => {
 		await init();
 		expect(state.setting.lang).toBe('en');
 		expect(state.locale.value).toBe('en');
-		expect(document.title).toBe('Cloud Mail');
+		expect(document.title).toBe('phooey! mail');
 		expect(state.setting.domainList).toEqual(['@example.com']);
 	});
 	it('identifies the current account if another tab signs in during startup',async()=>{

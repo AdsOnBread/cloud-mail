@@ -29,7 +29,7 @@ export const useUiStore = defineStore('ui', {
     actions: {
         setDark(dark) {
             document.documentElement.classList.toggle("dark",dark);
-            document.getElementById("theme-color-meta")?.setAttribute("content",dark?"#1b1b1f":"#f6f8fc");
+            document.getElementById("theme-color-meta")?.setAttribute("content",dark?"#1b1b1f":"#103c33");
             this.dark=dark;
         },
         showNotice() {
