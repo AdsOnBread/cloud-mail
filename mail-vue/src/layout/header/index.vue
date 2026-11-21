@@ -7,8 +7,8 @@
     <div v-if="searchable" class="mail-search" role="search">
       <form class="search-entry" @submit.prevent="submitSearch">
       <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
-      <span v-if="searchScope" class="search-folder">{{ searchScope }}</span>
-      <input v-model="searchText" aria-label="Search mail" :placeholder="searchScope ? '' : 'Search mail'" @keydown.esc="clearSearch" />
+      <span v-if="searchScope" id="mail-search-scope" class="search-folder">{{ searchScope }}</span>
+      <input v-model="searchText" aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @keydown.esc="clearSearch" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
       <SearchOptions v-if="route.name!=='draft'" :query-text="searchText" @applied="query=>{searchText=query;returnToResults()}" />
@@ -238,6 +238,15 @@ function formatName(email) {
 .detail-dropdown {
   color: var(--el-text-color-primary) !important;
 }
+@media (max-width:600px) {
+  .search-folder { display:none; }
+  .search-folder + input::placeholder { visibility:visible; }
+}
+/* Make room for the active query and its controls on compact phones. */
+@media (max-width:480px) {
+  .header { position:relative; }
+  .mail-search:focus-within { position:absolute; inset-inline:8px; z-index:2; }
+}
 </style>
 <style lang="scss" scoped>
 
@@ -346,6 +355,7 @@ function formatName(email) {
 .search-folder { font-size:16px; margin-left:8px; white-space:nowrap; }
 .mail-search:focus-within { background:var(--mail-surface); box-shadow:0 1px 3px #0003; }
 .mail-search input { flex:1; width:0; min-width:0; color:var(--el-text-color-primary); font-size:16px; padding:0 8px; }
+.search-folder + input::placeholder { visibility:hidden; }
 .mail-search input::placeholder { color:var(--regular-text-color); opacity:1; }
 .page-title { font-size:20px; padding-left:16px; }
 .toolbar { display:flex; align-items:center; justify-content:flex-end; gap:4px; padding-left:12px; }
@@ -353,4 +363,13 @@ function formatName(email) {
 .avatar-text { display:flex; align-items:center; justify-content:center; }
 @media (max-width:1023px) { .header { grid-template-columns:72px minmax(140px,1fr) auto; padding-right:12px; } .brand-name { display:none; } .header-brand { padding-left:16px; } }
 @media (max-width:767px) { .header { grid-template-columns:48px minmax(90px,1fr) auto; padding-right:8px; } .header-brand { padding-left:4px; } .toolbar { gap:0; padding-left:4px; } .toolbar .icon-button { width:32px; height:36px; } .notice { display:none; } .avatar { margin-left:4px; width:34px; height:34px; } .mail-search { height:44px; padding:0 2px; } .mail-search .icon-button { width:32px; } .mail-search input { font-size:14px; padding:0 2px; } }
+@media (max-width:600px) {
+  .search-folder { display:none; }
+  .search-folder + input::placeholder { visibility:visible; }
+}
+/* Make room for the active query and its controls on compact phones. */
+@media (max-width:480px) {
+  .header { position:relative; }
+  .mail-search:focus-within { position:absolute; inset-inline:8px; z-index:2; }
+}
 </style>
