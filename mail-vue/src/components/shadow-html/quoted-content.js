@@ -1,7 +1,7 @@
 const quoteMarkers='.gmail_quote,.cloudmail-reply-quote,blockquote[type="cite"],blockquote';
 const isAttribution=text=>/^On\s+.{1,700}\bwrote:\s*$/is.test(text.trim()) ||
   /^[^\n]{1,350}<[^<>\s]+@[^<>\s]+>\s+wrote:\s*$/i.test(text.trim());
-const forwardMarker=/^-{2,}\s*(?:forwarded message|original message)\s*-{2,}/i;
+const forwardMarker=/^(?:-{2,}\s*(?:forwarded message|original message)\s*-{2,}|begin forwarded message:)/i;
 
 function precedingAttribution(quote) {
   let previous=quote.previousSibling;
@@ -18,6 +18,9 @@ function precedingAttribution(quote) {
 function htmlParts(html,reply) {
   if (!/gmail_quote|cloudmail-reply-quote|<blockquote\b/i.test(html)) return [{html}];
   const doc=new DOMParser().parseFromString(html,'text/html'), body=doc.body;
+  // Document-level selectors can span a quote boundary. Keeping this rich
+  // message together preserves hidden preheaders, table layout and styling.
+  if (doc.querySelector('style')) return [{html}];
   const quotes=[];
   for (const node of body.querySelectorAll(quoteMarkers)) {
     // Slicing a table or a list into independent documents changes its layout and numbering.

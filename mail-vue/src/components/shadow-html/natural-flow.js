@@ -20,7 +20,7 @@ function flowNode(node,depth) {
       }
       if (['target','rel'].includes(attr.name)) continue;
     }
-    if (attr.name==='style' && node.localName==='blockquote' && [...node.style].every(key=>quoteStyles.has(key))) {
+    if (attr.name==='style' && node.localName==='blockquote' && Array.from(node.style).every(key=>quoteStyles.has(key))) {
       // CSSOM accepts many values, including URLs. Only reconstruct common
       // indented citation geometry and an ordinary solid gray border.
       const style=node.style;
@@ -42,12 +42,20 @@ function flowNode(node,depth) {
 }
 
 export function naturalFlow(doc) {
-  if (doc.head.children.length || doc.documentElement.attributes.length || doc.body.attributes.length) return null;
+  if (doc.head.children.length) return null;
+  const props={};
+  for (const element of [doc.documentElement,doc.body]) {
+    for (const {name,value} of element.attributes) {
+      if (name==='dir' && /^(ltr|rtl|auto)$/i.test(value)) props.dir=value;
+      else if (name==='lang' && /^[a-z0-9-]{1,63}$/i.test(value)) props.lang=value;
+      else return null;
+    }
+  }
   const nodes=[];
   for (const node of doc.body.childNodes) {
     const rendered=flowNode(node,0);
     if (rendered===null) return null;
     nodes.push(rendered);
   }
-  return nodes;
+  return Object.keys(props).length ? h('div',props,nodes) : nodes;
 }
