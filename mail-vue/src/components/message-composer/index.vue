@@ -270,7 +270,7 @@
           </button>
           <ComposeEmoji ref="emojiPicker" :editor="editor" :owner="userStore.user.email"
             :active="show && !minimized" :disabled="sending || preparing" />
-          <button v-if="!form.plainText" type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
+          <button v-if="!form.plainText" type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="showPhotos">
             <Icon icon="material-symbols:image-outline" width="20" />
           </button>
           <el-dropdown trigger="click" placement="top-start" :show-arrow="false"
@@ -294,7 +294,7 @@
             :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
             :label-ids="form.labelIds" :read-star="readComposeStar"
             @labels="form.labelIds = $event" @star="chooseStar" @error="sendError=$event" @command="moreCommand"/>
-          <input ref="photoInput" type="file" multiple :accept="photoTypes.join(',')" hidden @change="photoSelected" />
+
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
           }}</span>
@@ -318,6 +318,7 @@
       <p :id="recipientNoticeId">Please specify at least one recipient.</p>
       <form method="dialog"><button type="submit" autofocus>OK</button></form>
     </dialog>
+    <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="photosOpen=false" />
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
     <el-dialog
       v-model="showContacts"
@@ -365,6 +366,7 @@ import {useMailSignatures} from "@/store/mail-signatures";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
 import { hasFiles, transferFiles, photoTypes, planFiles } from "./files";
+import PhotoPicker from "./photo-picker.vue";
 import ComposeEmoji from "./emoji-picker.vue";
 import ComposeMore from "./more-options.vue";
 import { useMailLabels } from "@/store/mail-labels";
@@ -435,7 +437,7 @@ const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
 const emojiPicker = ref();
-const photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
+const photosOpen = ref(false), schedulePicker=ref(), scheduling=ref(false);
 const feedback=useMailFeedback();
 const dragHint = ref("");
 const fileBusy = () => !show.value || minimized.value || preparing.value || sending.value || attaching.value;
@@ -464,12 +466,25 @@ function pasteFiles(event) {
   try { addFiles(transferFiles(event.clipboardData), "auto"); }
   catch (error) { sendError.value = error.message; }
 }
-function photoSelected(event) {
-  const files = Array.from(event.target.files);
-  event.target.value = "";
-  if (files.length) addFiles(files, "photos");
+let photoSelection;
+function showPhotos() {
+  if (fileBusy()) return;
+  photoSelection = editor.value?.rememberSelection();
+  photosOpen.value = true;
 }
-async function addFiles(files, mode) {
+async function insertPickerPhotos({files, url}, closePicker) {
+  if (!photosOpen.value || fileBusy()) throw new Error("This message is no longer ready to edit.");
+  const resume = () => { closePicker(); photoSelection?.(); photoSelection = undefined; };
+  if (files) {
+    if (!await addFiles(files, "photos", resume)) throw new Error(sendError.value || "Could not insert the photos.");
+  } else {
+    await editor.value.ready();
+    if (!photosOpen.value || fileBusy()) return;
+    resume();
+    editor.value.insertPhotos([{src:url, name:""}]);
+  }
+}
+async function addFiles(files, mode, beforeInsert) {
   if (fileBusy() || !files.length) return false;
   const owner = form.ownerEmail, generation = fileGeneration;
   const current = () => mounted && show.value && owner === userStore.user.email && generation === fileGeneration;
@@ -485,6 +500,7 @@ async function addFiles(files, mode) {
       filename: file.name, size: file.size, contentType: file.type || "application/octet-stream", content: await fileToBase64(file),
     })));
     if (!current()) return false;
+    beforeInsert?.();
     if (photos.length) editor.value.insertPhotos(photos);
     form.attachments.push(...attachments);
     return true;
@@ -701,6 +717,8 @@ function startSignatureDefault(){
 }
 function resetForm() {
   fileGeneration++;
+  photosOpen.value = false;
+  photoSelection = undefined;
   dragHint.value = "";
   starChoice.value=null;
   missingRecipient.value = false;
@@ -1214,7 +1232,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
-  if (labelStore.edit) return;
+  if (labelStore.edit || photosOpen.value || event.target.closest?.(".photo-picker")) return;
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".label-dialog,.recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
@@ -1281,7 +1299,7 @@ function containFocus(event) {
   if (
     modal.value &&
     !composeRoot.value?.contains(event.target) &&
-    !event.target.closest(".el-overlay, .tox-tinymce-aux, .compose-format-popup")
+    !event.target.closest(".el-overlay, .tox-tinymce-aux, .compose-format-popup, .photo-picker")
   )
     composeRoot.value?.querySelector("button")?.focus();
 }
