@@ -2,7 +2,7 @@
   <el-popover v-model:visible="open" :trigger="external ? [] : 'click'" :placement="submenu ? 'right-start' : 'bottom-start'" :offset="submenu ? 0 : undefined"
     :fallback-placements="submenu ? ['left-start','bottom-end','bottom-start','top-end','top-start'] : undefined"
     :virtual-triggering="external" :virtual-ref="reference" :width="241" :show-arrow="false"
-    :popper-class="submenu ? 'label-picker scheduled-label-flyout' : 'label-picker'" @after-enter="open && menu?.focus()">
+    :popper-class="submenu ? 'label-picker scheduled-label-flyout filing-submenu' : 'label-picker'" @after-enter="open && menu?.focus()">
     <template v-if="!external" #reference>
       <button ref="trigger" class="mail-icon" aria-label="Label as" data-tip="Labels" aria-haspopup="menu"
         :disabled="disabled" :aria-expanded="open"><Icon icon="material-symbols:label-outline" width="20"/></button>
@@ -26,7 +26,7 @@ import { Icon } from "@iconify/vue";
 import FilingMenu from "./filing-menu.vue";
 import { useMailLabels } from "@/store/mail-labels";
 const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean, scheduled:Boolean, submenu:Boolean, returnFocus:Function });
-const emit = defineEmits(["apply","finish"]);
+const emit = defineEmits(["apply","finish","back"]);
 const router=useRouter(), labels=useMailLabels();
 const open=ref(false), query=ref(""), changes=ref({}), menu=ref(), trigger=ref();
 const filtered=computed(()=>labels.items.filter(item=>item.name.toLowerCase().includes(query.value.trim().toLowerCase())));
@@ -42,7 +42,7 @@ watch(open,value=>{
 });
 watch(()=>JSON.stringify(rowIds.value),()=>{open.value=false;});
 function restoreFocus() { (props.reference || trigger.value)?.focus(); }
-function dismiss() { open.value=false; restoreFocus(); }
+function dismiss() { open.value=false; restoreFocus(); emit("back"); }
 function backToParent(event) {
   if (!props.submenu || event.isComposing || event.target.matches('input,textarea')) return;
   event.preventDefault();

@@ -964,17 +964,20 @@ const escapeHTML = (value) =>
       ],
   );
 let sourceController;
-async function prepareMessage(message, mode, all = false) {
+async function prepareMessage(message, mode, all = false, rowView) {
   if (!available()) return false;
   preparing.value = true;
   const controller = sourceController = new AbortController();
   try {
     const owner=userStore.user.email, token=userStore.authenticatedToken;
-    const current = () => mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
-    const email = message.trashedAt
+    const current = () => (!rowView || rowView.current()) && mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
+    const email = (rowView || message.trashedAt)
       ? await http.get("/v1/messages/" + message.emailId,{signal:controller.signal,headers:{Authorization:token}})
       : await emailStore.ensureDetail(message);
     if (!current()) return false;
+    if (rowView && (!email || email.emailId!==message.emailId || email.userId!==userStore.user.userId || email.scheduledDraftId ||
+        Boolean(email.trashedAt)!==Boolean(message.trashedAt) || (message.accountId && message.accountId!==email.accountId)))
+      throw new Error("This message is no longer available here.");
     if (message.trashedAt && (!token || email.userId!==userStore.user.userId || email.scheduledDraftId)) throw new Error("This message is no longer available.");
     if (hasPerm("account:query")) await accountStore.loadAll();
     if (!current()) return false;
@@ -984,7 +987,8 @@ async function prepareMessage(message, mode, all = false) {
     setSender();
     loadedSource.value = email;
     form.replyAll = all;
-    if (props.inline) form.responseSourceId = email.emailId;
+    if (rowView) Object.assign(form,{responseView:"pop",inlineReply:true});
+    if (props.inline || rowView) form.responseSourceId = email.emailId;
     const originalAccount =
       accountStore.accounts.find(
         (account) => account.accountId === email.accountId,
@@ -1009,10 +1013,10 @@ async function prepareMessage(message, mode, all = false) {
     form.emailId = mode === "reply" ? email.emailId : 0;
     if (email.trashedAt) form.trashSource = email.emailId;
     Object.assign(form,quote);
-    if (props.inline && mode==="forward") form.attachments=quote.attachments.map(file=>({...file,fromResponse:true}));
+    if ((props.inline || rowView) && mode==="forward") form.attachments=quote.attachments.map(file=>({...file,fromResponse:true}));
     if (mode === "reply") {
       Object.assign(form, replyRecipients(email, accountStore.ownAddresses, all));
-      if (props.inline) {
+      if (props.inline || rowView) {
         addResponseNames(email);
       }
     } else if (responseHeader.value) editingRecipients.value = true;
@@ -1033,7 +1037,7 @@ async function prepareMessage(message, mode, all = false) {
   }
   await nextTick();
   if (!mounted || !props.dockActive) return;
-  if (props.inline && mode === "reply") editor.value?.focus?.(true);
+  if ((props.inline || rowView) && mode === "reply") editor.value?.focus?.(true);
   else toField.value?.focus();
   return true;
 }
@@ -1761,6 +1765,7 @@ defineExpose({
     if (!draft && typeof state.plainText === "boolean") form.plainText = state.plainText;
     if (!show.value) throw new Error("Could not open the composer.");
   },
+  openRowResponse(message,view) { return prepareMessage(message,view.command==="forward" ? "forward" : "reply",view.command==="all",view); },
   openReply,
   openReplyAll,
   openForward,

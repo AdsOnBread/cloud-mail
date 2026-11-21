@@ -217,8 +217,9 @@
           @open="open(row)"
           @select="toggle(row.lastEmailId)"
           @star="star(row)"
-          @contextmenu.prevent="openContext(row)"
-          @keydown.shift.f10.prevent="openContext(row)"
+          @contextmenu.prevent="rowMenu?.show($event,row)"
+        @keydown.shift.f10.stop.prevent="rowMenu?.show($event,row)"
+        @keydown.context-menu.stop.prevent="rowMenu?.show($event,row)"
         >
           <template v-if="folder === 'sent'" #status
             ><Icon
@@ -279,40 +280,6 @@
               <Icon icon="material-symbols:schedule-outline" width="20" />
             </button>
           </template>
-          <el-dropdown
-            popper-class="mail-action-menu"
-            :show-arrow="false"
-            ref="contextDropdown"
-            v-if="context === row.lastEmailId"
-            trigger="click"
-            @visible-change="!$event && (context = 0)"
-          >
-            <button aria-label="Conversation actions">⋮</button>
-            <template #dropdown
-              ><el-dropdown-menu>
-                <el-dropdown-item
-                  v-perm="'email:send'"
-                  @click="open(row, 'reply')"
-                  >Reply</el-dropdown-item
-                >
-                <el-dropdown-item
-                  v-perm="'email:send'"
-                  @click="open(row, 'replyAll')"
-                  >Reply all</el-dropdown-item
-                >
-                <el-dropdown-item v-if="hasPerm('email:send')" :disabled="forwarding" @click="forwardMessages(selected.includes(row.lastEmailId) ? selectedRows.map(item => item.lastEmailId) : [row.lastEmailId])">Forward as attachment</el-dropdown-item>
-                <el-dropdown-item @click="mutate('importance', { important: !row.importanceReason }, [row.lastEmailId])">{{ row.importanceReason ? 'Mark as not important' : 'Mark as important' }}</el-dropdown-item>
-                <el-dropdown-item @click="mutate('read', {}, [row.lastEmailId])"
-                  >Mark read</el-dropdown-item
-                >
-                <el-dropdown-item
-                  v-perm="'email:delete'"
-                  @click="remove([row.lastEmailId])"
-                  >Delete conversation</el-dropdown-item
-                >
-              </el-dropdown-menu></template
-            >
-          </el-dropdown>
         </MailRow>
       </div>
       <p v-if="loading" role="status" class="list-status">
@@ -326,6 +293,10 @@
         }}
       </p>
     </div>
+    <RowContextMenu ref="rowMenu" :rows="selectedRows" :scope="key" :folder="folder" :category="category" :label-id="labelId"
+      :busy="busy || loading" :forwarding="forwarding" @select-only="selected=$event" @command="rowCommand"
+      @move="(ops,ids)=>mutate('move',ops,ids)" @label="(ops,ids)=>mutate('label',ops,ids)"
+      @category="(category,ids)=>mutate('category',{category},ids)"/>
     <MailSnoozePicker ref="snoozePicker" @choose="(wakeAt,ids)=>mutate('snooze',{wakeAt},ids)"/>
   </section>
 </template>
@@ -367,6 +338,7 @@ import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import InboxTabs from "@/components/inbox-tabs.vue";
 import {inboxCategories,categoryFolders,categoryMessageKey} from "@/utils/inbox-categories";
 import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
+import RowContextMenu from "@/components/mail-row/context-menu.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
 const drafts = userDraftStore();
@@ -404,8 +376,7 @@ const rows = ref([]),
   total = ref(0),
   cursor = ref(null),
   hasMore = ref(false),
-  context = ref(0),
-  contextDropdown = ref();
+  rowMenu = ref();
 import {useUiStore} from "@/store/ui";
 const uiPreferences=useUiStore();
 const categoryUnread=ref({}), panelId=useId(), owner=useUserStore();
@@ -663,24 +634,15 @@ function selectAll(checked) {
     ? rows.value.slice(0, 95).map((row) => row.lastEmailId)
     : [];
 }
-async function openContext(row) {
-  context.value = row.lastEmailId;
-  await nextTick();
-  (Array.isArray(contextDropdown.value)
-    ? contextDropdown.value[0]
-    : contextDropdown.value
-  )?.handleOpen?.();
-}
 function rowOpenLabel(row) {
   const n = replies(row).length;
   const messages = row.messageCount + (row.messageCount === 1 ? " message" : " messages");
   const saved = n ? ", " + n + (n === 1 ? " draft" : " drafts") : "";
   return "Open " + (row.subject || "(no subject)") + ", " + messages + saved;
 }
-async function open(row, reply) {
-  context.value = 0;
+async function open(row) {
   const draft = replies(row)[0];
-  if (draft && !reply) {
+  if (draft) {
     try {
       const { openSavedDraft } = await import("@/services/draft-list");
       await openSavedDraft(draft.draftId, router, props.folder, props.labelId, route.query?.category);
@@ -696,9 +658,15 @@ async function open(row, reply) {
       folder: props.folder,
       ...(props.labelId ? {labelId:props.labelId} : {}),
       ...(props.folder==="inbox" && route.query?.category ? {category:route.query.category} : {}),
-      ...(reply ? { reply } : {}),
     },
   });
+}
+function rowCommand(command, ids, opener) {
+  if (command === 'attach') return forwardMessages(ids);
+  if (command === 'snooze') return snoozePicker.value?.show(opener,ids);
+  if (command === 'read' || command === 'unread') return mutate('read',{unread:Number(command==='read')},ids);
+  if (command === 'important' || command === 'unimportant') return mutate('importance',{important:command==='important'},ids);
+  return mutate(command,{},ids);
 }
 async function mutate(action, extra = {}, ids = selected.value) {
   if (busy.value) return;

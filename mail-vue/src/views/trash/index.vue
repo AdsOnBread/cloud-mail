@@ -188,6 +188,9 @@
         :date-title="formatDetailDate(message.createTime)"
         :open-label="'Open ' + (message.subject || '(no subject)')"
         @open="open(message)"
+        @contextmenu.prevent="rowMenu?.show($event,message)"
+        @keydown.shift.f10.stop.prevent="rowMenu?.show($event,message)"
+        @keydown.context-menu.stop.prevent="rowMenu?.show($event,message)"
         @select="toggle(message.emailId)"
       >
         <template #actions>
@@ -230,6 +233,8 @@
         }}
       </p>
     </div>
+    <RowContextMenu v-if="!messageId" ref="rowMenu" trash :scope="String(mailbox ?? '')" :rows="selectedRows"
+      :busy="busy || loading" :forwarding="forwarding" @select-only="selected=$event" @command="rowCommand" @move="moveTo" @label="setLabels"/>
     <div v-if="notice" class="snackbar" role="status">{{ notice }}</div>
   </section>
 </template>
@@ -255,6 +260,7 @@ import MovePicker from "@/components/mail-labels/move.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import {useForwardAttachments} from "@/services/forward-attachments";
 import FolderFilters from "@/components/mail-folder-filters.vue";
+import RowContextMenu from "@/components/mail-row/context-menu.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import {downloadablePart,inlineImageURL,storedKey} from "@/utils/private-files";
@@ -340,8 +346,15 @@ const targets = computed(() =>
 const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(row=>selected.value.includes(row.emailId)));
 const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
 const {forwarding, forwardMessages} = useForwardAttachments(() => JSON.stringify([mailbox.value, targets.value, search.query, search.filters]));
-function forwardTrash() {
-  return forwardMessages(selectedRows.value.map(row => row.emailId), {
+const rowMenu=ref();
+function rowCommand(command,ids) {
+  if (command==='attach') return forwardTrash(ids);
+  if (command==='inbox') return moveTo({labelId:0},ids);
+  if (command==='read' || command==='unread') return setRead(ids,command==='read');
+  return act(command==='delete' ? 'purge' : 'restore',ids);
+}
+function forwardTrash(ids) {
+  return forwardMessages(Array.isArray(ids) ? ids : selectedRows.value.map(row => row.emailId), {
     trash:true, mailbox:mailbox.value, pinnedSender:windowAccount.value,
   });
 }

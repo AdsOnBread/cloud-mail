@@ -381,7 +381,7 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
+     threads.push({threadId,purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,lastSenderEmail:latest.sendEmail,lastSenderName:latest.name,subject:sorted[0].subject,
        ...(p.folder==='sent'?{}:{senders:previewSenders(members)}),participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});

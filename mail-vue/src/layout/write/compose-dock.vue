@@ -240,6 +240,27 @@ async function launch(method, arg, extra) {
     if (!editor.visible && windows.value.includes(item)) remove(item);
   }
 }
+async function openRowResponses(rows, command) {
+  const owner=user.user.email, token=user.authenticatedToken, mailbox=accounts.currentAccountId, allReceive=accounts.currentAccount.allReceive;
+  let path=router.currentRoute.value.fullPath;
+  const current=()=>owner===user.user.email && token && token===user.authenticatedToken && token===localStorage.getItem("token") &&
+    mailbox===accounts.currentAccountId && allReceive===accounts.currentAccount.allReceive && path===router.currentRoute.value.fullPath && hasPerm("email:send");
+  if (!current()) return;
+  if (rows.length>1 && props.separateWindow && separateIdle.value) {
+    // An idle detached composer has one persisted draft slot. Resume the ordinary
+    // mailbox dock before opening several independent responses there.
+    const {composeWindow,...query}=router.currentRoute.value.query;
+    const location={path:router.currentRoute.value.path,query};
+    path=router.resolve(location).fullPath;
+    await router.replace(location);
+    if (!current()) return;
+    connectWindows();
+    separateIdle.value=false;
+  }
+  for (const message of rows) {
+    if (!current() || !await launch("openRowResponse", message, {command,current})) break;
+  }
+}
 async function discardEditor(ids, session) {
   const matches = occupied.value.filter(
     (item) => ids.includes(item.draftId) || ids.includes(item.requestedId),
@@ -291,8 +312,8 @@ async function openFromButton(event) {
 const draftStore = userDraftStore();
 watch(() => [draftStore.items,draftStore.refreshList], () => notifyWindowDraft(props.separateWindow), {flush:"post"});
 let stopReceiving;
-onMounted(async () => {
-  window.addEventListener("resize", resize);
+function connectWindows() {
+  stopReceiving?.();
   const id = props.separateWindow;
   const endpoint = receiveComposeWindows({restore:restoreWindow, getSession:draftSession, draftChanged:refreshLocalDraft, id,
     discardEditor(draftId) {
@@ -305,6 +326,11 @@ onMounted(async () => {
     },
   });
   stopReceiving = endpoint.stop;
+  return endpoint;
+}
+onMounted(async () => {
+  window.addEventListener("resize", resize);
+  const endpoint=connectWindows(), id=props.separateWindow;
   if (!id) return;
   try {
     const state = windowState(id), session = draftSession();
@@ -321,6 +347,7 @@ onMounted(async () => {
 onBeforeUnmount(() => stopReceiving?.());
 onBeforeUnmount(() => window.removeEventListener("resize", resize));
 defineExpose({
+  openRowResponses,
   openFromButton,
   open: (person) => launch("open", person),
   openReply: (email) => launch("openReply", email),
