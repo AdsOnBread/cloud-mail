@@ -445,7 +445,7 @@ async function setRead(batch,unread,leaveReader=false) {
   const owner=identity.value, email=user.user.email, session=localStorage.getItem("token"), origin=route.fullPath;
   const sameSession=()=>user.user.email===email && localStorage.getItem("token")===session;
   const current=()=>!disposed && identity.value===owner && sameSession();
-  const focused=document.activeElement;
+  const focused=document.activeElement, navigation=navigations;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   let finish;
   const pending=new Promise(resolve=>{finish=resolve});
@@ -457,10 +457,10 @@ async function setRead(batch,unread,leaveReader=false) {
     if (!current()) return;
     const ids=new Set(messages.map(row=>row.draftId));
     for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
-    if (leaveReader && route.fullPath===origin) back();
+    if (leaveReader && route.fullPath===origin && navigation===navigations) back();
     else if (!messageId.value && search.filters.isUnread && !unread) {
       await nextTick();
-      if (current() && route.fullPath===origin && !focused?.isConnected && document.activeElement===document.body)
+      if (current() && route.fullPath===origin && navigation===navigations && !focused?.isConnected && document.activeElement===document.body)
         focusList();
     }
   } catch(e) {
