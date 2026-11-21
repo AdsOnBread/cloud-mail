@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
 
+export const advancedSearchOpenerKey=Symbol('advanced search opener');
+
 export const useMailSearchStore = defineStore('mail-search', {
   state: () => ({ query: '', folder: 'email', labelId:'', filters: {} }),
   actions: {

@@ -7,22 +7,22 @@
       <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" />
       <SearchDateChip v-else />
     </template>
-    <SearchOptions chips />
+    <button type="button" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
+      :aria-expanded="Boolean(opener)" @click="opener=opener ? null : $event.currentTarget">Advanced search</button>
   </div>
 </template>
 
 <script setup>
-import {computed,onBeforeUpdate,onUpdated,ref} from 'vue';
+import {computed,inject,onBeforeUpdate,onUpdated,ref} from 'vue';
 import {Icon} from '@iconify/vue';
-import {useMailSearchStore} from '@/store/mail-search';
+import {advancedSearchOpenerKey,useMailSearchStore} from '@/store/mail-search';
 import PeopleFilter from './mail-people-filter.vue';
 import SearchDateChip from './mail-date-time/search-chip.vue';
-import SearchOptions from './mail-search-options.vue';
 import {timeCaption} from './mail-date-time/search-range';
 
 const props=defineProps({folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore();
-const row=ref();
+const row=ref(), opener=inject(advancedSearchOpenerKey);
 const flags={hasAttachment:'Has attachment',isUnread:'Is unread'};
 const ordered=computed(()=>{
   const keys=['from','days','hasAttachment','to'];

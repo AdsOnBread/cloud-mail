@@ -24,10 +24,12 @@ import Header from '@/layout/header/index.vue';
 import Main from '@/layout/main/index.vue';
 import writer from '@/layout/write/index.vue';
 import { Icon } from '@iconify/vue';
-import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { computed, provide, shallowRef, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUiStore } from '@/store/ui.js';
 import { useMailTheme } from '@/store/mail-theme';
+import {advancedSearchOpenerKey} from '@/store/mail-search';
+provide(advancedSearchOpenerKey,shallowRef(null));
 const theme=useMailTheme(),uiStore = useUiStore();
 const shellStyle=computed(()=>{
   const active=theme.active;

@@ -11,7 +11,7 @@
       <input v-model="searchText" aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @keydown.esc="clearSearch" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
-      <SearchOptions v-if="route.name!=='draft'" :query-text="searchText" @applied="query=>{searchText=query;returnToResults()}" />
+      <SearchOptions :query-text="searchText" @applied="applyAdvanced" />
     </div>
     <div v-else class="page-title">{{ $t(route.meta.title) }}</div>
     <div class="toolbar">
@@ -119,6 +119,19 @@ function submitSearch() {
 function returnToResults() {
   if (route.name === 'scheduled' && route.query.message) router.replace(searchFolder.value==='label' ? {name:'label',params:{labelId:searchLabelId.value}} : {name:searchFolder.value});
   if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder,query:mailSearch.folder==="email" && route.query.category?{category:route.query.category}:{}});
+}
+async function applyAdvanced({scope,query,filters}) {
+  const [name,labelId]=scope.split(':');
+  const target={name};
+  if (name==='label') target.params={labelId};
+  if (name==='email' && route.query.category && mailSearch.folder==='email') target.query={category:route.query.category};
+  const owner=userStore.user.email;
+  if (route.fullPath!==router.resolve(target).fullPath) await router.push(target);
+  if (route.name!==name || (name==='label' && String(route.params.labelId)!==labelId) || userStore.user.email!==owner) return;
+  mailSearch.visit(name,labelId);
+  mailSearch.$patch({query});
+  mailSearch.filters=filters;
+  searchText.value=query;
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
 

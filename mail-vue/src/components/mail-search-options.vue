@@ -1,98 +1,127 @@
 <template>
-      <button
-        ref="trigger"
-        v-if="!chips"
-        type="button"
-        class="mail-icon"
-        aria-label="Show search options"
-        data-tip="Show search options"
-        aria-haspopup="dialog" :aria-expanded="open" @click="toggle"
-      >
-        <Icon icon="material-symbols:tune" width="22" />
-      </button>
-      <button
-        ref="trigger"
-        v-else
-        type="button"
-        class="filter-chip advanced"
-        aria-haspopup="dialog" :aria-expanded="open" @click="toggle"
-      >Advanced search</button>
+  <button ref="trigger" type="button" class="mail-icon" data-search-options aria-label="Show search options"
+    data-tip="Show search options" aria-haspopup="dialog" :aria-expanded="Boolean(opener)"
+    @click="opener=opener ? null : trigger">
+    <Icon icon="material-symbols:tune" width="22"/>
+  </button>
   <Teleport to="body">
-    <form v-if="open" role="dialog" aria-label="Advanced search" :style="position"
-      ref="panel"
-      class="options-form"
-      @submit.prevent="apply"
-      @keydown.esc.stop.prevent="dismiss" @keydown.tab="tabOut" @focusout="focusOut"
-    >
+    <form v-if="opener" ref="panel" role="dialog" aria-label="Advanced search" :style="position" class="options-form"
+      @submit.prevent="apply" @keydown.esc.stop.prevent="dismiss" @keydown.tab="tabOut" @focusout="focusOut">
       <div class="criteria">
-      <label v-for="key in fields" :key="key"
-        >{{ names[key] }}
-        <select v-if="key === 'days'" v-model="form.days">
-          <option v-if="customRange" value="custom">{{ timeCaption(store.filters) }}</option>
-          <option v-for="[value, text] in times" :value="value" :key="value">
-            {{ text }}
-          </option>
-        </select>
-        <span v-else-if="key==='from' || key==='to'" class="people-terms">
-          <input v-for="(_,i) in form[key]" :key="i" v-model="form[key][i]"
-            :aria-label="i ? names[key]+' '+(i+1) : names[key]" :maxlength="maxPersonTerm" type="text"/>
-        </span>
-        <input
-          v-else
-          v-model="form[key]"
-          :aria-label="names[key]"
-          maxlength="200"
-          type="text"
-        />
-      </label>
-        <label class="check"
-          ><input v-model="form.hasAttachment" type="checkbox" /> Has
-          attachment</label
-        >
-        <label v-if="store.folder!=='scheduled'" class="check"
-          ><input v-model="form.isUnread" type="checkbox" /> Is unread</label
-        >
+        <div v-for="key in ['from','to']" :key="key" class="criterion">
+          <label :for="id+'-'+key">{{ names[key] }}</label>
+          <div class="people-terms"><input v-for="(_,i) in form[key]" :id="id+'-'+key+(i || '')" :key="i"
+            v-model="form[key][i]" :aria-label="i ? names[key]+' '+(i+1) : names[key]" :maxlength="maxPersonTerm" type="text"/></div>
+        </div>
+        <label v-for="key in ['subject','q']" :key="key" class="criterion">{{ names[key] }}
+          <input v-model="form[key]" :aria-label="names[key]" maxlength="200" type="text"/>
+        </label>
+        <div class="criterion">
+          <label :for="id+'-within'">Date within</label>
+          <div class="date-fields">
+            <select :id="id+'-within'" v-model="form.time" aria-label="Date within">
+              <option v-for="[key,text] in withinChoices" :key="key" :value="'center:'+key">{{ text }}</option>
+              <optgroup label="Other date filters">
+                <option value="">Any time</option>
+                <option v-if="customRange" value="custom">{{ timeCaption(store.filters) }}</option>
+                <option v-for="[key,text] in relativeChoices" :value="'relative:'+key" :key="key">{{ text }}</option>
+              </optgroup>
+            </select>
+            <input v-if="form.time.startsWith('center:')" v-model="form.date" type="date" aria-label="Date"
+              min="1000-01-01" max="9999-12-31"/>
+          </div>
+        </div>
+        <label class="criterion">Search
+          <select v-model="form.scope" aria-label="Search within">
+            <option v-for="folder in folders" :key="folder.id" :value="folder.id">{{folder.name}}</option>
+            <optgroup v-if="labels.items.length" label="Labels">
+              <option v-for="label in labels.items" :key="label.id" :value="'label:'+label.id">{{label.name}}</option>
+            </optgroup>
+          </select>
+        </label>
+        <div class="checks">
+          <label><input v-model="form.hasAttachment" type="checkbox"/> Has attachment</label>
+          <label v-if="supportsUnread"><input v-model="form.isUnread" type="checkbox"/> Is unread</label>
+        </div>
       </div>
       <div class="option-actions">
-        <button type="button" @click="clear">Clear</button
-        ><button type="submit">Search</button>
+        <button type="button" @click="clear">Clear</button>
+        <button type="submit">Search</button>
       </div>
     </form>
   </Teleport>
 </template>
+
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import {positionMailboxPopup} from "./mail-popup-position";
-import { Icon } from "@iconify/vue";
+import {computed,inject,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
+import {Icon} from '@iconify/vue';
+import {advancedSearchOpenerKey,useMailSearchStore} from '@/store/mail-search';
+import {useMailLabels} from '@/store/mail-labels';
+import {hasPerm} from '@/perm/perm';
+import {categoryFolders} from '@/utils/inbox-categories';
+import {systemFolders} from './mail-labels/system-folders';
+import {positionMailboxPopup} from './mail-popup-position';
 import {maxPersonTerm,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
-import {olderChoices,recentChoices,timeCaption,withoutTime} from "./mail-date-time/search-range";
-import { useMailSearchStore } from "@/store/mail-search";
-const props = defineProps({ chips: Boolean, queryText: String });
-const trigger = ref(),
-  panel = ref();
-const position=ref({});
-function place() {
-  if (open.value && panel.value && trigger.value) position.value=positionMailboxPopup(panel.value,trigger.value,440,trigger.value,!props.chips);
+import {centeredRange,olderChoices,parseRangeInput,recentChoices,timeCaption,withinChoices,withoutTime} from './mail-date-time/search-range';
+
+const props=defineProps({queryText:String});
+const emit=defineEmits(['applied']);
+const opener=inject(advancedSearchOpenerKey), trigger=ref(), panel=ref(), position=ref({}), form=ref({});
+const store=useMailSearchStore(), labels=useMailLabels(), id=useId();
+const names={from:'From',to:'To',subject:'Subject',q:'Has the words'};
+const relativeChoices=[...recentChoices,...olderChoices];
+const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'},
+  ...systemFolders.filter(item=>item.id!=='all' && (!item.permission || hasPerm(item.permission))),...categoryFolders]);
+const scope=computed(()=>store.folder==='label' ? 'label:'+store.labelId : store.folder);
+const supportsUnread=computed(()=>!['draft','scheduled'].includes(form.value.scope));
+const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.dateBefore!=null);
+function reset() {
+  const f=store.filters, preset=f.olderThan || f.days;
+  form.value={from:f.from ? peopleTerms(f,'from') : [''],to:f.to ? peopleTerms(f,'to') : [''],
+    subject:f.subject || '',q:props.queryText ?? store.query,
+    scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),
+    date:(f.dateCenter || '').replaceAll('/','-'),
+    time:f.dateWindow ? 'center:'+f.dateWindow : preset ? 'relative:'+preset : customRange.value ? 'custom' : 'center:1d'};
 }
-function toggle() {
-  if (open.value) return dismiss();
-  reset();
-  open.value=true;
-  nextTick(()=>{place();panel.value?.querySelector('input,select')?.focus({preventScroll:true});});
+function place() {
+  if (!opener.value || !panel.value) return;
+  const search=trigger.value.closest('[role=search]');
+  if (search) position.value=positionMailboxPopup(panel.value,search,722,search);
 }
 function dismiss() {
-  open.value = false;
-  trigger.value?.focus({preventScroll:true});
+  const origin=opener.value;
+  opener.value=null;
+  (origin?.isConnected ? origin : trigger.value)?.focus({preventScroll:true});
+}
+function apply() {
+  const f=form.value, next=f.time==='custom' ? {...store.filters} : withoutTime(store.filters);
+  if (f.time.startsWith('center:') && f.date) {
+    const bounds=centeredRange(parseRangeInput(f.date),f.time.slice(7));
+    if (!bounds) return;
+    Object.assign(next,bounds);
+  } else if (f.time.startsWith('relative:')) {
+    const key=f.time.slice(9);
+    next[olderChoices.some(([id])=>id===key) ? 'olderThan' : 'days']=key;
+  }
+  setPeopleTerms(next,'from',f.from);setPeopleTerms(next,'to',f.to);
+  if (f.subject.trim()) next.subject=f.subject.trim(); else delete next.subject;
+  if (f.hasAttachment) next.hasAttachment=1; else delete next.hasAttachment;
+  if (supportsUnread.value && f.isUnread) next.isUnread=1; else delete next.isUnread;
+  dismiss();
+  emit('applied',{scope:f.scope,query:f.q.trim(),filters:next});
+}
+function clear() {
+  dismiss();emit('applied',{scope:scope.value,query:'',filters:{}});
 }
 function tabOut(event) {
   const controls=panel.value.querySelectorAll('input,select,button');
   if (event.shiftKey ? event.target===controls[0] : event.target===controls[controls.length-1]) dismiss();
 }
 function focusOut(event) {
-  if (event.relatedTarget && !panel.value?.contains(event.relatedTarget) && event.relatedTarget!==trigger.value) open.value=false;
+  if (event.relatedTarget && !panel.value?.contains(event.relatedTarget) && !event.relatedTarget.closest?.('[data-search-options]')) opener.value=null;
 }
 function outside(event) {
-  if (!panel.value?.contains(event.target) && !trigger.value?.contains(event.target)) open.value=false;
+  if (!panel.value?.contains(event.target) && !event.target.closest?.('[data-search-options]')) opener.value=null;
 }
 function listen(visible) {
   const method=visible ? 'addEventListener' : 'removeEventListener';
@@ -100,131 +129,32 @@ function listen(visible) {
   window[method]('resize',place);window[method]('scroll',place,true);
   window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
 }
-const emit = defineEmits(["applied"]);
-const store = useMailSearchStore(),
-  open = ref(false),
-  form = ref({});
-watch(open,listen);
-watch(()=>store.folder,()=>{open.value=false});
-onBeforeUnmount(()=>listen(false));
-const names = {
-  from: "From",
-  to: "To",
-  subject: "Subject",
-  q: "Has the words",
-  days: "Any time",
-};
-const times = [["","Any time"],...recentChoices,...olderChoices];
-const customRange = computed(() => store.filters.dateAfter!=null || store.filters.dateBefore!=null);
-const fields = ["from", "to", "subject", "q", "days"];
-function reset() {
-  form.value = {
-    ...store.filters,
-    from:store.filters.from ? peopleTerms(store.filters,'from') : [''],
-    to:store.filters.to ? peopleTerms(store.filters,'to') : [''],
-    q: props.queryText ?? store.query,
-    days: store.filters.olderThan || (customRange.value ? "custom" : store.filters.days || ""),
-    hasAttachment: Boolean(store.filters.hasAttachment),
-    isUnread: Boolean(store.filters.isUnread),
-  };
-}
-function apply() {
-  let next = { ...store.filters };
-  for (const key of fields) {
-    if (key==='from' || key==='to') {
-      setPeopleTerms(next,key,form.value[key] || []);
-      continue;
-    }
-    const value = String(form.value[key] || "").trim();
-    if (key === "days") {
-      if (value === "custom") continue;
-      next = withoutTime(next);
-      if (olderChoices.some(([id])=>id===value)) next.olderThan = value;
-      else if (value) next.days = value;
-    } else if (key === "q") store.query = value;
-    else if (value) next[key] = value;
-    else delete next[key];
-  }
-  for (const key of ["hasAttachment", "isUnread"]) {
-      if (form.value[key]) next[key] = 1;
-      else delete next[key];
-    }
-  store.filters = next;
-  dismiss();
-  emit("applied", store.query);
-}
-function clear() {
-  form.value = {};
-  apply();
-}
+watch(opener,origin=>{
+  listen(Boolean(origin));
+  if (!origin) return;
+  reset();
+  nextTick(()=>{place();panel.value?.querySelector('input')?.focus({preventScroll:true})});
+},{flush:'sync'});
+watch(scope,()=>{opener.value=null});
+onBeforeUnmount(()=>{listen(false);opener.value=null});
 </script>
+
 <style scoped>
-.options-form {
-  position:fixed;
-  z-index:2400;
-  width:440px;
-  max-width:calc(100vw - 16px);
-  padding: 18px;
-  border-radius:10px;
-  background:var(--mail-surface);
-  color:var(--el-text-color-primary);
-  box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
-  display:flex;
-  flex-direction:column;
-  box-sizing:border-box;
-  max-height:min(70dvh,575px);
-}
-.criteria {
-  display:grid;
-  gap:14px;
-  min-height:0;
-  overflow-y:auto;
-  overscroll-behavior:contain;
-}
-.options-form label {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--regular-text-color);
-}
-.options-form input[type="text"],
-.options-form select {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  border-bottom: 1px solid var(--light-border-color);
-  padding: 4px;
-  color: var(--el-text-color-primary);
-  background: var(--mail-surface);
-  font: inherit;
-}
-.options-form input[type="text"]:focus {
-  outline: none;
-  border-bottom: 2px solid var(--el-color-primary);
-}
-.people-terms {display:grid;gap:4px;min-width:0;}
-.options-form label.check {
-  display: flex;
-}
-.option-actions {
-  flex-shrink:0;
-  padding-top:12px;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-}
-.option-actions button {
-  cursor: pointer;
-  padding: 8px 16px;
-  border-radius: 20px;
-  color: var(--el-color-primary);
-  font-weight: 500;
-}
-.option-actions button:last-child {
-  background: var(--el-color-primary);
-  color: var(--mail-surface);
-}
+.options-form {position:fixed;z-index:2400;box-sizing:border-box;display:flex;flex-direction:column;width:722px;max-width:calc(100vw - 16px);
+  padding:24px;border:1px solid var(--light-border-color);background:var(--mail-surface);color:var(--el-text-color-primary);
+  box-shadow:0 2px 6px #0003;font:14px/20px Arial,sans-serif;}
+.criteria {display:grid;gap:20px;overflow-y:auto;overscroll-behavior:contain;min-height:0;}
+.criterion {display:grid;grid-template-columns:96px minmax(0,1fr);column-gap:24px;align-items:baseline;color:var(--regular-text-color);}
+.options-form :is(input[type=text],input[type=date],select) {box-sizing:border-box;width:100%;height:20px;min-width:0;border:0;
+  border-bottom:1px solid var(--light-border-color);border-radius:0;background:var(--mail-surface);color:var(--el-text-color-primary);font:inherit;padding:0;}
+.options-form :is(input[type=text],input[type=date],select):focus {outline:0;box-shadow:inset 0 -2px var(--el-color-primary);}
+.people-terms {display:grid;gap:4px;}
+.date-fields {display:grid;grid-template-columns:1fr 1.1fr;gap:24px;min-width:0;}
+.checks {display:flex;align-items:center;flex-wrap:wrap;gap:8px 24px;}
+.checks label {display:flex;align-items:center;gap:8px;}
+.checks input {width:16px;height:16px;margin:0;accent-color:var(--el-color-primary);}
+.option-actions {display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-top:18px;flex-shrink:0;}
+.option-actions button {cursor:pointer;height:36px;border-radius:18px;padding:0 18px;color:var(--el-color-primary);font-weight:500;}
+.option-actions button[type=submit] {background:var(--el-color-primary);color:var(--mail-surface);}
+@media(max-width:620px) {.options-form{padding:16px;}.criterion{grid-template-columns:minmax(60px,22%) minmax(0,1fr);gap:10px;}.date-fields{gap:8px;}}
 </style>
