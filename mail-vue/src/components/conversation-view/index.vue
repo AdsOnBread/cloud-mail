@@ -574,7 +574,7 @@ function back() {
 }
 async function mutate(action, extra = {}) {
   if (busy.value) return;
-  const epoch=viewEpoch, anchor=Number(route.query.emailId);
+  const epoch=viewEpoch, anchor=Number(route.query.emailId), token=user.authenticatedToken;
   busy.value = true;
   try {
     if ((!["label", "importance"].includes(action) && !(await save())) || epoch!==viewEpoch) return;
@@ -597,7 +597,13 @@ async function mutate(action, extra = {}) {
       });
     }
   } catch (e) {
-    if (epoch===viewEpoch) error.value = e.message || "Could not update conversation.";
+    const message=e.message || "Could not update conversation.";
+    if (action==="move") {
+      if (token && token===user.authenticatedToken && token===localStorage.getItem("token")) {
+        if (epoch===viewEpoch && route.name==="content" && Number(route.query.emailId)===anchor) error.value=message;
+        else feedback.show(message);
+      }
+    } else if (epoch===viewEpoch) error.value=message;
   } finally {
     busy.value = false;
   }
