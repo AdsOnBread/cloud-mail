@@ -18,7 +18,7 @@
       <div v-if="showLabels" id="search-label-suggestions" role="listbox" aria-label="Go to label" class="search-label-suggestions">
         <button v-for="(item,i) in matches" :id="'search-label-option-'+i" :key="item.key" type="button"
           role="option" :aria-selected="i===choice" tabindex="-1" @pointerdown.prevent @click="openLabel(item)">
-          <Icon :icon="'material-symbols:'+item.icon" width="18"/><span>{{item.name}}</span>
+          <Icon :icon="'material-symbols:'+item.icon" width="18"/><span>{{item.query ? 'Search '+item.name+' for “'+item.query+'”' : item.name}}</span>
         </button>
         <div v-if="!matches.length" role="presentation">No matching labels</div>
       </div>
@@ -89,6 +89,7 @@
 
 <script setup>
 import MailboxShortcuts from "@/components/mail-keyboard-shortcuts/index.vue";
+import {labelSuggestions} from '@/utils/search-labels';
 import {systemFolders} from '@/components/mail-labels/system-folders';
 import {useMailLabels} from '@/store/mail-labels';
 import SearchOptions from "@/components/mail-search-options.vue";
@@ -131,6 +132,10 @@ const searchFolder = computed(() => {
   return route.name;
 });
 const searchScope = computed(() => {
+  if (searchFolder.value==='label') {
+    const label=labels.items.find(item=>String(item.id)===String(searchLabelId.value));
+    if(label) return 'label:'+label.name;
+  }
   if (categoryFolders.some(item=>item.id===searchFolder.value)) return "category:" + searchFolder.value;
   return ["trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
 });
@@ -141,15 +146,13 @@ const labels=useMailLabels(), searchInput=ref(null), suggest=ref(false), choice=
 let searchOrigin;
 const labelQuery=computed(()=>/^label:(.*)$/i.exec(searchText.value)?.[1]);
 const showLabels=computed(()=>suggest.value && labelQuery.value!==undefined);
-const matches=computed(()=>{
-  if(labelQuery.value===undefined) return [];
-  const term=labelQuery.value.trim().toLocaleLowerCase();
+const destinations=computed(()=>{
   return [{id:'email',name:'Inbox',icon:'inbox-outline'},...systemFolders,...categoryFolders]
     .filter(folder=>!folder.permission || hasPerm(folder.permission))
     .map(folder=>({...folder,key:folder.id,to:{name:folder.id}}))
-    .concat(labels.items.map(label=>({key:'label-'+label.id,name:label.name,icon:'label-outline',to:{name:'label',params:{labelId:label.id}}})))
-    .filter(item=>item.name.toLocaleLowerCase().includes(term));
+    .concat(labels.items.map(label=>({key:'label-'+label.id,name:label.name,icon:'label-outline',to:{name:'label',params:{labelId:label.id}}})));
 });
+const matches=computed(()=>labelSuggestions(labelQuery.value,destinations.value));
 function focusSearch(label){
   if(!searchInput.value) return;
   searchOrigin=document.activeElement;
@@ -175,9 +178,14 @@ function searchKeys(event){
   }
 }
 async function openLabel(item){
+  const owner=userStore.user.userId, token=userStore.authenticatedToken;
   await router.push(item.to);
-  if(router.resolve(item.to).fullPath!==router.currentRoute.value.fullPath) return;
-  clearSearch();suggest.value=false;searchInput.value?.blur();searchOrigin=null;
+  if(router.resolve(item.to).fullPath!==router.currentRoute.value.fullPath ||
+     token!==userStore.authenticatedToken || token!==localStorage.getItem('token') || owner!==userStore.user.userId) return;
+  const {query,excluded}=readSearchBar(item.query || '');
+  mailSearch.$patch(state=>{state.query=query;state.filters=excluded ? {excluded} : {};});
+  searchText.value=appliedText.value;
+  suggest.value=false;choice.value=0;searchInput.value?.blur();searchOrigin=null;
 }
 function submitSearch() {
   const selected=matches.value[choice.value];
