@@ -1,5 +1,5 @@
 import {peopleSuggestions} from '../../shared/mail-people-suggestions.js';
-import {peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
+import {maxPeople,peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
 import {searchDateBounds,withinDateBounds} from '../../shared/mail-search-date.js';
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
 import { inLabelBranch } from '../src/components/mail-labels/tree.js';
@@ -166,7 +166,7 @@ const api=createHTTPServer(async(req,res)=>{
        const sender=accounts.find(a=>a.accountId===d.accountId);
        return {draftId:d.draftId,senderEmail:sender?.email,senderName:d.name||sender?.name,recipients:d.receiveEmail,cc:d.cc,bcc:d.bcc};
      });
-   data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q);
+   data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,8+maxPeople);
  }
  else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}
  else if(path==='/v1/messages/trash-read'){

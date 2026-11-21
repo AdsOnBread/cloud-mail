@@ -1,4 +1,5 @@
 import { mailboxAttachments } from '../service/mailbox-attachments';
+import {maxPeople} from '../../../shared/mail-search-people';
 import {peopleSuggestions} from '../../../shared/mail-people-suggestions';
 import { addMailFilters,addPeopleFilter } from '../service/mail-search-filters';
 import { ensureThreads } from '../mobile/threads';
@@ -34,10 +35,11 @@ export async function searchPeople(c,userId,params) {
     recent=(await c.env.db.prepare(`SELECT ${project} FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
       WHERE ${conditions.join(' AND ')} ORDER BY d.updated_at DESC,d.draft_id LIMIT 100`).bind(...values).all()).results;
   } else recent=await read(' AND e.trashed_at IS NOT NULL');
-  let suggestions=peopleSuggestions(recent,field,term);
-  if (suggestions.length<8) {
+  const limit=8+maxPeople; // Allow the picker to omit contacts it already has selected.
+  let suggestions=peopleSuggestions(recent,field,term,limit);
+  if (suggestions.length<limit) {
     const other=await read(' AND e.trashed_at IS NULL');
-    suggestions=peopleSuggestions([...recent,...other],field,term);
+    suggestions=peopleSuggestions([...recent,...other],field,term,limit);
   }
   return suggestions;
 }

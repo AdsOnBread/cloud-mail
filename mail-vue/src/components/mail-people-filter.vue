@@ -9,7 +9,7 @@
         <span>{{ caption }}</span><Icon icon="material-symbols:arrow-drop-down" width="16"/>
       </button>
     </template>
-    <div ref="panel" role="dialog" :aria-label="label+' filter'" class="people-panel"
+    <div v-if="open" ref="panel" role="dialog" :aria-label="label+' filter'" class="people-panel"
       @keydown.esc.stop.prevent="close(true)" @keydown.tab="tabOut" @focusout="focusOut">
       <div class="people-entry">
         <button v-for="person in selected" :key="person" class="person-token" type="button"
@@ -52,7 +52,7 @@ const options=computed(()=>{
   if (selected.value.length>=maxPeople) return [];
   const omit=new Set(selected.value.map(s=>s.toLowerCase())), typed=query.value.trim();
   const matches=contacts.value.filter(p=>!omit.has(p.email.toLowerCase()) &&
-    [p.name,p.email].some(value=>value.toLowerCase().includes(typed.toLowerCase())));
+    [p.name,p.email].some(value=>value.toLowerCase().includes(typed.toLowerCase()))).slice(0,8);
   if (typed && !omit.has(typed.toLowerCase()) && !matches.some(p=>p.email.toLowerCase()===typed.toLowerCase()))
     matches.push({name:typed,email:typed,typed:true});
   return matches;
@@ -111,7 +111,11 @@ watch([open,query],([visible,text],_,cleanup)=>{
   const timer=setTimeout(async()=>{
     try {
       const data=await http.get('/v1/search/people',{params:{field:props.field,folder:props.folder,accountId:props.accountId,q:text.trim()},noMsg:true});
-      if (current) { contacts.value=data;index.value=-1; }
+      if (current) {
+        const highlighted=options.value[index.value]?.email;
+        contacts.value=data;
+        index.value=highlighted ? options.value.findIndex(person=>person.email===highlighted) : -1;
+      }
     } catch { if (current) contacts.value=[]; }
   },text ? 120 : 0);
   cleanup(()=>{current=false;clearTimeout(timer)});
