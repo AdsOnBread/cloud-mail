@@ -150,6 +150,10 @@ watch(
   box-shadow: 0 1px 2px rgba(60, 64, 67, .3), 0 2px 6px 2px rgba(60, 64, 67, .15);
   animation: format-popup-in 0.1s ease-out;
 }
+@media (forced-colors: active) {
+  .format-popup {outline: 1px solid CanvasText;}
+  .format-popup :deep(button:focus-visible) {outline: 2px solid Highlight; outline-offset: -2px;}
+}
 @keyframes format-popup-in {
   from {
     opacity: 0;

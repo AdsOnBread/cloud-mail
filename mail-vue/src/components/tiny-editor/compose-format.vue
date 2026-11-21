@@ -352,7 +352,7 @@ const visibleParagraph = computed(() =>
 const overflow = computed(() => [
   ...(!showLists.value ? [...alignments, ...lists] : []),
   ...(!showIndent.value ? indents : []),
-  ...extra.slice(extraCount.value),
+  ...extra.slice(extraCount.value).reverse(),
   ...(width.value < 395 ? history : []),
   ...editing,
 ]);
@@ -756,6 +756,15 @@ button {
 .color-column:hover .default-color, .default-color:focus-visible {opacity: 1;}
 .default-color:focus-visible {outline: 2px solid var(--el-color-primary);}
 @media (hover: none) { .default-color {opacity: 1;} }
+@media (forced-colors: active) {
+  .swatch {forced-color-adjust: none; border-color: Canvas;}
+  .swatch:is(:hover, :focus-visible) {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid Highlight;
+    outline-offset: 0;
+  }
+}
 @container compose-editor (max-width:440px) {
   .font-name {
     min-width: 0;

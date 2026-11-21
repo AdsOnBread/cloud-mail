@@ -6,9 +6,9 @@
     centered
     :panel-class="
       actions
-        ? 'format-more-menu'
+        ? (iconsOnly ? 'format-icon-menu' : 'format-more-menu')
         : iconsOnly
-          ? 'format-align-menu'
+          ? 'format-icon-menu'
           : 'format-type-menu ' + (sizePreview ? 'format-size-menu' : 'format-font-menu')
     "
     @open="emit('open')"
@@ -171,9 +171,9 @@ function navigate(event) {
   line-height: 20px;
 }
 .format-type-menu .check-slot { width: 16px; margin-right: 16px; }
-.format-align-menu .choices { padding: 4px 0; }
-.format-align-menu .choices button { height: 28px; padding: 4px 8px; }
-:global(.format-align-menu) {
+.format-icon-menu .choices { padding: 4px 0; }
+.format-icon-menu .choices button { height: 28px; padding: 4px 8px; }
+:global(.format-icon-menu) {
   width: 36px;
 }
 :global(.format-more-menu) {
@@ -184,7 +184,7 @@ function navigate(event) {
   opacity: 0.45;
   cursor: default;
 }
-:global(.format-align-menu [aria-checked="true"]) {
+:global(.format-icon-menu [aria-checked="true"]) {
   color: var(--el-color-primary);
   background: var(--mail-selected);
 }
