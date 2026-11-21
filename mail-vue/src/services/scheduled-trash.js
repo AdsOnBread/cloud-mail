@@ -38,6 +38,7 @@ function confirmTrash(context,op) {
     if (!context.current()) return false;
     forget(context.key,op.edit);
     feedback.trashed([],receipt.count,'message');
+    feedback.notice.scheduledTrash=op.edit;
     feedback.restored++;
     drafts.scheduledRevision++;
     feedback.notice.undoFiling=async()=>{
@@ -72,10 +73,12 @@ export async function deleteScheduled(rows) {
 // The server might have committed before the browser lost its connection or reloaded.
 export async function retryPendingTrash() {
   const context=session();
-  if (!context || !navigator.onLine) return;
+  if (!context || !navigator.onLine || useMailFeedback().notice?.scheduledTrash) return;
   for (const op of pending(context.key)) {
     if (!context.current()) return;
-    try {if (!await confirmTrash(context,op)) return;}
+    // Display one recovered Undo at a time. The notification advances the queue
+    // after the user acts or dismisses it.
+    try {await confirmTrash(context,op);return;}
     catch(e) {if (context.current()) useMailFeedback().show(e.message || 'The scheduled message changed.');}
   }
 }

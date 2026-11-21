@@ -36,3 +36,21 @@ it('forgets a stale revision after a definitive response',async()=>{
   await expect(deleteScheduled(rows)).rejects.toMatchObject({code:409});
   await retryPendingTrash();expect(http.post).toHaveBeenCalledTimes(1);
 });
+
+it('keeps each recovered Undo available before resolving the next pending operation',async()=>{
+  http.post.mockRejectedValue(new Error('Network Error'));
+  await deleteScheduled(rows.slice(0,1));
+  await deleteScheduled(rows.slice(1));
+  http.post.mockImplementation(async(path,payload)=>path.endsWith('/undo-trash') ? {scheduled:1,drafts:0} : {edit:payload.edit,count:1});
+  const feedback=useMailFeedback();
+  for (const i of [0,1]) {
+    await retryPendingTrash();
+    const edit=http.post.mock.calls[i][1].edit;
+    expect(feedback.notice.scheduledTrash).toBe(edit);
+    await retryPendingTrash();
+    expect(feedback.notice.scheduledTrash).toBe(edit);
+    await feedback.undo();
+    expect(http.post.mock.calls.at(-1)[1].edit).toBe(edit);
+  }
+  expect(http.post).toHaveBeenCalledTimes(6);
+});

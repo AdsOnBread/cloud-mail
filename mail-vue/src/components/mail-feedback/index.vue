@@ -25,6 +25,7 @@ function schedule() {
 watch(() => [feedback.notice, feedback.notice?.busy], schedule, {immediate:true});
 watch(() => user.user.email, () => { feedback.dismiss(); });
 watch(()=>[user.user.email,user.authenticatedToken],retryPendingTrash,{immediate:true});
+watch(()=>feedback.notice?.scheduledTrash,(current,previous)=>{if (previous && !current) retryPendingTrash();});
 onMounted(()=>window.addEventListener('online',retryPendingTrash));
 onBeforeUnmount(() => { window.removeEventListener('online',retryPendingTrash); pause(); feedback.dismiss(); });
 </script>
