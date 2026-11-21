@@ -109,7 +109,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
    if(['archive','snooze','inbox'].includes(operation))for(const id of ids)filing.set(id,operation==='archive'?null:operation==='inbox'?0:p.wakeAt);
-   else if(operation==='delete'){rows.filter(row=>ids.has(row.emailId)).forEach(row=>row.trashedAt=new Date().toISOString());}
+   else if(operation==='delete'){data={emailIds:[...ids]};rows.filter(row=>ids.has(row.emailId)).forEach(row=>row.trashedAt=new Date().toISOString());}
    else if(operation==='read')rows.filter(row=>ids.has(row.emailId)).forEach(row=>row.unread=p.unread??1);
    else if(operation==='star')for(const id of p.emailIds){const members=threadFor(id);if(p.starred)members.toSorted((a,b)=>b.emailId-a.emailId)[0].isStar=1;else members.forEach(row=>row.isStar=0);}
  }else if(path==='/email/list'||path==='/star/list'){
@@ -125,7 +125,7 @@ const api=createHTTPServer(async(req,res)=>{
  else if(path==='/email/send'){
    const form=JSON.parse(body);const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts[0].email,name:user.name,recipient:JSON.stringify(form.receiveEmail.map(address=>({address}))),cc:JSON.stringify(form.cc.map(address=>({address}))),bcc:JSON.stringify(form.bcc.map(address=>({address}))),listText:form.text||form.content};rows.unshift(row);data=[row];
  }else if(path==='/email/read'){const ids=JSON.parse(body).emailIds;rows.filter(row=>ids.includes(row.emailId)).forEach(row=>row.unread=JSON.parse(body).unread??1);}
- else if(path==='/email/delete'){const ids=(url.searchParams.get('emailIds')||'').split(',').map(Number);for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId))rows.splice(i,1);}
+ else if(path==='/email/delete'){const ids=(url.searchParams.get('emailIds')||'').split(',').map(Number);for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId))rows[i].trashedAt=new Date().toISOString();}
  else if(path==='/star/add'){rows.find(row=>row.emailId===JSON.parse(body).emailId).isStar=1;}
  else if(path==='/star/cancel'){rows.find(row=>row.emailId===Number(url.searchParams.get('emailId'))).isStar=0;}
  else if(path==='/account/setAllReceive'){accounts.find(account=>account.accountId===JSON.parse(body).accountId).allReceive^=1;}

@@ -221,13 +221,23 @@ export async function conversationAction(c, p, userId, action) {
 				db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) VALUES(?,'message',?,'upsert')").bind(userId, id),
 			);
 		await db.batch(statements);
-	} else if (action === 'star') {
+	} else if (action === 'delete') {
+    const statements = [];
+    for (let i = 0; i < ids.length; i += 80) {
+      const batch = ids.slice(i, i + 80);
+      statements.push(db.prepare(`UPDATE email SET trashed_at=CURRENT_TIMESTAMP
+        WHERE user_id=? AND trashed_at IS NULL AND email_id IN (${batch.map(() => '?')}) RETURNING email_id`)
+        .bind(userId, ...batch));
+    }
+    const changes = await db.batch(statements);
+    const emailIds = changes.flatMap(change => change.results.map(row => row.email_id));
+    return { conversationCount: threads.size, messageCount: emailIds.length, emailIds };
+  } else if (action === 'star') {
 		for (const id of p.starred ? latest : stars) await starService[p.starred ? 'add' : 'cancel'](c, { emailId: id }, userId);
 	} else
 		for (let offset = 0; offset < ids.length; offset += 80) {
 			const chunk = ids.slice(offset, offset + 80);
-			if (action === 'delete') await emailService.delete(c, { emailIds: chunk.join(',') }, userId);
-			else await emailService.read(c, { emailIds: chunk, unread: p.unread ?? 1 }, userId);
+			await emailService.read(c, { emailIds: chunk, unread: p.unread ?? 1 }, userId);
 		}
 	return { conversationCount: threads.size, messageCount: ids.length };
 }

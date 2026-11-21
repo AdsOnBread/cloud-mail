@@ -6,12 +6,14 @@
     <main class="mail-main"><Main /></main>
     <writer ref="writerRef" />
     <MailTooltip />
+    <MailFeedback />
     <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
 import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
+import MailFeedback from '@/components/mail-feedback/index.vue';
 import MailTooltip from '@/components/mail-tooltip/index.vue';
 import Aside from '@/layout/aside/index.vue';
 import Header from '@/layout/header/index.vue';

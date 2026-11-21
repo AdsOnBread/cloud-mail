@@ -206,7 +206,9 @@ describe('Web conversations', () => {
 		expect((await env.db.prepare('SELECT COUNT(*) n FROM star WHERE user_id=1').first()).n).toBe(0);
 		await action('read', [root.email_id], { unread: 0 });
 		expect((await messages(root.email_id)).messages.every((m) => m.unread === 0)).toBe(true);
-		await action('delete', [root.email_id]);
+		const trashed = await action('delete', [root.email_id]);
+		expect(trashed.emailIds).toHaveLength(105);
+		expect(trashed.emailIds).not.toContain(other.email_id);
 		expect((await list()).total).toBe(0);
 		expect((await env.db.prepare('SELECT is_del FROM email WHERE email_id=?').bind(other.email_id).first()).is_del).toBe(0);
 	});

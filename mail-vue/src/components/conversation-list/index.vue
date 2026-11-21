@@ -324,6 +324,8 @@
   </section>
 </template>
 <script setup>
+import { useMailFeedback } from "@/store/mail-feedback";
+const feedback = useMailFeedback();
 import {
   ref,
   computed,
@@ -336,7 +338,7 @@ import {
 import { useVirtualList, useWindowSize } from "@vueuse/core";
 import { Icon } from "@iconify/vue";
 import { useRouter, useRoute } from "vue-router";
-import { ElMessageBox } from "element-plus";
+
 import { useAccountStore } from "@/store/account";
 import { useEmailStore } from "@/store/email";
 import { useMailSearchStore } from "@/store/mail-search";
@@ -634,7 +636,8 @@ async function mutate(action, extra = {}, ids = selected.value) {
   if (busy.value) return;
   busy.value = true;
   try {
-    await conversationAction(action, ids, extra);
+    const result = await conversationAction(action, ids, extra);
+    if (action === "delete") feedback.trashed(result?.emailIds || [], ids.length);
     selected.value = selected.value.filter((id) => !ids.includes(id));
     emailStore.conversationRevision++;
     await refresh();
@@ -644,22 +647,8 @@ async function mutate(action, extra = {}, ids = selected.value) {
     busy.value = false;
   }
 }
-async function remove(ids = selected.value) {
-  if (!Array.isArray(ids)) ids = selected.value;
-  const count = rows.value
-    .filter((row) => ids.includes(row.lastEmailId))
-    .reduce((sum, row) => sum + row.messageCount, 0);
-  try {
-    await ElMessageBox.confirm(
-      `Delete ${ids.length} conversation(s), containing ${count} message(s)?`,
-      {
-        confirmButtonText: "Delete",
-        cancelButtonText: "Cancel",
-        type: "warning",
-      },
-    );
-    await mutate("delete", {}, ids);
-  } catch {}
+function remove(ids = selected.value) {
+  return mutate("delete", {}, Array.isArray(ids) ? ids : selected.value);
 }
 function star(row) {
   return mutate("star", { starred: !row.starred }, [row.lastEmailId]);

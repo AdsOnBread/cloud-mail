@@ -80,6 +80,8 @@
   </div>
 </template>
 <script setup>
+import { useMailFeedback } from "@/store/mail-feedback";
+const feedback = useMailFeedback();
 import { useUserStore } from '@/store/user.js';
 import { addresses } from '@/utils/recipients.js';
 import { privateFileURL } from '@/utils/private-files';
@@ -266,35 +268,21 @@ const handleBack = () => {
   router.back()
 }
 
-const handleDelete = () => {
-  ElMessageBox.confirm(t('delEmailConfirm'), {
-    confirmButtonText: t('confirm'),
-    cancelButtonText: t('cancel'),
-    type: 'warning'
-  }).then(() => {
-    if (emailStore.contentData.delType === 'logic') {
-      emailDelete(email.value.emailId).then(() => {
-        ElMessage({
-          message: t('delSuccessMsg'),
-          type: 'success',
-          plain: true,
-        })
-        emailStore.deleteIds = [email.value.emailId]
-      })
-    } else  {
-
-      allEmailDelete(email.value.emailId).then(() => {
-        ElMessage({
-          message: t('delSuccessMsg'),
-          type: 'success',
-          plain: true,
-        })
-        emailStore.deleteIds = [email.value.emailId]
-      })
-    }
-
-    router.back()
-  })
+const handleDelete = async () => {
+  const id = email.value.emailId;
+  if (emailStore.contentData.delType === 'logic') {
+    await emailDelete(id);
+    feedback.trashed([id], 1, "message");
+  } else {
+    try {
+      await ElMessageBox.confirm(t('delEmailConfirm'), {
+        confirmButtonText: t('confirm'), cancelButtonText: t('cancel'), type: 'warning'
+      });
+    } catch { return; }
+    await allEmailDelete(id);
+  }
+  emailStore.deleteIds = [id];
+  router.back();
 }
 </script>
 <style scoped>

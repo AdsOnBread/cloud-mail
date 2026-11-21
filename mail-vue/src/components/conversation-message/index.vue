@@ -131,9 +131,11 @@
   </article>
 </template>
 <script setup>
+import { useMailFeedback } from "@/store/mail-feedback";
+const feedback = useMailFeedback();
 import { ref, computed, watch, onUnmounted } from "vue";
 import { Icon } from "@iconify/vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { useEmailStore } from "@/store/email";
 import { useUserStore } from "@/store/user";
@@ -231,19 +233,13 @@ function read() {
   });
 }
 async function remove() {
-  try {
-    await ElMessageBox.confirm("Delete this message?", {
-      confirmButtonText: "Delete",
-      cancelButtonText: "Cancel",
-      type: "warning",
-    });
-    if (props.beforeDelete && !(await props.beforeDelete())) return;
-    await action(async () => {
-      await emailDelete(props.message.emailId);
-      delete store.detailMap[props.message.emailId];
-      emit("deleted");
-    });
-  } catch {}
+  if (props.beforeDelete && !(await props.beforeDelete())) return;
+  await action(async () => {
+    await emailDelete(props.message.emailId);
+    feedback.trashed([props.message.emailId], 1, "message");
+    delete store.detailMap[props.message.emailId];
+    emit("deleted");
+  });
 }
 async function download(file) {
   try {

@@ -116,6 +116,8 @@
   </section>
 </template>
 <script setup>
+import { useMailFeedback } from "@/store/mail-feedback";
+const feedback = useMailFeedback();
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {
   useRoute,
@@ -124,7 +126,7 @@ import {
   onBeforeRouteUpdate,
 } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { ElMessageBox } from "element-plus";
+
 import ConversationMessage from "@/components/conversation-message/index.vue";
 import MessageComposer from "@/components/message-composer/index.vue";
 import {
@@ -381,7 +383,8 @@ async function mutate(action, extra = {}) {
   if (busy.value || !(await save())) return;
   busy.value = true;
   try {
-    await conversationAction(action, [Number(route.query.emailId)], extra);
+    const result = await conversationAction(action, [Number(route.query.emailId)], extra);
+    if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (action === "delete") back();
     else
@@ -396,19 +399,8 @@ async function mutate(action, extra = {}) {
     busy.value = false;
   }
 }
-async function remove() {
-  try {
-    await ElMessageBox.confirm(
-      `Delete 1 conversation containing ${total.value} messages?`,
-      {
-        confirmButtonText: "Delete",
-        cancelButtonText: "Cancel",
-        type: "warning",
-      },
-    );
-    await mutate("delete");
-  } catch {}
-}
+function remove() { return mutate("delete"); }
+watch(() => feedback.restored, () => { if (!activeTarget.value) load(); });
 async function deleted(message) {
   if (activeTarget.value === message.emailId && !(await save())) return;
   messages.value = messages.value.filter(

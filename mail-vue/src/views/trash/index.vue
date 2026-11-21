@@ -204,6 +204,7 @@ import { addresses } from "@/utils/recipients";
 import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useAccountStore } from "@/store/account";
+import { useMailFeedback } from "@/store/mail-feedback";
 import { useEmailStore } from "@/store/email";
 import http from "@/axios";
 
@@ -314,6 +315,7 @@ async function loadDetail(id) {
 function reload() {
   return messageId.value ? loadDetail(messageId.value) : load();
 }
+watch(() => useMailFeedback().restored, reload);
 watch(messageId, reload, { immediate: true });
 watch([() => search.query, mailbox], () => {
   history.value = [];
