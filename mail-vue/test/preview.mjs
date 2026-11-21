@@ -259,6 +259,8 @@ const api=createHTTPServer(async(req,res)=>{
      if(!members.some(row=>row.type===0 && row.unread===0))continue;
      for(const id of threadLabels(members.filter(row=>combined || row.accountId===accountId)))data[id]=(data[id]||0)+1;
    }
+   for(const d of cloudDrafts.values()) if(d.scheduledAt && d.scheduledUnread && (combined || d.accountId===accountId))
+     for(const id of new Set(d.labelIds || [])) if(labels.has(id))data[id]=(data[id]||0)+1;
  }else if(path==='/email/conversation/label-colors')data=recentColors;
  else if(path==='/email/conversation/labels' && req.method==='GET')data=[...labels.values()];
  else if((path==='/email/conversation/labels' && req.method==='POST') || (/^\/email\/conversation\/labels\/\d+$/.test(path) && req.method==='PUT')){

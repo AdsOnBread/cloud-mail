@@ -511,7 +511,16 @@ describe('Scheduled send',()=>{
    expect(await change(messages,[added],[old])).toEqual({updated:2});
    expect(await scheduledList(c(),1,1,{labelId:added})).toMatchObject(messages.map((m,i)=>({...m,labelIds:i ? [added] : [keep,added]})));
    expect(await scheduledList(c(),1,1,{labelId:old})).toEqual([]);
+   const {labelUnreadCounts}=await import('../src/service/conversation-service');
+   const {setScheduledRead}=await import('../src/cloud/scheduled');
+   const counts=(accountId,allReceive=0,uid=1)=>labelUnreadCounts(c(),{accountId,allReceive},uid);
+   await setScheduledRead(c(),1,{messages,unread:true});
+   expect(await counts(1)).toEqual({[added]:2,[keep]:1});
+   expect(await counts(3)).toEqual({});
+   expect(await counts(3,1)).toEqual({[added]:2,[keep]:1});
+   expect(await counts(1,1,2)).toEqual({});
    await cancel(c(),1,messages[0].draftId,messages[0].version);
+   expect(await counts(1)).toEqual({[added]:1});
    expect((await drafts.get(c(),1,messages[0].draftId)).labelIds).toEqual([keep,added]);
    await expect(change(messages,[],[added])).rejects.toMatchObject({code:409});
    expect(await scheduledList(c(),1,1,{labelId:added})).toHaveLength(1);

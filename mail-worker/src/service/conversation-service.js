@@ -53,13 +53,18 @@ export async function labelUnreadCounts(c, params, userId) {
     JOIN account a ON a.account_id=e.account_id
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     WHERE ${visible} ${combined ? '' : 'AND e.account_id=?'}
-  )
-  SELECT label_id,COUNT(*) count FROM labeled WHERE EXISTS (
+  ), unread_labels AS (
+  SELECT label_id FROM labeled WHERE EXISTS (
     SELECT 1 FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
     JOIN account a ON a.account_id=e.account_id
     WHERE m.thread_id=labeled.thread_id AND ${visible} AND e.type=0 AND e.unread=0
-  ) GROUP BY label_id`)
-		.bind(userId,...(combined ? [] : [Number(params.accountId) || 0]),userId).all();
+  ) UNION ALL
+  SELECT l.label_id FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
+    JOIN mailbox_labels l ON l.user_id=d.user_id AND l.label_id IN (SELECT value FROM json_each(d.data,'$.labelIds'))
+    WHERE d.user_id=? AND json_extract(d.data,'$.scheduledAt') IS NOT NULL AND json_extract(d.data,'$.scheduledUnread')=1
+      ${combined ? '' : 'AND d.account_id=?'}
+  ) SELECT label_id,COUNT(*) count FROM unread_labels GROUP BY label_id`)
+		.bind(userId,...(combined ? [] : [Number(params.accountId) || 0]),userId,userId,...(combined ? [] : [Number(params.accountId) || 0])).all();
 	return Object.fromEntries(results.map(row => [row.label_id,row.count]));
 }
 

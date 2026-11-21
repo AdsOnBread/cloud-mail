@@ -214,7 +214,7 @@ watch([activeLabel,activeLabelMode,()=>Boolean(labelUnread.value[activeLabel.val
     if(!explicitlyChanged && (mode==='hide' || (mode==='unread' && ready && !hasUnread)))showHiddenLabels.value=true;
   },{immediate:true,flush:'post'});
 watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),
-  ()=>labels.items.length,()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh],
+  ()=>labels.items.length,()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh,()=>drafts.scheduledRevision],
   ([owner,accountId,allReceive,size],prev,cleanup)=>{
     let current=true;
     if(!prev || owner!==prev[0] || accountId!==prev[1] || allReceive!==prev[2]){
