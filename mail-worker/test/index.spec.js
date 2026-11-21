@@ -31,6 +31,18 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Sending with local mailbox storage', () => {
+	it('sends text-only drafts with regular attachments and stores their literal text',async()=>{
+    const send=vi.fn().mockResolvedValue({messageId:'plain-test'});
+    const text='Example <tag> & a URL\nhttps://example.org/';
+    const [row]=await emailService.send(context({email:{send}}),mail({
+      plainText:true,text,content:'<b>legacy markup</b>',attachments:[{filename:'note.txt',content:'YQ==',contentType:'text/plain'}]
+    }),1);
+    const [message]=send.mock.calls[0];
+    expect(message.text).toBe(text);
+    expect(message).not.toHaveProperty('html');
+    expect(message.attachments[0].filename).toBe('note.txt');
+    expect(row).toMatchObject({text,content:''});
+  });
 	it('sends ordinary and inline attachments and preserves stored MIME metadata', async () => {
 		const send = vi.fn().mockResolvedValue({ messageId: 'cf-provider-id' });
 		const ctx = context({ email: { send } });

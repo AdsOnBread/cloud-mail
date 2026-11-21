@@ -115,14 +115,14 @@ export async function buildMessage(params) {
 		to: recipients.to,
 		subject: params.subject,
 		text: params.text || '',
-		html: params.html || '',
 		attachments: await Promise.all(attachments.map(normalizeAttachment))
 	};
+	if (params.html) message.html = params.html;
 	if (recipients.cc.length) message.cc = recipients.cc;
 	if (recipients.bcc.length) message.bcc = recipients.bcc;
 	const ids = message.attachments.filter(item => item.contentId).map(item => item.contentId);
 	if (new Set(ids).size !== ids.length) throw new BizError('Inline image content IDs must be unique.', 400);
-	const { document } = parseHTML(message.html);
+	const { document } = parseHTML(message.html || '');
 	for (const image of document.querySelectorAll('img')) {
 		const src = image.getAttribute('src') || '';
 		if (src.startsWith('cid:') && !ids.includes(src.slice(4))) {

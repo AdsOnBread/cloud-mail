@@ -271,7 +271,9 @@ const emailService = {
 		if (typeof subject !== 'string' || !subject.trim() || subject.length > 998 || /[\r\n]/.test(subject)) {
 			throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
 		}
-		if (typeof content !== 'string' || !content.trim()) throw new BizError('Enter a message body.', 400);
+		const plainText = params.plainText === true;
+		const body = plainText ? text : content;
+		if (typeof body !== 'string' || !body.trim()) throw new BizError('Enter a message body.', 400);
 		if (text !== undefined && typeof text !== 'string') throw new BizError('Message text must be a string.', 400);
 
 
@@ -363,7 +365,7 @@ const emailService = {
 		const referenceChain = [...new Set([...referenceIds(emailRow.relation), ...referenceIds(emailRow.messageId)])];
 		while (new TextEncoder().encode(referenceChain.join(' ')).length > 1900) referenceChain.shift();
 		const references = referenceChain.join(' ');
-		let { imageDataList, html } = await attService.toImageUrlHtml(c, content, userId);
+		let { imageDataList, html } = plainText ? { imageDataList: [], html: '' } : await attService.toImageUrlHtml(c, content, userId);
 		validateAttachmentCount(imageDataList, true);
 		attachments = await Promise.all(attachments.map(normalizeAttachment));
 		const message = await buildMessage({
@@ -385,7 +387,7 @@ const emailService = {
 		emailData.sendEmail = accountRow.email;
 		emailData.name = name;
 		emailData.subject = subject;
-		emailData.content = html;
+		emailData.content = plainText ? '' : html;
 		emailData.text = text;
 		emailData.accountId = accountId;
 		emailData.status = emailConst.status.SENT;

@@ -5,7 +5,7 @@ import { normalizeAttachment,MAX_MESSAGE_BYTES } from '../service/email-sender';
 import r2Service from '../service/r2-service';
 import { camel } from '../mobile/service';
 
-const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','ui'];
+const fields=['name','subject','text','content','sendType','emailId','receiveEmail','cc','bcc','plainText','ui'];
 function normalize(input,previous={}) {
   const value={...previous};
   for(const key of fields) if(Object.hasOwn(input,key)) value[key]=input[key];
@@ -17,6 +17,7 @@ function normalize(input,previous={}) {
     value[key]??=[];
     if(!Array.isArray(value[key])||value[key].length>50||value[key].some(a=>typeof a!=='string'||a.length>320)) throw new BizError('Invalid draft recipients.',400);
   }
+  if(value.plainText!==undefined && typeof value.plainText!=='boolean')throw new BizError('Invalid message format.',400);
   if(value.sendType&&!['reply','forward'].includes(value.sendType)) throw new BizError('Invalid message kind.',400);
   if(new TextEncoder().encode(JSON.stringify(value)).length>MAX_MESSAGE_BYTES) throw new BizError('Draft is too large.',413);
   if(value.ui!==undefined && (!value.ui||typeof value.ui!=='object'||Array.isArray(value.ui)))throw new BizError('Invalid draft presentation metadata.',400);
@@ -162,6 +163,7 @@ export async function file(c,userId,attachmentId) {
 export async function payload(c,userId,draft) {
   const attachments=[];let content=draft.content;
   for(const meta of draft.attachments) {
+    if(draft.plainText && meta.contentId)continue;
     const {object}=await file(c,userId,meta.attachmentId);
     const bytes=object.arrayBuffer?await object.arrayBuffer():await new Response(object.body||object).arrayBuffer();
     if(meta.contentId) {

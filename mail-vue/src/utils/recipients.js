@@ -56,5 +56,5 @@ export function hasDraftContent(draft) {
 
 export function draftFingerprint(draft) {
   return JSON.stringify([draft.subject, draft.content, ...recipientFields.map(field => draft[field] || []),
-    (draft.attachments || []).map(file => [file.filename, file.content])]);
+    (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : [])]);
 }

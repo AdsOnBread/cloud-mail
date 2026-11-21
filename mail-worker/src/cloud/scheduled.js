@@ -17,7 +17,7 @@ export async function schedule(c, userId, id, input) {
 	if (!Number.isSafeInteger(sendAt) || sendAt <= Math.floor(Date.now() / 1000) || sendAt > 253402300799)
 		throw new BizError('Choose a future send time.', 400);
 	normalizeRecipients(current.receiveEmail, current.cc, current.bcc);
-	if (!current.subject?.trim() || current.subject.length > 998 || /[\r\n]/.test(current.subject) || !current.content?.trim())
+	if (!current.subject?.trim() || current.subject.length > 998 || /[\r\n]/.test(current.subject) || !(current.plainText ? current.text : current.content)?.trim())
 		throw new BizError('Enter a subject and message before scheduling.', 400);
 	const saved = await c.env.db
 		.prepare(
