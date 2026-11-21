@@ -32,6 +32,7 @@
     <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
+      :aria-description="dateTitle"
       :aria-label="openLabel + (attachmentCount ? ', has attachment' : '')"
       @click="$emit('open')"
     >

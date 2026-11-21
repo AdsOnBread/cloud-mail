@@ -142,12 +142,14 @@
     </div>
     <div v-else ref="scroll" class="scroll">
       <p class="notice">
+        <Icon icon="material-symbols:schedule-send-outline" width="20" aria-hidden="true" />
         Messages in Scheduled will be sent at their scheduled time.
       </p>
       <MailRow
         v-for="row in page"
         :key="row.draftId"
         :data-scheduled-id="row.draftId"
+        :class="{'awaiting-delivery':row.state==='scheduled'}"
         :starred="Boolean(row.starred)"
         show-importance
         :importance-reason="row.importanceReason"
@@ -623,7 +625,22 @@ onBeforeUnmount(() => {
   color: var(--regular-text-color);
 }
 .notice {
-  box-shadow: inset 0 -1px var(--light-border-color);
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:48px;
+  box-sizing:border-box;
+  padding:6px 16px;
+  text-align:start;
+  background:var(--scheduled-notice);
+  color:var(--secondary-text-color);
+  border-radius:4px;
+}
+.notice svg {flex:none;}
+.awaiting-delivery :deep(.row-date time) {
+  color:var(--scheduled-date);
+  font-size:14px;
+  font-weight:700;
 }
 .cancel-action {
   padding: 8px 12px;

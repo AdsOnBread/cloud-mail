@@ -188,6 +188,10 @@ html:not(.dark) {
     --mail-selected: #d3e3fd;
     --mail-hover: #e8edf5;
     --mail-read: #f2f6fc;
+    --scheduled-notice: rgb(241 243 244 / 87%);
+    --scheduled-date: #c26401;
+    --scheduled-banner: #f5f5f5;
+    --scheduled-action: #1a73e8;
     --el-color-primary: #0b57d0;
     --el-color-primary-dark-2: #0842a0;
     --el-color-primary-light-3: #5189df;
@@ -220,6 +224,10 @@ html.dark {
     --mail-selected: #004a77;
     --mail-hover: #36383f;
     --mail-read: #292b30;
+    --scheduled-notice: #303238;
+    --scheduled-date: #ffb366;
+    --scheduled-banner: #303135;
+    --scheduled-action: #a8c7fa;
     --el-color-primary: #a8c7fa;
     --el-color-primary-dark-2: #c2d7fb;
     --el-color-primary-light-3: #84acef;
