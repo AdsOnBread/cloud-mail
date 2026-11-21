@@ -540,7 +540,10 @@ async function trash(batch) {
   const current=()=>sameSession() && !disposed && identity.value===owner && navigations===navigation;
   const focused=document.activeElement;
   const focusId=Number(focused?.closest('[data-scheduled-id]')?.dataset.scheduledId);
-  const index=page.value.findIndex(row=>row.draftId===focusId);
+  const toolbarFocus=Boolean(focused?.closest('.selected-toolbar'));
+  const removed=new Set(batch.map(row=>row.draftId));
+  const restoreFocus=removed.has(focusId) || toolbarFocus;
+  const index=page.value.findIndex(row=>toolbarFocus ? removed.has(row.draftId) : row.draftId===focusId);
   busy.value=true;
   error.value='';
   try {
@@ -568,11 +571,10 @@ async function trash(batch) {
       }
     };
     if (current()) {
-      const ids=new Set(messages.map(message=>message.draftId));
-      rows.value=rows.value.filter(row=>!ids.has(row.draftId));
-      selected.value=selected.value.filter(id=>!ids.has(id));
-      if (ids.has(messageId.value)) back();
-      else if (ids.has(focusId) && (document.activeElement===focused || document.activeElement===document.body)) {
+      rows.value=rows.value.filter(row=>!removed.has(row.draftId));
+      selected.value=selected.value.filter(id=>!removed.has(id));
+      if (removed.has(messageId.value)) back();
+      else if (restoreFocus && (document.activeElement===focused || document.activeElement===document.body)) {
         nextTick(()=>{
           if (current() && document.activeElement===document.body)
             focusList(page.value[Math.min(index,page.value.length-1)]?.draftId);
