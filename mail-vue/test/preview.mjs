@@ -233,10 +233,11 @@ const api=createHTTPServer(async(req,res)=>{
      const deliver=()=>{const receipt={state:'sent',attemptId:key,messages:previewSend(draft)};sendAttempts.set(key,receipt);draft.state='sent';draft.version++;recordDraft(draft);return receipt;};
      data=sendAttempts.get(key);
      if(!data && input.undoSeconds){
+       const duration=(generalSettings.undoSeconds ?? input.undoSeconds)*1000;
        draft.state='sending';draft.version++;recordDraft(draft);
-       data={state:'holding',draftId:id,attemptId:key,version:draft.version,undoUntil:Date.now()+input.undoSeconds*1000};
+       data={state:'holding',draftId:id,attemptId:key,version:draft.version,undoUntil:Date.now()+duration};
        sendAttempts.set(key,data);
-       setTimeout(()=>{if(sendAttempts.get(key)?.state==='holding')deliver();},input.undoSeconds*1000);
+       setTimeout(()=>{if(sendAttempts.get(key)?.state==='holding')deliver();},duration);
      }else if(!data)data=deliver();
    }
    else if(req.method==='DELETE'){draft.state='deleted';draft.version++;recordDraft(draft);data={deleted:true};}

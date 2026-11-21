@@ -99,7 +99,7 @@ onBeforeRouteLeave(async to=>{
   if (busy.value) return false;
   try {
     await ElMessageBox.confirm('Your changes have not been saved. Discard them?', 'Unsaved changes', {
-      confirmButtonText:'Discard changes',cancelButtonText:'Keep editing',autofocus:false,
+      confirmButtonText:'Discard changes',cancelButtonText:'Keep editing',customClass:'mail-confirm',autofocus:false,
     });
     return true;
   } catch { return false; }
