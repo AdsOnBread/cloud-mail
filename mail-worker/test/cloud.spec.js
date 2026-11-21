@@ -731,7 +731,8 @@ describe('Scheduled send',()=>{
    const messages=[];
    for(const labels of [[old,keep],[old]]) {
      const d=await draft({labelIds:labels});
-     messages.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+     const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt});
+     messages.push({draftId:queued.draftId,version:queued.version,sendAt:queued.sendAt});
    }
    const change=(messages,add,remove,uid=1)=>setScheduledLabels(c(),uid,{messages,add,remove});
    await expect(change(messages,[foreign],[old])).rejects.toMatchObject({code:409});
@@ -837,7 +838,8 @@ describe('Scheduled send',()=>{
    const messages=[];
    for (const subject of ['First','Second']) {
      const d=await draft({subject});
-     messages.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+     const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt});
+     messages.push({draftId:queued.draftId,version:queued.version,sendAt:queued.sendAt});
    }
    const unread=()=>scheduledList(c(),1,1,{isUnread:'1'});
    const set=(user,messages,unread)=>setScheduledRead(c(),user,{messages,unread});
@@ -863,7 +865,8 @@ describe('Scheduled send',()=>{
    const rows=[];
    for (const subject of ['First','Second']) {
      const d=await draft({subject});
-     rows.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt:when}));
+     const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt:when});
+     rows.push({draftId:queued.draftId,version:queued.version,sendAt:queued.sendAt});
    }
    const file=(messages,inbox)=>setScheduledInbox(c(),1,{messages,inbox});
    const inbox=()=>scheduledList(c(),1,1,{mark:'inbox'});
@@ -898,7 +901,8 @@ describe('Scheduled send',()=>{
    const rows=[];
    for (const subject of ['Snooze first','Snooze second']) {
      const d=await draft({subject});
-     rows.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+     const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt});
+     rows.push({draftId:queued.draftId,version:queued.version,sendAt:queued.sendAt});
    }
    const snooze=(messages,time=wakeAt,uid=1)=>snoozeScheduled(c(),uid,{messages,wakeAt:time});
    const folder=mark=>scheduledList(c(),1,1,{mark});
