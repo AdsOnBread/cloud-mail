@@ -1,7 +1,7 @@
 <template>
-  <el-popover v-model:visible="open" :trigger="external ? [] : 'click'" placement="bottom-start"
+  <el-popover v-model:visible="open" :trigger="external ? [] : 'click'" :placement="submenu ? 'right-start' : 'bottom-start'" :offset="submenu ? 0 : undefined"
     :virtual-triggering="external" :virtual-ref="reference" :width="241" :show-arrow="false"
-    popper-class="label-picker" @after-enter="open && menu?.focus()">
+    :popper-class="submenu ? 'label-picker scheduled-label-flyout' : 'label-picker'" @after-enter="open && menu?.focus()">
     <template v-if="!external" #reference>
       <button ref="trigger" class="mail-icon" aria-label="Label as" data-tip="Labels" aria-haspopup="menu"
         :disabled="disabled" :aria-expanded="open"><Icon icon="material-symbols:label-outline" width="20"/></button>
@@ -24,14 +24,14 @@ import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import FilingMenu from "./filing-menu.vue";
 import { useMailLabels } from "@/store/mail-labels";
-const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean, scheduled:Boolean });
-const emit = defineEmits(["apply"]);
+const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean, scheduled:Boolean, submenu:Boolean, returnFocus:Function });
+const emit = defineEmits(["apply","finish"]);
 const router=useRouter(), labels=useMailLabels();
 const open=ref(false), query=ref(""), changes=ref({}), menu=ref(), trigger=ref();
 const filtered=computed(()=>labels.items.filter(item=>item.name.toLowerCase().includes(query.value.trim().toLowerCase())));
 const rowIds=computed(()=>props.scheduled ? props.rows.map(({draftId,version})=>({draftId,version})) : props.rows.map(row=>row.lastEmailId));
 let anchors=[];
-defineExpose({show:()=>{if (!props.disabled && rowIds.value.length) open.value=true;}});
+defineExpose({show:()=>{if (!props.disabled && rowIds.value.length) open.value=true;},open});
 watch(open,value=>{
   if (value) {
     query.value="";
@@ -44,9 +44,10 @@ function restoreFocus() { (props.reference || trigger.value)?.focus(); }
 function dismiss() { open.value=false; restoreFocus(); }
 function createLabel() {
   dismiss();
-  labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,scheduled:props.scheduled,restoreFocus};
+  labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,scheduled:props.scheduled,restoreFocus:props.returnFocus || restoreFocus};
+  emit("finish");
 }
-function manageLabels() { dismiss(); router.push({name:'label-settings'}); }
+function manageLabels() { dismiss(); emit('finish'); router.push({name:'label-settings'}); }
 function currentState(id) {
   const count=props.rows.filter(row=>row.labelIds?.includes(id)).length;
   return count===0 ? false : count===props.rows.length ? true : "mixed";
@@ -64,6 +65,7 @@ function apply() {
   const ops={add:[],remove:[]};
   for (const [id,on] of Object.entries(changes.value)) ops[on ? "add" : "remove"].push(Number(id));
   dismiss();
+  emit("finish");
   emit("apply",ops,anchors);
 }
 </script>

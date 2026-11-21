@@ -131,13 +131,13 @@ const api=createHTTPServer(async(req,res)=>{
    else data=queued.filter(d=>(!Number(p.isUnread) || d.scheduledUnread) && matchesDate(d.createTime,p) && matchesRowSize(d,p,d.attachments)).map(d=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
-     return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
+     return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,labelIds:d.labelIds || [],subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
        inbox:d.scheduledInbox||0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
        senderEmail:sender.email,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
+     return (!p.labelId || row.labelIds.includes(Number(p.labelId))) && (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/labels'].includes(path) && req.method==='POST'){

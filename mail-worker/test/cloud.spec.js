@@ -491,6 +491,46 @@ describe('Attachment retention',()=>{
 });
 
 describe('Scheduled send',()=>{
+ it('applies label differences to a whole queue selection and preserves each message’s unrelated labels',async()=>{
+   const {schedule,scheduledList,setScheduledLabels,cancel}=await import('../src/cloud/scheduled');
+   const label=(user,name)=>env.db.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id').bind(user,name).first('label_id');
+   const old=await label(1,'Work'),keep=await label(1,'Personal'),added=await label(1,'Later'),foreign=await label(2,'Other');
+   const sendAt=Math.floor(Date.now()/1000)+3600;
+   const messages=[];
+   for(const labels of [[old,keep],[old]]) {
+     const d=await draft({labelIds:labels});
+     messages.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+   }
+   const change=(messages,add,remove,uid=1)=>setScheduledLabels(c(),uid,{messages,add,remove});
+   await expect(change(messages,[foreign],[old])).rejects.toMatchObject({code:409});
+   await expect(change(messages,[added],[old],2)).rejects.toMatchObject({code:409});
+   await expect(change([messages[0],{...messages[1],version:77}],[added],[old])).rejects.toMatchObject({code:409});
+   await expect(change(messages,[added],[added])).rejects.toMatchObject({code:400});
+   expect((await scheduledList(c(),1,1,{labelId:old})).length).toBe(2);
+   expect(await change(messages,[added],[old])).toEqual({updated:2});
+   expect(await change(messages,[added],[old])).toEqual({updated:2});
+   expect(await scheduledList(c(),1,1,{labelId:added})).toMatchObject(messages.map((m,i)=>({...m,labelIds:i ? [added] : [keep,added]})));
+   expect(await scheduledList(c(),1,1,{labelId:old})).toEqual([]);
+   await cancel(c(),1,messages[0].draftId,messages[0].version);
+   expect((await drafts.get(c(),1,messages[0].draftId)).labelIds).toEqual([keep,added]);
+   await expect(change(messages,[],[added])).rejects.toMatchObject({code:409});
+   expect(await scheduledList(c(),1,1,{labelId:added})).toHaveLength(1);
+ });
+ it('keeps a first label applied during preparation on the delivered sender copy',async()=>{
+   const {schedule,setScheduledLabels,deliverDue}=await import('../src/cloud/scheduled');
+   const {default:storage}=await import('../src/service/r2-service');
+   const id=await env.db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Just filed') RETURNING label_id").first('label_id');
+   const d=await draft({attachments:[{filename:'a.txt',content:'YQ==',contentType:'text/plain'}]});
+   const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+3600});
+   const get=storage.getObj.bind(storage);
+   vi.spyOn(storage,'getObj').mockImplementationOnce(async(...args)=>{
+     await setScheduledLabels(c(),1,{messages:[queued],add:[id],remove:[]});return get(...args);
+   });
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());
+   expect((await env.db.prepare('SELECT m.label_id,e.user_id,e.type FROM mailbox_label_members m JOIN email e USING(email_id)').all()).results)
+     .toEqual([{label_id:id,user_id:1,type:1}]);
+ });
  it.each([false,true])('files only the sender copy with surviving owned compose labels (scheduled=%s)',async queued=>{
    const {schedule,scheduledList,deliverDue}=await import('../src/cloud/scheduled');
    const label=async(owner,name)=>(await env.db.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id')

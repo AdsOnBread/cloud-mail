@@ -98,19 +98,8 @@
         :disabled="busy || readTargets.some(row=>!canCancel(row))" @click="fileInbox(readTargets, moveIntoInbox)">
         <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
       </button>
-      <template v-if="readTargets.length">
-        <el-dropdown trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
-          <button ref="moreButton" class="mail-icon" aria-label="More email options" data-tip="More"
-            :disabled="busy"><Icon icon="material-symbols:more-vert" width="20"/></button>
-          <template #dropdown><el-dropdown-menu>
-            <el-dropdown-item :disabled="labelsDisabled" @click="scheduledPicker?.show()">Label as
-              <Icon icon="material-symbols:arrow-right" width="16" aria-hidden="true"/>
-            </el-dropdown-item>
-          </el-dropdown-menu></template>
-        </el-dropdown>
-        <LabelPicker v-if="moreButton" ref="scheduledPicker" scheduled external :reference="moreButton" :rows="readTargets"
-          :disabled="labelsDisabled" @apply="applyLabels"/>
-      </template>
+      <ScheduledLabelActions v-if="readTargets.length" ref="labelActions" :rows="readTargets" :disabled="busy"
+        :filing-disabled="labelsDisabled" @apply="applyLabels"/>
       <div class="scheduled-pager">
       <span class="total">{{ range }}</span>
       <button
@@ -256,7 +245,7 @@ import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
-import LabelPicker from "@/components/mail-labels/picker.vue";
+import ScheduledLabelActions from "./label-actions.vue";
 import ScheduledMessage from "./message.vue";
 
 const router = useRouter(),
@@ -334,7 +323,7 @@ const range = computed(() => {
     : "";
 });
 const canCancel = (row) => ["scheduled", "schedule_failed"].includes(row.state);
-const scheduledPicker=ref(), moreButton=ref();
+const labelActions=ref();
 const labelsDisabled=computed(()=>busy.value || !readTargets.value.length || readTargets.value.some(row=>!canCancel(row)));
 async function applyLabels(ops,messages) {
   if (labelsDisabled.value) return;
@@ -350,7 +339,7 @@ async function applyLabels(ops,messages) {
   } finally {
     busy.value=false;
     await nextTick();
-    if (current() && document.activeElement===document.body) moreButton.value?.focus();
+    if (current() && document.activeElement===document.body) labelActions.value?.focus();
   }
 }
 function status(row) {
