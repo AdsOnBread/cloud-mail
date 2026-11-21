@@ -112,3 +112,16 @@ it("does not delete a reply target if its draft cannot be saved", async () => {
   expect(emailDelete).not.toHaveBeenCalled();
   wrapper.unmount();
 });
+
+it("describes the recipient summary and keeps Bcc private on a different sender's copy",async()=>{
+  vi.spyOn(useEmailStore(),"ensureDetail").mockImplementation(async m=>m);
+  const wrapper=card({expanded:true,message:{...message,type:1,userId:2,
+    recipient:JSON.stringify([{address:"me@example.com"},{name:"Project team",address:"team@example.net"}])}});
+  await flushPromises();
+  const toggle=wrapper.get(".recipient-toggle");
+  expect(toggle.attributes("aria-description")).toBe("to me, Project team");
+  expect(wrapper.get(".recipient-details").text()).toContain("Project team <team@example.net>");
+  expect(wrapper.get(".recipient-details").text()).toContain("subject:Project");
+  expect(wrapper.get(".recipient-details").text()).not.toContain("secret@example.net");
+  wrapper.unmount();
+});
