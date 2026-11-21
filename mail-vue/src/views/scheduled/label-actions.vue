@@ -1,6 +1,6 @@
 <template>
   <el-popover :visible="open" placement="bottom-start" :width="210" :show-arrow="false" :persistent="false"
-    popper-class="mail-action-menu scheduled-more-menu" @after-enter="open && item?.focus()">
+    popper-class="mail-action-menu scheduled-more-menu" @after-enter="open && !picker?.open && item?.focus()">
     <template #reference>
       <button ref="trigger" type="button" class="mail-icon" aria-label="More email options" data-tip="More"
         aria-haspopup="menu" :aria-expanded="open" :disabled="disabled" @click="open=!open" @keydown.down.prevent="open=true">

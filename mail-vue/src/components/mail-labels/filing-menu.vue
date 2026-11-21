@@ -22,7 +22,9 @@ const emit=defineEmits(["create","manage","dismiss","leave"]);
 const input=ref(),menu=ref();
 defineExpose({focus:()=>input.value?.focus()});
 function leave(event) {
-  if (event.relatedTarget && !menu.value.contains(event.relatedTarget)) emit("leave");
+  // WebKit can focus the popover itself when a pointer clicks a checkbox.
+  const popup=menu.value.closest('.el-popper') || menu.value;
+  if (event.relatedTarget && !popup.contains(event.relatedTarget)) emit("leave");
 }
 function navigate(event) {
   if (event.isComposing || event.keyCode===229) return;
