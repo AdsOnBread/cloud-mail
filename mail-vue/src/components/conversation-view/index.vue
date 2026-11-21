@@ -39,7 +39,7 @@
     <div ref="scroll" class="conversation-body">
       <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
         <div v-if="messages.length" class="heading-actions">
-          <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" :disabled="loading" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:close-fullscreen' : 'material-symbols:open-in-full'" width="18"/></button>
+          <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" :disabled="loading" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:unfold-less' : 'material-symbols:unfold-more'" width="20"/></button>
           <button type="button" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail()"><Icon icon="material-symbols:print-outline" width="20"/></button>
           <a v-if="route.query.window!=='1'" :href="windowHref" target="_blank" rel="noopener noreferrer" aria-label="In new window" data-tip="In new window" @click="openWindow"><Icon icon="material-symbols:open-in-new" width="19"/></a>
         </div>
