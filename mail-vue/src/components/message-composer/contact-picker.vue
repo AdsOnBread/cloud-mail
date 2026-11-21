@@ -69,7 +69,13 @@ watch([()=>query.value.trim(),retry],([term],_,cleanup)=>{
     try {
       const result=await http.get('/v1/search/people',{params:{folder:'compose',field:'any',view:'picker',accountId:account,q:term},
         headers:{Authorization:token},signal:ctl.signal,noMsg:true});
-      if(current() && !ctl.signal.aborted) remote.value=result;
+      if(!current() || ctl.signal.aborted) return;
+      remote.value=result;
+      for(const person of result){
+        const id=key(person.email),selected=chosen.value.get(id);
+        if(selected && selected.name===selected.email && person.name && person.name!==person.email)
+          chosen.value.set(id,{email:selected.email,name:person.name});
+      }
     }catch{
       if(current() && !ctl.signal.aborted) failed.value=true;
     }finally{if(!ctl.signal.aborted) loading.value=false;}

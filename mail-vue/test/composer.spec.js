@@ -564,7 +564,9 @@ describe("shared inline replies", () => {
     expect(state.drafts.get(15).content).toContain("cloudmail-reply-quote");
     wrapper.unmount();
   });
-  it("reveals hidden recipient fields when validation fails", async () => {
+  it("identifies an invalid recipient and selects it for correction after the dialog closes", async () => {
+    // jsdom has no native top layer; browser checks cover Escape and OK.
+    HTMLDialogElement.prototype.showModal ??= function(){this.open=true;};
     const wrapper = composer({ inline: true });
     wrapper.vm.openDraft({
       draftId: 2,
@@ -581,6 +583,12 @@ describe("shared inline replies", () => {
       .find((b) => b.text() === "Send")
       .trigger("click");
     await flushPromises();
+    const dialog=wrapper.get('dialog[open]');
+    expect(dialog.text()).toContain('The address "invalid" in the "To" field was not recognized.');
+    await dialog.trigger("close");
+    await flushPromises();
+    const input=wrapper.get('[aria-label="To recipients"]').element;
+    expect(input.value.slice(input.selectionStart,input.selectionEnd)).toBe('invalid');
     expect(wrapper.get('[aria-label="To recipients"]').isVisible()).toBe(true);
     expect(wrapper.get('[role="alert"]').text()).toContain("Invalid email");
     expect(emailSend).not.toHaveBeenCalled();

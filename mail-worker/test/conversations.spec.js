@@ -539,6 +539,10 @@ it('finds compose correspondents only in the sending mailbox and omits received 
  await insert({name:'Arden elsewhere',send_email:'elsewhere@example.net',account_id:3});
  await insert({name:'Arden external',send_email:'external@example.net',account_id:2,user_id:2});
  const options=await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'1',q:'arden'});
+ const directory=await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',view:'picker',accountId:'1'});
+ expect(directory.map(person=>person.email)).toContain('arden@example.net');
+ expect(await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',view:'picker',accountId:'2'})).toEqual([]);
+ expect(await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'1'})).toEqual([]);
  expect(options.map(p=>p.email).sort()).toEqual(['arden@example.net','lee@example.net','ray@example.net']);
  expect(await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'2',q:'arden'})).toEqual([]);
 });

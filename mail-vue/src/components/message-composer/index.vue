@@ -125,7 +125,7 @@
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
-              :error="recipientErrors.receiveEmail"
+              :error="recipientNotice ? undefined : recipientErrors.receiveEmail"
               @contacts="openContacts('receiveEmail')"
             >
               <button
@@ -159,7 +159,7 @@
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
-              :error="recipientErrors.cc"
+              :error="recipientNotice ? undefined : recipientErrors.cc"
               @contacts="openContacts('cc')"
             />
             <RecipientField
@@ -174,7 +174,7 @@
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
-              :error="recipientErrors.bcc"
+              :error="recipientNotice ? undefined : recipientErrors.bcc"
               @contacts="openContacts('bcc')"
             />
           </div>
@@ -1703,10 +1703,6 @@ defineExpose({
   font-size: 12px;
   max-height: 60px;
   overflow: auto;
-}
-.contact-target {
-  margin-bottom: 12px;
-  color: var(--regular-text-color);
 }
 .expanded {
   top: 5vh;

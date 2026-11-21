@@ -261,7 +261,7 @@ const api=createHTTPServer(async(req,res)=>{
        const sender=accounts.find(a=>a.accountId===d.accountId);
        return {draftId:d.draftId,senderEmail:sender?.email,senderName:d.name||sender?.name,recipients:d.receiveEmail,cc:d.cc,bcc:d.bcc};
      });
-   data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,8+maxPeople);
+   data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,p.view==='picker' ? 50 : 8+maxPeople);
  }
  else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text})),hasMore:false,nextCursor:null};}
  else if(path==='/v1/messages/trash-labels'){
