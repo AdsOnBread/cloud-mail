@@ -129,7 +129,7 @@ export async function openSavedDraft(draftId, router, folder, labelId, category)
   ) {
     await router.push({
       path: "/mail",
-      query: { emailId: draft.emailId, draft: draftKey(draft), folder, labelId, ...(folder==="inbox" && category?{category}:{}) },
+      query: { emailId: draft.emailId, draft: draftKey(draft), folder, labelId, ...(router.currentRoute?.value.query.window==="1" ? {window:"1"} : {}), ...(folder==="inbox" && category?{category}:{}) },
     });
   } else await useUiStore().writerRef.openDraft(draft);
 }

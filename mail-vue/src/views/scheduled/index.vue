@@ -459,7 +459,7 @@ function retry() {
   else loadDetail();
 }
 function open(row, replace = false) {
-  const location = { name: "scheduled", query: { message: row.draftId, sender:receiptSender.value || undefined, from: originFolder.value || undefined, labelId:originLabelId.value || undefined } };
+  const location = { name: "scheduled", query: { message: row.draftId, window:route.query.window==="1" ? "1" : undefined, sender:receiptSender.value || undefined, from: originFolder.value || undefined, labelId:originLabelId.value || undefined } };
   return replace ? router.replace(location) : router.push(location);
 }
 function back() {

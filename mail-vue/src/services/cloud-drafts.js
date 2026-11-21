@@ -448,6 +448,23 @@ export async function cancelScheduledReceipt(receipt, session) {
   await sessionAPI(session.database).post('/v1/scheduled/' + receipt.draftId + '/cancel', {version:receipt.version}, {noMsg:true});
   session.check();
   userDraftStore().scheduledRevision++;
+  return {
+    async localDraft() {
+      session.check();
+      // A pull started before Cancel may already have fetched the previous cursor page.
+      const joined = locks.has(session.database);
+      await syncCloudDrafts();
+      session.check();
+      const find = () => session.database.draft.where('cloudDraftId').equals(receipt.draftId).first();
+      let row = await find();
+      if (joined && (!row || row.cloudVersion < receipt.version + 1)) {
+        await syncCloudDrafts();
+        session.check();
+        row = await find();
+      }
+      return row && row.cloudVersion >= receipt.version + 1 ? row : null;
+    },
+  };
 }
 
 async function finishSentAttempt(database, id, attemptId, messages) {

@@ -8,7 +8,7 @@
     <MailTooltip />
     <MailFeedback />
     <LabelEditor /><QuickSettings />
-    <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+    <button v-if="!conversationWindow && route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
@@ -50,7 +50,7 @@ function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.lab
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
-const conversationWindow=computed(()=>route.name==='content' && route.query.window==='1' && !!route.query.emailId);
+const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || (route.name==='scheduled' && !!route.query.message)));
 const writerRef = ref();
 const isMobile = ref(window.innerWidth < 768);
 let stopDraftSync, stopDraftList;

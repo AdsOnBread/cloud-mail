@@ -22,11 +22,12 @@ const feedback = useMailFeedback(), user = useUserStore();
 const route=useRoute();
 const messageLocation=computed(()=>{
   const notice=feedback.notice;
+  const windowQuery=route.query.window==='1' ? {window:'1'} : {};
   if (notice?.scheduledMessage) return {name:'scheduled',query:{
-    message:notice.scheduledMessage.draftId,sender:notice.scheduledMessage.accountId
+    message:notice.scheduledMessage.draftId,sender:notice.scheduledMessage.accountId,...windowQuery
   }};
   if (notice?.sentEmailId) return {name:'content',query:{emailId:notice.sentEmailId,folder:'sent',
-    ...(route.name==='content' && route.query.window==='1' ? {window:'1'} : {})}};
+    ...windowQuery}};
   return null;
 });
 async function openMessage(event,navigate) {

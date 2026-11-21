@@ -1208,12 +1208,11 @@ function scheduledFeedback(result, sendAt, session) {
     session.check();
     const origin = router.currentRoute.value.fullPath;
     const notice = feedback.notice;
-    await cancelScheduledReceipt(receipt, session);
+    const restored = await cancelScheduledReceipt(receipt, session);
     // Cancellation is committed even if the user navigates away or draft sync is offline.
     try {
-      await syncCloudDrafts();
+      const draft = await restored.localDraft();
       session.check();
-      const draft = await session.database.draft.where("cloudDraftId").equals(receipt.draftId).first();
       if (draft && !draft.deleted && feedback.notice === notice && router.currentRoute.value.fullPath === origin) {
         const {openSavedDraft} = await import("@/services/draft-list");
         session.check();
