@@ -53,6 +53,22 @@ export function recipientEntries(value) {
   return storedRecipients(value).filter(entry=>typeof entry?.address==="string" && entry.address.trim());
 }
 
+export function headerRecipients(value) {
+  return storedRecipients(value).filter(entry =>
+    typeof entry?.address === "string" && entry.address.trim() ||
+    typeof entry?.name === "string" && entry.name.trim() && Array.isArray(entry.group)
+  );
+}
+
+export function headerAddressText(entry) {
+  if (Array.isArray(entry.group)) {
+    const members = recipientEntries(entry.group).map(headerAddressText);
+    return entry.name + ":" + (members.length ? " " + members.join(", ") : "") + ";";
+  }
+  const {name, address} = entry;
+  return name && address && name !== address ? name + " <" + address + ">" : address || name || "";
+}
+
 export function normalizeRecipients(form, pending = {}) {
   const seen = new Set();
   const result = { errors: {} };

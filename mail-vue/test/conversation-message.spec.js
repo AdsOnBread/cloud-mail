@@ -140,3 +140,22 @@ it('shows the snippet when collapsed and the sender address and recipient contro
   expect(wrapper.get('.recipient-toggle').attributes('aria-description')).toBe('to me');
   wrapper.unmount();
 });
+
+it("keeps named and empty groups in message details and the printed headers", async () => {
+  const incoming = {...message, recipient:JSON.stringify([{name:"Project Team",group:[{name:"Bea",address:"bea@example.net"}]}]),
+    cc:JSON.stringify([{name:"Undisclosed recipients",group:[]}]), toEmail:"delivered@example.net", text:"Notes", unread:1};
+  vi.spyOn(useEmailStore(),"ensureDetail").mockResolvedValue(incoming);
+  const wrapper = card({message:incoming, expanded:true});
+  await flushPromises();
+  expect(wrapper.get(".recipient-details").text()).toContain("Project Team: Bea <bea@example.net>;");
+  expect(wrapper.get(".recipient-details").text()).toContain("Undisclosed recipients:;");
+  expect(wrapper.get(".recipient-toggle").text()).toContain("to Project Team");
+  const doc = document.implementation.createHTMLDocument();
+  const {appendPrintedMessage} = await import("../src/components/conversation-view/print");
+  await appendPrintedMessage(doc,incoming,1,()=>true,new AbortController().signal);
+  expect(doc.body.textContent).toContain("To: Project Team: Bea <bea@example.net>;");
+  expect(doc.body.textContent).toContain("Cc: Undisclosed recipients:;");
+  expect(doc.body.textContent).not.toContain("Delivered to:");
+  expect(doc.body.textContent).not.toContain("secret@example.net");
+  wrapper.unmount();
+});

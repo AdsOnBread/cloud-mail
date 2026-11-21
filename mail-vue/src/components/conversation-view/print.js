@@ -1,12 +1,9 @@
 import {copyBody,printDocument} from '@/utils/print-document';
 import {downloadablePart,storedKey} from '@/utils/private-files';
-import {recipientEntries} from '@/utils/recipients';
+import {headerRecipients,headerAddressText} from '@/utils/recipients';
 import {formatDetailDate} from '@/utils/day';
 import {attachmentBlob,previewMime} from '@/components/mail-attachments/content';
 
-function address({name,address}) {
-  return name && name!==address ? name+' <'+address+'>' : address;
-}
 async function loadInlineImages(template,message,current,signal,token) {
   const files=message.attList || [];
   for (const image of template.content.querySelectorAll('img')) {
@@ -38,14 +35,14 @@ async function loadInlineImages(template,message,current,signal,token) {
 export async function appendPrintedMessage(doc,message,owner,current,signal,token) {
   const article=doc.createElement('article'),header=doc.createElement('header');
   const sender=doc.createElement('strong');
-  sender.textContent=address({name:message.name,address:message.sendEmail}) || '';
+  sender.textContent=headerAddressText({name:message.name,address:message.sendEmail}) || '';
   const time=doc.createElement('time');time.textContent=message.createTime ? formatDetailDate(message.createTime) : '';
   header.append(sender,time);
   for (const [label,value] of [['To',message.recipient],['Cc',message.cc],['Bcc',message.type===1 && owner!=null && message.userId===owner ? message.bcc : null]]) {
-    const list=recipientEntries(value).map(address);
+    const list=headerRecipients(value).map(headerAddressText);
     if (list.length) { const line=doc.createElement('div');line.textContent=label+': '+list.join(', ');header.append(line); }
   }
-  if (message.type===0 && message.toEmail && !recipientEntries(message.recipient).length && !recipientEntries(message.cc).length) {
+  if (message.type===0 && message.toEmail && !headerRecipients(message.recipient).length && !headerRecipients(message.cc).length) {
     const line=doc.createElement('div');line.textContent='Delivered to: '+message.toEmail;header.append(line);
   }
   article.append(header);
