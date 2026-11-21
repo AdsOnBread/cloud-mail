@@ -21,12 +21,16 @@ export const useMailSignatures = defineStore('mail-signatures',{
       this.pending=request;
       return request;
     },
+    rememberSaved(data){
+      if(this.owner!==session() || (this.data?.version ?? 0)>data.version)return;
+      this.generation++;this.pending=null;this.checked=Date.now();this.data=data;
+    },
     async save(value){
       const owner=this.owner;
       if(owner!==session())throw new Error('The signed-in account changed.');
       const data=await http.put('/v1/signatures',value,{noMsg:true});
       if(owner!==session())throw new Error('The signed-in account changed.');
-      this.generation++;this.pending=null;this.checked=Date.now();this.data=data;
+      this.rememberSaved(data);
       return data;
     }
   }

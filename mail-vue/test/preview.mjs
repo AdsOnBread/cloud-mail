@@ -126,11 +126,12 @@ const api=createHTTPServer(async(req,res)=>{
    const folder=path.split('/').at(-1),{mode}=JSON.parse(body);systemLabels[folder]=mode;data={folder,mode};
  }else if(path==='/v1/general-settings'){
    if(req.method==='PUT'){
-     const update=JSON.parse(body);
-     if(update.version!==generalSettings.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Settings changed elsewhere.'}));return;}
+     const {signatures:edited,...update}=JSON.parse(body);
+     if(update.version!==generalSettings.version || (edited && edited.version!==signatures.version)){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Settings changed elsewhere.'}));return;}
      generalSettings={...update,version:update.version+1};
-   }
-   data=generalSettings;
+     if(edited)signatures={...edited,version:edited.version+1};
+     data=edited ? {...generalSettings,signatures} : generalSettings;
+   }else data=generalSettings;
  }else if(path==='/v1/signatures'){
    if(req.method==='PUT'){
      const update=JSON.parse(body);

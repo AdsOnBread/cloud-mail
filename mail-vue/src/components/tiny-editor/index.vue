@@ -372,10 +372,10 @@ function initEditor(initialContent) {
         if (props.collapseQuote)
           ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
         isInitialized.value = true;
-        emit("change", getContent(), messageText());
+        if (!props.signatureEditor) emit("change", getContent(), messageText());
       });
       ed.on("input change undo redo", () => {
-        if (disposed) return;
+        if (disposed || !isInitialized.value) return;
         const content = getContent();
         const text = messageText();
         emit("change", content, text);
