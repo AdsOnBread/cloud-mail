@@ -104,7 +104,7 @@ const relativeChoices=[...recentChoices,...olderChoices];
 const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'},
   ...systemFolders.filter(item=>item.id!=='all' && (!item.permission || hasPerm(item.permission))),...categoryFolders]);
 const scope=computed(()=>store.folder==='label' ? 'label:'+store.labelId : store.folder);
-const supportsUnread=computed(()=>!['draft','scheduled'].includes(form.value.scope));
+const supportsUnread=computed(()=>form.value.scope!=='draft');
 const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.dateBefore!=null);
 function reset() {
   const f=store.filters, preset=f.olderThan || f.days;

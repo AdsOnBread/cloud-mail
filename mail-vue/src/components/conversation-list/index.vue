@@ -173,7 +173,7 @@
         <RouterLink v-for="message in scheduledMatches" :key="message.draftId"
           :to="{name:'scheduled', query:{message:message.draftId,from:folder,labelId:folder==='label' ? labelId : undefined}}">
           <Icon icon="material-symbols:schedule-send-outline" width="18" />
-          <span>{{ message.subject || '(no subject)' }}</span>
+          <span :class="{'queued-unread':message.unread}">{{ message.subject || '(no subject)' }}</span>
           <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
         </RouterLink>
       </div>
@@ -597,7 +597,7 @@ async function load(
   error.value = "";
   try {
     const includeScheduled = !target.cursor && ["starred","important","label"].includes(props.folder)
-      && !search.filters.isUnread && owner.user.email && (props.folder==="starred" || account.currentAccountId);
+      && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
       conversationList({ ...params(), cursor: target.cursor }),
       includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
@@ -795,6 +795,7 @@ onUnmounted(() => {
 defineExpose({ refresh });
 </script>
 <style scoped>
+.queued-unread {font-weight:600;}
 .conversation-list {
   container-type:inline-size;
   height: 100%;

@@ -39,14 +39,11 @@
           >
             <Icon icon="material-symbols:arrow-drop-down" width="16" />
           </button>
-          <template #dropdown
-            ><el-dropdown-menu
-              ><el-dropdown-item :command="true">All</el-dropdown-item
-              ><el-dropdown-item :command="false"
-                >None</el-dropdown-item
-              ></el-dropdown-menu
-            ></template
-          >
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="option in selectionOptions" :key="option" :command="option">{{ option }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
         </el-dropdown>
         <button
           v-if="selected.length"
@@ -91,6 +88,11 @@
           </el-dropdown>
         </template>
       </template>
+      <button v-if="readTargets.length" class="mail-icon" :aria-label="readAction" :data-tip="readAction"
+        :disabled="busy || (messageId && !detail) || readTargets.some(row=>!canCancel(row) || reading.has(row.draftId))"
+        @click="setRead(readTargets, readAction==='Mark as unread', Boolean(messageId))">
+        <Icon :icon="readIcon(readAction==='Mark as read')" width="20" />
+      </button>
       <span class="total">{{ range }}</span>
       <button
         class="mail-icon"
@@ -151,6 +153,7 @@
         :data-scheduled-id="row.draftId"
         :class="{'awaiting-delivery':row.state==='scheduled'}"
         :starred="Boolean(row.starred)"
+        :unread="Boolean(row.unread)"
         show-importance
         :importance-reason="row.importanceReason"
         :busy="busy || !canCancel(row)"
@@ -176,6 +179,11 @@
         @open="open(row)"
       >
         <template v-if="canCancel(row)" #actions>
+          <button class="mail-icon" :aria-label="row.unread ? 'Mark as read' : 'Mark as unread'"
+            :data-tip="row.unread ? 'Mark as read' : 'Mark as unread'" :disabled="busy || reading.has(row.draftId)"
+            @click="setRead([row],!row.unread)">
+            <Icon :icon="readIcon(row.unread)" width="20" />
+          </button>
           <button
             class="mail-icon"
             :aria-label="'Cancel send for ' + row.subject"
@@ -256,7 +264,8 @@ const loading = ref(true),
   detailError = ref(false),
   error = ref("");
 const ordered = computed(() => {
-  let matches = rows.value;
+  // Opening the last unread result keeps its reader and pager until the user leaves.
+  let matches = search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
   if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
   if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
   if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
@@ -273,6 +282,11 @@ const item = computed(() => rows.value.find(row => row.draftId === messageId.val
 const targets = computed(() =>
   page.value.filter((row) => selected.value.includes(row.draftId)),
 );
+const readTargets = computed(()=>messageId.value ? (item.value ? [item.value] : []) : targets.value);
+const readAction = computed(()=>readTargets.value.some(row=>row.unread) ? 'Mark as read' : 'Mark as unread');
+const readIcon = unread => unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
+const reading = ref(new Set());
+const selectionOptions = ['All','None','Read','Unread','Starred','Unstarred'];
 const filtered = computed(() =>
   Boolean(search.query || Object.keys(search.filters).length),
 );
@@ -331,7 +345,8 @@ async function load() {
   listError.value = "";
   try {
     const data = await http.get("/v1/scheduled", {
-      params: { accountId: scope.value, q: search.query, ...search.filters },
+      // Scheduled is capped at 100 messages. Keep read state available for the open reader.
+      params: { accountId: scope.value, q: search.query, ...search.filters, isUnread:undefined },
       noMsg: true,
     });
     if (
@@ -343,7 +358,7 @@ async function load() {
     rows.value = data;
     offset.value = Math.min(
       offset.value,
-      Math.floor(Math.max(0, data.length - 1) / 50) * 50,
+      Math.floor(Math.max(0, ordered.value.length - 1) / 50) * 50,
     );
     selected.value = selected.value.filter((id) =>
       page.value.some((row) => row.draftId === id),
@@ -369,8 +384,10 @@ async function loadDetail() {
       request === detailRequest &&
       data.draftId === messageId.value &&
       (scope.value == null || data.accountId === scope.value)
-    )
+    ) {
       detail.value = data;
+      if (data.scheduledUnread && canCancel(data)) await setRead([data],false);
+    }
   } catch (e) {
     if (request === detailRequest) {
       detailError.value = true;
@@ -403,9 +420,36 @@ function step(direction) {
   selected.value = [];
   scroll.value?.scrollTo(0, 0);
 }
-function select(all) {
-  if (!busy.value)
-    selected.value = all ? page.value.map((row) => row.draftId) : [];
+function select(option) {
+  if (busy.value) return;
+  const matches = {
+    All:()=>true, None:()=>false, Read:row=>!row.unread, Unread:row=>row.unread,
+    Starred:row=>row.starred, Unstarred:row=>!row.starred,
+  };
+  const match=matches[option===true ? 'All' : option===false ? 'None' : option];
+  if (match) selected.value=page.value.filter(match).map(row=>row.draftId);
+}
+async function setRead(batch,unread,leaveReader=false) {
+  if (!batch.length || batch.some(row=>!canCancel(row) || reading.value.has(row.draftId))) return;
+  const owner=identity.value, session=localStorage.getItem("token"), origin=route.fullPath;
+  const current=()=>!disposed && identity.value===owner && localStorage.getItem("token")===session;
+  const messages=batch.map(({draftId,version})=>({draftId,version}));
+  for (const {draftId} of messages) reading.value.add(draftId);
+  try {
+    await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true});
+    if (!current()) return;
+    const ids=new Set(messages.map(row=>row.draftId));
+    for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
+    drafts.scheduledRevision++;
+    if (leaveReader && route.fullPath===origin) back();
+  } catch(e) {
+    if (current()) {
+      await load();
+      if (current()) error.value=e.message || 'Could not update read status.';
+    }
+  } finally {
+    for (const {draftId} of messages) reading.value.delete(draftId);
+  }
 }
 function toggle(id) {
   if (!busy.value)
