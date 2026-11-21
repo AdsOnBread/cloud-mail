@@ -32,7 +32,7 @@
         </div>
       </div>
     </div>
-    <ConnectedApps />
+    <ConnectedApps id="connected-apps" ref="connections" tabindex="-1"/>
     <div class="del-email" v-perm="'my:delete'">
       <div class="title">{{$t('deleteUser')}}</div>
       <div style="color: var(--regular-text-color);">
@@ -59,6 +59,14 @@ import {reactive, ref, defineOptions} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
+import {watchEffect} from 'vue';
+const connections=ref();
+watchEffect(()=>{
+  if(router.currentRoute.value.hash==='#connected-apps' && connections.value?.$el) {
+    connections.value.$el.focus({preventScroll:true});
+    connections.value.$el.scrollIntoView({block:'start'});
+  }
+},{flush:'post'});
 import {accountSetName} from "@/request/account.js";
 import {useAccountStore} from "@/store/account.js";
 import {useI18n} from "vue-i18n";

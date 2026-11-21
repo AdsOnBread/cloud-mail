@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .quick-settings {
   position: fixed;
-  inset: 64px 12px 16px auto;
+  inset: 64px calc(12px + var(--side-rail, 0px)) 16px auto;
   margin: 0;
   width: 320px;
   max-width: calc(100vw - 16px);

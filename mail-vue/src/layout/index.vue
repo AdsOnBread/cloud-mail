@@ -4,7 +4,10 @@
     <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="composeModal || (isMobile && !uiStore.asideShow)" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" :inert="composeModal" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main" :inert="composeModal"><Main /></main>
-    <writer ref="writerRef" :key="user.authenticatedToken" />
+    <div v-if="sideAvailable" class="side-tools" :inert="composeModal">
+      <SidePanel :key="user.authenticatedToken" v-model="contactsOpen" :account-id="sideAccountId"/>
+    </div>
+    <writer :side-inset="sideDockInset" ref="writerRef" :key="user.authenticatedToken" />
     <MailTooltip />
     <MailFeedback />
     <LabelEditor /><QuickSettings />
@@ -23,6 +26,7 @@ import {useMailLabels} from "@/store/mail-labels";
 import LabelEditor from "@/components/mail-labels/editor.vue";
 import MailFeedback from '@/components/mail-feedback/index.vue';
 import MailTooltip from '@/components/mail-tooltip/index.vue';
+import SidePanel from '@/layout/side-panel/index.vue';
 import Aside from '@/layout/aside/index.vue';
 import Header from '@/layout/header/index.vue';
 import Main from '@/layout/main/index.vue';
@@ -37,7 +41,9 @@ provide(advancedSearchOpenerKey,shallowRef(null));
 const theme=useMailTheme(),uiStore = useUiStore();
 const shellStyle=computed(()=>{
   const active=theme.active;
-  return {'--mail-row-height':uiStore.rowHeight+'px',
+  return {'--side-rail':sideAvailable.value && !uiStore.sideRailHidden ? '56px' : '0px',
+    '--side-contacts':sideAvailable.value && contactsOpen.value ? '336px' : '0px',
+    '--mail-row-height':uiStore.rowHeight+'px',
     '--mail-canvas':!['light','dark'].includes(active.id) && !uiStore.dark ? active.color : undefined,
     '--theme-image': active.image?'url("'+active.image+'")':undefined};
 });
@@ -65,6 +71,14 @@ function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRai
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
 const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
+const wideEnough = ref(window.innerWidth >= 900);
+const sideAvailable = computed(()=>wideEnough.value && !conversationWindow.value);
+const contactsOpen = ref(false);
+const sideAccountId = computed(()=>filterAccount.currentAccount?.accountId || user.user.account?.accountId || 0);
+const sideDockInset = computed(()=>sideAvailable.value && !uiStore.sideRailHidden ? 56 + (contactsOpen.value ? 320 : 0) : 0);
+watch([sideAccountId, ()=>user.authenticatedToken,sideAvailable,()=>uiStore.sideRailHidden,()=>uiStore.quickSettings],()=>{
+  contactsOpen.value=false;
+},{flush:'sync'});
 const sessionEnded = ref(false);
 function checkReaderSession(event) {
   if (!conversationWindow.value || sessionEnded.value) return;
@@ -89,6 +103,7 @@ const isMobile = ref(window.innerWidth < 768);
 let stopDraftSync, stopDraftList;
 let size = window.innerWidth >= 1024 ? 'desktop' : window.innerWidth >= 768 ? 'tablet' : 'mobile';
 function resize() {
+  wideEnough.value = window.innerWidth >= 900;
   isMobile.value = window.innerWidth < 768;
   const next = window.innerWidth >= 1024 ? 'desktop' : window.innerWidth >= 768 ? 'tablet' : 'mobile';
   if (next !== size) { uiStore.asideShow = next === 'desktop'; size = next; }
@@ -108,6 +123,7 @@ onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync
 .photo-theme.nav-peek .mail-sidebar{background:#242830}
 }
 .nav-expanded { --nav-width:256px; }
+.side-tools{display:contents}
 .mail-header { grid-column:1/-1; min-width:0; }
 .mail-sidebar { grid-column:1; grid-row:2; min-height:0; overflow:hidden; }
 .mail-main { grid-column:2; grid-row:2; min-width:0; min-height:0; padding:0 16px 16px 0; }
@@ -122,7 +138,10 @@ onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync
 }
 @media (min-width:768px) and (prefers-reduced-motion:no-preference) { .mail-layout { transition:grid-template-columns .16s cubic-bezier(.2,0,0,1); } }
 @media (prefers-reduced-motion:reduce) { .mail-sidebar { transition:none; } }
-@media(min-width:900px){.settings-open .mail-main{padding-right:344px}}
+@media(min-width:900px){
+  .mail-main{padding-right:calc(16px + var(--side-rail) + var(--side-contacts))}
+  .settings-open .mail-main{padding-right:calc(344px + var(--side-rail))}
+}
 .mail-layout.conversation-window { grid-template: minmax(0,1fr) / minmax(0,1fr); }
 .conversation-window .mail-main { grid-area:1 / 1; padding:0; }
 </style>
