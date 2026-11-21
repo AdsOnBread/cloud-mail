@@ -126,7 +126,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
-import http from "@/axios";
+import { useMailboxPeople } from "@/services/mailbox-people";
 import { useUserStore } from "@/store/user";
 import {
   maxPersonTerm,
@@ -171,11 +171,8 @@ const dirty = computed(
     chosen.value.size !== initial.size ||
     [...initial].some((id) => !chosen.value.has(id)),
 );
-const query = ref(""),
-  remote = ref([]),
-  loading = ref(false),
-  failed = ref(false),
-  retry = ref(0);
+const query = ref("");
+const {remote,loading,failed,retry} = useMailboxPeople(query,account,token,current);
 const dialog = ref(),
   confirmRemove = ref();
 onMounted(() => {
@@ -197,60 +194,13 @@ watch(
   },
   { flush: "sync" },
 );
-watch(
-  [() => query.value.trim(), retry],
-  ([term], _, cleanup) => {
-    remote.value = [];
-    failed.value = false;
-    if (!current()) return;
-    const ctl = new AbortController();
-    loading.value = true;
-    const timer = setTimeout(
-      async () => {
-        try {
-          const result = await http.get("/v1/search/people", {
-            params: {
-              folder: "compose",
-              field: "any",
-              view: "picker",
-              accountId: account,
-              q: term,
-            },
-            headers: { Authorization: token },
-            signal: ctl.signal,
-            noMsg: true,
-          });
-          if (!current() || ctl.signal.aborted) return;
-          remote.value = result;
-          for (const person of result) {
-            const id = key(person.email),
-              selected = chosen.value.get(id);
-            if (
-              selected &&
-              selected.name === selected.email &&
-              person.name &&
-              person.name !== person.email
-            )
-              chosen.value.set(id, {
-                email: selected.email,
-                name: person.name,
-              });
-          }
-        } catch {
-          if (current() && !ctl.signal.aborted) failed.value = true;
-        } finally {
-          if (!ctl.signal.aborted) loading.value = false;
-        }
-      },
-      term ? 140 : 0,
-    );
-    cleanup(() => {
-      clearTimeout(timer);
-      ctl.abort();
-    });
-  },
-  { immediate: true },
-);
+watch(remote, (people) => {
+  for (const person of people) {
+    const id = key(person.email), selected = chosen.value.get(id);
+    if (selected && selected.name === selected.email && person.name && person.name !== person.email)
+      chosen.value.set(id, {email:selected.email, name:person.name});
+  }
+});
 const visible = computed(() => {
   const entries = new Map(),
     matching = new Set(),

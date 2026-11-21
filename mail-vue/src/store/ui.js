@@ -5,6 +5,7 @@ export const useUiStore = defineStore('ui', {
         asideShow: window.innerWidth >= 1024,
         accountShow: false,
         quickSettings:false,
+        sideRailHidden:false,
         density:"default",
         inboxTabs:true,
         backgroundLoading: true,
@@ -41,6 +42,6 @@ export const useUiStore = defineStore('ui', {
         }
     },
     persist: {
-        pick: ['dark','composeFormatting','composeModes','recentEmoji','density','inboxTabs'],
+        pick: ['dark','sideRailHidden','composeFormatting','composeModes','recentEmoji','density','inboxTabs'],
     },
 })

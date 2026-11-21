@@ -1,7 +1,7 @@
 // Preserve the position of visible drafts. When space runs out, keep the most
 // recently used windows on screen and leave room for the draft switcher.
-export function dockLayout(windows, viewport, active) {
-  const edge = viewport < 768 ? 8 : 48;
+export function dockLayout(windows, viewport, active, sideInset = 0) {
+  const edge = viewport < 768 ? 8 : sideInset ? sideInset + 16 : 48;
   const gap = 12;
   const available = viewport - edge - 8;
   const sizes = new Map(

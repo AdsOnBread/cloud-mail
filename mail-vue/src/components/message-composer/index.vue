@@ -818,12 +818,18 @@ function focusWindow(){
   else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
   else editor.value?.focus();
 }
-function open() {
+function open(person) {
   if (show.value) return focusWindow();
   if (preparing.value) return;
   resetForm();
   setSender();
+  if (person && person.accountId !== form.accountId) return;
+  if (person) {
+    form.receiveEmail = [person.email];
+    rememberPerson(person);
+  }
   reveal();
+  if (person) nextTick(() => composeRoot.value?.querySelector(".subject-input")?.focus());
   startSignatureDefault();
 }
 async function openDraft(draft) {

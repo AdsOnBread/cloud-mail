@@ -49,7 +49,14 @@ function position() {
   const left=viewport?.offsetLeft || 0, top=viewport?.offsetTop || 0;
   const right=left+(viewport?.width || innerWidth),bottom=top+(viewport?.height || innerHeight);
   const above=rect.top-box.height-8,below=rect.bottom+8;
-  const preferAbove=target.closest('[data-tip-placement]')?.dataset.tipPlacement==='top';
+  const placement=target.closest('[data-tip-placement]')?.dataset.tipPlacement;
+  if (placement === 'left' && rect.left - box.width - 8 >= left) {
+    x.value=rect.left-8-box.width/2;
+    y.value=Math.max(top+4,Math.min(rect.top+(rect.height-box.height)/2,bottom-4-box.height));
+    placed.value=true;
+    return;
+  }
+  const preferAbove=placement==='top';
   x.value=Math.max(left+4+box.width/2,Math.min(rect.left+rect.width/2,right-4-box.width/2));
   y.value=Math.max(top+4,Math.min((preferAbove && above>=top+4) || below+box.height>bottom-4 ? above : below,bottom-4-box.height));
   placed.value=true;

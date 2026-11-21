@@ -61,6 +61,7 @@ import { discardDrafts } from "@/services/cloud-drafts";
 import { useMailFeedback } from "@/store/mail-feedback";
 import { useUserStore } from "@/store/user";
 import { dockLayout } from "./dock";
+const props = defineProps({ sideInset: { type:Number, default:0 } });
 const feedback = useMailFeedback(),
   user = useUserStore();
 const editors = new Map();
@@ -83,7 +84,7 @@ const windows = ref([empty()]),
   viewport = ref(window.innerWidth);
 const occupied = computed(() => windows.value.filter((item) => item.open));
 const layout = computed(() =>
-  dockLayout(occupied.value, viewport.value, active.value),
+  dockLayout(occupied.value, viewport.value, active.value, props.sideInset),
 );
 const modalOpen = computed(
   () =>
@@ -232,7 +233,7 @@ function resize() {
 onMounted(() => window.addEventListener("resize", resize));
 onBeforeUnmount(() => window.removeEventListener("resize", resize));
 defineExpose({
-  open: () => launch("open"),
+  open: (person) => launch("open", person),
   openReply: (email) => launch("openReply", email),
   openReplyAll: (email) => launch("openReplyAll", email),
   openForward: (email) => launch("openForward", email),
