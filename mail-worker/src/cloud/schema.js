@@ -1,3 +1,4 @@
+import {scheduledTrashSchema} from './scheduled-trash-schema.js';
 import {mailWordSchema} from '../service/mail-word-schema.js';
 export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
   user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
@@ -6,18 +7,24 @@ export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user
 
 // Recheck after a concurrent initializer adds the same column.
 export async function ensureRawSizeColumn(readColumns, addColumn) {
-  const exists=async()=>(await readColumns()).some(column=>column.name==='raw_size');
+  return ensureEmailColumn(readColumns,addColumn,'raw_size');
+}
+export async function ensureEmailColumn(readColumns,addColumn,name) {
+  if (!['raw_size','scheduled_draft_id'].includes(name)) throw new Error('Unknown email column');
+  const exists=async()=>(await readColumns()).some(column=>column.name===name);
   if (await exists()) return;
-  try { await addColumn('ALTER TABLE email ADD COLUMN raw_size INTEGER'); }
+  try { await addColumn('ALTER TABLE email ADD COLUMN '+name+' INTEGER'); }
   catch(error) { if (!(await exists())) throw error; }
 }
 
 export async function migrateCloud(db) {
   const readColumns=async()=>(await db.prepare('PRAGMA table_info(email)').all()).results;
   await ensureRawSizeColumn(readColumns,sql=>db.prepare(sql).run());
+  await ensureEmailColumn(readColumns,sql=>db.prepare(sql).run(),'scheduled_draft_id');
   const columns = await readColumns();
   if (!columns.some(c => c.name === 'trashed_at')) await db.prepare('ALTER TABLE email ADD COLUMN trashed_at TEXT').run();
   await db.batch([
+    ...scheduledTrashSchema.map(sql=>db.prepare(sql)),
     ...mailWordSchema().map(sql=>db.prepare(sql)),
     db.prepare(signatureSchema),
     db.prepare(systemLabelSchema),

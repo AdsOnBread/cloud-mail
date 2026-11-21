@@ -4,6 +4,7 @@ import userContext from '../security/user-context';
 import { activeUser,permission } from '../cloud/auth';
 import * as drafts from '../cloud/drafts';
 import * as mail from '../cloud/mail';
+import {trashScheduled,undoScheduledTrash} from '../cloud/scheduled-trash';
 import {schedule,scheduledList,snoozeScheduled,setScheduledLabels,setScheduledInbox,setScheduledRead,setScheduledMark,cancel} from '../cloud/scheduled';
 import { send } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
@@ -30,6 +31,8 @@ app.get(root+'/scheduled/:id',async c=>{
   if(!row.scheduledAt)return c.json({code:404,message:'Scheduled message not found.'},404);
   return c.json(result.ok(row));
 });
+app.post(root+'/scheduled/trash',async c=>c.json(result.ok(await trashScheduled(c,uid(c),await c.req.json()))));
+app.post(root+'/scheduled/undo-trash',async c=>c.json(result.ok(await undoScheduledTrash(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/labels',async c=>c.json(result.ok(await setScheduledLabels(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/snooze',async c=>c.json(result.ok(await snoozeScheduled(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/inbox',async c=>c.json(result.ok(await setScheduledInbox(c,uid(c),await c.req.json()))));

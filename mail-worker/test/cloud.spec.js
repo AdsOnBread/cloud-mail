@@ -889,6 +889,73 @@ describe('Scheduled send',()=>{
  });
 });
 
+describe('Scheduled Trash',()=>{
+ const queue=async(extra={})=>{
+   const {schedule}=await import('../src/cloud/scheduled');
+   const d=await draft(extra);
+   return {...d,...await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+7200})};
+ };
+ it('moves a scheduled reply with inline and ordinary files through Trash, Undo, and recovery to Drafts',async()=>{
+   const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');
+   const {scheduledList}=await import('../src/cloud/scheduled');
+   const {setTrashLabels,moveFromTrash}=await import('../src/cloud/trash-actions');
+   const original=await message();
+   const label=await env.db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Projects') RETURNING label_id").first('label_id');
+   const d=await queue({sendType:'reply',emailId:original.email_id,labelIds:[label],bcc:['private@example.net'],
+     content:'<b>Hello</b><img src="cid:photo">',attachments:[{filename:'notes.txt',content:'YWJj',contentType:'text/plain'},
+       {filename:'photo.png',content:'aW1n',contentType:'image/png',contentId:'photo'}]});
+   const edit=await trashScheduled(c(),1,{messages:[d]});
+   expect(await scheduledList(c(),1)).toEqual([]);
+   expect((await drafts.list(c(),1)).drafts).toEqual([]);
+   const [receipt]=(await mail.list(c(),1,{folder:'trash',hasAttachment:'1'})).messages;
+   expect(receipt).toMatchObject({scheduledDraftId:d.draftId,attachmentCount:1,labelIds:[label]});
+   expect((await mail.list(c(),2,{folder:'trash'})).messages).toEqual([]);
+   const detail=await mail.detail(c(),1,receipt.emailId);
+   expect(detail.content).toBe(d.content);
+   expect(JSON.parse(detail.bcc)[0].address).toBe('private@example.net');
+   expect(detail.attList).toHaveLength(2);
+   const file=detail.attList.find(f=>f.filename==='notes.txt');
+   expect(await new Response((await mail.attachment(c(),1,file.attId)).object.body).text()).toBe('abc');
+   await expect(drafts.file(c(),1,d.attachments[0].attachmentId)).rejects.toMatchObject({code:404});
+   await expect(moveFromTrash(env.db,1,[receipt.emailId],0)).rejects.toMatchObject({code:409});
+   await setTrashLabels(env.db,1,[receipt.emailId],[],[label]);
+   expect(await undoScheduledTrash(c(),1,edit)).toEqual({scheduled:1,drafts:0});
+   const [again]=await scheduledList(c(),1);
+   expect(again).toMatchObject({sendAt:d.sendAt,labelIds:[],attachmentCount:1});
+   expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
+   const second=await trashScheduled(c(),1,{messages:[again]});
+   const [next]=(await mail.list(c(),1,{folder:'trash'})).messages;
+   await mail.trash(c(),1,[next.emailId],'restore');
+   const recovered=await drafts.get(c(),1,d.draftId);
+   expect(recovered).toMatchObject({state:'draft',clientId:d.clientId,emailId:d.emailId,attachments:d.attachments,content:d.content,bcc:d.bcc});
+   expect(recovered.scheduledAt).toBeUndefined();
+   expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
+   await expect(undoScheduledTrash(c(),1,second)).rejects.toMatchObject({code:409});
+ });
+ it('fences dispatch and bulk changes, restores overdue mail as a draft and purges expired files',async()=>{
+   const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');
+   const {deliverDue}=await import('../src/cloud/scheduled');
+   const a=await queue({plainText:true,text:'<hello>',attachments:[{filename:'notes.txt',content:'YWJj',contentType:'text/plain'}]}), b=await queue();
+   await env.db.prepare("UPDATE cloud_drafts SET state='sending' WHERE draft_id=?").bind(b.draftId).run();
+   await expect(trashScheduled(c(),1,{messages:[a,b]})).rejects.toMatchObject({code:409});
+   expect((await mail.list(c(),1,{folder:'trash'})).messages).toEqual([]);
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(a.draftId).run();
+   const first=await trashScheduled(c(),1,{messages:[a]});
+   await deliverDue(c());
+   expect((await mail.list(c(),2,{folder:'inbox'})).messages).toEqual([]);
+   const [receipt]=(await mail.list(c(),1,{folder:'trash'})).messages;
+   expect(await mail.detail(c(),1,receipt.emailId)).toMatchObject({content:'',text:'<hello>'});
+   expect(await undoScheduledTrash(c(),1,first)).toEqual({scheduled:0,drafts:1});
+   const after=await queue({attachments:[{filename:'notes.txt',content:'YWJj',contentType:'text/plain'}]});
+   const row=await env.db.prepare('SELECT key FROM draft_files WHERE attachment_id=?').bind(after.attachments[0].attachmentId).first();
+   const last=await trashScheduled(c(),1,{messages:[after]});
+   await env.db.prepare("UPDATE email SET trashed_at=datetime('now','-31 days') WHERE scheduled_draft_id=?").bind(after.draftId).run();
+   await mail.purgeExpired(c());
+   expect((await drafts.get(c(),1,after.draftId,true)).state).toBe('deleted');
+   await expect(undoScheduledTrash(c(),1,last)).rejects.toMatchObject({code:409});
+   expect(await env.r2.get(row.key)).toBeNull();
+ });
+});
 describe('signature settings',()=>{
  it('isolates owners, keeps supported formatting and prevents a stale editor overwriting changes',async()=>{
    const {readSignatures,saveSignatures}=await import('../src/cloud/signatures');

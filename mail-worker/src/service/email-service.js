@@ -677,9 +677,11 @@ const emailService = {
 	async physicsDelete(c, params) {
 		let { emailIds } = params;
 		emailIds = emailIds.split(',').map(Number);
-		await attService.removeByEmailIds(c, emailIds);
-		await starService.removeByEmailIds(c, emailIds);
-		await orm(c).delete(email).where(inArray(email.emailId, emailIds)).run();
+		const ids=JSON.stringify(emailIds);
+		await attService.removeAttByField(c,'email_id',emailIds,[
+			c.env.db.prepare('DELETE FROM star WHERE email_id IN (SELECT value FROM json_each(?))').bind(ids),
+			c.env.db.prepare('DELETE FROM email WHERE email_id IN (SELECT value FROM json_each(?))').bind(ids)
+		]);
 	},
 
 	async physicsDeleteUserIds(c, userIds) {

@@ -79,11 +79,11 @@ export async function snoozeScheduled(c,userId,input) {
     throw new BizError('Choose a future snooze time.',400);
   return setPlacement(c,userId,messages,wakeAt);
 }
-const eligibleSelection=`FROM cloud_drafts d
+export const eligibleSelection=`FROM cloud_drafts d
   JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
   JOIN json_each(?) r ON json_extract(r.value,'$[0]')=d.draft_id AND json_extract(r.value,'$[1]')=d.version
   WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')`;
-function scheduledSelection(selection) {
+export function scheduledSelection(selection) {
   if (!Array.isArray(selection) || !selection.length || selection.length>50) throw new BizError('Invalid scheduled message selection.',400);
   const messages=selection.map(row=>[positive(row?.draftId),positive(row?.version)]);
   if (new Set(messages.map(([id])=>id)).size!==messages.length) throw new BizError('Duplicate scheduled message.',400);

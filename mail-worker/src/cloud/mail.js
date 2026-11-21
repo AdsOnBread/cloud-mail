@@ -69,7 +69,7 @@ export async function list(c,userId,p={}) {
   }
   const limit=pageSize(p.limit);
   const rows=(await c.env.db.prepare(`${folder==='inbox' ? `WITH ${filedConversations}` : ''} SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
-    ${folder==='trash' ? messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
+    ${folder==='trash' ? 'e.scheduled_draft_id,'+messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
     FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
     ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}
     WHERE ${filters.join(' AND ')} ORDER BY e.email_id DESC LIMIT ?`).bind(...args,limit+1).all()).results;

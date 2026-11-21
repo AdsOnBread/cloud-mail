@@ -67,13 +67,14 @@ async function recover(db,userId,selected,labelId,idList,record) {
   // may contain a newer reply, an older anchor, or an entirely deleted conversation.
   await ensureThreads(db,userId);
   const [mail,accounts,state,destination]=await db.batch([
-    db.prepare(`SELECT ${threadColumns},e.trashed_at,e.type,e.status FROM email e JOIN account a ON a.account_id=e.account_id
+    db.prepare(`SELECT ${threadColumns},e.trashed_at,e.type,e.status,e.scheduled_draft_id FROM email e JOIN account a ON a.account_id=e.account_id
       WHERE ${owned} AND e.trashed_at IS NOT NULL AND e.email_id IN (SELECT value FROM json_each(?))`).bind(userId,idList),
     db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId),
     db.prepare('SELECT revision,indexed_revision FROM mobile_thread_state WHERE user_id=?').bind(userId),
     db.prepare('SELECT label_id FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(userId,labelId)
   ]);
   if (labelId && !destination.results.length) throw new BizError('Label not found.',404);
+  if (mail.results.some(row=>row.scheduled_draft_id)) throw new BizError('Restore the unsent message to Drafts.',409);
   if (mail.results.length!==selected.length) throw new BizError('A selected message is no longer in Trash.',409);
   if (!state.results.length || state.results[0].indexed_revision!==state.results[0].revision) throw new BizError('Trash changed. Refresh and try again.',409);
   const active=await relatedActiveMail(db,userId,mail.results);

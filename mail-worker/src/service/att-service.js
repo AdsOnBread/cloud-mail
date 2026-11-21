@@ -219,7 +219,7 @@ const attService = {
 			.all();
 	},
 
-	async removeAttByField(c, fieldName, fieldValues) {
+	async removeAttByField(c, fieldName, fieldValues, afterDeletes = []) {
 
 		const sqlList = [];
 
@@ -243,9 +243,9 @@ const attService = {
 
 		});
 
-		const attListResult = await c.env.db.batch(sqlList);
+		const attListResult = await c.env.db.batch([...sqlList,...afterDeletes]);
 
-		const delKeyList = attListResult.flatMap(r => r.results ? r.results.map(row => row.key) : []);
+		const delKeyList = attListResult.slice(0,sqlList.length).flatMap(r => r.results ? r.results.map(row => row.key) : []);
 
 		if (delKeyList.length > 0) {
 			try {
