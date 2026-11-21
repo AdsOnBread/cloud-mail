@@ -1276,7 +1276,8 @@ function persistDraft(options) {
 }
 async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
   const draft = snapshot();
-  if (autosave && !props.inline && !hasDraftContent(draft)) {
+  const generatedOnly=draftFingerprint(draft)===automaticBaseline && !draft.labelIds?.length && !draft.mailboxStarred;
+  if (autosave && !props.inline && (!hasDraftContent(draft) || generatedOnly)) {
     if (windowContactSeed) {
       saveWindowState(props.separateWindow,{...windowState(props.separateWindow),person:null});
       windowContactSeed=false;
@@ -1316,8 +1317,9 @@ watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingF
   ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
   if(preparing.value || sending.value || !show.value) return;
   const changedFiling = form.draftId && (filing!==previousFiling || revision!==previousRevision);
-  const empty = !form.draftId && !pendingWrites && !hasDraftContent(autosaveForm.value);
-  if (!changedFiling && (empty || fingerprint===automaticBaseline ||
+  const generatedOnly=fingerprint===automaticBaseline && !form.labelIds?.length && !form.mailboxStarred;
+  const skipEmpty=!form.draftId && !pendingWrites && (!hasDraftContent(autosaveForm.value) || generatedOnly);
+  if (!changedFiling && (skipEmpty ||
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
