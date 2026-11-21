@@ -60,7 +60,7 @@
       </div>
     </article>
     <template v-else
-      ><p v-if="!rows.length && !error" class="empty">
+      ><p v-if="!rows.length && !error && !listError" class="empty">
         {{ loading ? "Loading…" : "No scheduled messages." }}
       </p>
       <button
@@ -161,8 +161,14 @@ async function load() {
     });
     if (request !== generation) return;
     rows.value = data;
-    if (item.value)
+    if (item.value) {
       item.value = data.find((m) => m.draftId === item.value.draftId) || null;
+      if (!item.value) {
+        messageRequest++;
+        detail.value = null;
+        error.value = "";
+      }
+    }
   } catch (e) {
     if (request === generation)
       listError.value = e.message || "Could not load Scheduled.";
