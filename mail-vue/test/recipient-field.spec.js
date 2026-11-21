@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, ref } from 'vue';
+import {recipientDragSession} from '../src/components/recipient-field/drag';
 import RecipientField from '../src/components/recipient-field/index.vue';
 
 vi.mock('@/axios',()=>({default:{get:vi.fn()}}));
@@ -11,6 +12,30 @@ function field() {
     template:'<RecipientField ref="entry" v-model="recipients" label="Bcc" :names="{}" />' }), {attachTo:document.body});
 }
 describe('recipient entry', () => {
+  it.each([true,false])('retains an earlier address edit when a later chip drag completes or cancels (%s)', async complete=>{
+    const wrapper=mount(defineComponent({
+      components:{RecipientField},
+      setup:()=>({to:ref(['a@example.test','b@example.test','c@example.test']),bcc:ref([])}),
+      template:'<div><RecipientField label="To" v-model="to"/><RecipientField label="Bcc" v-model="bcc"/></div>'
+    }),{attachTo:document.body,global:{provide:{[recipientDragSession]:()=>'current'}}});
+    try {
+      const [from,destination]=wrapper.findAllComponents(RecipientField);
+      await from.get('[aria-label="a@example.test"]').trigger('keydown',{key:'F',shiftKey:true});
+      await from.get('input').setValue('first@example.test, second@example.test');
+      const chip=from.get('[aria-label="b@example.test"]');
+      vi.spyOn(chip.element,'getClientRects').mockReturnValue([{}]);
+      await chip.trigger('pointerdown',{pointerType:'mouse',button:0});
+      await from.get('input').trigger('blur',{relatedTarget:chip.element});
+      const values=new Map();
+      const dataTransfer={get types(){return [...values.keys()]},setData:(k,v)=>values.set(k,v),getData:k=>values.get(k),setDragImage:vi.fn()};
+      await chip.trigger('dragstart',{dataTransfer});
+      if (complete) await destination.get('input').trigger('drop',{dataTransfer});
+      await chip.trigger('dragend');
+      const addresses=w=>w.findAll('.chip-address').map(e=>e.attributes('aria-label'));
+      expect(addresses(from)).toEqual(['first@example.test','second@example.test',...(complete?[]:['b@example.test']),'c@example.test']);
+      expect(addresses(destination)).toEqual(complete?['b@example.test']:[]);
+    } finally {wrapper.unmount();}
+  });
   it('commits an unfinished address through the public method used by Send and Save', async () => {
     const wrapper=field(); await wrapper.get('input').setValue('blind@example.com');
     wrapper.vm.entry.commit();
