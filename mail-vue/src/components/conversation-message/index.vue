@@ -36,14 +36,15 @@
         />
       </button>
       <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" aria-label="Reply to message" data-tip="Reply" @click="$emit('reply',false)"><Icon icon="material-symbols:reply" width="20" /></button>
-      <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :show-arrow="false" popper-class="mail-action-menu">
+      <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
         <button class="icon-button" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20" /></button>
         <template #dropdown><el-dropdown-menu>
-          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply', false)">Reply</el-dropdown-item>
-          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply', true)">Reply all</el-dropdown-item>
-          <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)">Forward</el-dropdown-item>
-          <el-dropdown-item divided @click="read">{{ message.unread === 0 ? "Mark read" : "Mark unread" }}</el-dropdown-item>
-          <el-dropdown-item v-perm="'email:delete'" @click="remove">Delete message</el-dropdown-item>
+          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply',false)"><Icon icon="material-symbols:reply"/>Reply</el-dropdown-item>
+          <el-dropdown-item v-if="hasReplyAll(email,account.ownAddresses)" v-perm="'email:send'" @click="$emit('reply',true)"><Icon icon="material-symbols:reply-all"/>Reply all</el-dropdown-item>
+          <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)"><Icon icon="material-symbols:forward"/>Forward</el-dropdown-item>
+          <el-dropdown-item divided v-perm="'email:delete'" @click="remove"><Icon icon="material-symbols:delete-outline"/>Delete</el-dropdown-item>
+          <el-dropdown-item @click="read"><Icon :icon="message.unread===0?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'"/>{{ message.unread===0 ? 'Mark as read' : 'Mark as unread' }}</el-dropdown-item>
+          <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
         </el-dropdown-menu></template>
       </el-dropdown>
     </div>
@@ -82,6 +83,8 @@ import { ElMessage } from "element-plus";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { useEmailStore } from "@/store/email";
+import {hasReplyAll} from '@/utils/recipients';
+import {useAccountStore} from '@/store/account';
 import MessageRecipients from "@/components/message-recipients.vue";
 import { useUiStore } from "@/store/ui";
 import { emailRead, emailDelete } from "@/request/email";
@@ -94,8 +97,8 @@ const props = defineProps({
   beforeDelete: Function,
   replying: Boolean,
 });
-const emit = defineEmits(["toggle", "reply", "deleted", "changed"]);
-const store = useEmailStore(),
+const emit = defineEmits(["toggle", "reply", "deleted", "changed", "print"]);
+const account=useAccountStore(),store = useEmailStore(),
   ui = useUiStore();
 const detail = ref(null),
   loading = ref(false),
@@ -222,11 +225,11 @@ time {
   color: var(--regular-text-color);
   flex: 1;
 }
-.icon-button { width:32px; height:32px; border-radius:50%; display:inline-grid; place-items:center; flex-shrink:0;
+.icon-button { width:40px; height:40px; border-radius:50%; display:inline-grid; place-items:center; flex-shrink:0;
   color: var(--regular-text-color);
   cursor: pointer;
 }
-.icon-button:hover { background:var(--mail-hover); }
+.icon-button:is(:hover,:focus-visible) { background:var(--mail-hover); }
 .conversation-recipients {display:block;margin:0 0 18px 48px;max-width:calc(100% - 48px)}
 .message-html { margin-left:48px; }
 .message-text {

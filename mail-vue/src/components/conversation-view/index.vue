@@ -37,7 +37,14 @@
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
     <div ref="scroll" class="conversation-body">
-      <h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
+      <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
+        <div v-if="messages.length" class="heading-actions">
+          <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:close-fullscreen' : 'material-symbols:open-in-full'" width="18"/></button>
+          <button type="button" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail()"><Icon icon="material-symbols:print-outline" width="20"/></button>
+          <a v-if="route.query.window!=='1'" :href="windowHref" target="_blank" rel="noopener noreferrer" aria-label="In new window" data-tip="In new window" @click="openWindow"><Icon icon="material-symbols:open-in-new" width="19"/></a>
+        </div>
+      </div>
+      <p v-if="printing || expanding" role="status">{{printing ? 'Preparing to print…' : 'Expanding messages…'}}</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
       </p>
@@ -81,6 +88,7 @@
         @reply="reply(message, $event)"
         @changed="updateMessage(message,$event)"
         @deleted="deleted(message)"
+        @print="printMail"
       >
         <MessageComposer
           v-if="activeTarget === message.emailId"
@@ -100,6 +108,7 @@
         <el-button
           v-perm="'email:send'"
           round
+          v-if="hasReplyAll(messages.at(-1),accountStore.ownAddresses)"
           @click="reply(messages.at(-1), true)"
           ><Icon icon="material-symbols:reply-all" width="20" />Reply
           all</el-button
@@ -110,6 +119,10 @@
   </section>
 </template>
 <script setup>
+import {hasReplyAll} from '@/utils/recipients';
+import {useUserStore} from '@/store/user';
+import {emailDetail} from '@/request/email';
+import {printMessages} from './print';
 import { useMailFeedback } from "@/store/mail-feedback";
 import {categoryFolders} from "@/utils/inbox-categories";
 const feedback = useMailFeedback();
@@ -203,6 +216,67 @@ let viewEpoch = 0,
   handledReply = false;
 const currentComposer = () =>
   Array.isArray(composer.value) ? composer.value[0] : composer.value;
+const user=useUserStore(),printing=ref(false),expanding=ref(false);
+let printRun=0,expandRun=0;
+const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expanded.value.has(m.emailId)));
+const expansionTitle=computed(()=>allExpanded.value || expanding.value ? 'Collapse all' : 'Expand all');
+const windowHref=computed(()=>{
+  const {emailId,folder,labelId,category}=route.query;
+  return router.resolve({path:'/mail',query:{emailId,folder,labelId,category,window:'1'}}).href;
+});
+function openWindow(event) {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();window.open(windowHref.value,'_blank','popup,noopener,noreferrer,width=1000,height=760');
+}
+function readerCurrent() {
+  const epoch=viewEpoch,token=localStorage.getItem('token'),owner=user.user.userId,account=accountStore.currentAccountId;
+  return ()=>epoch===viewEpoch && token===localStorage.getItem('token') && owner===user.user.userId && account===accountStore.currentAccountId;
+}
+async function allRows(current) {
+  const ids=new Map(messages.value.map(m=>[m.emailId,m]));
+  let before=hasMore.value ? cursor.value : null;
+  while (before && current()) {
+    const page=await conversationMessages({emailId:Number(route.query.emailId),before,limit:100});
+    if (!current()) return [];
+    if (page.threadId!==threadId.value || (page.hasMore && !(page.nextCursor>0 && page.nextCursor<before))) throw new Error('Conversation changed. Reopen it and try again.');
+    for (const m of page.messages) ids.set(m.emailId,m);
+    before=page.hasMore ? page.nextCursor : null;
+  }
+  return [...ids.values()].sort((a,b)=>a.emailId-b.emailId);
+}
+async function printMail(message) {
+  if (printing.value) return;
+  const run=++printRun,current=readerCurrent();
+  printing.value=true;error.value='';
+  try {
+    const rows=message ? [message] : await allRows(current);
+    if (current()) await printMessages({subject:message?.subject || threadSubject.value,owner:user.user.userId,rows,current,read:row=>emailDetail(row.emailId)});
+  } catch(e) {if(current())error.value=e.message || 'Could not print the message.';}
+  finally {if(run===printRun)printing.value=false;}
+}
+async function toggleAll() {
+  const run=++expandRun,valid=readerCurrent(),current=()=>valid() && run===expandRun;
+  if (allExpanded.value || expanding.value) {
+    expanding.value=false;
+    expanded.value=new Set([messages.value.at(-1)?.emailId,activeTarget.value].filter(Boolean));
+    return;
+  }
+  expanding.value=true;error.value='';
+  try {
+    const rows=await allRows(current);
+    if (!current()) return;
+    messages.value=rows;hasMore.value=false;cursor.value=null;
+    const pending=rows.filter(m=>!expanded.value.has(m.emailId));
+    for (let i=0;i<pending.length;i+=4) {
+      const batch=pending.slice(i,i+4);
+      const details=await Promise.all(batch.map(m=>store.detailMap[m.emailId] || emailDetail(m.emailId)));
+      if (!current()) return;
+      store.applyFullList(details);
+      expanded.value=new Set([...expanded.value,...batch.map(m=>m.emailId)]);
+    }
+  } catch(e) {if(current())error.value=e.message || 'Could not expand the conversation.';}
+  finally {if(run===expandRun)expanding.value=false;}
+}
 async function save() {
   return (await currentComposer()?.saveAndClose()) ?? true;
 }
@@ -274,7 +348,7 @@ async function load(older = false) {
 watch(
   [() => route.query.emailId, () => route.query.draft],
   () => {
-    viewEpoch++;
+    viewEpoch++;printRun++;expandRun++;printing.value=false;expanding.value=false;
     switching = false;
     handledReply = false;
     threadSubject.value = "";
@@ -372,6 +446,7 @@ async function reply(message, all, draft) {
   }
 }
 async function toggle(message) {
+  expandRun++;expanding.value=false;
   if (
     activeTarget.value === message.emailId &&
     expanded.value.has(message.emailId) &&
@@ -543,10 +618,16 @@ onUnmounted(() => {
   padding: 20px 32px 80px;
   min-height: 0;
 }
+.thread-heading {display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;}
+.thread-heading h1 {flex:1;min-width:0;}
+.heading-actions {display:flex;align-items:center}
+.heading-actions :is(button,a) {display:grid;place-items:center;height:40px;width:40px;border-radius:50%;color:var(--regular-text-color);cursor:pointer}
+.heading-actions :is(button,a):is(:hover,:focus-visible) {background:var(--mail-hover)}
+.heading-actions button:disabled {opacity:.45;cursor:default}
 h1 {
   font-size: 24px;
   font-weight: 400;
-  margin: 0 0 16px 48px;
+  margin: 0 0 0 48px;
   overflow-wrap: anywhere;
   line-height: 1.4;
 }
@@ -613,6 +694,7 @@ h1 {
     margin-left: 0;
     font-size: 22px;
   }
+  .thread-heading {flex-wrap:wrap;}
   .bottom-replies {
     margin-left: 0;
   }

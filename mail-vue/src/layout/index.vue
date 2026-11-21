@@ -1,8 +1,8 @@
 <template>
-  <div class="mail-layout" :style="shellStyle" :class="{ 'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings,'photo-theme':!!theme.active.image,'nav-compact':!uiStore.asideShow && !peek,'nav-peek':peek && !uiStore.asideShow && !isMobile }">
-    <header class="mail-header"><Header /></header>
-    <aside @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
-    <button v-if="uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
+  <div class="mail-layout" :style="shellStyle" :class="{ 'conversation-window': conversationWindow,'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings,'photo-theme':!!theme.active.image,'nav-compact':!uiStore.asideShow && !peek,'nav-peek':peek && !uiStore.asideShow && !isMobile }">
+    <header v-show="!conversationWindow" class="mail-header"><Header /></header>
+    <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
+    <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
     <main class="mail-main"><Main /></main>
     <writer ref="writerRef" />
     <MailTooltip />
@@ -50,6 +50,7 @@ function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.lab
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
+const conversationWindow=computed(()=>route.name==='content' && route.query.window==='1' && !!route.query.emailId);
 const writerRef = ref();
 const isMobile = ref(window.innerWidth < 768);
 let stopDraftSync, stopDraftList;
@@ -89,4 +90,6 @@ onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync
 @media (min-width:768px) and (prefers-reduced-motion:no-preference) { .mail-layout { transition:grid-template-columns .16s cubic-bezier(.2,0,0,1); } }
 @media (prefers-reduced-motion:reduce) { .mail-sidebar { transition:none; } }
 @media(min-width:900px){.settings-open .mail-main{padding-right:344px}}
+.mail-layout.conversation-window { grid-template: minmax(0,1fr) / minmax(0,1fr); }
+.conversation-window .mail-main { grid-area:1 / 1; padding:0; }
 </style>

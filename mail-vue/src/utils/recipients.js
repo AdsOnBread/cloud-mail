@@ -81,3 +81,11 @@ export function draftFingerprint(draft) {
   return JSON.stringify([draft.subject, draft.content, ...recipientFields.map(field => draft[field] || []),
     (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : []), ...draftFilingFingerprint(draft)]);
 }
+
+export function hasReplyAll(message, ownAddresses) {
+  if (!message) return false;
+  const own=new Set(ownAddresses.map(address=>address.toLowerCase()));
+  const people=[message.sendEmail,...addresses(message.recipient),...addresses(message.cc)]
+    .filter(Boolean).map(address=>address.trim().toLowerCase()).filter(address=>!own.has(address));
+  return new Set(people).size>1;
+}

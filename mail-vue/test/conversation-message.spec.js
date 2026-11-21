@@ -105,7 +105,7 @@ it("does not delete a reply target if its draft cannot be saved", async () => {
   await flushPromises();
   await wrapper
     .findAll("button")
-    .find((b) => b.text() === "Delete message")
+    .find((b) => b.text() === "Delete")
     .trigger("click");
   await flushPromises();
   expect(beforeDelete).toHaveBeenCalledOnce();

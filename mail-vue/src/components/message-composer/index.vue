@@ -997,7 +997,7 @@ async function moreCommand(command) {
   }
   if (command === "print") {
     commitRecipients();
-    printDraft({...form, content:editor.value.getContent()});
+    await printDraft({...form, content:editor.value.getContent()});
     return;
   }
   if (command === "enable-rich" && !form.plainText) return;
