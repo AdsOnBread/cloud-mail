@@ -10,9 +10,7 @@
 </template>
 <script setup>
 import {ref, onMounted, onBeforeUnmount, watch} from 'vue';
-import {getDocument, GlobalWorkerOptions, version} from 'pdfjs-dist';
-import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-GlobalWorkerOptions.workerSrc=workerURL;
+import {openPdf} from './pdf-document';
 const props=defineProps({blob:Blob});
 const canvas=ref(),page=ref(1),pages=ref(0),ready=ref(false),error=ref('');
 let documentTask,pdf,renderTask,revision=0,closed=false;
@@ -20,12 +18,7 @@ onMounted(async()=>{
   try {
     const data=await props.blob.arrayBuffer();
     if(closed)return;
-    const assets=new URL(import.meta.env.BASE_URL+'pdf/'+version+'/',document.baseURI).href;
-    documentTask=getDocument({
-      data,isEvalSupported:false,enableXfa:false,
-      wasmUrl:assets+'wasm/',cMapUrl:assets+'cmaps/',cMapPacked:true,
-      standardFontDataUrl:assets+'standard_fonts/',iccUrl:assets+'iccs/'
-    });
+    documentTask=openPdf(data);
     pdf=await documentTask.promise;
     if(!closed){pages.value=pdf.numPages;await render();}
   } catch {if(!closed)error.value='Preview unavailable';}

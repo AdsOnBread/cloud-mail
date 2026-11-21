@@ -23,7 +23,7 @@
 <script setup>
 import {ref,shallowRef,onMounted,onBeforeUnmount,defineAsyncComponent} from 'vue';
 import {Icon} from '@iconify/vue';
-import http from '@/axios';
+import {attachmentBlob,previewMime,previewKind,saveAttachment} from './content';
 const PdfPreview=defineAsyncComponent(()=>import('./pdf-preview.vue'));
 const props=defineProps({file:{type:Object,required:true}});
 defineEmits(['close']);
@@ -32,23 +32,12 @@ const controller=new AbortController();
 async function load(){
   error.value='';
   try{
-    const path=props.file.attachmentId ? '/v1/drafts/attachments/'+encodeURIComponent(props.file.attachmentId) : '/v1/attachments/'+props.file.attId;
-    const data=await http.get(path+'/content',{responseType:'blob',signal:controller.signal,noMsg:true});
+    const data=await attachmentBlob(props.file,controller.signal);
     if(controller.signal.aborted)return;
-    let mime=data.type.split(';')[0].toLowerCase();
-    const name=props.file.filename;
-    if(!mime || mime==='application/octet-stream'){
-      const bytes=new Uint8Array(await data.slice(0,12).arrayBuffer());
-      if(controller.signal.aborted)return;
-      const prefix=String.fromCharCode(...bytes);
-      if(bytes[0]===0xff && bytes[1]===0xd8 && bytes[2]===0xff)mime='image/jpeg';
-      else if(prefix.startsWith('\x89PNG\r\n\x1a\n'))mime='image/png';
-      else if(/^GIF8[79]a/.test(prefix))mime='image/gif';
-      else if(prefix.startsWith('RIFF') && prefix.slice(8)==='WEBP')mime='image/webp';
-    }
-    if(/^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(mime))kind.value='image';
-    else if(mime==='application/pdf' || /\.pdf$/i.test(name))kind.value='pdf';
-    else if(mime.startsWith('text/') || ['application/json','application/xml'].includes(mime) || /\.(txt|csv|md|log)$/i.test(name)){
+    const mime=await previewMime(data);
+    if(controller.signal.aborted)return;
+    kind.value=previewKind(mime,props.file.filename);
+    if(kind.value==='text'){
       sample.value=await data.slice(0,256*1024).text();
       if(controller.signal.aborted)return;
       if(data.size>256*1024)sample.value+='\n…';
@@ -58,13 +47,7 @@ async function load(){
     if(kind.value==='image')objectURL.value=URL.createObjectURL(data.slice(0,data.size,mime));
   }catch{if(!controller.signal.aborted)error.value='Could not load attachment.';}
 }
-function download(){
-  const link=document.createElement('a');
-  // A user can close the preview immediately after starting a download.
-  const url=URL.createObjectURL(blob.value);
-  link.href=url;link.download=props.file.filename;link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),30000);
-}
+function download(){ saveAttachment(blob.value,props.file.filename); }
 onMounted(()=>{dialog.value.showModal();load();});
 onBeforeUnmount(()=>{controller.abort();dialog.value?.close();if(objectURL.value)URL.revokeObjectURL(objectURL.value);});
 </script>

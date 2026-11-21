@@ -65,46 +65,20 @@
           :resolve-file-url="fileURL"
         />
         <pre v-else>{{ detail.text || row.preview }}</pre>
-        <section v-if="files.length" class="files" aria-label="Attachments">
-          <strong
-            >{{ files.length }}
-            {{ files.length === 1 ? "attachment" : "attachments" }}</strong
-          >
-          <div class="file-list">
-            <div v-for="file in files" :key="file.attachmentId" class="file">
-              <button
-                :aria-label="'Preview ' + file.filename"
-                @click="preview = file"
-              >
-                <Icon
-                  icon="material-symbols:description-outline"
-                  width="19"
-                />{{ file.filename }}
-              </button>
-              <button
-                :aria-label="'Download ' + file.filename"
-                data-tip="Download"
-                @click="download(file)"
-              >
-                <Icon icon="material-symbols:download" width="18" />
-              </button>
-            </div>
-          </div>
-        </section>
+        <AttachmentTiles :key="detail.draftId" :files="files" @error="$emit('error',$event)"/>
       </template>
     </div>
-    <FilePreview v-if="preview" :file="preview" @close="preview = null" />
   </article>
 </template>
 <script setup>
 import {labelStyle} from "@/components/mail-labels/colors";
 import {formatDetailDate} from "@/utils/day";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { Icon } from "@iconify/vue";
 import http from "@/axios";
 import MailImportance from "@/components/mail-importance.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
-import FilePreview from "@/components/mail-attachments/preview.vue";
+import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 const props = defineProps({
   row: Object,
   labels: Array,
@@ -114,8 +88,7 @@ const props = defineProps({
   canCancel: Boolean,
   busy: Boolean,
 });
-const emit = defineEmits(["cancel", "error", "star", "importance"]);
-const preview = ref(null);
+defineEmits(["cancel", "error", "star", "importance"]);
 const files = computed(
   () => props.detail?.attachments?.filter((f) => !f.contentId) || [],
 );
@@ -151,18 +124,6 @@ async function fileURL(id) {
       { responseType: "blob", noMsg: true },
     ),
   );
-}
-async function download(file) {
-  try {
-    const url = await fileURL(file.attachmentId);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.filename;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  } catch (error) {
-    emit("error", error.message || "Could not download attachment.");
-  }
 }
 </script>
 <style scoped>
@@ -262,41 +223,11 @@ h1 {
 }
 .timing button:active {background:color-mix(in srgb,var(--scheduled-action) 16%,transparent);}
 .timing button:disabled {opacity:.55;cursor:default;}
-.file button:hover {background:var(--mail-hover);}
 pre {
   white-space: pre-wrap;
   font:
     14px/1.5 Arial,
     sans-serif;
-}
-.files {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--light-border-color);
-  font-size: 13px;
-}
-.file-list {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-.file {
-  display: inline-flex;
-  max-width: 100%;
-  border: 1px solid var(--light-border-color);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.file button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  color: inherit;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-  min-width: 0;
 }
 @media (max-width: 767px) {
   .scheduled-message {

@@ -129,16 +129,7 @@
             :resolve-file-url="inlineFileURL"
           />
           <pre v-else>{{ detail.text }}</pre>
-          <button
-            v-for="file in (detail.attList||[]).filter(downloadablePart)"
-            :key="file.attId"
-            class="attachment"
-            @click="download(file)"
-          >
-            <Icon icon="material-symbols:attach-file" width="18" />{{
-              file.filename
-            }}
-          </button>
+          <AttachmentTiles :key="detail.emailId" :files="(detail.attList || []).filter(downloadablePart)" @error="error=$event"/>
         </div>
       </article>
       <p v-else-if="loading" role="status">Loading message…</p>
@@ -228,6 +219,7 @@ import MovePicker from "@/components/mail-labels/move.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
+import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import {downloadablePart} from "@/utils/private-files";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
@@ -536,19 +528,6 @@ async function inlineFileURL(key) {
   if (!file) throw new Error("Attachment unavailable.");
   return URL.createObjectURL(await attachmentBlob(file));
 }
-async function download(file) {
-  try {
-    const blob = await attachmentBlob(file);
-    const url = URL.createObjectURL(blob),
-      link = document.createElement("a");
-    link.href = url;
-    link.download = file.filename || "attachment";
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) {
-    error.value = e.message || "Could not download attachment.";
-  }
-}
 onBeforeUnmount(() => {
   disposed = true;
   revision++;
@@ -608,8 +587,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   border-radius: 18px;
 }
-.toolbar-text:hover,
-.attachment:hover {
+.toolbar-text:hover {
   background: var(--mail-hover);
 }
 .trash-detail {
@@ -649,15 +627,6 @@ pre {
     sans-serif;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.attachment {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--light-border-color);
-  border-radius: 8px;
-  cursor: pointer;
 }
 [role="alert"] {
   padding: 0 16px;

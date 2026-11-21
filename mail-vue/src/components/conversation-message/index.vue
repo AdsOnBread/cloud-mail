@@ -68,18 +68,8 @@
       </div>
       <ShadowHtml class="message-html" v-if="email.content" :html="email.content" />
       <pre v-else class="message-text">{{ email.text }}</pre>
-      <div v-if="attachedFiles.length" class="attachments">
-        <div v-for="file in attachedFiles" :key="file.attId" class="attachment">
-          <button class="attachment-open" :aria-label="'Preview '+file.filename" @click="previewFile=file">
-            <Icon icon="material-symbols:attach-file" width="22"/>
-            <span>{{ file.filename || 'Attachment' }}<small v-if="file.size!=null">{{ formatBytes(file.size) }}</small></span>
-          </button>
-          <button class="icon-button" data-tip="Download" :aria-label="'Download '+file.filename" @click="download(file)"><Icon icon="material-symbols:download" width="20"/></button>
-        </div>
-      </div>
-
+      <AttachmentTiles class="attachments" :files="attachedFiles" @error="showFileError"/>
     </template>
-    <FilePreview v-if="previewFile" :file="previewFile" @close="previewFile=null"/>
     <slot />
   </article>
 </template>
@@ -89,16 +79,15 @@ const feedback = useMailFeedback();
 import { ref, computed, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
-import FilePreview from "@/components/mail-attachments/preview.vue";
+import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { useEmailStore } from "@/store/email";
 import MessageRecipients from "@/components/message-recipients.vue";
 import { useUiStore } from "@/store/ui";
 import { emailRead, emailDelete } from "@/request/email";
 import { starAdd, starCancel } from "@/request/star";
-import { privateFileURL, downloadablePart } from "@/utils/private-files";
+import { downloadablePart } from "@/utils/private-files";
 import { formatDetailDate } from "@/utils/day";
-import { formatBytes } from "@/utils/file-utils";
 const props = defineProps({
   message: Object,
   expanded: Boolean,
@@ -112,7 +101,7 @@ const detail = ref(null),
   loading = ref(false),
   error = ref(""),
   busy = ref(false);
-const previewFile = ref(null);
+function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
 async function load() {
@@ -174,18 +163,6 @@ async function remove() {
     delete store.detailMap[props.message.emailId];
     emit("deleted");
   });
-}
-async function download(file) {
-  try {
-    const url = await privateFileURL(file.key);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.filename || "attachment";
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  } catch (e) {
-    ElMessage.error(e.message);
-  }
 }
 </script>
 <style scoped>
@@ -258,35 +235,7 @@ time {
   font: 14px/1.6 Arial;
   padding-left: 48px;
 }
-.attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 20px 0 0 48px;
-}
-.attachment {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--light-border-color);
-  border-radius: 10px;
-  color: inherit;
-  cursor: pointer;
-  max-width: 100%;
-}
-.attachment-open {display:flex;align-items:center;gap:10px;min-width:0;color:inherit;text-align:left;cursor:pointer}
-.attachment-open svg {flex:none}
-.attachment-open span {white-space:nowrap}
-.attachment span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.attachment small {
-  display: block;
-  margin-top: 4px;
-  color: var(--regular-text-color);
-}
+.attachments {margin-inline-start:48px}
 .delivery-status {
   padding: 12px;
   color: var(--el-color-warning);
