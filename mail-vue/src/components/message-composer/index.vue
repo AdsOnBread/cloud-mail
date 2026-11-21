@@ -570,11 +570,23 @@ function toggleMinimized() {
   minimized.value = true;
   nextTick(() => composeRoot.value?.querySelector(".compose-caption")?.focus());
 }
+let focusAfterResize;
+function setFullScreen(value) {
+  if (expanded.value === value) return;
+  const resumeBody = editor.value?.rememberSelection?.();
+  focusAfterResize = () => {
+    if (![form.receiveEmail,form.cc,form.bcc].some(addresses => addresses.length)) focusRecipients("receiveEmail");
+    else if (!form.subject.trim()) composeRoot.value?.querySelector(".subject-input")?.focus();
+    else if (resumeBody) resumeBody();
+    else editor.value?.focus();
+  };
+  expanded.value = value;
+}
 function toggleFullScreen() {
   if (minimized.value) {
     expanded.value = true;
     restoreCompose();
-  } else expanded.value = !expanded.value;
+  } else setFullScreen(!expanded.value);
 }
 function collapseAddresses() {
   if (!props.inline) addressExpanded.value = false;
@@ -753,6 +765,7 @@ function startSignatureDefault(){
 }
 function resetForm() {
   clearFormatCaption();
+  focusAfterResize=undefined;
   fileGeneration++;
   photosOpen.value = false;
   photoSelection = undefined;
@@ -1013,7 +1026,7 @@ async function moreCommand(command) {
   if (command === "fullscreen") {
     const fullScreen = !composeMode.value.fullScreen;
     uiPreferences.composeModes[owner] = {...composeMode.value, fullScreen};
-    if (desktop.value && !props.inline) expanded.value = fullScreen;
+    if (desktop.value && !props.inline) setFullScreen(fullScreen);
     return;
   }
   // An editor command already has a live selection. Switch immediately so a
@@ -1413,6 +1426,14 @@ function keydown(event) {
 }
 let previousFocus;
 watch(modal,async active=>{
+  const focusWriting = focusAfterResize;
+  focusAfterResize=undefined;
+  if (focusWriting) {
+    await nextTick();
+    if (mounted && show.value && !minimized.value && props.dockActive && !props.dockHidden && modal.value===active)
+      focusWriting();
+    return;
+  }
   if(active){
     previousFocus=document.activeElement;
     await nextTick();
@@ -1501,7 +1522,7 @@ defineExpose({
 .compose-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 199;
 }
 .send {
@@ -1539,7 +1560,8 @@ defineExpose({
 }
 .compose-caption {
   font-size: 14px;
-  font-weight: 600;
+  line-height:20px;
+  font-weight: 500;
   color: inherit;
   cursor: pointer;
   flex: 1;
@@ -1552,7 +1574,7 @@ defineExpose({
 .window-actions {
   flex: none;
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 .window-actions button {
   display: flex;
@@ -1560,7 +1582,7 @@ defineExpose({
   justify-content: center;
   color: var(--regular-text-color);
   width: 24px;
-  height: 28px;
+  height: 24px;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -1715,16 +1737,16 @@ defineExpose({
   overflow: auto;
 }
 .expanded {
-  top: 5vh;
-  bottom: 5vh;
-  left: 10vw;
-  right: 10vw;
+  top: 40px;
+  bottom: 29px;
+  left: min(150px, calc((100vw - 600px) / 2));
+  right: min(150px, calc((100vw - 600px) / 2));
   width: auto;
   max-width: none;
 }
 .expanded .write-box {
   height: 100%;
-  border-radius: 8px;
+  border-radius: 20px;
 }
 .expanded .compose-container {
   height: calc(100% - 40px);
