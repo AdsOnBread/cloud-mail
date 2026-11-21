@@ -209,6 +209,7 @@ async function launch(method, arg, extra) {
   if (props.separateWindow && separateIdle.value) {
     const state = windowState(props.separateWindow);
     saveWindowState(props.separateWindow,{...state,idle:false,draftId:arg?.draftId || null});
+    notifyWindowDraft(props.separateWindow);
     separateIdle.value = false;
   }
   let item = windows.value.find((row) => !row.open);
