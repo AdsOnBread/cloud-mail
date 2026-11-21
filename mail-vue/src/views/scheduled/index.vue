@@ -94,6 +94,10 @@
         @click="setRead(readTargets, readAction==='Mark as unread', Boolean(messageId))">
         <Icon :icon="readIcon(readAction==='Mark as read')" width="20" />
       </button>
+      <button v-if="readTargets.length" class="mail-icon" :aria-label="inboxAction" :data-tip="inboxAction"
+        :disabled="busy || readTargets.some(row=>!canCancel(row))" @click="fileInbox(readTargets, moveIntoInbox)">
+        <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
+      </button>
       <span class="total">{{ range }}</span>
       <button
         class="mail-icon"
@@ -180,6 +184,9 @@
         @open="open(row)"
       >
         <template v-if="canCancel(row)" #actions>
+          <button class="mail-icon" aria-label="Archive" data-tip="Archive" :disabled="busy || !row.inbox" @click="fileInbox([row],false)">
+            <Icon icon="material-symbols:archive-outline" width="20"/>
+          </button>
           <button class="mail-icon" :aria-label="row.unread ? 'Mark as read' : 'Mark as unread'"
             :data-tip="row.unread ? 'Mark as read' : 'Mark as unread'" :disabled="busy || reading.has(row.draftId)"
             @click="setRead([row],!row.unread)">
@@ -226,6 +233,7 @@ import { useUserStore } from "@/store/user";
 import { userDraftStore } from "@/store/draft";
 import { useMailFeedback } from "@/store/mail-feedback";
 import { useMailSearchStore } from "@/store/mail-search";
+import {fileScheduledMessages} from "@/services/scheduled-filing";
 import {pendingScheduledReads} from "@/services/scheduled-read";
 import { syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
@@ -247,8 +255,8 @@ function visibleLabels(row) {
   return labelStore.items.filter(label=>label.messages!=="hide" && row.labelIds?.includes(label.id));
 }
 const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
-const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important"].includes(route.query.from) ? route.query.from : "");
-const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label"}[originFolder.value] || "Scheduled"));
+const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important","inbox"].includes(route.query.from) ? route.query.from : "");
+const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label",inbox:"Inbox"}[originFolder.value] || "Scheduled"));
 const scope = computed(() =>
   account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
 );
@@ -269,6 +277,7 @@ const ordered = computed(() => {
   // Opening the last unread result keeps its reader and pager until the user leaves.
   let matches = search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
   if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
+  if (originFolder.value === "inbox") matches=matches.filter(row=>row.inbox);
   if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
   if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
   return latestFirst.value && !originFolder.value ? [...matches].reverse() : matches;
@@ -285,6 +294,8 @@ const targets = computed(() =>
   page.value.filter((row) => selected.value.includes(row.draftId)),
 );
 const readTargets = computed(()=>messageId.value ? (item.value ? [item.value] : []) : targets.value);
+const moveIntoInbox=computed(()=>readTargets.value.some(row=>!row.inbox));
+const inboxAction=computed(()=>moveIntoInbox.value ? 'Move to Inbox' : 'Archive');
 const readAction = computed(()=>readTargets.value.some(row=>row.unread) ? 'Mark as read' : 'Mark as unread');
 const readIcon = unread => unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
 const reading = computed(()=>pendingScheduledReads(db.value,user.authenticatedToken));
@@ -478,6 +489,22 @@ function toggle(id) {
     selected.value = selected.value.includes(id)
       ? selected.value.filter((key) => key !== id)
       : [...selected.value, id];
+}
+async function fileInbox(batch,inbox) {
+  if (busy.value || !batch.length || batch.some(row=>!canCancel(row))) return;
+  const owner=identity.value, session=localStorage.getItem('token'), navigation=navigations;
+  const current=()=>!disposed && identity.value===owner && session===localStorage.getItem('token');
+  busy.value=true;
+  error.value='';
+  try {
+    await fileScheduledMessages(batch,inbox);
+    if (!current()) return;
+    const ids=new Set(batch.map(row=>row.draftId));
+    for (const row of rows.value) if (ids.has(row.draftId)) row.inbox=Number(inbox);
+    if (!inbox && originFolder.value==='inbox' && navigation===navigations && ids.has(messageId.value)) back();
+  } catch(e) {
+    if (current()) error.value=e.message || 'Could not change Inbox placement.';
+  } finally {busy.value=false;}
 }
 async function mark(row, field, value) {
   if (busy.value || !canCancel(row)) return;

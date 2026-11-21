@@ -18,6 +18,7 @@ export const userDraftStore = defineStore('draft', {
     state: () => ({
         refreshList: 0,
         scheduledRevision: 0,
+        scheduledInboxUnread: 0,
         setDraft: {},
         items: [],
         threads: {},

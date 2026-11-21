@@ -153,7 +153,7 @@
         <Icon icon="material-symbols:chevron-right" width="20" />
       </button>
     </div>
-    <InboxTabs v-if="category" :value="category" :panel-id="panelId" :unread="categoryUnread" @select="selectCategory"/>
+    <InboxTabs v-if="category" :value="category" :panel-id="panelId" :unread="{...categoryUnread,primary:(categoryUnread.primary || 0)+drafts.scheduledInboxUnread}" @select="selectCategory"/>
     <p v-if="error" role="alert" class="list-status">
       {{ error }} <button @click="refresh">Retry</button>
     </p>
@@ -596,7 +596,7 @@ async function load(
   loading.value = true;
   error.value = "";
   try {
-    const includeScheduled = !target.cursor && ["starred","important","label"].includes(props.folder)
+    const includeScheduled = !target.cursor && (["starred","important","label"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
       && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
       conversationList({ ...params(), cursor: target.cursor }),

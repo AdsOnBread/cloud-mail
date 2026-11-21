@@ -6,7 +6,7 @@
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
                       :class="activeFolder === 'email' ? 'choose-item' : ''">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread" class="menu-name draft-count">{{ unread }}</span>
+          <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread + drafts.scheduledInboxUnread" class="menu-name draft-count">{{ unread + drafts.scheduledInboxUnread }}</span>
         </el-menu-item>
         <template v-for="hidden in [false,true]" :key="String(hidden)">
           <el-menu-item v-if="hidden" index="more" :aria-expanded="more" :aria-label="more ? 'Less' : 'More'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
@@ -258,12 +258,15 @@ async function refreshScheduledCount(){
   const request=++countRequest;
   if(!user.user.email || !accountStore.currentAccountId)return;
   try {
-    const result=await http.get('/v1/scheduled',{params:{countOnly:1,accountId:accountStore.currentAccount.allReceive?undefined:accountStore.currentAccountId},noMsg:true});
-    if(request===countRequest)scheduledCount.value=result.count;
+    const result=await http.get('/v1/scheduled',{params:{countOnly:1,includeInboxUnread:1,accountId:accountStore.currentAccount.allReceive?undefined:accountStore.currentAccountId},noMsg:true});
+    if(request===countRequest){
+      scheduledCount.value=result.count;
+      drafts.scheduledInboxUnread=result.inboxUnread || 0;
+    }
   }catch{/* Retain this mailbox's last successful count while offline. */}
 }
-watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>accountStore.currentAccount.allReceive],()=>{
-  scheduledCount.value=0;
+watch([()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentAccountId,()=>accountStore.currentAccount.allReceive],()=>{
+  scheduledCount.value=0;drafts.scheduledInboxUnread=0;
   refreshScheduledCount();
 },{immediate:true,flush:'sync'});
 watch(()=>drafts.scheduledRevision,refreshScheduledCount);
