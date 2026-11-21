@@ -3,13 +3,13 @@
     v-model="visible"
     :label="label"
     :tooltip="tooltip"
-    :end="actions"
+    centered
     :panel-class="
       actions
         ? 'format-more-menu'
         : iconsOnly
           ? 'format-align-menu'
-          : 'format-type-menu'
+          : 'format-type-menu ' + (sizePreview ? 'format-size-menu' : 'format-font-menu')
     "
     @open="emit('open')"
     @ready="onShow"
@@ -61,6 +61,7 @@ const props = defineProps({
   choices: Array,
   value: String,
   iconsOnly: Boolean,
+  sizePreview: Boolean,
 });
 const emit = defineEmits(["open", "choose"]);
 const visible = ref(false),
@@ -132,7 +133,7 @@ function navigate(event) {
 .choices {
   max-height: min(370px, 55vh);
   overflow: auto;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 .choices button {
   display: flex;
@@ -162,10 +163,18 @@ function navigate(event) {
   margin-right: 12px;
 }
 :global(.format-type-menu) {
-  width: 174px;
+  width: 195px;
 }
+:global(.format-popup.format-size-menu) { width: 173px; }
+.format-type-menu .choices button {
+  padding: 6px 12px 6px 16px;
+  line-height: 20px;
+}
+.format-type-menu .check-slot { width: 16px; margin-right: 16px; }
+.format-align-menu .choices { padding: 4px 0; }
+.format-align-menu .choices button { height: 28px; padding: 4px 8px; }
 :global(.format-align-menu) {
-  width: 44px;
+  width: 36px;
 }
 :global(.format-more-menu) {
   min-width: 44px;

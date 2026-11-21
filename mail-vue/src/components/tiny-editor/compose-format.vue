@@ -21,6 +21,7 @@
           :key="picker.label"
           :label="picker.label"
           :tooltip="tip(picker)"
+          :size-preview="picker.command === 'FontSize'"
           :choices="picker.options"
           :value="
             picker.command === 'FontName' ? fontValue : sizes[sizeIndex][1]
@@ -52,6 +53,7 @@
           role="dialog"
           panel-label="Text and background colors"
           panel-class="format-palette"
+          centered
           @open="openColors"
           @ready="focusColors"
         >
@@ -61,7 +63,7 @@
               width="14"
           /></template>
           <div ref="palette" class="palette-columns">
-            <div v-for="group in colorGroups" :key="group.command">
+            <div v-for="group in colorGroups" :key="group.command" class="color-column">
               <div class="palette-heading">{{ group.label }}</div>
               <div
                 role="grid"
@@ -102,10 +104,11 @@
               <button
                 :aria-label="'Default ' + group.label.toLowerCase()"
                 class="default-color"
+                :data-tip="'Default '+group.label.toLowerCase()"
                 @mousedown.prevent
                 @click="chooseColor(group.command, null)"
               >
-                Default
+                <Icon icon="material-symbols:format-clear" width="16" aria-hidden="true"/>
               </button>
             </div>
           </div>
@@ -709,51 +712,50 @@ button {
   white-space: nowrap;
 }
 :global(.format-palette.format-popup) {
-  width: min(326px, calc(100vw - 12px));
-  padding: 10px;
+  width: 324px;
+  padding: 4px;
 }
 .palette-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
 }
+.color-column {position: relative; min-width: 0;}
 .palette-heading {
-  font:
-    500 13px/20px Arial,
-    sans-serif;
-  margin-bottom: 4px;
+  padding: 8px;
+  font: 400 14px/20px Arial, sans-serif;
   color: var(--el-text-color-primary);
 }
-.swatches {
-  display: grid;
-  gap: 1px;
-}
+.swatches {padding: 1px 7px 7px;}
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 1px;
 }
+.swatch-row:nth-child(-n+2) {margin-bottom: 6px;}
 .swatch {
   box-sizing: border-box;
   width: 100%;
-  height: 17px;
-  border: 1px solid #0002;
+  height: 18px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
   padding: 0;
 }
-.swatch:hover,
-.swatch:focus-visible {
-  outline: 2px solid var(--el-text-color-primary);
-  outline-offset: -1px;
-  z-index: 1;
+.swatch:hover, .swatch:focus-visible {
+  border-color: var(--el-text-color-primary);
+  outline: 0;
 }
 .default-color {
-  margin-top: 6px;
-  padding: 4px 6px;
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 2px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border-radius: 4px;
+  opacity: 0;
 }
-.default-color:focus-visible {
-  outline: 2px solid var(--el-color-primary);
-}
+.color-column:hover .default-color, .default-color:focus-visible {opacity: 1;}
+.default-color:focus-visible {outline: 2px solid var(--el-color-primary);}
+@media (hover: none) { .default-color {opacity: 1;} }
 @container compose-editor (max-width:440px) {
   .font-name {
     min-width: 0;

@@ -44,7 +44,7 @@ const props = defineProps({
   panelLabel: String,
   role: { type: String, default: "menu" },
   panelClass: String,
-  end: Boolean,
+  centered: Boolean,
 });
 const emit = defineEmits(["update:modelValue", "open", "ready"]);
 const id = useId(),
@@ -61,12 +61,13 @@ function position() {
   const right =
       left + (viewport?.width || document.documentElement.clientWidth),
     bottom = top + (viewport?.height || document.documentElement.clientHeight);
-  const x = props.end ? anchor.right - box.width : anchor.left;
-  const above = anchor.top - 6 - box.height;
+  const x = props.centered ? anchor.left + (anchor.width - box.width) / 2 : anchor.left;
+  const gap = props.centered ? 8 : 6;
+  const above = anchor.top - gap - box.height;
   const y =
-    above >= top + 6 || anchor.bottom + box.height + 6 > bottom
+    above >= top + 6 || anchor.bottom + box.height + gap > bottom
       ? above
-      : anchor.bottom + 6;
+      : anchor.bottom + gap;
   positionStyle.value = {
     maxHeight: Math.max(0, bottom - top - 12) + "px",
     maxWidth: Math.max(0, right - left - 12) + "px",
@@ -144,9 +145,9 @@ watch(
   overflow: auto;
   background: var(--mail-surface);
   color: var(--el-text-color-primary);
-  border: 1px solid var(--light-border-color);
-  border-radius: 6px;
-  box-shadow: 0 2px 6px #0003;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, .3), 0 2px 6px 2px rgba(60, 64, 67, .15);
   animation: format-popup-in 0.1s ease-out;
 }
 @keyframes format-popup-in {
