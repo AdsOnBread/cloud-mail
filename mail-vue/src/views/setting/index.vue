@@ -90,7 +90,7 @@ watch(dirty, changed=>{
   if (changed) window.addEventListener('beforeunload',beforeUnload);
   else window.removeEventListener('beforeunload',beforeUnload);
 });
-watch(()=>[user.user.userId,user.authenticatedToken],()=>{
+watch([()=>user.user.userId,()=>user.authenticatedToken],()=>{
   baseline.value=null; manageSignatures.value=false;
   if (user.user.userId && user.authenticatedToken) load();
 },{immediate:true});
