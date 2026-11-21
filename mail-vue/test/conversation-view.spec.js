@@ -4,12 +4,17 @@ import { createPinia, setActivePinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
 import ConversationView from "../src/components/conversation-view/index.vue";
 import { conversationMessages } from "../src/request/conversation";
+import { userDraftStore } from "../src/store/draft";
 import { useEmailStore } from "../src/store/email";
 const state = vi.hoisted(() => ({
   save: vi.fn(async () => true),
   reply: vi.fn(),
   all: vi.fn(),
   draft: vi.fn(),
+  readSaved: vi.fn(),
+}));
+vi.mock("../src/services/draft-list", () => ({
+  readSavedDraft: state.readSaved,
 }));
 vi.mock("../src/request/conversation", () => ({
   conversationMessages: vi.fn(),
@@ -167,16 +172,25 @@ describe("conversation navigation and inline targets", () => {
     wrapper.unmount();
   });
   it("restores a saved inline draft into its anchor and refreshes sent replies without reopening context-menu reply", async () => {
-    useEmailStore().pendingReplyDraft = {
+    state.readSaved.mockResolvedValue({
       emailId: 10,
       inlineReply: true,
       content: "Saved",
       draftId: 3,
-    };
+    });
+    userDraftStore().items = [
+      {
+        emailId: 10,
+        draftId: 3,
+        cloudDraftId: 5,
+        reply: true,
+        preview: "Saved",
+      },
+    ];
     conversationMessages
       .mockResolvedValueOnce(page([message(10)]))
       .mockResolvedValue(page([message(10), message(20)]));
-    const { wrapper } = await setup("emailId=10&reply=replyAll");
+    const { wrapper } = await setup("emailId=10&draft=cloud-5&reply=replyAll");
     expect(state.draft).toHaveBeenCalledWith(
       expect.objectContaining({ draftId: 3 }),
     );
@@ -190,6 +204,36 @@ describe("conversation navigation and inline targets", () => {
     expect(wrapper.find('button[aria-expanded="true"]').text()).toContain(
       "Message 10",
     );
+    wrapper.unmount();
+  });
+  it("opens late-synced drafts and drops a previous thread's delayed draft anchor", async () => {
+    conversationMessages
+      .mockResolvedValueOnce(page([message(11)]))
+      .mockResolvedValue(page([message(22)]));
+    state.readSaved.mockImplementation(async (id) => ({
+      draftId: id,
+      emailId: id === 1 ? 10 : 22,
+    }));
+    let finishDetail;
+    vi.spyOn(useEmailStore(), "ensureDetail").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishDetail = resolve;
+        }),
+    );
+    const { wrapper, router } = await setup("emailId=10&draft=cloud-7");
+    userDraftStore().items = [
+      { emailId: 10, draftId: 1, cloudDraftId: 7, reply: true },
+      { emailId: 22, draftId: 2, cloudDraftId: 8, reply: true },
+    ];
+    await flushPromises();
+    expect(finishDetail).toBeTypeOf("function");
+    await router.push("/mail?emailId=22&draft=cloud-8");
+    await flushPromises();
+    finishDetail(message(10));
+    await flushPromises();
+    expect(state.draft.mock.calls.map(([draft]) => draft.draftId)).toEqual([2]);
+    expect(wrapper.text()).not.toContain("Message 10");
     wrapper.unmount();
   });
   it("opens a context reply once and ignores stale pages after the anchor changes", async () => {

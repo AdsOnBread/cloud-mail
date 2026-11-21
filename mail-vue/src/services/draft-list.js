@@ -4,7 +4,7 @@ import { userDraftStore } from "@/store/draft";
 import { useEmailStore } from "@/store/email";
 import { useUiStore } from "@/store/ui";
 import http from "@/axios";
-import { draftSummary, newestDraft } from "@/utils/draft-summary";
+import { draftKey, draftSummary, newestDraft } from "@/utils/draft-summary";
 
 export function startDraftList() {
   const store = userDraftStore(),
@@ -98,7 +98,7 @@ export function startDraftList() {
   };
 }
 
-export async function openSavedDraft(draftId, router, folder) {
+export async function readSavedDraft(draftId) {
   const database = db.value;
   const [draft, files] = await Promise.all([
     database.draft.get(draftId),
@@ -106,16 +106,20 @@ export async function openSavedDraft(draftId, router, folder) {
   ]);
   if (db.value !== database || !draft || draft.deleted)
     throw new Error("This draft is no longer available.");
-  const restored = { ...draft, attachments: files?.attachments || [] };
+  return { ...draft, attachments: files?.attachments || [] };
+}
+
+export async function openSavedDraft(draftId, router, folder) {
+  const draft = await readSavedDraft(draftId);
   if (
-    (draft.inlineReply || (folder && folder !== "draft")) &&
+    draftKey(draft) &&
     draft.sendType === "reply" &&
-    draft.emailId
+    draft.emailId &&
+    (draft.inlineReply || folder !== "draft")
   ) {
-    useEmailStore().pendingReplyDraft = restored;
     await router.push({
       path: "/mail",
-      query: { emailId: draft.emailId, ...(folder ? { folder } : {}) },
+      query: { emailId: draft.emailId, draft: draftKey(draft), folder },
     });
-  } else useUiStore().writerRef.openDraft(restored);
+  } else await useUiStore().writerRef.openDraft(draft);
 }

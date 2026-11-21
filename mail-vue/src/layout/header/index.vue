@@ -1,26 +1,26 @@
 <template>
   <div class="header">
     <div class="header-brand">
-      <button type="button" class="icon-button" aria-label="Toggle navigation" title="Main menu" :aria-expanded="uiStore.asideShow" @click="changeAside"><Icon icon="material-symbols:menu" width="24" /></button>
+      <button type="button" class="icon-button" aria-label="Toggle navigation" data-tip="Main menu" :aria-expanded="uiStore.asideShow" @click="changeAside"><Icon icon="material-symbols:menu" width="24" /></button>
       <router-link to="/inbox" class="brand-name"><Icon icon="material-symbols:mail-outline-rounded" width="32" /><span>{{ settingStore.settings.title || 'Cloudmail' }}</span></router-link>
     </div>
     <form v-if="searchable" class="mail-search" role="search" @submit.prevent="submitSearch">
-      <button type="submit" class="icon-button" aria-label="Search mail" title="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
+      <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
       <input v-model="searchText" aria-label="Search mail" placeholder="Search mail" @keydown.esc="clearSearch" />
-      <button v-if="searchText || mailSearch.query" type="button" class="icon-button" aria-label="Clear search" title="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
+      <button v-if="searchText || mailSearch.query" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
     </form>
     <div v-else class="page-title">{{ $t(route.meta.title) }}</div>
     <div class="toolbar">
-      <button type="button" v-if="uiStore.dark" class="icon-button" aria-label="Switch to light mode" title="Light mode" @click="openDark($event)">
+      <button type="button" v-if="uiStore.dark" class="icon-button" aria-label="Switch to light mode" data-tip="Light mode" @click="openDark($event)">
         <Icon icon="material-symbols:light-mode-outline" width="22"/>
       </button>
-      <button type="button" v-else class="icon-button" aria-label="Switch to dark mode" title="Dark mode" @click="openDark($event)">
+      <button type="button" v-else class="icon-button" aria-label="Switch to dark mode" data-tip="Dark mode" @click="openDark($event)">
         <Icon icon="material-symbols:dark-mode-outline" width="22"/>
       </button>
-      <button type="button" class="icon-button notice" aria-label="Announcements" title="Announcements" @click="openNotice"><Icon icon="material-symbols:campaign-outline" width="22" /></button>
-      <button type="button" class="icon-button" aria-label="Settings" title="Settings" @click="router.push('/settings')"><Icon icon="material-symbols:settings-outline" width="24" /></button>
+      <button type="button" class="icon-button notice" aria-label="Announcements" data-tip="Announcements" @click="openNotice"><Icon icon="material-symbols:campaign-outline" width="22" /></button>
+      <button type="button" class="icon-button" aria-label="Settings" data-tip="Settings" @click="router.push('/settings')"><Icon icon="material-symbols:settings-outline" width="24" /></button>
       <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
-        <button type="button" class="avatar" aria-label="Your account" title="Your account" @click="userInfoHide" >
+        <button type="button" class="avatar" aria-label="Your account" data-tip="Your account" @click="userInfoHide" >
           <div class="avatar-text">
             <div>{{ formatName(userStore.user.email) }}</div>
           </div>
@@ -88,7 +88,7 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
-const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed'].includes(route.name));
+const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','trash'].includes(route.name));
 watch(() => route.name, name => { mailSearch.visit(name); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {

@@ -1,36 +1,36 @@
 <template>
   <el-scrollbar class="scroll">
     <div>
-      <button v-perm="'email:send'" type="button" class="compose-button" title="Compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+      <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <el-menu :collapse="false"  >
-        <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" title="Inbox"
+        <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
                       :class="activeFolder === 'email' ? 'choose-item' : ''">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" title="Starred"
+        <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" data-tip="Starred"
                       :class="activeFolder === 'star' ? 'choose-item' : ''">
           <Icon icon="material-symbols:star-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('starred')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name:'snoozed'})" index="snoozed" aria-label="Snoozed" title="Snoozed" :class="{'choose-item':activeFolder==='snoozed'}">
+        <el-menu-item @click="router.push({name:'snoozed'})" index="snoozed" aria-label="Snoozed" data-tip="Snoozed" :class="{'choose-item':activeFolder==='snoozed'}">
           <Icon icon="material-symbols:schedule-outline" width="20"/><span class="menu-name" style="margin-left:16px">Snoozed</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'send'})" index="send" aria-label="Sent" title="Sent" v-perm="'email:send'"
+        <el-menu-item @click="router.push({name: 'send'})" index="send" aria-label="Sent" data-tip="Sent" v-perm="'email:send'"
                       :class="activeFolder === 'send' ? 'choose-item' : ''">
           <Icon icon="material-symbols:send-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('sent')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" title="Drafts" v-perm="'email:send'"
+        <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" data-tip="Drafts" v-perm="'email:send'"
                       :class="activeFolder === 'draft' ? 'choose-item' : ''">
           <Icon icon="material-symbols:draft-outline" width="19" height="19" />
           <span class="menu-name" style="margin-left: 17px">{{$t('drafts')}}</span><span v-if="drafts.items.length" class="menu-name draft-count">{{ drafts.items.length }}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name:'archived'})" index="archived" aria-label="Archived" title="Archived" :class="{'choose-item':activeFolder==='archived'}">
+        <el-menu-item @click="router.push({name:'archived'})" index="archived" aria-label="Archived" data-tip="Archived" :class="{'choose-item':activeFolder==='archived'}">
           <Icon icon="material-symbols:archive-outline" width="20"/><span class="menu-name" style="margin-left:16px">Archived</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name:'trash'})" index="trash" aria-label="Trash" title="Trash" :class="activeFolder==='trash'?'choose-item':''"><Icon icon="material-symbols:delete-outline" width="20"/><span class="menu-name" style="margin-left:16px">Trash</span></el-menu-item>
-        <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" title="Settings" index="setting"
+        <el-menu-item @click="router.push({name:'trash'})" index="trash" aria-label="Trash" data-tip="Trash" :class="activeFolder==='trash'?'choose-item':''"><Icon icon="material-symbols:delete-outline" width="20"/><span class="menu-name" style="margin-left:16px">Trash</span></el-menu-item>
+        <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" data-tip="Settings" index="setting"
                       :class="activeFolder === 'setting' ? 'choose-item' : ''">
           <Icon icon="fluent:settings-48-regular" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('settings')}}</span>
@@ -38,32 +38,32 @@
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
-        <el-menu-item @click="router.push({name: 'analysis'})" aria-label="Analytics" title="Analytics" index="analysis" v-perm="'analysis:query'"
+        <el-menu-item @click="router.push({name: 'analysis'})" aria-label="Analytics" data-tip="Analytics" index="analysis" v-perm="'analysis:query'"
                       :class="activeFolder === 'analysis' ? 'choose-item' : ''">
           <Icon icon="fluent:data-pie-20-regular" width="24" height="24" />
           <span class="menu-name" style="margin-left: 13px">{{$t('analytics')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'user'})" aria-label="All users" title="All users" index="setting" v-perm="'user:query'"
+        <el-menu-item @click="router.push({name: 'user'})" aria-label="All users" data-tip="All users" index="setting" v-perm="'user:query'"
                       :class="activeFolder === 'user' ? 'choose-item' : ''">
           <Icon icon="si:user-alt-2-line" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('allUsers')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'all-email'})" aria-label="All mail" title="All mail" index="all-email" v-perm="'all-email:query'"
+        <el-menu-item @click="router.push({name: 'all-email'})" aria-label="All mail" data-tip="All mail" index="all-email" v-perm="'all-email:query'"
                       :class="activeFolder === 'all-email' ? 'choose-item' : ''">
           <Icon icon="fluent:mail-list-28-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('allMail')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'role'})" aria-label="Permissions" title="Permissions" index="setting" v-perm="'role:query'"
+        <el-menu-item @click="router.push({name: 'role'})" aria-label="Permissions" data-tip="Permissions" index="setting" v-perm="'role:query'"
                       :class="activeFolder === 'role' ? 'choose-item' : ''">
           <Icon icon="fluent:lock-closed-16-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('permissions')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'reg-key'})" aria-label="Invite codes" title="Invite codes" index="reg-key" v-perm="'reg-key:query'"
+        <el-menu-item @click="router.push({name: 'reg-key'})" aria-label="Invite codes" data-tip="Invite codes" index="reg-key" v-perm="'reg-key:query'"
                       :class="activeFolder === 'reg-key' ? 'choose-item' : ''">
           <Icon icon="fluent:fingerprint-20-filled" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('inviteCode')}}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'sys-setting'})" aria-label="System settings" title="System settings" index="sys-setting" v-perm="'setting:query'"
+        <el-menu-item @click="router.push({name: 'sys-setting'})" aria-label="System settings" data-tip="System settings" index="sys-setting" v-perm="'setting:query'"
                       :class="activeFolder === 'sys-setting' ? 'choose-item' : ''">
           <Icon icon="eos-icons:system-ok-outlined" width="18" height="18" style="margin-left: 2px" />
           <span class="menu-name" style="margin-left: 17px">{{$t('SystemSettings')}}</span>
@@ -71,10 +71,10 @@
       </el-menu>
       <div class="mailbox-selector">
         <el-popover v-if="hasPerm('account:query') && settingStore.settings.manyEmail === 0" v-model:visible="uiStore.accountShow" trigger="click" placement="right-start" :width="340" popper-class="mailbox-popover">
-          <template #reference><button type="button" class="mailbox-button" :title="accountStore.currentAccount.email" aria-label="Choose mailbox" :aria-expanded="uiStore.accountShow"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span><Icon class="mailbox-chevron" icon="material-symbols:expand-more" width="18" /></button></template>
+          <template #reference><button type="button" class="mailbox-button" :data-tip="accountStore.currentAccount.email" aria-label="Choose mailbox" :aria-expanded="uiStore.accountShow"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span><Icon class="mailbox-chevron" icon="material-symbols:expand-more" width="18" /></button></template>
           <Account />
         </el-popover>
-        <div v-else class="mailbox-button" :title="accountStore.currentAccount.email"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span></div>
+        <div v-else class="mailbox-button" :data-tip="accountStore.currentAccount.email"><Icon icon="material-symbols:account-circle-outline" width="22" /><span>{{ accountStore.currentAccount.email }}</span></div>
       </div>
     </div>
   </el-scrollbar>

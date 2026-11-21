@@ -317,3 +317,32 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 .check-target input { width:15px; height:15px; margin:0; accent-color:var(--el-color-primary); cursor:pointer; }
 .mail-toolbar { display:flex; align-items:center; gap:4px; padding:0 12px 0 8px; height:48px; flex-shrink:0; }
 .mail-toolbar .total { margin-left:auto; font-size:12px; color:var(--regular-text-color); padding:0 8px; white-space:nowrap; }
+
+/* Floating mailbox menus share their surface and interaction colors with the list. */
+.mail-action-menu.el-popper,
+.mail-dialog.el-dialog,
+.mail-confirm.el-message-box {
+  border:0;
+  background:var(--mail-surface);
+  color:var(--el-text-color-primary);
+  box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
+}
+.mail-action-menu.el-popper { border-radius:8px; overflow:hidden; }
+.mail-action-menu .el-dropdown-menu { min-width:144px; padding:6px 0; background:var(--mail-surface); }
+.mail-action-menu .el-dropdown-menu__item { min-height:32px; padding:5px 18px; color:var(--el-text-color-primary); }
+.mail-action-menu .el-dropdown-menu__item:focus,
+.mail-action-menu .el-dropdown-menu__item:hover { background:var(--mail-read); color:var(--el-text-color-primary); }
+.mail-dialog.el-dialog,.mail-confirm.el-message-box { border-radius:20px; padding:24px; }
+.mail-confirm .el-message-box__title,.mail-dialog .el-dialog__title { font-size:20px; font-weight:400; line-height:28px; }
+.mail-confirm .el-message-box__header { padding:0 0 12px; }
+.mail-confirm .el-message-box__content { padding:0; color:var(--regular-text-color); }
+.mail-confirm .el-message-box__btns { padding:24px 0 0; }
+.mail-confirm .el-button { min-height:36px; padding:0 16px; border:0; font-weight:500; }
+.mail-confirm .el-button:not(.delete-confirm) { background:transparent; color:var(--el-color-primary); }
+.mail-confirm .el-button:not(.delete-confirm):hover { background:var(--mail-read); }
+.mail-confirm .delete-confirm { background:var(--mail-draft); color:var(--mail-surface); }
+
+.snooze-menu .el-dropdown-menu { min-width:260px; }
+.snooze-menu .snooze-heading { padding:12px 18px 8px; font-weight:500; }
+.snooze-menu .el-dropdown-menu__item { justify-content:space-between; gap:24px; }
+.snooze-menu small { color:var(--regular-text-color); font-size:12px; }

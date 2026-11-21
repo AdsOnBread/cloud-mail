@@ -11,6 +11,8 @@
         />
       </label>
       <el-dropdown
+        popper-class="mail-action-menu"
+        :show-arrow="false"
         trigger="click"
         placement="bottom-start"
         @command="selectMatching"
@@ -50,7 +52,11 @@
         >
           <Icon icon="material-symbols:refresh" width="20" />
         </button>
-        <el-dropdown trigger="click">
+        <el-dropdown
+          popper-class="mail-action-menu"
+          :show-arrow="false"
+          trigger="click"
+        >
           <button
             class="mail-icon"
             data-tip="More"
@@ -105,7 +111,9 @@
           data-tip="Snooze"
           aria-label="Snooze conversations"
           :disabled="busy"
-          @click="chooseSnooze(selected)"
+          aria-haspopup="menu"
+          :aria-expanded="Boolean(snoozeAnchor && !snoozeRow)"
+          @click="chooseSnooze(selected, $event)"
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
@@ -210,12 +218,18 @@
               data-tip="Snooze"
               aria-label="Snooze"
               :disabled="busy"
-              @click="chooseSnooze([row.lastEmailId])"
+              aria-haspopup="menu"
+              :aria-expanded="
+                Boolean(snoozeAnchor) && snoozeRow === row.lastEmailId
+              "
+              @click="chooseSnooze([row.lastEmailId], $event, row.lastEmailId)"
             >
               <Icon icon="material-symbols:schedule-outline" width="20" />
             </button>
           </template>
           <el-dropdown
+            popper-class="mail-action-menu"
+            :show-arrow="false"
             ref="contextDropdown"
             v-if="context === row.lastEmailId"
             trigger="click"
@@ -258,21 +272,42 @@
         }}
       </p>
     </div>
+    <el-dropdown
+      v-if="snoozeAnchor"
+      ref="snoozeMenu"
+      virtual-triggering
+      :virtual-ref="snoozeAnchor"
+      :trigger="[]"
+      placement="bottom-end"
+      :show-arrow="false"
+      popper-class="mail-action-menu snooze-menu"
+      @visible-change="!$event && (snoozeAnchor = null)"
+      @command="snoozeCommand"
+    >
+      <template #dropdown>
+        <el-dropdown-menu>
+          <div class="snooze-heading">Snooze until</div>
+          <el-dropdown-item
+            v-for="option in snoozeOptions"
+            :key="option.label"
+            :command="option.date"
+          >
+            <span>{{ option.label }}</span><small>{{ option.detail }}</small>
+          </el-dropdown-item>
+          <el-dropdown-item divided command="custom"
+            >Pick date &amp; time</el-dropdown-item
+          >
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
     <el-dialog
       v-model="snoozeOpen"
-      title="Snooze until"
+      title="Pick date &amp; time"
+      class="mail-dialog"
       width="340px"
       append-to-body
     >
       <div class="snooze-options">
-        <button
-          v-for="option in snoozeOptions"
-          :key="option.label"
-          @click="applySnooze(option.date)"
-        >
-          <span>{{ option.label }}</span
-          ><small>{{ option.detail }}</small>
-        </button>
         <label
           >Pick a date and time<input
             type="datetime-local"
@@ -418,7 +453,16 @@ const snoozeOpen = ref(false),
   snoozeIds = ref([]),
   customTime = ref(""),
   snoozeOptions = ref([]);
-function chooseSnooze(ids) {
+const snoozeAnchor = ref(null),
+  snoozeMenu = ref(null),
+  snoozeRow = ref(0);
+async function chooseSnooze(ids, event, row = 0) {
+  if (snoozeAnchor.value === event.currentTarget) {
+    snoozeAnchor.value = null;
+    return;
+  }
+  snoozeAnchor.value = event.currentTarget;
+  snoozeRow.value = row;
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(8, 0, 0, 0);
@@ -438,7 +482,12 @@ function chooseSnooze(ids) {
     snoozeOptions.value.push(option("Next week", nextWeek));
   snoozeIds.value = [...ids];
   customTime.value = "";
-  snoozeOpen.value = true;
+  await nextTick();
+  snoozeMenu.value?.handleOpen();
+}
+function snoozeCommand(value) {
+  if (value === "custom") snoozeOpen.value = true;
+  else applySnooze(value);
 }
 function applySnooze(date) {
   if (!(date > new Date())) return;
@@ -508,6 +557,7 @@ watch(
   key,
   () => {
     generation++;
+    snoozeAnchor.value = null;
     snoozeOpen.value = false;
     history.value = [];
     pageCursor.value = null;
@@ -620,6 +670,7 @@ onActivated(() => {
 });
 onDeactivated(() => {
   active = false;
+  snoozeAnchor.value = null;
   snoozeOpen.value = false;
 });
 timer = setInterval(
@@ -679,16 +730,11 @@ defineExpose({ refresh });
   display: grid;
   gap: 8px;
 }
-.snooze-options > button:not(.el-button),
 .snooze-options label {
   display: flex;
   justify-content: space-between;
   padding: 8px;
   gap: 8px;
-}
-.snooze-options > button:not(.el-button):hover {
-  cursor: pointer;
-  background: var(--mail-hover);
 }
 .snooze-options label {
   flex-direction: column;

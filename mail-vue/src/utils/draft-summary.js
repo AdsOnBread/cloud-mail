@@ -15,9 +15,17 @@ function preview(draft) {
   return template.content.textContent.replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
+export function draftKey(draft) {
+  if (draft.cloudDraftId) return "cloud-" + draft.cloudDraftId;
+  if (draft.clientId) return "client-" + draft.clientId;
+  return null;
+}
+
 export function draftSummary(draft) {
   return {
     draftId: draft.draftId,
+    cloudDraftId: draft.cloudDraftId,
+    clientId: draft.clientId,
     emailId: Number(draft.emailId),
     reply: draft.sendType === "reply",
     subject: draft.subject || "",

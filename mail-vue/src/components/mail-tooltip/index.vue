@@ -2,6 +2,7 @@
   <Teleport to="body"
     ><div
       v-if="visible"
+      ref="tip"
       id="mail-control-tip"
       role="tooltip"
       class="mail-control-tip"
@@ -12,7 +13,8 @@
   >
 </template>
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from "vue";
+import { onMounted, onBeforeUnmount, nextTick, ref } from "vue";
+const tip = ref(null);
 const visible = ref(false),
   label = ref(""),
   x = ref(0),
@@ -32,18 +34,22 @@ function enter(event) {
   if (target === button) return;
   hide();
   target = button;
-  timer = setTimeout(() => {
+  timer = setTimeout(async () => {
     if (!button.isConnected || !button.getClientRects().length) return;
     const rect = button.getBoundingClientRect();
     label.value = button.dataset.tip;
-    const margin = Math.min(innerWidth / 2, label.value.length * 3.8 + 12);
+    visible.value = true;
+    await nextTick();
+    if (!tip.value || target !== button) return;
+    const margin = tip.value.offsetWidth / 2 + 4;
     x.value = Math.min(
       innerWidth - margin,
       Math.max(margin, rect.left + rect.width / 2),
     );
     y.value =
-      rect.bottom + 6 > innerHeight - 30 ? rect.top - 32 : rect.bottom + 6;
-    visible.value = true;
+      rect.bottom + 8 + tip.value.offsetHeight > innerHeight
+        ? Math.max(4, rect.top - tip.value.offsetHeight - 8)
+        : rect.bottom + 8;
   }, 450);
 }
 function leave(event) {
@@ -75,12 +81,15 @@ onBeforeUnmount(() => {
   z-index: 5000;
   padding: 4px 8px;
   border-radius: 4px;
-  background: #353638;
+  background: #3c4043;
+  box-shadow: 0 1px 3px #0002;
+  max-width: calc(100vw - 8px);
+  overflow-wrap: anywhere;
   color: white;
   font:
     500 12px/18px Arial,
     sans-serif;
   pointer-events: none;
-  white-space: nowrap;
+  line-height: 16px;
 }
 </style>

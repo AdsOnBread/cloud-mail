@@ -22,6 +22,7 @@
       </button>
       <button
         class="icon-button"
+        :data-tip="message.isStar ? 'Unstar' : 'Star'"
         :aria-label="message.isStar ? 'Unstar message' : 'Star message'"
         @click="star"
       >
@@ -37,7 +38,7 @@
     </div>
     <template v-if="expanded">
       <button
-        class="recipient-toggle"
+        class="recipient-toggle" data-tip="Show details"
         :aria-expanded="recipientsOpen"
         @click="recipientsOpen = !recipientsOpen"
       >

@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   drafts: new Map(),
   attachments: new Map(),
   next: 1,
+  editorReady: vi.fn(),
 }));
 vi.mock("../src/db/db.js", () => {
   const table = (map) => ({
@@ -86,6 +87,7 @@ vi.mock("../src/components/tiny-editor/index.vue", async () => {
           },
         );
         expose({
+          ready: state.editorReady,
           clearEditor: () => {
             body.value = "";
           },
@@ -225,6 +227,25 @@ describe("composer persistence and sending", () => {
       cc: [],
       bcc: ["private@example.com"],
     });
+    wrapper.unmount();
+  });
+  it("opens a cloud text draft read-only during editor initialization and keeps its revision on close", async () => {
+    let ready;
+    state.editorReady.mockReturnValueOnce(new Promise(resolve => { ready = resolve; }));
+    const wrapper = composer({inline: true});
+    const original = {draftId: 18, cloudDraftId: 54, cloudVersion: 3, accountId: 1,
+      receiveEmail: ["person@example.com"], subject: "Project", text: "Hello <Alex>\nThanks!", content: ""};
+    state.drafts.set(18, original);
+    const opening = wrapper.vm.openDraft(original);
+    await flushPromises();
+    expect(wrapper.get(".write-box").attributes()).toHaveProperty("inert");
+    ready();
+    await opening;
+    expect(wrapper.get(".write-box").attributes()).not.toHaveProperty("inert");
+    expect(wrapper.get('[aria-label="Message body"]').element.value).toBe("Hello &lt;Alex&gt;<br>Thanks!");
+    await wrapper.get('[aria-label="Close and save draft"]').trigger("click");
+    await flushPromises();
+    expect(state.drafts.get(18)).toEqual(original);
     wrapper.unmount();
   });
   it("removes an emptied existing draft when it is closed", async () => {

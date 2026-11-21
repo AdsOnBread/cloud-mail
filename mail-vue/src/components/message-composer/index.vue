@@ -10,14 +10,14 @@
     :aria-modal="modal || undefined"
     aria-label="Compose message"
   >
-    <div class="write-box" :aria-busy="sending">
+    <div class="write-box" :aria-busy="sending || preparing" :inert="preparing || undefined">
       <div v-if="inline" class="inline-reply-header">
         <button
           type="button"
           class="inline-recipients"
           aria-label="Edit reply recipients"
           :aria-expanded="editingRecipients"
-          :title="replyRecipientTitle"
+          :data-tip="replyRecipientTitle"
           :disabled="sending || attaching"
           @click="editReplyRecipients"
         >
@@ -36,7 +36,7 @@
           type="button"
           class="compose-tool inline-close"
           aria-label="Close and save draft"
-          title="Save and close reply"
+          data-tip="Save and close reply"
           :disabled="sending || attaching"
           @click="close"
         >
@@ -89,7 +89,7 @@
           <button
             type="button"
             aria-label="Close and save draft"
-            title="Close"
+            data-tip="Close"
             :disabled="sending || attaching"
             @click="close"
           >
@@ -233,7 +233,7 @@
             class="compose-tool formatting-toggle"
             aria-label="Formatting options"
             :aria-pressed="showFormatting"
-            title="Formatting options"
+            data-tip="Formatting options"
             :disabled="sending"
             @click="showFormatting = !showFormatting"
           >
@@ -242,7 +242,7 @@
           <button
             type="button"
             class="compose-tool"
-            title="Attach files"
+            data-tip="Attach files"
             aria-label="Attach files"
             :disabled="sending || attaching"
             @click="chooseFile"
@@ -255,7 +255,7 @@
           <button
             type="button"
             class="compose-tool"
-            title="Discard draft"
+            data-tip="Discard draft"
             aria-label="Discard draft"
             :disabled="sending || attaching"
             @click="discard"
@@ -400,7 +400,8 @@ const contacts = computed(() =>
   writerStore.sendRecipientRecord.map((email) => ({ email })),
 );
 let baseline = "";
-let preparing = false;
+let restoredUntouched = false;
+const preparing = ref(false);
 const emptyForm = () => ({
   sendEmail: "",
   receiveEmail: [],
@@ -434,12 +435,13 @@ function resetForm() {
   showBcc.value = false;
   defValue.value = "";
   baseline = "";
+  restoredUntouched = false;
   minimized.value = false;
   expanded.value = false;
   editor.value?.clearEditor();
 }
 function available() {
-  if (show.value || preparing) {
+  if (show.value || preparing.value) {
     minimized.value = false;
     ElMessage.info(
       "Your current message is open. Save or discard it before starting another.",
@@ -471,25 +473,39 @@ function open() {
     minimized.value = false;
     return;
   }
-  if (preparing) return;
+  if (preparing.value) return;
   resetForm();
   setSender();
   reveal();
 }
-function openDraft(draft) {
+async function openDraft(draft) {
   if (!available()) return;
-  resetForm();
-  Object.assign(form, restoreDraft(draft));
-  form.ownerEmail=userStore.user.email;
-  if (props.inline && form.sendType === "reply")
-    form.content = foldLegacyReplyQuote(form.content || "");
-  defValue.value = form.content || "";
-  reveal();
-  if (props.inline)
-    nextTick(async () => {
-      await editor.value?.ready?.();
-      editor.value?.focus?.(true);
-    });
+  preparing.value = true;
+  try {
+    resetForm();
+    Object.assign(form, restoreDraft(draft));
+    form.ownerEmail = userStore.user.email;
+    if (!form.sendEmail) {
+      const account = [...accountStore.accounts, accountStore.currentAccount, userStore.user.account]
+        .find(account => account?.accountId === form.accountId);
+      form.sendEmail = account?.email || "";
+    }
+    if (!form.content && form.text)
+      form.content = escapeHTML(form.text).replace(/\r\n?|\n/g, "<br>");
+    if (props.inline && form.sendType === "reply")
+      form.content = foldLegacyReplyQuote(form.content || "");
+    defValue.value = form.content || "";
+    reveal();
+    await nextTick();
+    await editor.value?.ready?.();
+    baseline = draftFingerprint(form);
+    restoredUntouched = Boolean(draft.cloudDraftId);
+  } finally {
+    preparing.value = false;
+  }
+  await nextTick();
+  if (props.inline) editor.value?.focus?.(true);
+  else toField.value?.focus();
 }
 // Older reply drafts stored the generated quote directly after the editable body.
 function foldLegacyReplyQuote(content) {
@@ -518,7 +534,7 @@ const escapeHTML = (value) =>
   );
 async function prepareMessage(message, mode, all = false) {
   if (!available()) return;
-  preparing = true;
+  preparing.value = true;
   try {
     const email = await emailStore.ensureDetail(message);
     if (hasPerm("account:query")) await accountStore.loadAll();
@@ -591,7 +607,6 @@ async function prepareMessage(message, mode, all = false) {
     reveal();
     await nextTick();
     await editor.value?.ready?.();
-    if (props.inline) editor.value?.focus?.(true);
     // TinyMCE normalizes HTML; compare against its actual representation after loading.
     baseline = draftFingerprint(form);
   } catch (error) {
@@ -599,8 +614,11 @@ async function prepareMessage(message, mode, all = false) {
       error.message || "Could not load the message. Please try again.",
     );
   } finally {
-    preparing = false;
+    preparing.value = false;
   }
+  await nextTick();
+  if (props.inline) editor.value?.focus?.(true);
+  else toField.value?.focus();
 }
 function openReply(email) {
   return prepareMessage(email, "reply");
@@ -638,7 +656,9 @@ async function removeSavedDraft() {
 }
 let cloudSaveTimer;
 watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.sendType,form.emailId]),()=>{
-  if(preparing||sending.value||!show.value||!hasDraftContent(form))return;
+  if(preparing.value||sending.value||!show.value||!hasDraftContent(form))return;
+  if (restoredUntouched && draftFingerprint(form) === baseline) return;
+  restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
   const localSave=persistDraft().catch(()=>{form.syncState="offline";});
   cloudSaveTimer=setTimeout(async()=>{
@@ -648,18 +668,18 @@ watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.s
 },{deep:true});
 
 async function saveAndClose() {
-  if (sending.value || attaching.value || preparing) return false;
+  if (sending.value || attaching.value || preparing.value) return false;
   if (!show.value) return true;
   try {
     await editor.value?.ready?.();
     commitRecipients();
-    if (
-      hasDraftContent(form) &&
-      (!baseline || draftFingerprint(form) !== baseline || form.draftId)
-    )
-      await persistDraft();
-    else await removeSavedDraft();
-    syncCloudDrafts().catch(()=>{});
+    clearTimeout(cloudSaveTimer);
+    if (!restoredUntouched || draftFingerprint(form) !== baseline) {
+      if (hasDraftContent(form) && (form.draftId || draftFingerprint(form) !== baseline))
+        await persistDraft();
+      else await removeSavedDraft();
+      syncCloudDrafts().catch(() => {});
+    }
     show.value = false;
     resetForm();
     emit("closed");
@@ -682,6 +702,11 @@ async function close() {
     return;
   }
   commitRecipients();
+  if (restoredUntouched && draftFingerprint(form) === baseline) {
+    show.value = false;
+    resetForm();
+    return;
+  }
   if (!hasDraftContent(form)) {
     try {
       await removeSavedDraft();

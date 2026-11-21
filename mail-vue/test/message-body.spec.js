@@ -14,6 +14,14 @@ describe('isolated message rendering',()=>{
   const document=frame.attributes('srcdoc');expect(document).toContain('<p>Hello</p>');expect(document).not.toContain('alert(1)');
   expect(document).toContain("default-src 'none'");expect(wrapper.find('button').exists()).toBe(false);wrapper.unmount();
  });
+ it('resolves stored images through the current folder attachment reader',async()=>{
+  const resolveFileUrl=vi.fn(async ()=>'blob:trash-image');
+  const wrapper=mount(MessageBody,{props:{html:'<img src="attachments/test.png">',resolveFileUrl}});
+  await flushPromises();
+  expect(resolveFileUrl).toHaveBeenCalledWith('attachments/test.png');
+  expect(wrapper.get('iframe').attributes('srcdoc')).toContain('src="blob:trash-image"');
+  wrapper.unmount();
+ });
  it('offers opt-in remote images only when present and preserves content when the theme changes',async()=>{
   const wrapper=mount(MessageBody,{props:{html:'<p>Hello</p><img src="https://example.net/photo.png">'}});await flushPromises();
   expect(wrapper.get('button').text()).toBe('Load remote images');

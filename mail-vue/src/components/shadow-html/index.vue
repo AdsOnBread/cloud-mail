@@ -9,7 +9,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { useUiStore } from '@/store/ui.js'
 import { privateFileURL, storedKey } from '@/utils/private-files'
-const props = defineProps({ html: { type: String, required: true } })
+const props = defineProps({ html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateFileURL } })
 const remote = ref(false)
 const hasRemoteImages = ref(false)
 const uiStore = useUiStore()
@@ -31,7 +31,7 @@ watch(() => [props.html, remote.value, uiStore.dark], async () => {
   await Promise.all(Array.from(doc.images).map(async image => {
     const key=storedKey(image.getAttribute('src'))
     if (!key) return
-    try { const url=await privateFileURL(key);created.push(url);image.src=url } catch { image.removeAttribute('src');error.value='Some inline images are unavailable.' }
+    try { const url=await props.resolveFileUrl(key);created.push(url);image.src=url } catch { image.removeAttribute('src');error.value='Some inline images are unavailable.' }
   }))
   if (current !== generation) { created.forEach(URL.revokeObjectURL);return }
   urls.forEach(URL.revokeObjectURL);urls=created

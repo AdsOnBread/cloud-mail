@@ -3,7 +3,7 @@
     class="conversation-row"
     :class="{ unread, selected, 'draft-row': draftOnly }"
   >
-    <label class="check-target">
+    <label class="check-target" data-tip="Select">
       <input
         type="checkbox"
         :aria-label="`Select ${subject || '(no subject)'}`"
@@ -12,7 +12,7 @@
       />
     </label>
     <button
-      v-if="!draftOnly"
+      v-if="!draftOnly && !hideStar"
       class="row-star mail-icon"
       :class="{ starred }"
       :aria-pressed="Boolean(starred)"
@@ -48,11 +48,11 @@
           ><span class="separator"> - </span>{{ preview }}</span
         ></span
       >
-      <span class="row-date" :title="dateTitle"
+      <span class="row-date" :data-tip="dateTitle"
         ><slot name="status" /><time>{{ date }}</time></span
       >
     </button>
-    <div class="row-actions"><slot name="actions" /></div>
+    <div v-if="$slots.actions" class="row-actions"><slot name="actions" /></div>
     <slot />
   </div>
 </template>
@@ -72,6 +72,7 @@ defineProps({
   selected: Boolean,
   starred: Boolean,
   draftOnly: Boolean,
+  hideStar: Boolean,
 });
 defineEmits(["select", "star", "open"]);
 </script>
@@ -175,16 +176,16 @@ defineEmits(["select", "star", "open"]);
   align-items: center;
 }
 @media (min-width: 768px) {
-  .conversation-row:focus-within,
+  .conversation-row:has(:focus-visible),
   .conversation-row:has([aria-expanded="true"]) {
     z-index: 1;
     box-shadow: var(--mail-row-shadow);
   }
-  .conversation-row:focus-within .row-actions,
+  .conversation-row:has(:focus-visible) .row-actions,
   .conversation-row:has([aria-expanded="true"]) .row-actions {
     display: flex;
   }
-  .conversation-row:focus-within .row-date,
+  .conversation-row:has(:focus-visible):has(.row-actions) .row-date,
   .conversation-row:has([aria-expanded="true"]) .row-date {
     display: none;
   }
@@ -197,7 +198,7 @@ defineEmits(["select", "star", "open"]);
   .conversation-row:hover .row-actions {
     display: flex;
   }
-  .conversation-row:hover .row-date {
+  .conversation-row:hover:has(.row-actions) .row-date {
     display: none;
   }
   .conversation-row:hover .row-star {

@@ -1,12 +1,13 @@
 <template>
   <section class="conversation-view" aria-label="Conversation">
     <div class="conversation-toolbar">
-      <button aria-label="Back to mail" @click="back">
+      <button aria-label="Back to mail" data-tip="Back to mail" @click="back">
         <Icon icon="material-symbols:arrow-back" width="22" />
       </button>
       <button
         :disabled="busy || !messages.length"
         aria-label="Mark conversation read"
+        data-tip="Mark conversation read"
         @click="mutate('read')"
       >
         <Icon icon="material-symbols:mark-email-read-outline" width="22" />
@@ -14,6 +15,7 @@
       <button
         :disabled="busy || !messages.length"
         aria-label="Mark conversation unread"
+        data-tip="Mark conversation unread"
         @click="mutate('read', { unread: 0 })"
       >
         <Icon icon="material-symbols:mark-email-unread-outline" width="22" />
@@ -22,9 +24,22 @@
         v-perm="'email:delete'"
         :disabled="busy || !messages.length"
         aria-label="Delete conversation"
+        data-tip="Delete conversation"
         @click="remove"
       >
         <Icon icon="material-symbols:delete-outline" width="22" />
+      </button>
+      <button
+        v-if="threadDrafts.length"
+        class="draft-jump"
+        data-tip="Show saved replies"
+        @click="focusDrafts"
+      >
+        {{
+          threadDrafts.length === 1
+            ? "Draft"
+            : "Drafts (" + threadDrafts.length + ")"
+        }}
       </button>
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
@@ -42,6 +57,26 @@
         Load older messages
       </button>
       <p v-if="loading" role="status">Loading conversation…</p>
+      <div
+        v-if="threadDrafts.length"
+        ref="draftList"
+        class="thread-drafts"
+        aria-label="Saved replies"
+      >
+        <button
+          v-for="draft in threadDrafts"
+          :key="draft.draftId"
+          :aria-pressed="activeDraft === draft.draftId"
+          @click="chooseDraft(draft)"
+        >
+          <Icon icon="material-symbols:edit-outline" width="18" />
+          <span class="draft-label">Draft</span>
+          <span class="draft-snippet">{{
+            draft.preview || draft.recipients || "(empty draft)"
+          }}</span>
+          <time>{{ mailboxDate(draft.lastDate) }}</time>
+        </button>
+      </div>
       <ConversationMessage
         v-for="message in messages"
         :key="message.emailId"
@@ -59,7 +94,7 @@
           ref="composer"
           inline
           @sent="sent"
-          @closed="activeTarget = 0"
+          @closed="closed"
         />
       </ConversationMessage>
       <div v-if="messages.length && !activeTarget" class="bottom-replies">
@@ -81,7 +116,7 @@
   </section>
 </template>
 <script setup>
-import { ref, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {
   useRoute,
   useRouter,
@@ -98,6 +133,31 @@ import {
 } from "@/request/conversation";
 import { useEmailStore } from "@/store/email";
 import { useAccountStore } from "@/store/account";
+import { userDraftStore } from "@/store/draft";
+import { draftKey } from "@/utils/draft-summary";
+import { mailboxDate } from "@/utils/day";
+const drafts = userDraftStore();
+const threadId = ref(null);
+const draftList = ref(null);
+function focusDrafts() {
+  draftList.value?.querySelector("button")?.focus();
+  draftList.value?.scrollIntoView({ block: "nearest" });
+}
+const activeDraft = ref(null);
+const threadDrafts = computed(() => {
+  const ids = new Set(messages.value.map((message) => message.emailId));
+  if (messages.value.length) ids.add(Number(route.query.emailId));
+  return drafts.items.filter(
+    (draft) =>
+      draft.reply &&
+      (ids.has(draft.emailId) ||
+        (threadId.value && drafts.threads[draft.emailId] === threadId.value)),
+  );
+});
+function closed() {
+  activeTarget.value = 0;
+  activeDraft.value = null;
+}
 const accountStore = useAccountStore();
 const route = useRoute(),
   router = useRouter(),
@@ -114,7 +174,8 @@ const messages = ref([]),
   total = ref(0),
   hasMore = ref(false),
   cursor = ref(null);
-let generation = 0,
+let viewEpoch = 0,
+  generation = 0,
   switching = false,
   handledReply = false;
 const currentComposer = () =>
@@ -151,6 +212,7 @@ async function load(older = false) {
           ),
         ]
       : data.messages;
+    threadId.value = data.threadId;
     threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
     hasMore.value = data.hasMore;
@@ -162,14 +224,12 @@ async function load(older = false) {
     if (!older && data.messages.length) open.add(data.messages.at(-1).emailId);
     expanded.value = open;
     await nextTick();
+    if (request !== generation) return;
     if (older && scroll.value)
       scroll.value.scrollTop += scroll.value.scrollHeight - prior;
     if (!older) {
-      const draft = store.pendingReplyDraft;
-      if (draft && Number(draft.emailId) === anchor) {
-        handledReply = true;
-        store.pendingReplyDraft = null;
-        await reply({ emailId: anchor }, false, draft);
+      if (route.query.draft && !handledReply) {
+        await openRequestedDraft();
       } else if (route.query.reply && !handledReply && data.messages.length) {
         handledReply = true;
         await reply(data.messages.at(-1), route.query.reply === "replyAll");
@@ -183,42 +243,102 @@ async function load(older = false) {
   }
 }
 watch(
-  () => route.query.emailId,
+  [() => route.query.emailId, () => route.query.draft],
   () => {
+    viewEpoch++;
+    switching = false;
     handledReply = false;
     threadSubject.value = "";
-    activeTarget.value = 0;
+    threadId.value = null;
+    closed();
     expanded.value = new Set();
     messages.value = [];
     load();
   },
   { immediate: true },
 );
+function matchingDraft() {
+  const key = route.query.draft;
+  if (!key) return;
+  return threadDrafts.value.find(
+    (d) =>
+      d.emailId === Number(route.query.emailId) &&
+      (draftKey(d) === key || (d.clientId && "client-" + d.clientId === key)),
+  );
+}
+async function openRequestedDraft() {
+  const draft = matchingDraft();
+  if (!draft || handledReply || switching || !messages.value.length) return;
+  handledReply = true;
+  await editSavedDraft(draft);
+}
+watch([matchingDraft, loading], () => {
+  if (!loading.value && route.query.draft) openRequestedDraft();
+});
+async function chooseDraft(draft) {
+  if (draft.draftId === activeDraft.value) {
+    scroll.value
+      ?.querySelector(".send.inline")
+      ?.scrollIntoView({ block: "nearest" });
+    return;
+  }
+  if (switching) return;
+  if (!draftKey(draft) || matchingDraft()?.draftId === draft.draftId)
+    await editSavedDraft(draft);
+  else
+    await router.replace({
+      path: route.path,
+      query: {
+        ...route.query,
+        emailId: draft.emailId,
+        draft: draftKey(draft),
+        reply: undefined,
+      },
+    });
+}
+async function editSavedDraft(summary) {
+  const request = viewEpoch;
+  try {
+    const { readSavedDraft } = await import("@/services/draft-list");
+    const draft = await readSavedDraft(summary.draftId);
+    if (request === viewEpoch)
+      await reply({ emailId: summary.emailId }, false, draft);
+  } catch (e) {
+    if (request === viewEpoch)
+      error.value = e.message || "Could not open draft.";
+  }
+}
 async function reply(message, all, draft) {
   if (switching) return;
+  const request = viewEpoch;
   switching = true;
   try {
-    if (!(await save())) return;
+    if (!(await save()) || request !== viewEpoch) return;
     // A restored draft may target a message older than the currently loaded page.
     if (!messages.value.some((item) => item.emailId === message.emailId)) {
       const detail = await store.ensureDetail(message);
+      if (request !== viewEpoch) return;
       messages.value.push(detail);
       messages.value.sort((a, b) => a.emailId - b.emailId);
     }
     expanded.value = new Set([...expanded.value, message.emailId]);
     activeTarget.value = message.emailId;
     await nextTick();
+    if (request !== viewEpoch) return;
     const editor = currentComposer();
-    if (draft) editor.openDraft(draft);
+    activeDraft.value = draft?.draftId ?? null;
+    if (draft) await editor.openDraft(draft);
     else await editor[all ? "openReplyAll" : "openReply"](message);
     await nextTick();
+    if (request !== viewEpoch) return;
     scroll.value
       ?.querySelector(".send.inline")
       ?.scrollIntoView({ block: "nearest" });
   } catch (e) {
-    error.value = e.message || "Could not open reply.";
+    if (request === viewEpoch)
+      error.value = e.message || "Could not open reply.";
   } finally {
-    switching = false;
+    if (request === viewEpoch) switching = false;
   }
 }
 async function toggle(message) {
@@ -247,7 +367,15 @@ async function sent() {
 function back() {
   if (window.history.state.back) router.back();
   else
-    router.push(({ sent:'/sent', starred:'/starred', draft:'/drafts', archived:'/archived', snoozed:'/snoozed' })[route.query.folder] || '/inbox');
+    router.push(
+      {
+        sent: "/sent",
+        starred: "/starred",
+        draft: "/drafts",
+        archived: "/archived",
+        snoozed: "/snoozed",
+      }[route.query.folder] || "/inbox",
+    );
 }
 async function mutate(action, extra = {}) {
   if (busy.value || !(await save())) return;
@@ -324,6 +452,7 @@ onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
+  viewEpoch++;
   generation++;
   window.removeEventListener("keydown", keydown);
   window.removeEventListener("beforeunload", beforeUnload);
@@ -356,6 +485,15 @@ onUnmounted(() => {
 .conversation-toolbar button:hover {
   background: var(--mail-hover);
 }
+.conversation-toolbar .draft-jump {
+  width: auto;
+  padding: 0 12px;
+  border-radius: 18px;
+  color: var(--mail-draft);
+  font:
+    500 14px Arial,
+    sans-serif;
+}
 .conversation-toolbar span {
   margin-left: auto;
   font-size: 12px;
@@ -373,6 +511,44 @@ h1 {
   margin: 0 0 16px 48px;
   overflow-wrap: anywhere;
   line-height: 1.4;
+}
+.thread-drafts {
+  margin: 0 0 12px;
+  border-block: 1px solid var(--light-border-color);
+}
+.thread-drafts button {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 8px;
+  color: var(--regular-text-color);
+  text-align: left;
+  font: inherit;
+}
+.thread-drafts button:hover {
+  background: var(--mail-read);
+}
+.thread-drafts button[aria-pressed="true"] {
+  background: var(--mail-search);
+}
+.thread-drafts button + button {
+  border-top: 1px solid var(--light-border-color);
+}
+.draft-label {
+  color: var(--mail-draft);
+  font-size: 14px;
+}
+.draft-snippet {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+}
+.thread-drafts time {
+  font-size: 12px;
 }
 .older {
   display: block;
