@@ -1,5 +1,6 @@
 <template>
-  <section class="conversation-view" aria-label="Conversation">
+  <section ref="reader" class="conversation-view" aria-label="Conversation" aria-keyshortcuts="N P"
+    @focusin="rememberMessage" @pointerdown="rememberMessage">
     <div class="conversation-toolbar">
       <button data-reader-back aria-label="Back to mail" data-tip="Back to mail" @click="back">
         <Icon icon="material-symbols:arrow-back" width="22" />
@@ -25,8 +26,9 @@
       <button
         v-if="threadDrafts.length"
         class="draft-jump"
-        data-tip="Show saved replies"
-        @click="focusDrafts"
+        :aria-label="threadDrafts.length===1 ? 'Open saved reply' : 'Show saved replies'"
+        :data-tip="threadDrafts.length===1 ? 'Open saved reply' : 'Show saved replies'"
+        @click="jumpToDraft"
       >
         {{
           threadDrafts.length === 1
@@ -47,6 +49,9 @@
       <p v-if="printing || expanding" role="status">{{printing ? 'Preparing to print…' : 'Expanding messages…'}}</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
+      </p>
+      <p v-if="draftFailure" role="alert">
+        {{ draftFailure.message }} <button @click="editSavedDraft(draftFailure.summary)">Retry opening draft</button>
       </p>
       <button
         v-if="hasMore"
@@ -80,6 +85,7 @@
       <ConversationMessage
         v-for="message in messages"
         :key="message.emailId"
+        :data-reader-message="message.emailId"
         :message="message"
         :now="readerNow"
         :before-delete="save"
@@ -167,11 +173,14 @@ const filingTitle=computed(()=>filingAction.value==="archive"?"Archive":"Move to
 const drafts = userDraftStore();
 const threadId = ref(null);
 const draftList = ref(null);
-function focusDrafts() {
+function jumpToDraft() {
+  if (threadDrafts.value.length===1) return chooseDraft(threadDrafts.value[0]);
   draftList.value?.querySelector("button")?.focus();
   draftList.value?.scrollIntoView({ block: "nearest" });
 }
-const activeDraft = ref(null);
+const activeDraft = ref(null), draftFailure=ref(null);
+const reader=ref(null), currentMessage=ref(null);
+let draftRun=0;
 const threadDrafts = computed(() => {
   const ids = new Set(messages.value.map((message) => message.emailId));
   if (messages.value.length) ids.add(Number(route.query.emailId));
@@ -350,6 +359,7 @@ watch(
     viewEpoch++;printRun++;expandRun++;printing.value=false;expanding.value=false;
     switching = false;
     handledReply = false;
+    draftRun++;draftFailure.value=null;currentMessage.value=null;
     threadSubject.value = "";
     threadId.value = null;
     labelIds.value=[];
@@ -379,13 +389,15 @@ watch([matchingDraft, loading], () => {
   if (!loading.value && route.query.draft) openRequestedDraft();
 });
 async function chooseDraft(draft) {
+  if (switching) return;
   if (draft.draftId === activeDraft.value) {
+    draftRun++;draftFailure.value=null;
+    currentComposer()?.focusBody?.();
     scroll.value
       ?.querySelector(".send.inline")
       ?.scrollIntoView({ block: "nearest" });
     return;
   }
-  if (switching) return;
   if (!draftKey(draft) || matchingDraft()?.draftId === draft.draftId)
     await editSavedDraft(draft);
   else
@@ -400,19 +412,20 @@ async function chooseDraft(draft) {
     });
 }
 async function editSavedDraft(summary) {
-  const request = viewEpoch;
+  const run=++draftRun, current=readerCurrent();
+  draftFailure.value=null;
   try {
-    const { readSavedDraft } = await import("@/services/draft-list");
-    const draft = await readSavedDraft(summary.draftId);
-    if (request === viewEpoch)
-      await reply({ emailId: summary.emailId }, false, draft);
+    const {readSavedDraft}=await import("@/services/draft-list");
+    if (!current() || run!==draftRun) return;
+    const draft=await readSavedDraft(summary.draftId);
+    if (current() && run===draftRun) await reply({emailId:summary.emailId},false,draft);
   } catch (e) {
-    if (request === viewEpoch)
-      error.value = e.message || "Could not open draft.";
+    if (current() && run===draftRun) draftFailure.value={summary,message:e.message || "Could not open draft."};
   }
 }
 async function reply(message, all, draft) {
   if (switching) return;
+  if (!draft) { draftRun++;draftFailure.value=null; }
   const request = viewEpoch;
   switching = true;
   try {
@@ -429,15 +442,19 @@ async function reply(message, all, draft) {
     await nextTick();
     if (request !== viewEpoch) return;
     const editor = currentComposer();
-    activeDraft.value = draft?.draftId ?? null;
-    if (draft) await editor.openDraft(draft);
+    if (draft) {
+      try { await editor.openDraft(draft); }
+      catch (e) { if (request===viewEpoch) closed(); throw e; }
+    }
     else await editor[all ? "openReplyAll" : "openReply"](message);
     await nextTick();
     if (request !== viewEpoch) return;
+    activeDraft.value=draft?.draftId ?? null;
     scroll.value
       ?.querySelector(".send.inline")
       ?.scrollIntoView({ block: "nearest" });
   } catch (e) {
+    if (draft) throw e;
     if (request === viewEpoch)
       error.value = e.message || "Could not open reply.";
   } finally {
@@ -546,7 +563,44 @@ async function deleted(message) {
     });
   else await load();
 }
+function rememberMessage(event) {
+  const card=event.target.closest?.('[data-reader-message]');
+  if (card) currentMessage.value=Number(card.dataset.readerMessage);
+}
+function canNavigate(event) {
+  if (event.defaultPrevented || event.isComposing || event.keyCode===229 ||
+      event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || loading.value || switching) return false;
+  const target=event.target;
+  if (target!==document.body && target!==document.documentElement && !reader.value?.contains(target)) return false;
+  if (event.composedPath().some(node=>node.isContentEditable || node.matches?.(
+    'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="menu"],[role="dialog"]'))) return false;
+  return ![...document.querySelectorAll('dialog[open],.el-overlay,.el-dropdown__popper,.compose-format-popup,.send.compose-open:not(.inline)')]
+    .some(node=>node.getClientRects().length);
+}
+async function stepMessage(event,step) {
+  if (!canNavigate(event) || !messages.value.length) return;
+  const origin=currentMessage.value;
+  let index=messages.value.findIndex(message=>message.emailId===origin);
+  if (index<0) index=step>0 ? -1 : messages.value.length;
+  event.preventDefault();
+  if (index===0 && step<0 && hasMore.value) {
+    if (expanding.value) return;
+    const current=readerCurrent(), focused=document.activeElement;
+    await load(true);
+    if (!current() || document.activeElement!==focused || currentMessage.value!==origin || !canNavigateAfterLoad()) return;
+    index=messages.value.findIndex(message=>message.emailId===origin);
+  }
+  const next=messages.value[index+step];
+  if (!next) return;
+  const button=scroll.value?.querySelector('[data-reader-message="'+next.emailId+'"] .message-toggle');
+  button?.focus({preventScroll:true});
+  button?.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+function canNavigateAfterLoad() {
+  return !switching && !loading.value && !document.querySelector('dialog[open]');
+}
 function keydown(event) {
+  if (event.key==="n" || event.key==="p") return stepMessage(event,event.key==="n" ? 1 : -1);
   if (
     event.key === "Escape" && !event.defaultPrevented &&
     ![...document.querySelectorAll(".el-popper,.el-dialog")].some(el=>el.getClientRects().length) &&

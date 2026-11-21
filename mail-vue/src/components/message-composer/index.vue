@@ -1504,6 +1504,7 @@ onUnmounted(() => {
   document.removeEventListener("focusin", containFocus);
 });
 defineExpose({
+  focusBody: () => editor.value?.focus(),
   followDelivery,
   discardEditor,
   open,
