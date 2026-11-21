@@ -506,7 +506,7 @@ const show = ref(false);
 const editingRecipients = ref(false);
 const loadedSource = shallowRef(null);
 const responseSource = computed(() => loadedSource.value || props.responseMessage || emailStore.detailMap?.[form.responseSourceId || form.emailId]);
-const responseHeader = computed(() => props.inline || form.responseView === "pop");
+const responseHeader = computed(() => props.inline || (!form.detachedReply && form.responseView === "pop"));
 const responseMode = computed(() => form.sendType === "forward" ? "forward" : form.replyAll ? "all" : "reply");
 const addressExpanded = ref(true);
 const subjectCaption = ref("");
@@ -900,6 +900,7 @@ async function openDraft(draft, options) {
   }
   await nextTick();
   if (!mounted || !props.dockActive) return;
+  if (responseHeader.value && !responseSource.value && !form.detachedReply) loadResponseSource();
   if (options?.selectSubject) {
     const subject = composeRoot.value?.querySelector(".subject-input");
     subject?.focus(); subject?.select();
@@ -1038,7 +1039,7 @@ async function moveResponse(command) {
       // The inline instance stays locked until its docked successor is ready.
       clearTimeout(cloudSaveTimer);
       const pristine=!form.draftId && [baseline,automaticBaseline].includes(draftFingerprint(form));
-      const saved=pristine ? snapshot() : await persistDraft({requireCurrent:true,session,responseView:view});
+      const saved=pristine ? {...snapshot(),inlineReply:true} : await persistDraft({requireCurrent:true,session,responseView:view});
       session.check();
       const moved=await uiPreferences.writerRef?.openDraft({...saved,responseView:view},{
         source:responseSource.value, selectSubject:view==="subject", handoff:true,
@@ -1057,6 +1058,26 @@ async function moveResponse(command) {
   } catch (error) { sendError.value=error.message || "Your reply is still open."; }
   finally { preparing.value=false; }
 }
+async function readResponseSource(id,session,controller) {
+  session.check();
+  const source=form.trashSource
+    ? await http.get("/v1/messages/"+id,{signal:controller.signal,headers:{Authorization:session.token}})
+    : await emailStore.ensureDetail({emailId:id});
+  session.check();
+  if (!source || Number(source.accountId)!==Number(form.accountId) || Number(source.emailId)!==Number(id))
+    throw new Error("The original message is no longer available.");
+  return source;
+}
+async function loadResponseSource() {
+  const id=form.responseSourceId || form.trashSource || form.emailId;
+  if (!id) return;
+  const controller=sourceController=new AbortController();
+  try {
+    const source=await readResponseSource(id,draftSession(),controller);
+    if (!controller.signal.aborted && mounted && show.value && (form.responseSourceId || form.trashSource || form.emailId)===id)
+      loadedSource.value=source;
+  } catch { /* A saved response remains editable when its source is offline. */ }
+}
 async function changeResponse(command) {
   const id=form.responseSourceId || form.trashSource || form.emailId;
   if (!id || form.detachedReply) { sendError.value="The original message is no longer available."; return; }
@@ -1066,13 +1087,8 @@ async function changeResponse(command) {
     commitRecipients();
     await pendingDefault;
     await saveQueue;
-    const source=form.trashSource
-      ? await http.get("/v1/messages/"+id,{signal:controller.signal,headers:{Authorization:session.token}})
-      : await emailStore.ensureDetail({emailId:id});
-    session.check();
+    const source=await readResponseSource(id,session,controller);
     if (controller.signal.aborted || !mounted) return;
-    if (!source || Number(source.accountId)!==Number(form.accountId) || Number(source.emailId)!==Number(id))
-      throw new Error("The original message is no longer available.");
     const mode=command==="forward" ? "forward" : "reply";
     if (mode!==form.sendType) {
       const quote=await quotedMessage(source,mode,controller.signal,session.token);
@@ -1091,8 +1107,7 @@ async function changeResponse(command) {
     form.sendType=mode;
     form.replyAll=command==="all";
     Object.assign(form,mode==="reply" ? replyRecipients(source,accountStore.ownAddresses,form.replyAll) : {receiveEmail:[],cc:[],bcc:[]});
-    form.bcc=[];
-    showCc.value=!!form.cc.length;showBcc.value=false;
+    showCc.value=!!form.cc.length;showBcc.value=!!form.bcc.length;
     quoteExpanded.value=false;
     editingRecipients.value=mode==="forward";
     validateAddresses.value=false;

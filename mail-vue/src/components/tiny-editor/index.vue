@@ -213,17 +213,12 @@ watch(
   },
 );
 
-watch(
-  () => props.showQuote,
-  () => {
-    if (isInitialized.value)
-      editor.value?.dom.toggleClass(
-        editor.value.getBody(),
-        "show-reply-quote",
-        props.showQuote,
-      );
-  },
-);
+function updateQuoteDisplay(ed) {
+  ed.dom.toggleClass(ed.getBody(),"hide-reply-quote",props.collapseQuote && !props.showQuote);
+}
+watch([() => props.showQuote,() => props.collapseQuote], () => {
+  if (isInitialized.value) updateQuoteDisplay(editor.value);
+});
 
 function configureComposeMode(ed) {
   if (!props.mailCompose) return;
@@ -317,7 +312,7 @@ function initEditor(initialContent) {
     content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:${props.mailCompose ? "13px" : "14px"}; } body[contenteditable="plaintext-only"] { white-space:pre-wrap; font-size:14px } :root {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
-    } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
+    } body.hide-reply-quote .cloudmail-reply-quote { display:none; }`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
     ...(props.signatureEditor ? {
       iframe_aria_text:"Signature text", contextmenu:false, paste_data_images:false,relative_urls:false,remove_script_host:false,
@@ -395,8 +390,7 @@ function initEditor(initialContent) {
         if (props.mailCompose) observeFileTransfers(ed);
         configureComposeMode(ed);
         writeContent(ed, initialContent ?? props.defValue);
-        if (props.collapseQuote)
-          ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
+        updateQuoteDisplay(ed);
         isInitialized.value = true;
         if (!props.signatureEditor) emit("change", getContent(), messageText());
       });

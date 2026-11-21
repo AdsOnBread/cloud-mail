@@ -294,7 +294,7 @@ describe("composer persistence and sending", () => {
     await opening;
     expect(wrapper.get(".write-box").attributes()).not.toHaveProperty("inert");
     expect(wrapper.get('[aria-label="Message body"]').element.value).toBe("Hello &lt;Alex&gt;<br>Thanks!");
-    await wrapper.get('[aria-label="Close and save draft"]').trigger("click");
+    await wrapper.get(".send.inline").trigger("keydown",{key:"Escape"});
     await flushPromises();
     expect(state.drafts.get(18)).toEqual(original);
     wrapper.unmount();
