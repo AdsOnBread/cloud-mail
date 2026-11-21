@@ -129,7 +129,7 @@
           />
           <pre v-else>{{ detail.text }}</pre>
           <button
-            v-for="file in detail.attList"
+            v-for="file in (detail.attList||[]).filter(downloadablePart)"
             :key="file.attId"
             class="attachment"
             @click="download(file)"
@@ -216,6 +216,7 @@ import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
 import SearchOptions from "@/components/mail-search-options.vue";
 import MailRow from "@/components/mail-row/index.vue";
+import {downloadablePart} from "@/utils/private-files";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import { addresses } from "@/utils/recipients";

@@ -1,5 +1,5 @@
 // Used by both "Has attachment" search and mailbox indicators. Inline images belong to the message body.
-export const attachedFile = "att.user_id=e.user_id AND att.account_id=e.account_id AND att.email_id=e.email_id AND att.type=0 AND COALESCE(att.content_id,'')='' AND lower(COALESCE(att.disposition,''))!='inline'";
+export const attachedFile = "att.user_id=e.user_id AND att.account_id=e.account_id AND att.email_id=e.email_id AND att.type=0 AND (lower(att.disposition)='attachment' OR (COALESCE(att.content_id,'')='' AND lower(COALESCE(att.disposition,''))!='inline'))";
 
 export async function mailboxAttachments(db, userId, rows, mode) {
   const groups = new Map();

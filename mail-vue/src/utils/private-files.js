@@ -1,3 +1,7 @@
+export function downloadablePart(file) {
+  const disposition=file.disposition?.toLowerCase();
+  return Number(file.type || 0)===0 && (disposition==='attachment' || (!file.contentId && disposition!=='inline'));
+}
 // Credentials are attached only to this installation's API, never to message-supplied URLs.
 export async function privateFile(key) {
   const base = new URL(import.meta.env.VITE_BASE_URL || '/api', location.origin);

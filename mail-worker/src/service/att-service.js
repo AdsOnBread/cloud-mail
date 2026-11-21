@@ -1,6 +1,6 @@
 import orm from '../entity/orm';
 import { att } from '../entity/att';
-import { and, eq, isNull, inArray, desc } from 'drizzle-orm';
+import { and, eq, sql, inArray, desc } from 'drizzle-orm';
 import r2Service from './r2-service';
 import constant from '../const/constant';
 import fileUtils from '../utils/file-utils';
@@ -44,7 +44,7 @@ const attService = {
 				eq(att.emailId, emailId),
 				eq(att.userId, userId),
 				eq(att.type, attConst.type.ATT),
-				isNull(att.contentId)
+				sql`(lower(${att.disposition})='attachment' OR (COALESCE(${att.contentId},'')='' AND lower(COALESCE(${att.disposition},''))!='inline'))`
 			)
 		).all();
 	},

@@ -95,8 +95,8 @@
       </div>
       <ShadowHtml class="message-html" v-if="email.content" :html="email.content" />
       <pre v-else class="message-text">{{ email.text }}</pre>
-      <div v-if="email.attList?.length" class="attachments">
-        <div v-for="file in email.attList" :key="file.attId" class="attachment">
+      <div v-if="attachedFiles.length" class="attachments">
+        <div v-for="file in attachedFiles" :key="file.attId" class="attachment">
           <button class="attachment-open" :aria-label="'Preview '+file.filename" @click="previewFile=file">
             <Icon icon="material-symbols:attach-file" width="22"/>
             <span>{{ file.filename || 'Attachment' }}<small v-if="file.size!=null">{{ formatBytes(file.size) }}</small></span>
@@ -123,7 +123,7 @@ import { useUserStore } from "@/store/user";
 import { useUiStore } from "@/store/ui";
 import { emailRead, emailDelete } from "@/request/email";
 import { starAdd, starCancel } from "@/request/star";
-import { privateFileURL } from "@/utils/private-files";
+import { privateFileURL, downloadablePart } from "@/utils/private-files";
 import { formatDetailDate } from "@/utils/day";
 import { formatBytes } from "@/utils/file-utils";
 import { addresses } from "@/utils/recipients";
@@ -144,6 +144,7 @@ const detail = ref(null),
   busy = ref(false);
 const previewFile = ref(null);
 const email = computed(() => detail.value || props.message);
+const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
 async function load() {
   if (loading.value) return;
   loading.value = true;

@@ -95,7 +95,8 @@ describe('Web conversations', () => {
     expect(page.threads[0].attachmentCount).toBe(4);
     expect(page.threads[0].attachments.map(file=>file.filename)).toEqual(['a.txt','b.txt','c.txt']);
     expect((await list({folder:'sent',hasAttachment:1})).total).toBe(1);
-    await add(reply.email_id,'reply.txt');
+    await add(reply.email_id,'reply.txt',0,'<reference>');
+    await env.db.prepare("UPDATE attachments SET disposition='attachment' WHERE email_id=?").bind(reply.email_id).run();
     await env.db.prepare('DELETE FROM attachments WHERE email_id=?').bind(root.email_id).run();
     expect((await list({hasAttachment:1})).threads[0].attachments[0].filename).toBe('reply.txt');
     await cloudMail.trash(context(),1,[reply.email_id]);
