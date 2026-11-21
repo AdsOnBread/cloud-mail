@@ -32,6 +32,7 @@
 <script setup>
 import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from "vue";
 import {Icon} from "@iconify/vue";
+import {ElMessage} from "element-plus";
 import http from "@/axios";
 import {useUserStore} from "@/store/user";
 import {useWriterStore} from "@/store/writer";
@@ -44,9 +45,10 @@ const title=computed(()=>saved.value?.name || props.name || props.email);
 const calendarLink=computed(()=>"https://calendar.google.com/calendar/render?"+new URLSearchParams({action:"TEMPLATE",add:props.email}));
 const saveLabel=computed(()=>saved.value ? "Remove from contacts" : "Add to contacts");
 const controller=new AbortController();
-const current=()=>!controller.signal.aborted && props.owner && user.user.email===props.owner && token && token===user.authenticatedToken && token===localStorage.getItem("token");
+const sameSession=owner=>owner && user.user.email===owner && token && token===user.authenticatedToken && token===localStorage.getItem("token");
+const current=()=>!controller.signal.aborted && sameSession(props.owner);
 const config=()=>({signal:controller.signal,headers:{Authorization:token},noMsg:true});
-let readVersion=0;
+let readVersion=0,refreshAfterSave=false;
 async function read() {
   if (!current()) return emit("close");
   const version=++readVersion;
@@ -60,16 +62,30 @@ async function read() {
 async function save() {
   if (!current() || !ready.value || busy.value) return;
   busy.value=true;
+  const change={owner:props.owner,accountId:props.accountId,email:props.email,saved:!saved.value};
   try {
-    const value=await http.put("/v1/contacts",{email:props.email,name:title.value,accountId:props.accountId,saved:!saved.value},config());
-    if (!current()) return;
-    saved.value=value;
-    writer.contactChanged({owner:props.owner,accountId:props.accountId,email:props.email,saved:Boolean(value)});
-    notice.value=value ? "Added to contacts" : "Removed from contacts";
-  } catch { if (current()) notice.value="Couldn’t update this contact. Try again."; }
-  finally { busy.value=false; }
+    // Dismissing the card cancels its reads. An explicit save still completes
+    // and refreshes the mailbox that initiated it.
+    const value=await http.put("/v1/contacts",{email:change.email,name:title.value,accountId:change.accountId,saved:change.saved},
+      {headers:{Authorization:token},noMsg:true});
+    if (!sameSession(change.owner)) return;
+    writer.contactChanged(change);
+    if (current()) {
+      saved.value=value;
+      notice.value=value ? "Added to contacts" : "Removed from contacts";
+    }
+  } catch {
+    if (current()) notice.value="Couldn’t update this contact. Try again.";
+    else if (sameSession(change.owner)) ElMessage.error("Couldn’t update "+change.email+" in contacts.");
+  } finally {
+    busy.value=false;
+    if (refreshAfterSave && current()) {refreshAfterSave=false;read();}
+  }
 }
-watch(()=>writer.contactRevision,()=>{if (!busy.value) read();},{flush:"sync"});
+watch(()=>writer.contactRevision,()=>{
+  if (busy.value) refreshAfterSave=true;
+  else read();
+},{flush:"sync"});
 async function copy() {
   if (!current()) return;
   try {await navigator.clipboard.writeText(props.email);if (current()) notice.value="Email copied";}
