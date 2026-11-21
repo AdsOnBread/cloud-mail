@@ -11,7 +11,7 @@
       ref="editorRef"
     ></textarea>
     <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
-    <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.open(link)" />
+    <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.openPhoto(link)" />
     <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
   </div>
 </template>

@@ -11,8 +11,8 @@
       <span aria-hidden="true">|</span>
       <button type="button" @click="remove">Remove</button>
     </template>
-    <form v-else :class="{'image-link':panel.hasImage}" @submit.prevent="apply">
-      <label v-if="!panel.hasImage">
+    <form v-else :class="{'image-link':panel.imageLink}" @submit.prevent="apply">
+      <label v-if="!panel.imageLink">
         <Icon icon="material-symbols:short-text" width="18" aria-hidden="true" />
         <input ref="textField" v-model="panel.text" aria-label="Anchor Text" placeholder="Text" autocomplete="off" />
       </label>
@@ -20,7 +20,7 @@
         <Icon icon="material-symbols:link" width="18" aria-hidden="true" />
         <input ref="urlField" v-model="panel.url" aria-label="Link" placeholder="Type or paste a link" autocomplete="off" />
       </label>
-      <button v-if="panel.hasImage && panel.existing" class="remove-link" type="button" @click="remove">Remove link</button>
+      <button v-if="panel.imageLink && panel.existing" class="remove-link" type="button" @click="remove">Remove link</button>
       <button type="submit" class="apply-link" :disabled="!safeUrl">Apply</button>
     </form>
   </div>
@@ -112,7 +112,7 @@ function editorKey(event) {
   }
   close(false);
 }
-async function open(existing = null, preview = false, pointer = null) {
+async function open(existing = null, preview = false, pointer = null, photoAction = false) {
   close(false);
   const ed = props.editor;
   if (!ed?.initialized || ed.removed) return;
@@ -123,8 +123,8 @@ async function open(existing = null, preview = false, pointer = null) {
     pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : null;
   bookmark = ed.selection.getBookmark(2, true);
   originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
-  const hasImage = Boolean((anchor || range.cloneContents()).querySelector("img"));
-  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, hasImage, existing:Boolean(anchor)};
+  const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
+  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, imageLink, existing:Boolean(anchor)};
   const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown", insideEditor);
@@ -161,14 +161,14 @@ function change(fn) {
 }
 function apply() {
   if (!safeUrl.value) return;
-  const hasImage = panel.value.hasImage;
+  const imageLink = panel.value.imageLink;
   const href = safeUrl.value,
     text = panel.value.text || href;
   change((ed) => {
     if (anchor?.isConnected) {
       ed.dom.setAttrib(anchor, "href", href);
-      if (!hasImage && text !== originalText) renameLink(anchor, text);
-    } else if (!ed.selection.isCollapsed() && (hasImage || text === originalText)) {
+      if (!imageLink && text !== originalText) renameLink(anchor, text);
+    } else if (!ed.selection.isCollapsed() && (imageLink || text === originalText)) {
       ed.execCommand("mceInsertLink", false, { href });
     } else {
       const link = ed.getDoc().createElement("a");
@@ -192,7 +192,7 @@ function remove() {
   });
 }
 onBeforeUnmount(() => close());
-defineExpose({ open, close });
+defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
 </script>
 <style scoped>
 .link-card {

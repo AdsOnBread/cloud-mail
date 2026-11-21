@@ -9,7 +9,7 @@ export function renameLink(link, label) {
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (node.length) runs.push(node);
   }
-  if (!runs.length || link.querySelector("img,br,[contenteditable=false]")) {
+  if (!runs.length || (!link.querySelector("img") && link.querySelector("br,[contenteditable=false]"))) {
     link.textContent = label;
     return;
   }
