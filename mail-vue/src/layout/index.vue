@@ -12,7 +12,7 @@
     <MailFeedback />
     <LabelEditor /><QuickSettings />
     <FilterEditor v-if="filters.editor" :key="filters.editor.id" :rule="filters.editor"/>
-    <button v-if="!conversationWindow && route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" :inert="composeModal" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
+    <button v-if="!conversationWindow && route.name !== 'content' && route.meta.name!=='setting'" v-perm="'email:send'" class="mobile-compose" :inert="composeModal" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>

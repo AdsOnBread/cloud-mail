@@ -83,6 +83,7 @@ const props = defineProps({
   mailCompose: Boolean,
   spellActive: Boolean,
   signatureEditor: Boolean,
+  writingStyle: Object,
   plainText: Boolean,
   collapseQuote: Boolean,
   showQuote: Boolean,
@@ -339,6 +340,15 @@ function initEditor(initialContent) {
         ed.ui.registry.addButton("signaturelink",{icon:"link", tooltip:"Insert link", onAction:openLink});
       }
       if (props.mailCompose) {
+        // Select all followed by deletion can replace the initial styled paragraph.
+        // Restore the writing area before insertion while leaving existing blocks alone.
+        ed.on("beforeinput", event=>{
+          if(props.plainText || !event.inputType?.startsWith("insert") || !Object.keys(props.writingStyle || {}).length)return;
+          const body=ed.getBody(),block=body.firstElementChild;
+          if(!block?.matches("div:not([class]):not([style])") || !ed.dom.isEmpty(block) ||
+              !Array.from(body.children).slice(1).every(node=>node.matches(".cloudmail-signature,.cloudmail-reply-quote")))return;
+          ed.dom.setStyles(block,props.writingStyle);
+        });
         ed.on("keydown", event => {
           const action=props.spellActive && spellingShortcut(event,appleSpellingKeys);
           if (action) {

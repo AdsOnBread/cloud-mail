@@ -191,6 +191,7 @@
         >
           <tinyEditor
             :plain-text="form.plainText"
+            :writing-style="writingStyle"
             :def-value="defValue"
             mail-compose
             :spell-active="show && !minimized && !sending"
@@ -797,9 +798,11 @@ function startSignatureDefault(){
     if(pristine)automaticBaseline=draftFingerprint(form);
   })();
 }
+const writingStyle=ref({});
 let windowContactSeed=false;
 function resetForm() {
   windowContactSeed=false;
+  writingStyle.value=textStyleCSS(userStore.user.generalSettings?.textStyle);
   clearFormatCaption();
   focusAfterResize=undefined;
   fileGeneration++;
@@ -871,7 +874,7 @@ function focusWindow(){
 // Only the new writing area gets the account default. Quoted and signed text
 // remain sibling blocks and saved draft HTML keeps its own styles.
 function initialWritingArea(content="") {
-  const css=textStyleCSS(userStore.user.generalSettings?.textStyle);
+  const css=writingStyle.value;
   if(form.plainText || !Object.keys(css).length)return content;
   const template=document.createElement('template');
   template.innerHTML=content || '<div><br></div>';

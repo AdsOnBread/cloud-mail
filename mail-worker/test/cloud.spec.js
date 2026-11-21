@@ -166,6 +166,24 @@ describe('General mail settings',()=>{
    await expect(saveGeneralSettings(env.db,1,{...prefs,version:2,hoverActions:0})).rejects.toMatchObject({code:400});
    expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:false,keyboardShortcuts:true,hoverActions:false});
  });
+ it('migrates and saves a default writing style, preserves it for older clients and resets it',async()=>{
+   const {ensureGeneralPreferenceColumns}=await import('../src/cloud/schema');
+   const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
+   await env.db.prepare('ALTER TABLE mail_general_settings DROP COLUMN text_style').run();
+   const columns=async()=>(await env.db.prepare('PRAGMA table_info(mail_general_settings)').all()).results;
+   await ensureGeneralPreferenceColumns(columns,sql=>env.db.prepare(sql).run());
+   const prefs={version:0,undoSeconds:10,replyAll:false};
+   const textStyle={font:'Georgia',size:'Large',color:'#9900ff'};
+   await saveGeneralSettings(env.db,1,{...prefs,textStyle});
+   const legacy=await saveGeneralSettings(env.db,1,{...prefs,version:1,signatures:{version:0,items:[],defaults:{},beforeQuote:false}});
+   expect(legacy.textStyle).toEqual(textStyle);
+   expect((await readGeneralSettings(env.db,2)).textStyle).toBeUndefined();
+   await expect(saveGeneralSettings(env.db,1,{...prefs,version:2,textStyle:{...textStyle,color:'invalid'}})).rejects.toMatchObject({code:400});
+   expect((await saveGeneralSettings(env.db,1,{...prefs,version:2})).textStyle).toEqual(textStyle);
+   const reset={font:'Sans Serif',size:'Normal',color:''};
+   expect((await saveGeneralSettings(env.db,1,{...prefs,version:3,textStyle:reset})).textStyle).toBeUndefined();
+   expect((await readGeneralSettings(env.db,1)).textStyle).toBeUndefined();
+ });
  it('rejects stale edits, keeps preferences per user, and removes them on deletion',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const input={version:0,undoSeconds:30,replyAll:true};
