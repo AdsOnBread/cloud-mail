@@ -210,6 +210,14 @@ defineEmits(["select", "star", "open", "importance"]);
   align-items: center;
 }
 @media (min-width: 768px) {
+  /* Keep native tab order stable while focus moves from the row into its actions. */
+  .row-actions {
+    display:flex;
+    position:absolute;
+    inset-inline-end:12px;
+    opacity:0;
+    pointer-events:none;
+  }
   .with-files {box-sizing:border-box;height:calc(var(--mail-row-height,40px) + 32px);padding-bottom:32px}
   .with-files .paperclip {display:none}
   .file-chips {position:absolute;left:calc(96px + clamp(140px, 16vw, 200px));right:14px;bottom:7px;display:flex;gap:6px;align-items:center;overflow:hidden}
@@ -228,7 +236,7 @@ defineEmits(["select", "star", "open", "importance"]);
   }
   .conversation-row:has(:focus-visible) .row-actions,
   .conversation-row:has([aria-expanded="true"]) .row-actions {
-    display: flex;
+    position:static;opacity:1;pointer-events:auto;
   }
   .conversation-row:has(:focus-visible):has(.row-actions) .row-date,
   .conversation-row:has([aria-expanded="true"]) .row-date {
@@ -241,7 +249,7 @@ defineEmits(["select", "star", "open", "importance"]);
     box-shadow: var(--mail-row-shadow);
   }
   .conversation-row:hover .row-actions {
-    display: flex;
+    position:static;opacity:1;pointer-events:auto;
   }
   .conversation-row:hover:has(.row-actions) .row-date {
     display: none;
