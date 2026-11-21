@@ -110,6 +110,15 @@ describe('recipient entry', () => {
     expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([['alexandra@example.com']]);
     wrapper.unmount();
   });
+  it('keeps removed mailbox contacts hidden even when the server finds their messages',async()=>{
+    vi.useFakeTimers();
+    const wrapper=mount(RecipientField,{props:{label:'Cc',owner:'first',accountId:1,removed:['removed@example.net']}});
+    try {
+      http.get.mockResolvedValueOnce([{email:'Removed@example.net',name:'Removed'}]);
+      await wrapper.get('input').setValue('Rem');await vi.advanceTimersByTimeAsync(150);
+      expect(wrapper.get('input').attributes('aria-expanded')).toBe('false');
+    } finally {wrapper.unmount();vi.useRealTimers();}
+  });
   it('ignores late mailbox matches after the sending identity changes',async()=>{
     vi.useFakeTimers();
     const wrapper=mount(RecipientField,{props:{label:'Cc',owner:'first',accountId:1}});

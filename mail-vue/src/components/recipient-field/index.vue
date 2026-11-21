@@ -55,7 +55,7 @@ import { splitRecipients } from '@/utils/recipients.js';
 import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
-  names: Object, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
+  names: Object, removed: {type:Array,default:()=>[]}, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
 const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);

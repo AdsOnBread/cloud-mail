@@ -122,6 +122,7 @@
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
               :recent="mailboxRecents"
+              :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.receiveEmail"
@@ -155,6 +156,7 @@
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
               :recent="mailboxRecents"
+              :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.cc"
@@ -169,6 +171,7 @@
               :owner="form.ownerEmail===userStore.user.email ? form.ownerEmail : ''"
               :account-id="form.accountId"
               :recent="mailboxRecents"
+              :removed="removedSuggestions"
               @choose-person="rememberPerson"
               :names="form.replyRecipientNames"
               :error="recipientErrors.bcc"
@@ -714,6 +717,7 @@ const emptyForm = () => ({
 });
 const form = reactive(emptyForm());
 const mailboxRecents = computed(()=>writerStore.recentAddresses(form.ownerEmail,form.accountId));
+const removedSuggestions = computed(()=>writerStore.removedSuggestions[JSON.stringify([form.ownerEmail,form.accountId])] || []);
 const attachedFiles = computed(() => form.attachments.filter(file => !file.contentId));
 const starChoice = ref(null);
 const starRevision = ref(0);
@@ -1393,7 +1397,7 @@ async function deleteContact() {
     const selected = contactsTabRef.value
       .getSelectionRows()
       .map((contact) => contact.email);
-    writerStore.forgetAddresses(selected);
+    writerStore.forgetAddresses(form.ownerEmail, form.accountId, selected);
   } catch {}
 }
 function keydown(event) {

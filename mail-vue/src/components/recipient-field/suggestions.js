@@ -10,7 +10,7 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   const options=computed(()=>{
     const needle=personSearchKey(query.value);
     if (!needle || needle.length>maxPersonTerm) return [];
-    const omit=new Set([...props.otherRecipients,...props.modelValue.filter((_,index)=>index!==editing.value)].map(personSearchKey));
+    const omit=new Set([...props.removed,...props.otherRecipients,...props.modelValue.filter((_,index)=>index!==editing.value)].map(personSearchKey));
     const named=new Map(people.value.map(person=>[personSearchKey(person.email),person]));
     const known=[...props.recent,...Object.keys(props.names || {})].map(email=>{
       const name=props.names?.[email.toLowerCase()];

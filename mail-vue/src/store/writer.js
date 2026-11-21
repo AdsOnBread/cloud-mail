@@ -3,7 +3,8 @@ import { defineStore } from 'pinia'
 export const useWriterStore = defineStore('writer', {
     state: () => ({
         sendRecipientRecord: [],
-        mailboxRecents: {}
+        mailboxRecents: {},
+        removedSuggestions: {}
     }),
     actions: {
         recentAddresses(owner, accountId) {
@@ -12,17 +13,22 @@ export const useWriterStore = defineStore('writer', {
         rememberAddresses(owner, accountId, addresses) {
             if (!owner || !(accountId > 0)) return;
             const key = JSON.stringify([owner, accountId]);
+            if (this.removedSuggestions[key]?.length) {
+                const reused = new Set(addresses.map(address=>address.toLowerCase()));
+                this.removedSuggestions[key] = this.removedSuggestions[key].filter(address=>!reused.has(address));
+            }
             this.mailboxRecents[key] = [...new Set([...addresses, ...this.recentAddresses(owner,accountId)])].slice(0,500);
         },
-        forgetAddresses(addresses) {
-            const removed = new Set(addresses);
-            this.sendRecipientRecord = this.sendRecipientRecord.filter(address => !removed.has(address));
-            for (const key of Object.keys(this.mailboxRecents)) {
-                this.mailboxRecents[key] = this.mailboxRecents[key].filter(address => !removed.has(address));
-            }
+        forgetAddresses(owner, accountId, addresses) {
+            const removed = new Set(addresses.map(address=>address.toLowerCase()));
+            this.sendRecipientRecord = this.sendRecipientRecord.filter(address => !removed.has(address.toLowerCase()));
+            if (!owner || !(accountId > 0)) return;
+            const key = JSON.stringify([owner, accountId]);
+            this.mailboxRecents[key] = this.recentAddresses(owner,accountId).filter(address => !removed.has(address.toLowerCase()));
+            this.removedSuggestions[key] = [...new Set([...(this.removedSuggestions[key] || []),...removed])];
         }
     },
     persist: {
-        pick: ['sendRecipientRecord','mailboxRecents'],
+        pick: ['sendRecipientRecord','mailboxRecents','removedSuggestions'],
     },
 })
