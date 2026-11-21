@@ -17,6 +17,12 @@
           </label>
         </div>
       </div>
+      <div class="setting-row text-style-row">
+        <div class="signature-caption"><strong>Default text style:</strong>
+          <div>(Use the 'Remove formatting' button on the toolbar to reset the default text style)</div>
+        </div>
+        <DefaultTextStyle v-model="form.textStyle" :disabled="!ready || busy"/>
+      </div>
       <div class="setting-row">
         <strong id="hover-actions">Hover actions:</strong>
         <div role="radiogroup" aria-labelledby="hover-actions">
@@ -63,17 +69,19 @@ import {ElMessageBox} from 'element-plus';
 import http from '@/axios';
 import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
+import DefaultTextStyle from './default-text-style.vue';
+import {defaultTextStyle} from '../../../../shared/mail-text-style';
 import SettingsTabs from './tabs.vue';
 import SignatureFields from '@/components/mail-signatures/fields.vue';
 import {useMailSignatures} from '@/store/mail-signatures';
 
 const user=useUserStore(), account=useAccountStore(), router=useRouter();
-const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false,hoverActions:true});
+const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false,hoverActions:true,textStyle:{...defaultTextStyle}});
 const baseline=ref(null), busy=ref(false), conflict=ref(''), error=ref(''), preferencesError=ref('');
 const signatures=useMailSignatures(), signatureForm=ref(null), signatureRevision=ref(0), savedSignatures=ref(''), signatureError=ref('');
 const keyboardRow=ref(null);
 const ready=computed(()=>Boolean(baseline.value));
-const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts || baseline.value.hoverActions!==form.hoverActions));
+const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts || baseline.value.hoverActions!==form.hoverActions || ['font','size','color'].some(key=>baseline.value.textStyle[key]!==form.textStyle[key])));
 const signaturesChanged=computed(()=>signatureForm.value && JSON.stringify(signatureForm.value)!==savedSignatures.value);
 const dirty=computed(()=>preferencesChanged.value || signaturesChanged.value);
 let generation=0;
@@ -85,8 +93,8 @@ function session() {
 function accept(saved) {
   if ((user.user.generalSettings?.version ?? 0) > saved.version) saved=user.user.generalSettings;
   user.user.generalSettings=saved;
-  baseline.value={...saved,undoSeconds:user.undoSeconds,keyboardShortcuts:saved.keyboardShortcuts===true,hoverActions:saved.hoverActions!==false};
-  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions});
+  baseline.value={...saved,undoSeconds:user.undoSeconds,keyboardShortcuts:saved.keyboardShortcuts===true,hoverActions:saved.hoverActions!==false,textStyle:saved.textStyle || defaultTextStyle};
+  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions,textStyle:{...baseline.value.textStyle}});
 }
 function acceptSignatures(data) {
   signatureRevision.value++;
@@ -148,7 +156,7 @@ async function save() {
   } finally { if (request.current()) busy.value=false; }
 }
 function cancel() {
-  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions});
+  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts,hoverActions:baseline.value.hoverActions,textStyle:{...baseline.value.textStyle}});
   if (savedSignatures.value) acceptSignatures(JSON.parse(savedSignatures.value));
   router.push('/inbox');
 }
@@ -198,5 +206,5 @@ html.dark form{color-scheme:dark}
 footer{display:flex;justify-content:center;gap:6px;padding:14px 0}
 button{font:inherit;color:inherit;cursor:pointer}button:disabled{color:GrayText;cursor:default}
 p[role=alert]{color:var(--el-color-danger)}
-@media(max-width:600px){.setting-row.signature-row{grid-template-columns:minmax(0,1fr);gap:10px}form{padding-inline:12px}.setting-row{grid-template-columns:36% minmax(0,1fr)}}
+@media(max-width:600px){.setting-row:is(.signature-row,.text-style-row){grid-template-columns:minmax(0,1fr);gap:10px}form{padding-inline:12px}.setting-row{grid-template-columns:36% minmax(0,1fr)}}
 </style>
