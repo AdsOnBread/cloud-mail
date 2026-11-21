@@ -1,5 +1,5 @@
 <template>
-  <dialog ref="dialog" class="contact-picker" aria-label="Select contacts" @cancel.prevent="dismiss" @keydown.esc.stop @close="emit('close')">
+  <dialog ref="dialog" class="contact-picker" aria-label="Select contacts" @cancel.prevent="dismiss" @keydown.esc.stop.prevent="dismiss" @close="emit('close')">
     <header>
       <h2><Icon icon="material-symbols:account-circle" width="24"/>Select contacts</h2>
       <label class="contact-search"><Icon icon="material-symbols:search" width="20"/>
@@ -26,7 +26,7 @@
       <button type="button" class="text-button" @click="dismiss">Cancel</button>
       <button type="button" class="insert" :disabled="!dirty && !chosen.size" @click="insert">Insert</button>
     </footer>
-    <dialog ref="confirmRemove" class="forget-dialog" aria-label="Remove recent contacts" @keydown.esc.stop>
+    <dialog ref="confirmRemove" class="forget-dialog" aria-label="Remove recent contacts" @keydown.esc.stop.prevent="confirmRemove.close()">
       <h3>Remove from recent contacts?</h3>
       <p>These addresses will be hidden from suggestions for this mailbox.</p>
       <form method="dialog"><button autofocus>Cancel</button><button type="button" @click="forget">Remove</button></form>
@@ -50,7 +50,11 @@ const emit=defineEmits(['insert','forget','close']);
 const user=useUserStore(),token=user.authenticatedToken,owner=props.owner,account=props.accountId;
 const current=()=>owner && owner===user.user.email && owner===props.owner && account===props.accountId && token && token===user.authenticatedToken && token===localStorage.getItem('token');
 const key=address=>address.trim().toLowerCase();
-const named=email=>({email,name:props.names?.[key(email)] || email});
+function named(email){
+  const id=key(email);
+  const name=props.names && Object.hasOwn(props.names,id) ? props.names[id] : '';
+  return {email,name:typeof name==='string' && name || email};
+}
 const initial=new Set(props.addresses.map(key));
 const chosen=ref(new Map(props.addresses.map(email=>[key(email),named(email)])));
 const dirty=computed(()=>chosen.value.size!==initial.size || [...initial].some(id=>!chosen.value.has(id)));
