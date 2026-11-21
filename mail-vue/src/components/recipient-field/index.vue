@@ -69,7 +69,7 @@ import { formatRecipient, parseRecipientList, splitRecipients } from '@/utils/re
 import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
-  names: Object, removed: {type:Array,default:()=>[]}, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
+  names: Object, contactRevision:Number, removed: {type:Array,default:()=>[]}, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
 const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson','composeContact']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);

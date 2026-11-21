@@ -29,7 +29,7 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   });
   function close() { typing.value=false; active.value=-1; }
   watch([()=>props.owner,()=>props.accountId],close,{flush:'sync'});
-  watch(query,(term,_,cleanup)=>{
+  watch([query,()=>props.contactRevision],([term],_,cleanup)=>{
     people.value=[];
     if (!term || term.length>maxPersonTerm) return;
     const controller=new AbortController();

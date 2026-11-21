@@ -30,7 +30,7 @@
   </section>
 </template>
 <script setup>
-import {computed,nextTick,onMounted,onBeforeUnmount,ref} from "vue";
+import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from "vue";
 import {Icon} from "@iconify/vue";
 import http from "@/axios";
 import {useUserStore} from "@/store/user";
@@ -46,13 +46,16 @@ const saveLabel=computed(()=>saved.value ? "Remove from contacts" : "Add to cont
 const controller=new AbortController();
 const current=()=>!controller.signal.aborted && props.owner && user.user.email===props.owner && token && token===user.authenticatedToken && token===localStorage.getItem("token");
 const config=()=>({signal:controller.signal,headers:{Authorization:token},noMsg:true});
+let readVersion=0;
 async function read() {
   if (!current()) return emit("close");
-  notice.value="";
+  const version=++readVersion;
+  if (!ready.value) notice.value="";
+  ready.value=false;
   try {
     const value=await http.get("/v1/contacts",{...config(),params:{email:props.email,accountId:props.accountId}});
-    if (current()) {saved.value=value;ready.value=true;}
-  } catch { if (current()) notice.value="Couldn’t load contact."; }
+    if (current() && version===readVersion) {saved.value=value;ready.value=true;}
+  } catch { if (current() && version===readVersion) notice.value="Couldn’t load contact."; }
 }
 async function save() {
   if (!current() || !ready.value || busy.value) return;
@@ -61,13 +64,14 @@ async function save() {
     const value=await http.put("/v1/contacts",{email:props.email,name:title.value,accountId:props.accountId,saved:!saved.value},config());
     if (!current()) return;
     saved.value=value;
-    if (value) writer.restoreSuggestions(props.owner,props.accountId,[props.email]);
-    writer.contactRevision++;
+    writer.contactChanged({owner:props.owner,accountId:props.accountId,email:props.email,saved:Boolean(value)});
     notice.value=value ? "Added to contacts" : "Removed from contacts";
   } catch { if (current()) notice.value="Couldn’t update this contact. Try again."; }
   finally { busy.value=false; }
 }
+watch(()=>writer.contactRevision,()=>{if (!busy.value) read();},{flush:"sync"});
 async function copy() {
+  if (!current()) return;
   try {await navigator.clipboard.writeText(props.email);if (current()) notice.value="Email copied";}
   catch {if (current()) notice.value="Couldn’t copy the email address.";}
 }
@@ -84,7 +88,7 @@ function outside(event) {
 function escape(event) {
   if (event.key!=="Escape" || event.isComposing || event.defaultPrevented) return;
   event.preventDefault();event.stopPropagation();
-  emit("close",card.value?.contains(document.activeElement));
+  emit("close",props.focused || card.value?.contains(document.activeElement));
 }
 function tab(event) {
   const actions=[...card.value.querySelectorAll("a,button:not(:disabled)")];

@@ -16,6 +16,7 @@
   </div>
 </template>
 <script setup>
+import {useWriterStore} from "@/store/writer";
 import {useMessageFilters} from '@/store/message-filters';
 import FilterEditor from '@/components/mail-filters/filter-editor.vue';
 import {useAccountStore} from '@/store/account';
@@ -113,7 +114,7 @@ onBeforeUnmount(() => {
 
 const composeModal=computed(()=>Boolean(writerRef.value?.modalOpen));
 const isMobile = ref(window.innerWidth < 768);
-let stopDraftSync, stopDraftList;
+let stopDraftSync, stopDraftList, stopContacts;
 let size = window.innerWidth >= 1024 ? 'desktop' : window.innerWidth >= 768 ? 'tablet' : 'mobile';
 function resize() {
   wideEnough.value = window.innerWidth >= 900;
@@ -122,8 +123,10 @@ function resize() {
   if (next !== size) { uiStore.asideShow = next === 'desktop'; size = next; }
 }
 watch(() => route.path, () => { if (isMobile.value) uiStore.asideShow = false; });
-onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync((...args)=>writerRef.value?.followDelivery(...args)); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
-onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
+onMounted(() => {
+  stopContacts=useWriterStore().listenForContacts(owner=>owner===user.user.email && user.authenticatedToken && user.authenticatedToken===localStorage.getItem("token"));
+  stopDraftList=startDraftList(); stopDraftSync=startDraftSync((...args)=>writerRef.value?.followDelivery(...args)); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
+onBeforeUnmount(() => { clearTimeout(railTimer);stopContacts?.();stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
 </script>
 <style scoped>
 .mail-layout { --nav-width:72px; position:fixed; inset:0; display:grid; grid-template-columns:var(--nav-width) minmax(0,1fr); grid-template-rows:64px minmax(0,1fr); background:var(--mail-canvas); }
