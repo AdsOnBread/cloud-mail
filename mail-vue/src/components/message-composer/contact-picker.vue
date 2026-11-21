@@ -253,6 +253,7 @@ watch(
 );
 const visible = computed(() => {
   const entries = new Map(),
+    matching = new Set(),
     hidden = new Set(props.removed.map(key)),
     term = personSearchKey(query.value.trim());
   // Keep off-screen selections when a different search returns. Existing draft
@@ -266,14 +267,18 @@ const visible = computed(() => {
     const id = key(person.email);
     if (!initial.has(id) && (hidden.has(id) || !isEmail(person.email)))
       continue;
+    if (
+      [person.name, person.email].some((text) =>
+        personSearchKey(text).includes(term),
+      )
+    )
+      matching.add(id);
     const old = entries.get(id);
     if (!old || old.name === old.email) entries.set(id, person);
   }
-  return [...entries.values()].filter((person) =>
-    [person.name, person.email].some((text) =>
-      personSearchKey(text).includes(term),
-    ),
-  );
+  return [...entries]
+    .filter(([id]) => matching.has(id))
+    .map(([id, person]) => chosen.value.get(id) || person);
 });
 const allVisible = computed(
   () =>

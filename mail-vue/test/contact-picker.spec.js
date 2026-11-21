@@ -84,3 +84,18 @@ it("ignores an earlier lookup that arrives after a newer one and enriches presel
   await wrapper.get("button.insert").trigger("click");
   expect(wrapper.emitted("insert")[0][0]).toEqual([maya]);
 });
+
+it("finds a checked address under a different name and displays the name that Insert will use", async () => {
+  const selected = { email: "help@example.net", name: "Support Team" };
+  http.get.mockImplementation(async (_, { params }) => [
+    params.q ? { ...selected, name: "Owners Team" } : selected,
+  ]);
+  open();
+  await vi.advanceTimersByTimeAsync(1);
+  await wrapper.get('input[aria-label="help@example.net"]').setValue(true);
+  await wrapper.get("input[type=search]").setValue("owners");
+  await vi.advanceTimersByTimeAsync(150);
+  expect(wrapper.get(".person-name").text()).toBe("Support Team");
+  await wrapper.get("button.insert").trigger("click");
+  expect(wrapper.emitted("insert")[0][0]).toEqual([selected]);
+});
