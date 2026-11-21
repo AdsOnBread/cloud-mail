@@ -14,7 +14,7 @@ function plainHeaderLength(lines) {
   if (!first.startsWith("---------- Forwarded message")) return 0;
   let end=1;
   while (end<lines.length && /^(From|Date|Subject|To|Cc):/.test(lines[end].textContent)) end++;
-  return end + (end<lines.length && !lines[end].textContent.trim() ? 1 : 0);
+  return end;
 }
 export function changeQuotedBody(html,generated,plainText,mode) {
   const previous=document.createElement("template"), next=document.createElement("template");
@@ -26,7 +26,23 @@ export function changeQuotedBody(html,generated,plainText,mode) {
   if (!quote) return html;
   if (plainText) {
     const original=Array.from(old.childNodes), updated=Array.from(quote.childNodes);
-    quote.replaceChildren(...updated.slice(0,plainHeaderLength(updated)),...original.slice(plainHeaderLength(original)));
+    const heading=updated.slice(0,plainHeaderLength(updated));
+    const body=original.slice(plainHeaderLength(original));
+    // The forwarded header is followed by a generated blank separator. A
+    // reply instead prefixes every body line with a single quote marker.
+    if (mode==="reply" && body.length && !body[0].textContent.trim()) body.shift();
+    if (mode==="forward") {
+      const separator=document.createElement("div");
+      separator.append(document.createElement("br"));
+      heading.push(separator);
+    }
+    const lines=body.map(node=>{
+      const line=document.createElement("div"), text=node.textContent;
+      line.textContent=mode==="reply" ? "> "+text : text.replace(/^> ?/,"");
+      if (!line.textContent) line.append(document.createElement("br"));
+      return line;
+    });
+    quote.replaceChildren(...heading,...lines);
   } else if (mode==="forward") {
     const attribution=old.firstElementChild;
     if (attribution?.textContent.trimEnd().endsWith(" wrote:")) attribution.remove();

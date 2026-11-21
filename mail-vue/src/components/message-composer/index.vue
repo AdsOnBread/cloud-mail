@@ -332,7 +332,7 @@ import {quotedMessage} from "./quoted-message";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import ContactPicker from './contact-picker.vue';
-import {changeQuotedBody,responseSubject} from "./response";
+import {changeQuotedBody,responseSubject,responseFileSignatures,restoreResponseFiles} from "./response";
 import ResponseMenu from "./response-menu.vue";
 import SendControls from "./send-controls.vue";
 import {sendConfirmation} from "./send-confirmation";
@@ -984,14 +984,7 @@ async function prepareMessage(message, mode, all = false) {
     if (mode === "reply") {
       Object.assign(form, replyRecipients(email, accountStore.ownAddresses, all));
       if (props.inline) {
-        form.replyRecipientNames = {};
-        for (const list of [email.recipient, email.cc]) {
-          for (const person of mailboxEntries(list)) {
-            if (person.name) form.replyRecipientNames[person.address.toLowerCase()] = person.name;
-          }
-        }
-        if (email.sendEmail && email.name)
-          form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
+        addResponseNames(email);
       }
     } else if (responseHeader.value) editingRecipients.value = true;
     if (form.plainText) Object.assign(form, plainMarkup(form.content));
@@ -1013,6 +1006,14 @@ async function prepareMessage(message, mode, all = false) {
   if (props.inline && mode === "reply") editor.value?.focus?.(true);
   else toField.value?.focus();
   return true;
+}
+function addResponseNames(source) {
+  const names={...form.replyRecipientNames};
+  for (const list of [source.recipient,source.cc,source.bcc]) {
+    for (const person of mailboxEntries(list)) if (person.name) names[person.address.toLowerCase()]=person.name;
+  }
+  if (source.sendEmail && source.name) names[source.sendEmail.toLowerCase()]=source.name;
+  form.replyRecipientNames=names;
 }
 async function responseCommand(command) {
   if (sending.value || preparing.value || attaching.value || !show.value) return;
@@ -1051,6 +1052,7 @@ async function moveResponse(command) {
     } else {
       form.responseView=view;
       if (form.draftId) await persistDraft({requireCurrent:true,session});
+      preparing.value=false;
       await nextTick();
       const subject=composeRoot.value?.querySelector(".subject-input");
       subject?.focus(); subject?.select();
@@ -1095,7 +1097,16 @@ async function changeResponse(command) {
       session.check();
       if (controller.signal.aborted || !mounted) return;
       const html=changeQuotedBody(editor.value?.getContent() ?? form.content, quote.content,form.plainText,mode);
-      const files=form.attachments.filter(file=>!file.fromResponse);
+      const attachments=form.attachments.map(file=>({...file}));
+      if (mode==="reply" && !form.responseSourceId && attachments.length && source.attList?.length) {
+        // Older saved Trash forwards have no origin markers on copied files.
+        const original=await quotedMessage(source,"forward",controller.signal,session.token);
+        const signatures=await responseFileSignatures(original.attachments.map(file=>({...file,fromResponse:true})));
+        await restoreResponseFiles(attachments,signatures);
+        session.check();
+        if (controller.signal.aborted || !mounted) return;
+      }
+      const files=attachments.filter(file=>!file.fromResponse);
       form.attachments=[...files,...quote.attachments.map(file=>({...file,fromResponse:true}))];
       form.content=defValue.value=html;
       form.text=plainMarkup(form.content).text;
@@ -1106,6 +1117,7 @@ async function changeResponse(command) {
     form.responseSourceId=id;
     form.sendType=mode;
     form.replyAll=command==="all";
+    if (mode==="reply") addResponseNames(source);
     Object.assign(form,mode==="reply" ? replyRecipients(source,accountStore.ownAddresses,form.replyAll) : {receiveEmail:[],cc:[],bcc:[]});
     showCc.value=!!form.cc.length;showBcc.value=!!form.bcc.length;
     quoteExpanded.value=false;
