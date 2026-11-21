@@ -1,7 +1,7 @@
 <template>
   <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview, 'selection-link':panel.selectedText}" role="dialog"
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
-    @keydown.esc.stop.prevent="close(true)" @focusout="leaveCard" @pointerdown.stop>
+    @keydown.esc.stop.prevent="close(true)" @keydown.tab="tabWithinPreview" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
       <span v-if="canVisit">Go to link: </span>
       <a v-if="canVisit" :href="safeUrl" :aria-label="destination" :title="destination" target="_blank" rel="noopener noreferrer">{{ previewText }}</a>
@@ -86,8 +86,28 @@ function close(focus = false) {
 function leaveCard(event) {
   if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) close();
 }
-function insideEditor() {
-  close(false);
+function insideEditor(event) {
+  if (event.paste && panel.value?.preview) followCaret();
+  else close(false);
+}
+function tabWithinPreview(event) {
+  if (!panel.value?.preview || event.ctrlKey || event.metaKey || event.altKey) return;
+  const actions = Array.from(box.value.querySelectorAll("a[href],button"));
+  const index = actions.indexOf(document.activeElement);
+  if (index < 0) return;
+  const next = actions[index + (event.shiftKey ? -1 : 1)];
+  if (next) {
+    event.preventDefault();
+    next.focus();
+  } else if (event.shiftKey) {
+    event.preventDefault();
+    close(true);
+  }
+}
+function linkLabel(link) {
+  // TinyMCE temporarily pads the active edge of a link with a caret marker.
+  const label = link.textContent;
+  return link.getAttribute("data-mce-selected") === "inline-boundary" ? label.replace(/^\uFEFF|\uFEFF$/g, "") : label;
 }
 function selectionKey(event) {
   return /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(event.key) ||
@@ -108,7 +128,10 @@ function followCaret() {
   }
   // Use the moving end of a backwards selection to choose the line of a wrapped link.
   const native = ed.getDoc().getSelection();
-  if (!native?.focusNode || !link.contains(native.focusNode)) return;
+  if (!native?.focusNode || !link.contains(native.focusNode)) {
+    if (panel.value?.preview) close();
+    return;
+  }
   const caret = ed.dom.createRng();
   caret.setStart(native.focusNode, native.focusOffset);
   caret.collapse(true);
@@ -121,7 +144,7 @@ function followCaret() {
   range = selection.cloneRange();
   bookmark = ed.selection.getBookmark(2, true);
   fragment = fragmentAt(link, point);
-  originalText = panel.value.text = link.textContent;
+  originalText = panel.value.text = linkLabel(link);
   position();
 }
 function editorKey(event) {
@@ -153,7 +176,7 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   range = ed.selection.getRng().cloneRange();
   fragment = anchor && pointer ? fragmentAt(anchor, pointer) : null;
   bookmark = ed.selection.getBookmark(2, true);
-  originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
+  originalText = anchor ? linkLabel(anchor) : ed.selection.getContent({format:"text"});
   const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
   const selectedText = !anchor && !imageLink && !range.collapsed && Boolean(originalText.trim());
   const directUrl = selectedText && selectedLinkUrl(originalText);
@@ -253,7 +276,7 @@ watch(() => props.editor, (ed, _, cleanup) => {
     stop();
   };
   const input = event => {
-    if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|delete)/.test(event.inputType)) followCaret();
+    if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|insertFromPaste|delete)/.test(event.inputType)) followCaret();
   };
   ed.on("keydown", down);
   ed.on("SelectionChange", moved);
