@@ -33,7 +33,7 @@ function matchesEditor(current, expected) {
   return current.cloudVersion === expected.cloudVersion && current.localRevision === expected.localRevision;
 }
 const apiError=e=>e.response?.data||e;
-const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[]),...draftFilingFingerprint(row)]);
+const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
 // The server stores pasted photos as CID attachments. Compare the restored image
 // in the HTML once, while retaining separately attached files in the comparison.
 function savedFingerprint(row) {
@@ -41,7 +41,8 @@ function savedFingerprint(row) {
   template.innerHTML=row.content || '';
   const photos=new Set(Array.from(template.content.querySelectorAll('img[src]'), image=>image.getAttribute('src')));
   const attachments=(row.attachments || []).filter(file=>!file.contentId || !photos.has(file.content));
-  return fingerprint({...row, content:template.innerHTML, attachments});
+  // Filing participates in draft conflicts but never changes a delivery receipt.
+  return JSON.stringify([fingerprint({...row, content:template.innerHTML, attachments}),draftFilingFingerprint(row)]);
 }
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
 const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','starEditBase','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','attachments'])delete copy[key];return copy;};

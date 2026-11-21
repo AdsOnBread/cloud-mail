@@ -235,6 +235,16 @@ describe('Cloud draft synchronization',()=>{
    expect(await db.value.draft.get(next.draftId)).toMatchObject({dirty:false});
    await expect(discardDrafts([row.draftId])).rejects.toThrow('delivery status');await operation.dispose();
  });
+ it('recognizes a pre-upgrade delivery receipt when only private filing choices changed',async()=>{
+   const row=await saveLocalDraft(input({mailboxStarred:true,labelIds:[3],attachments:[]}));
+   const serialized=JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,[],row.sendType,row.emailId]);
+   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized));
+   const sendFingerprint=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+   await db.value.draft.put({...await db.value.draft.get(row.draftId),sendAttemptId:'prior-receipt',sendFingerprint});
+   state.attempts.set('prior-receipt',{state:'sent',messages:[{emailId:8}]});
+   expect(await sendCloudDraft(row.draftId)).toEqual([{emailId:8}]);
+   expect(await db.value.draft.toArray()).toHaveLength(0);
+ });
  it('releases a rejected send receipt so a draft can still be discarded',async()=>{
    const row=await saveLocalDraft(input());await syncCloudDrafts();
    http.post.mockRejectedValueOnce({code:409,current:state.remote.get(1)});
