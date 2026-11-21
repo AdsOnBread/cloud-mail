@@ -23,12 +23,13 @@
           <a href="https://support.google.com/mail/answer/8395" target="_blank" rel="noopener" aria-label="Learn more about signatures">Learn more</a>
         </div>
         <div :inert="busy || undefined">
-          <SignatureFields v-if="signatureForm" :form="signatureForm" :account-id="account.currentAccountId"/>
-          <p v-else-if="signatureError" role="alert">{{signatureError}} <button type="button" @click="reloadSignatures">Retry</button></p>
+          <SignatureFields v-if="signatureForm" :key="signatureRevision" :form="signatureForm" :account-id="account.currentAccountId"/>
+          <p v-else-if="signatureError" role="alert">{{signatureError}} <button type="button" @click="load('signatures')">Retry</button></p>
           <p v-else role="status">Loading signatures…</p>
         </div>
       </div>
-      <p v-if="error" role="alert">{{error}} <button v-if="!ready || conflict" type="button" @click="load">Reload saved settings</button></p>
+      <p v-if="preferencesError" role="alert">{{preferencesError}} <button type="button" :disabled="busy" @click="load('preferences')">Retry preferences</button></p>
+      <p v-if="error" role="alert">{{error}} <button v-if="conflict" type="button" :disabled="busy" @click="load(conflict,true)">Reload saved settings</button></p>
       <footer>
         <button type="submit" :disabled="!dirty || busy || conflict">Save Changes</button>
         <button type="button" :disabled="busy" @click="cancel">Cancel</button>
@@ -49,8 +50,8 @@ import {useMailSignatures} from '@/store/mail-signatures';
 
 const user=useUserStore(), account=useAccountStore(), router=useRouter();
 const form=reactive({undoSeconds:5,replyAll:false});
-const baseline=ref(null), busy=ref(false), conflict=ref(false), error=ref('');
-const signatures=useMailSignatures(), signatureForm=ref(null), savedSignatures=ref(''), signatureError=ref('');
+const baseline=ref(null), busy=ref(false), conflict=ref(''), error=ref(''), preferencesError=ref('');
+const signatures=useMailSignatures(), signatureForm=ref(null), signatureRevision=ref(0), savedSignatures=ref(''), signatureError=ref('');
 const ready=computed(()=>Boolean(baseline.value));
 const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll));
 const signaturesChanged=computed(()=>signatureForm.value && JSON.stringify(signatureForm.value)!==savedSignatures.value);
@@ -68,42 +69,41 @@ function accept(saved) {
   Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll});
 }
 function acceptSignatures(data) {
+  signatureRevision.value++;
   savedSignatures.value=JSON.stringify(data);
   signatureForm.value=JSON.parse(savedSignatures.value);
 }
-async function loadSignatures(request) {
-  signatureError.value='';
-  try {
-    const data=await signatures.load(true);
-    if (data && request.current()) acceptSignatures(data);
-  } catch (e) {
-    if (request.current()) signatureError.value=e.message || 'Could not load signatures.';
-  }
-}
-async function reloadSignatures() {
-  if (busy.value) return;
+async function load(section='both', recovering=false) {
   const request=session();
   busy.value=true;
-  try { await loadSignatures(request); }
-  finally { if (request.current()) busy.value=false; }
-}
-async function load() {
-  const request=session();
-  error.value=''; conflict.value=false; busy.value=true;
-  const loadPreferences=async()=>{
-    try {
-      const saved=await http.get('/v1/general-settings',request.config);
-      if (request.current()) accept(saved);
-    } catch (e) {
-      if (request.current()) error.value=e.message || 'Could not load settings.';
-    }
-  };
-  await Promise.all([loadPreferences(),loadSignatures(request)]);
-  if (request.current()) busy.value=false;
+  const wantsPreferences=section!=='signatures', wantsSignatures=section!=='preferences';
+  const [prefs,sigs]=await Promise.allSettled([
+    wantsPreferences ? http.get('/v1/general-settings',request.config) : null,
+    wantsSignatures ? signatures.load(true) : null,
+  ]);
+  if (!request.current()) return;
+  busy.value=false;
+  const prefsFailure=prefs.status==='rejected' && (prefs.reason?.message || 'Could not load settings.');
+  const sigsFailure=sigs.status==='rejected' ? sigs.reason?.message || 'Could not load signatures.' :
+    wantsSignatures && !sigs.value && 'Could not load signatures.';
+  if (recovering && (prefsFailure || sigsFailure)) {
+    error.value=prefsFailure || sigsFailure;
+    return;
+  }
+  if (wantsPreferences) {
+    preferencesError.value=prefsFailure || '';
+    if (!prefsFailure) accept(prefs.value);
+  }
+  if (wantsSignatures) {
+    signatureError.value=sigsFailure || '';
+    if (!sigsFailure) acceptSignatures(sigs.value);
+  }
+  if (recovering) {conflict.value='';error.value='';}
 }
 async function save() {
   if (busy.value || conflict.value || !dirty.value) return;
   const request=session();
+  const section=preferencesChanged.value ? (signaturesChanged.value ? 'both' : 'preferences') : 'signatures';
   error.value=''; busy.value=true;
   try {
     if (preferencesChanged.value) {
@@ -124,7 +124,7 @@ async function save() {
     busy.value=false;
     await router.push('/inbox');
   } catch (e) {
-    if (request.current()) {error.value=e.message || 'Could not save settings.'; conflict.value=Number(e.code)===409;}
+    if (request.current()) {error.value=e.message || 'Could not save settings.'; conflict.value=Number(e.code)===409 ? section : '';}
   } finally { if (request.current()) busy.value=false; }
 }
 function cancel() {
@@ -138,7 +138,7 @@ watch(dirty, changed=>{
   else window.removeEventListener('beforeunload',beforeUnload);
 });
 watch([()=>user.user.userId,()=>user.authenticatedToken],()=>{
-  baseline.value=null; signatureForm.value=null; savedSignatures.value='';
+  baseline.value=null; signatureForm.value=null; savedSignatures.value=''; conflict.value=''; error.value=''; signatureError.value=''; preferencesError.value='';
   if (user.user.userId && user.authenticatedToken) load();
 },{immediate:true});
 onBeforeRouteLeave(async to=>{

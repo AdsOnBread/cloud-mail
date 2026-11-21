@@ -15,7 +15,8 @@ export const useMailSignatures = defineStore('mail-signatures',{
       if(!fresh && this.data && Date.now()-this.checked<30000)return this.data;
       const generation=this.generation;
       const request=http.get('/v1/signatures',{noMsg:true,timeout:5000}).then(data=>{
-        if(session()!==owner || generation!==this.generation)return null;
+        if(session()!==owner || this.owner!==owner)return null;
+        if(generation!==this.generation)return this.data;
         this.data=data;this.checked=Date.now();return data;
       }).finally(()=>{if(this.pending===request)this.pending=null;});
       this.pending=request;
