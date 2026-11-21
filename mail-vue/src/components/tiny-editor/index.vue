@@ -120,6 +120,7 @@ function insertPhotos(photos) {
     image.alt = photo.name;
     image.style.maxWidth = defaultPhotoWidth;
     image.style.maxHeight = defaultPhotoHeight;
+    image.style.height = "auto";
     return image.outerHTML;
   }).join("");
   ed.insertContent(html);

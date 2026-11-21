@@ -40,11 +40,20 @@ function current(image = photo.value) {
   return image && ed?.initialized && !ed.removed && ed.getBody()?.contains(image)
     && !image.closest('[contenteditable="false"],[data-mce-bogus]');
 }
+function imageOnlyLink(image) {
+  const link = image.closest("a[href]");
+  if (!link) return null;
+  for (let node = image; node !== link; node = node.parentNode) {
+    if ([...node.parentNode.childNodes].some(sibling => sibling !== node &&
+        (sibling.nodeType !== 3 || sibling.textContent.trim()))) return null;
+  }
+  return link;
+}
 function caretAfter(image) {
   const ed = props.editor;
   ed.focus();
   const range = ed.getDoc().createRange();
-  range.setStartAfter(image);
+  range.setStartAfter(imageOnlyLink(image) || image);
   range.collapse(true);
   ed.selection.setRng(range);
 }
@@ -148,18 +157,14 @@ function resize(label) {
     const original = label==="Original size";
     const size = original ? null : photoDimensions(image.naturalWidth,image.naturalHeight,available,label==="Small");
     if (!original && !size) return;
-    ed.dom.setStyles(image,{width:null,height:null,"min-width":null,"min-height":null,"max-width":original ? "none" : "100%","max-height":null});
+    ed.dom.setStyles(image,{width:null,height:"auto","min-width":null,"min-height":null,"max-width":original ? "none" : "100%","max-height":null});
     ed.dom.setAttribs(image,{width:size?.width ?? null,height:size?.height ?? null});
   });
 }
 async function act(label) {
   if (!current()) { close(); return; }
   if (label==="Remove") {
-    mutate((ed,image) => {
-      const parent = image.closest("a");
-      ed.dom.remove(image);
-      if (parent && !parent.textContent.trim() && !parent.children.length) ed.dom.remove(parent);
-    });
+    mutate((ed,image) => ed.dom.remove(imageOnlyLink(image) || image));
   } else if (label==="Edit alt text") {
     description.value = photo.value.getAttribute("alt") || "";
     editing.value = true;
@@ -174,7 +179,7 @@ async function act(label) {
     if (link) emit("edit-link",link);
   } else resize(label);
 }
-function applyAlt() { mutate((ed,image) => ed.dom.setAttrib(image,"alt",description.value)); }
+function applyAlt() { mutate((_ed,image) => image.setAttribute("alt",description.value)); }
 function keys(event) {
   const buttons = [...bar.value.querySelectorAll("button:enabled")];
   const index = buttons.indexOf(event.target);

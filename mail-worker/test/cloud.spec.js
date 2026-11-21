@@ -402,6 +402,25 @@ describe('MCP authorization boundaries',()=>{
    await env.db.prepare('UPDATE user SET status=1 WHERE user_id=1').run();
    expect((await fetchWorker('/mcp',{headers:{Authorization:'Bearer '+token.access_token}})).status).toBe(403);
  });
+ it('preserves displayed size, decorative alt text and original sizing on scheduled delivery',async()=>{
+   const {schedule,deliverDue}=await import('../src/cloud/scheduled');
+   const src='data:image/png;base64,AAECAw==';
+   const html='<img src="'+src+'" alt="A diagram" width="198" height="99" style="max-width:100%;height:auto">'+
+     '<img src="https://example.org/example.png" alt="" style="margin:0;max-width:none;height:auto">';
+   const d=await draft({content:html,receiveEmail:['outside@example.net']});
+   const ctx=c();ctx.env.email={send:vi.fn().mockResolvedValue({messageId:'<photo@example.com>'})};
+   await schedule(ctx,1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+120});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(ctx);
+   expect(ctx.env.email.send).toHaveBeenCalledOnce();
+   const delivered=ctx.env.email.send.mock.calls[0][0];
+   const [small,original]=parseHTML(delivered.html).document.querySelectorAll('img');
+   expect(small.getAttribute('src')).toMatch(/^cid:/);
+   expect([small.getAttribute('width'),small.getAttribute('height'),small.getAttribute('alt')]).toEqual(['198','99','A diagram']);
+   expect(small.getAttribute('style')).toContain('height:auto');
+   expect(original.getAttribute('alt')).toBe('');
+   expect(original.getAttribute('style')).toBe('margin:0;max-width:none;height:auto');
+ });
  it('keeps inline draft images private and sends their original binary content',async()=>{
    const d=await draft({content:'<p>Image</p><img src="data:image/png;base64,AAECAw==">'});
    expect(d.content).toContain('cid:');expect(d.attachments).toHaveLength(1);
