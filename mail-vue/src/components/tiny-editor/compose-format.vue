@@ -179,8 +179,8 @@
   </div>
 </template>
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
-import { useElementSize } from "@vueuse/core";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useResizeObserver } from "@vueuse/core";
 import { Icon } from "@iconify/vue";
 import FormatPopup from "./format-popup.vue";
 import FormatPicker from "./format-picker.vue";
@@ -195,7 +195,21 @@ const props = defineProps({ editor: Object, requestFormat: Function });
 const row = ref(null),
   palette = ref(null),
   colorOpen = ref(false);
-const { width } = useElementSize(row);
+const width = ref(0);
+let resizeFrame = 0;
+onMounted(() => {
+  width.value = row.value.clientWidth;
+});
+useResizeObserver(row, ([entry]) => {
+  // Updating the controls also resizes any open menu. Let the browser finish
+  // delivering its measurements before moving commands between the two.
+  cancelAnimationFrame(resizeFrame);
+  if (entry.contentRect.width !== width.value)
+    resizeFrame = requestAnimationFrame(() => {
+      width.value = entry.contentRect.width;
+    });
+});
+onBeforeUnmount(() => cancelAnimationFrame(resizeFrame));
 const active = ref({}),
   fontName = ref("Sans Serif"),
   sizeIndex = ref(1),
@@ -231,7 +245,12 @@ const stripWidth = computed(() => {
 // If shrinking the editor moves a focused control into More, keep the keyboard in the toolbar.
 watch([extraCount, showIndent, showLists, showHistory], async () => {
   const focused = document.activeElement;
-  if (!row.value?.contains(focused)) return;
+  if (!row.value || !focused) return;
+  const popup = focused.closest('.compose-format-popup');
+  const popupOwner = popup && row.value.querySelector(
+    '[aria-controls="' + CSS.escape(popup.id) + '"]',
+  );
+  if (!row.value.contains(focused) && !popupOwner) return;
   await nextTick();
   if (
     row.value?.isConnected &&

@@ -571,15 +571,17 @@ function toggleMinimized() {
   nextTick(() => composeRoot.value?.querySelector(".compose-caption")?.focus());
 }
 let focusAfterResize;
+function focusWritingField(resumeBody) {
+  if (![form.receiveEmail, form.cc, form.bcc].some(addresses => addresses.length))
+    focusRecipients("receiveEmail");
+  else if (!form.subject.trim()) composeRoot.value?.querySelector(".subject-input")?.focus();
+  else if (resumeBody) resumeBody();
+  else editor.value?.focus();
+}
 function setFullScreen(value) {
   if (expanded.value === value) return;
   const resumeBody = editor.value?.rememberSelection?.();
-  focusAfterResize = () => {
-    if (![form.receiveEmail,form.cc,form.bcc].some(addresses => addresses.length)) focusRecipients("receiveEmail");
-    else if (!form.subject.trim()) composeRoot.value?.querySelector(".subject-input")?.focus();
-    else if (resumeBody) resumeBody();
-    else editor.value?.focus();
-  };
+  focusAfterResize = () => focusWritingField(resumeBody);
   expanded.value = value;
 }
 function toggleFullScreen() {
@@ -1436,8 +1438,9 @@ watch(modal,async active=>{
   }
   if(active){
     previousFocus=document.activeElement;
+    const restoring = Boolean(restoreFocus);
     await nextTick();
-    if(modal.value && props.dockActive && !restoreFocus) composeRoot.value?.querySelector("button")?.focus();
+    if(modal.value && props.dockActive && !restoring && !composeRoot.value?.contains(document.activeElement)) focusWritingField();
     return;
   }
   const origin=previousFocus;
