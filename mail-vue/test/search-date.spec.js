@@ -17,5 +17,6 @@ it('round-trips a local day through half-open timestamp bounds and clears only d
   expect(parseRangeInput('2023/02/29')).toBeNull();
   const filters={dateAfter:midnight(day),dateBefore:midnight(day,true),from:'pat',hasAttachment:1};
   expect(rangeDates(filters).map(rangeInput)).toEqual(['2024/02/29','2024/02/29']);
+  expect(searchDateBounds({dateBefore:253402300800}).before).toBeNull();
   expect(withoutTime(filters)).toEqual({from:'pat',hasAttachment:1});
 });
