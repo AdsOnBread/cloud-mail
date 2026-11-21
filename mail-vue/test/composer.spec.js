@@ -6,6 +6,7 @@ import { useUserStore } from "../src/store/user.js";
 import { useSettingStore } from "../src/store/setting.js";
 import { useAccountStore } from "../src/store/account.js";
 import { starInOpenEditor } from "../src/store/draft";
+import {useMailFeedback} from "../src/store/mail-feedback";
 import { useEmailStore } from "../src/store/email.js";
 import db from "../src/db/db.js";
 import { emailSend } from "../src/request/email.js";
@@ -200,6 +201,23 @@ describe("composer persistence and sending", () => {
     expect(state.drafts.size).toBe(0);
     expect(state.attachments.size).toBe(0);
     wrapper.unmount();
+  });
+  it("sends once from a pending Bcc address and links the confirmed message", async()=>{
+    vi.mocked(emailSend).mockResolvedValue([{emailId:47,subject:"Report"}]);
+    const wrapper=composer();
+    try {
+      await populate(wrapper);
+      const field=wrapper.get('[aria-label="Bcc recipients"]');
+      const modifier=/Mac|iPhone|iPad/.test(navigator.platform) ? {metaKey:true} : {ctrlKey:true};
+      await field.trigger("keydown",{key:"Enter",...modifier,isComposing:true});
+      await field.trigger("keydown",{key:"Enter",...modifier,repeat:true});
+      expect(emailSend).not.toHaveBeenCalled();
+      await field.trigger("keydown",{key:"Enter",...modifier});
+      await flushPromises();
+      expect(emailSend).toHaveBeenCalledTimes(1);
+      expect(emailSend.mock.calls[0][0].bcc).toEqual(["private@example.com"]);
+      expect(useMailFeedback().notice).toMatchObject({message:"Message sent",sentEmailId:47});
+    } finally {wrapper.unmount();}
   });
   it("keeps recipient fields and a saved draft after a network failure", async () => {
     vi.mocked(emailSend).mockRejectedValue(new Error("Network failed"));
