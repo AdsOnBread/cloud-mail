@@ -109,6 +109,16 @@ async function push(database,row,api) {
       return database.transaction('rw', database.draft, database.att, async () => {
         const current = await database.draft.get(row.draftId);
         if (!current) return;
+        // Reloading after the server committed an update can lose its response. A retry
+        // then receives a conflict containing the exact revision this browser wrote.
+        if (other && row.editToken && other.editToken === row.editToken &&
+            other.cloudDraftId === row.cloudDraftId && other.cloudVersion === row.cloudVersion + 1 &&
+            other.name === value.name && fingerprint(other) === fingerprint(value)) {
+          const acknowledged = current.editToken === row.editToken;
+          await database.draft.put({...current, cloudVersion:other.cloudVersion, dirty:!acknowledged,
+            syncState:acknowledged ? (current.conflictCopy ? 'conflict' : 'saved') : 'saving'});
+          return;
+        }
         // Keep the open editor attached to its local copy, including any edits made during the upload.
         const {cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, ...copy} = current;
         await database.draft.put({...copy, clientId:crypto.randomUUID(), syncState:'conflict', conflictCopy:true, dirty:true});

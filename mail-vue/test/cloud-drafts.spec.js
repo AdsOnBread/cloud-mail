@@ -35,6 +35,17 @@ describe('Cloud draft synchronization',()=>{
   expect((await db.value.draft.get(row.draftId)).syncState).toBe('offline');await syncCloudDrafts();expect(http.post).not.toHaveBeenCalled();
   Object.defineProperty(navigator,'onLine',{value:true});await syncCloudDrafts();await syncCloudDrafts();expect(http.post).toHaveBeenCalledTimes(1);expect(http.post.mock.calls[0][1]).toMatchObject({bcc:['hidden@example.net'],attachments:[{filename:'report.txt',content:'aGVsbG8='}]});expect(state.rows.size).toBe(1);
  });
+ it('recognizes its own cloud update after a lost response without creating a duplicate',async()=>{
+  const row=await saveLocalDraft(input({name:'Alex'}));
+  await syncCloudDrafts();
+  await saveLocalDraft({...await db.value.draft.get(row.draftId),plainText:true,text:'Literal <text>',attachments:[]});
+  const update=http.put.getMockImplementation();
+  http.put.mockImplementationOnce(async(...args)=>{await update(...args);throw new Error('Response lost');});
+  await expect(syncCloudDrafts()).rejects.toThrow('Response lost');
+  expect((await syncCloudDrafts()).conflicts).toEqual({});
+  expect([...state.rows.values()]).toMatchObject([{draftId:row.draftId,cloudVersion:2,dirty:false,plainText:true}]);
+  expect(state.remote.size).toBe(1);
+ });
  it('preserves both versions on conflict and points the editor at its saved copy',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const local=await db.value.draft.get(row.draftId),remote=state.remote.get(local.cloudDraftId);remote.subject='Edited on iOS';remote.version++;event(remote);
   await saveLocalDraft({...local,subject:'My browser edits',attachments:[]});const result=await syncCloudDrafts();
