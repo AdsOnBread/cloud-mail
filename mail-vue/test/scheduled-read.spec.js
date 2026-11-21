@@ -32,7 +32,7 @@ it('finishes an earlier mark before reading a reopened message and keeps the new
   const router=createRouter({history:createMemoryHistory(),routes:[{name:'scheduled',path:'/scheduled',component:Scheduled}]});
   const visit=id=>router.push({name:'scheduled',query:{message:id}});
   await visit(1);
-  const wrapper=shallowMount(Scheduled,{global:{plugins:[pinia,router]}});
+  const wrapper=shallowMount(Scheduled,{global:{plugins:[pinia,router],stubs:{MailSnoozePicker:false}}});
   try {
     await flushPromises();
     await wrapper.get('button[aria-label="Mark as unread"]').trigger('click');
