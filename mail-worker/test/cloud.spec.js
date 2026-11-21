@@ -34,7 +34,7 @@ describe('Incoming mail filters',()=>{
    const actions={read:true,star:true,archive:true,category:'updates',important:false,labelId:label.label_id};
    const r=await create(criteria,actions);
    expect((await db.prepare('SELECT unread FROM email WHERE email_id=?').bind(original.email_id).first()).unread).toBe(0);
-   const other=await message({account_id:2,user_id:2}), sent=await message({type:1}), alias=await message({account_id:3});
+   await message({account_id:2,user_id:2});await message({type:1});const alias=await message({account_id:3});
    const changed=await saveFilter(db,1,r.id,{version:r.version,criteria,actions,applyExisting:true});
    expect(changed.version).toBe(2);
    const rows=(await db.prepare('SELECT email_id FROM email WHERE unread=1 ORDER BY email_id').all()).results;
@@ -77,6 +77,7 @@ describe('Incoming mail filters',()=>{
  it('keeps label ownership and empty criteria out of saved rules',async()=>{
    const label=await db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(2,'Private') RETURNING label_id").first();
    await expect(create({from:'x'},{labelId:label.label_id})).rejects.toMatchObject({code:404});
+   await expect(create({from:'x',scope:'trash'},{read:true})).rejects.toMatchObject({code:400});
    await expect(create({},{read:true})).rejects.toMatchObject({code:400});
    await expect(create({from:'x'},{})).rejects.toMatchObject({code:400});
  });

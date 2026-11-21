@@ -9,6 +9,9 @@ function invalid(text) {
 	throw new BizError(text, 400);
 }
 function criteria(value = {}) {
+  const supported=['from','to','subject','words','excluded','hasAttachment'];
+  if (!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).some(key=>!supported.includes(key)) ||
+      (value.hasAttachment!=null && typeof value.hasAttachment!=='boolean')) invalid('Invalid filter criteria.');
 	const result = {};
 	for (const [key, limit] of [
 		['from', 320],
@@ -36,6 +39,7 @@ function criteria(value = {}) {
 }
 
 function actions(value = {}) {
+  if (!value || typeof value!=='object' || Array.isArray(value)) invalid('Invalid filter actions.');
 	const result = {};
 	for (const key of ['archive', 'read', 'star']) if (value[key] === true) result[key] = true;
 	if (typeof value.important === 'boolean') result.important = value.important;
@@ -86,9 +90,9 @@ export async function saveFilter(db, user, id, input) {
 			? db
 					.prepare(
 						`INSERT INTO mail_filters(id,user_id,criteria,actions,mutation) SELECT ?,?,?,?,? WHERE ${validLabel}
-        AND (SELECT count(*) FROM mail_filters WHERE user_id=?)<100 ON CONFLICT(id) DO NOTHING`,
+        ON CONFLICT(id) DO NOTHING`,
 					)
-					.bind(id, user, query, json, mutation, label, user, label, user)
+					.bind(id, user, query, json, mutation, label, user, label)
 			: db
 					.prepare(
 						`UPDATE mail_filters SET criteria=?,actions=?,mutation=?,version=version+1 WHERE id=? AND user_id=? AND version=? AND ${validLabel}`,
@@ -112,7 +116,7 @@ export async function saveFilter(db, user, id, input) {
 		if (input.version === 0 && row?.version === 1 && row.criteria === query && row.actions === json) return exposed(row);
 		if (label && !(await db.prepare('SELECT 1 FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(user, label).first()))
 			throw new BizError('This label is no longer available.', 404);
-		throw new BizError(input.version || row ? 'This filter has changed. Reopen it from Settings.' : 'Cannot create another filter.', 409);
+		throw new BizError('This filter has changed. Reopen it from Settings.', 409);
 	}
 	return exposed(row);
 }

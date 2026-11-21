@@ -44,8 +44,6 @@ export const useMessageFilters = defineStore("message-filters", {
       };
     },
     async save(session, input) {
-      if (!session.current())
-        throw new Error("Reopen filters in your signed-in mailbox.");
       let saved;
       do {
         if (!session.current())
