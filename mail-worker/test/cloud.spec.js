@@ -101,11 +101,15 @@ describe('Send attempts',()=>{
  it('honors explicit blind-copy-only reply addresses and preserves the hidden field on a sent reply',async()=>{
    const source = await message();
    const explicit = await prepare(c(),1,{accountId:1,emailId:source.email_id,subject:'',bcc:['chosen@example.com']},'reply');
+   const ordinary = await prepare(c(),1,{accountId:1,emailId:source.email_id,cc:[],bcc:[]},'reply');
+   expect(ordinary.receiveEmail).toEqual([source.send_email]);
    expect(explicit.receiveEmail || []).toEqual([]);
    expect(explicit).toMatchObject({subject:'',bcc:['chosen@example.com']});
    const sent = await message({type:1,recipient:'[]',cc:'[]',bcc:'[{"address":"private@example.com"}]'});
    for (const replyAll of [true,false]) {
-     const reply=await prepare(c(),1,{accountId:1,emailId:sent.email_id,replyAll},'reply');
+     const ordinary=await prepare(c(),1,{accountId:1,emailId:sent.email_id,replyAll},'reply');
+     expect(ordinary.bcc).toEqual([]);
+     const reply=await prepare(c(),1,{accountId:1,emailId:sent.email_id,replyAll,reuseBlindRecipients:true},'reply');
      expect(reply).toMatchObject({receiveEmail:[],cc:[],bcc:['private@example.com']});
    }
  });
