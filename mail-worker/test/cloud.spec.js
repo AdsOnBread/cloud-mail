@@ -590,6 +590,23 @@ describe('Scheduled send',()=>{
    expect(box.threads[0].messageCount).toBe(2);
    expect((await env.db.prepare('SELECT * FROM conversation_filing WHERE user_id!=1').all()).results).toEqual([]);
  });
+ it('keeps a newer manual Archive when an arriving message delays the pending Inbox placement',async()=>{
+   const {schedule,setScheduledInbox,deliverDue}=await import('../src/cloud/scheduled');
+   const {conversationList,conversationAction}=await import('../src/service/conversation-service');
+   const d=await draft();
+   const row=await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+60});
+   await setScheduledInbox(c(),1,{messages:[row],inbox:true});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());
+   const sentId=await env.db.prepare('SELECT email_id FROM scheduled_inbox_deliveries WHERE user_id=1').first('email_id');
+   // Reproduce an intervening arrival between the index scan and its revision write.
+   await env.db.prepare('CREATE TRIGGER test_index_advanced AFTER UPDATE OF indexed_revision ON mobile_thread_state WHEN NEW.user_id=1 BEGIN UPDATE mobile_thread_state SET revision=revision+1 WHERE user_id=1; END').run();
+   await conversationAction(c(),{emailIds:[sentId]},1,'archive');
+   await env.db.prepare('DROP TRIGGER test_index_advanced').run();
+   expect((await conversationList(c(),{folder:'inbox',accountId:1},1)).threads).toHaveLength(0);
+   expect((await conversationList(c(),{folder:'archived',accountId:1},1)).threads).toMatchObject([{lastEmailId:sentId}]);
+   expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(0);
+ });
  it('keeps filing choices through cancellation, edits and delivery, on the sender copy only',async()=>{
    const {schedule,scheduledList,cancel,setScheduledMark}=await import('../src/cloud/scheduled');
    const draftRow=await draft(),id=draftRow.draftId,sendAt=Math.floor(Date.now()/1000)+3600;

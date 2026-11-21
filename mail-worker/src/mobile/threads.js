@@ -50,6 +50,10 @@ export const threadColumns = 'e.email_id,e.user_id,e.message_id,e.in_reply_to,e.
 async function fileDeliveredInbox(db,userId) {
   const fresh="EXISTS(SELECT 1 FROM mobile_thread_state WHERE user_id=p.user_id AND revision=indexed_revision)";
   await db.batch([
+    // Sent copies start without filing. A placement already written for the new copy
+    // is a newer manual decision, including one made while the thread index was dirty.
+    db.prepare(`DELETE FROM scheduled_inbox_deliveries AS p WHERE p.user_id=? AND EXISTS(
+      SELECT 1 FROM conversation_filing f WHERE f.user_id=p.user_id AND f.email_id=p.email_id)`).bind(userId),
     db.prepare(`INSERT OR REPLACE INTO conversation_filing(user_id,email_id,wake_at)
       SELECT DISTINCT e.user_id,e.email_id,0 FROM scheduled_inbox_deliveries p
       JOIN mobile_thread_members sent ON sent.user_id=p.user_id AND sent.email_id=p.email_id
