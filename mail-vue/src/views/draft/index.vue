@@ -66,6 +66,7 @@
         :draft-count="1"
         :participants="draft.recipients"
         :subject="draft.subject"
+        :attachment-count="draft.hasFiles ? 1 : 0"
         :preview="draft.preview"
         :date="mailboxDate(draft.lastDate)"
         :date-title="formatDetailDate(draft.lastDate)"

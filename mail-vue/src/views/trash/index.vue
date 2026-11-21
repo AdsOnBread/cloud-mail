@@ -162,6 +162,7 @@
         trash
         :participants="message.name || message.sendEmail"
         :subject="message.subject"
+        :attachments="message.attachments" :attachment-count="message.attachmentCount"
         :preview="message.preview"
         :unread="message.unread === 0"
         :selected="selected.includes(message.emailId)"

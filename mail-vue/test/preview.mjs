@@ -32,6 +32,13 @@ rows[0].messageId='<ideas@example.net>';
 rows.push({...rows[0],emailId:101,type:1,status:2,unread:1,name:'Alex Morgan',sendEmail:'alex@example.com',recipient:'[{"address":"maya@example.net"}]',subject:'Re: A few ideas for the next chapter',text:'These are great ideas. I added a few notes.',content:'<p>These are great ideas. I added a few notes.</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 rows.push({...rows[0],emailId:102,subject:'Re: A few ideas for the next chapter',text:'Thanks! The first option is my favorite. What do you think?',content:'<p>Thanks! The first option is my favorite. What do you think?</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 for(let i=40;i<75;i++)rows.push({...rows[0],emailId:i,messageId:`<archive-${i}@example.net>`,replyToEmailId:i===40?0:40,subject:'Release planning archive',text:`Planning update ${i-39}`,content:`<p>Planning update ${i-39}</p>`,unread:1});
+const fixtureText='Project notes\nReview the fall colors and send feedback on Friday.';
+const fixtureFiles=[
+ {attId:501,filename:'Project notes.txt',mimeType:'text/plain',size:fixtureText.length},
+ {attId:502,filename:'Color study.png',mimeType:'image/png',size:68},
+];
+rows.find(row=>row.emailId===100).attList=fixtureFiles;
+const attachmentSummary=files=>files.length ? {attachmentCount:files.length,attachments:files.slice(0,3)} : {};
 const filedCategory=new Map();
 const importanceChoices = new Map();
 let importanceRevision = 0;
@@ -73,6 +80,11 @@ const api=createHTTPServer(async(req,res)=>{
  if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
  let body='';for await(const chunk of req) body+=chunk;
  let data={};const path=url.pathname.replace(/^\/api/,'');
+ if(path==='/v1/attachments/501/content'||path==='/v1/attachments/502/content'){
+   const text=path.includes('/501/');
+   res.writeHead(200,{'Content-Type':text?'text/plain':'image/png'});
+   res.end(text?fixtureText:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jnt8AAAAASUVORK5CYII=','base64'));return;
+ }
  if(path.startsWith('/v1/drafts/attachments/')){
    const id=path.split('/')[4],file=[...cloudDrafts.values()].flatMap(d=>d.attachments).find(f=>f.attachmentId===id);
    if(!file){res.writeHead(404);res.end();return;}
@@ -108,7 +120,7 @@ const api=createHTTPServer(async(req,res)=>{
    else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
- else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/'))data=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));
  else if(path==='/setting/websiteConfig')data=settings;
@@ -134,7 +146,7 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
+     threads.push({threadId,...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
        participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});

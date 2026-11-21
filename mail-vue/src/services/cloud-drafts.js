@@ -16,15 +16,17 @@ const locks=new WeakMap();
 const apiError=e=>e.response?.data||e;
 const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId]);
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
-const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','attachments'])delete copy[key];return copy;};
+const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','hasFiles','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
   const {attachments:ignored,...metadata}=row;
+  metadata.hasFiles=attachments.some(file=>!file.contentId);
   await database.transaction('rw',database.draft,database.att,async()=>{await database.draft.put(metadata);await database.att.put({draftId:row.draftId,attachments});});
 }
 // Called inside a draft/attachment transaction so an interrupted save cannot leave a partial draft.
 async function writeDraft(database, row) {
   const {attachments = [], ...metadata} = row;
+  metadata.hasFiles=attachments.some(file=>!file.contentId);
   if (row.draftId) await database.draft.put(metadata);
   else {
     delete metadata.draftId;

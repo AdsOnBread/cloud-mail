@@ -165,6 +165,8 @@
           :participants="row.participants"
           :count="row.messageCount"
           :subject="row.subject"
+          :attachments="row.attachments"
+          :attachment-count="row.attachmentCount || (replies(row).some(d=>d.hasFiles)?1:0)"
           :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId && label.messages!=='hide')"
           :preview="replies(row)[0]?.preview || row.preview"
           :draft-count="replies(row).length"
@@ -410,7 +412,7 @@ const {
   containerProps,
   wrapperProps,
 } = useVirtualList(rows, {
-  itemHeight: () => (width.value < 768 ? 84 : uiPreferences.rowHeight),
+  itemHeight: index => width.value < 768 ? 84 : uiPreferences.rowHeight + (uiPreferences.density === "default" && rows.value[index]?.attachments?.length ? 32 : 0),
   overscan: 12,
 });
 let generation = 0,

@@ -27,6 +27,7 @@ export function draftSummary(draft) {
     cloudDraftId: draft.cloudDraftId,
     clientId: draft.clientId,
     emailId: Number(draft.emailId),
+    hasFiles: Boolean(draft.hasFiles),
     reply: draft.sendType === "reply",
     subject: draft.subject || "",
     preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : preview(draft),

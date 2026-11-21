@@ -1,7 +1,7 @@
 <template>
   <div
     class="conversation-row"
-    :class="{ unread, selected, 'draft-row': draftOnly }"
+    :class="{ unread, selected, 'draft-row': draftOnly, 'with-files': showChips }"
   >
     <label class="check-target" data-tip="Select">
       <input
@@ -32,7 +32,7 @@
     <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
-      :aria-label="openLabel"
+      :aria-label="openLabel + (attachmentCount ? ', has attachment' : '')"
       @click="$emit('open')"
     >
       <span class="participants">
@@ -50,10 +50,18 @@
         ></span
       >
       <span class="row-date" :data-tip="dateTitle"
-        ><slot name="status" /><time>{{ date }}</time></span
+        ><Icon v-if="attachmentCount" class="paperclip" icon="material-symbols:attach-file" width="18" aria-label="Has attachment" /><slot name="status" /><time>{{ date }}</time></span
       >
     </button>
     <div v-if="$slots.actions" class="row-actions"><slot name="actions" /></div>
+    <div v-if="showChips" class="file-chips" aria-label="Attachments">
+      <button v-for="file in attachments" :key="file.attId" class="file-chip" :aria-label="'Preview '+file.filename" :title="file.filename" @click="previewFile=file">
+        <Icon :class="fileColor(file)" :icon="file.mimeType?.startsWith('image/')?'material-symbols:image-outline':'material-symbols:description-outline'" width="16" />
+        <span>{{ file.filename }}</span>
+      </button>
+      <button v-if="attachmentCount>attachments.length" class="file-chip more-files" :aria-label="'Open conversation for '+(attachmentCount-attachments.length)+' more attachments'" @click="$emit('open')">+{{ attachmentCount-attachments.length }}</button>
+    </div>
+    <FilePreview v-if="previewFile" :file="previewFile" @close="previewFile=null"/>
     <slot />
   </div>
 </template>
@@ -61,7 +69,13 @@
 import { Icon } from "@iconify/vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
-defineProps({
+import {computed,ref} from "vue";
+import {useUiStore} from "@/store/ui";
+import FilePreview from "@/components/mail-attachments/preview.vue";
+const ui=useUiStore(),previewFile=ref(null);
+const props=defineProps({
+  attachments:Array,
+  attachmentCount:Number,
   showImportance: Boolean,
   importanceReason: String,
   participants: String,
@@ -81,6 +95,13 @@ defineProps({
   hideStar: Boolean,
   trash: Boolean,
 });
+const showChips=computed(()=>ui.density==='default' && props.attachments?.length>0);
+function fileColor(file){
+  if(file.mimeType==='application/pdf' || /\.pdf$/i.test(file.filename))return 'pdf';
+  if(file.mimeType?.startsWith('image/'))return 'image';
+  if(/\.(csv|xlsx?)$/i.test(file.filename))return 'sheet';
+  return 'document';
+}
 defineEmits(["select", "star", "open", "importance"]);
 </script>
 <style scoped>
@@ -181,11 +202,23 @@ defineEmits(["select", "star", "open", "importance"]);
 .unread .row-date {
   color: inherit;
 }
+.paperclip {transform:rotate(45deg);color:var(--secondary-text-color)}
 .row-actions {
   display: none;
   align-items: center;
 }
 @media (min-width: 768px) {
+  .with-files {box-sizing:border-box;height:calc(var(--mail-row-height,40px) + 32px);padding-bottom:32px}
+  .with-files .paperclip {display:none}
+  .file-chips {position:absolute;left:calc(96px + clamp(140px, 16vw, 200px));right:14px;bottom:7px;display:flex;gap:6px;align-items:center;overflow:hidden}
+  .with-files:has(.row-importance) .file-chips {left:calc(124px + clamp(140px, 16vw, 200px))}
+  .file-chip {display:inline-flex;align-items:center;gap:6px;border:1px solid var(--secondary-border-color,var(--light-border-color));border-radius:16px;min-width:0;max-width:170px;padding:0 10px;height:26px;color:var(--regular-text-color);font:500 12px/24px Arial,sans-serif;cursor:pointer}
+  .file-chip:hover,.file-chip:focus-visible {background:var(--mail-hover)}
+  .file-chip:focus-visible {outline-offset:-2px}
+  .file-chip span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .file-chip svg,.more-files {flex-shrink:0}
+  .pdf{color:#d93025}.document{color:#4285f4}.image{color:#ea8600}.sheet{color:#188038}
+
   .conversation-row:has(:focus-visible),
   .conversation-row:has([aria-expanded="true"]) {
     z-index: 1;
@@ -216,6 +249,7 @@ defineEmits(["select", "star", "open", "importance"]);
   }
 }
 @media (max-width: 767px) {
+  .file-chips {display:none}
   .conversation-row {
     height: 84px;
     padding-right: 12px;

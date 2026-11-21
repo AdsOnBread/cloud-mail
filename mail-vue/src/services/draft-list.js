@@ -37,6 +37,11 @@ export function startDraftList() {
             row.schedulingError,
           ].join("|");
           const cached = cache.get(row.draftId);
+          if (row.hasFiles == null && cached?.revision !== revision) {
+            const files=await database.att.get(row.draftId);
+            if(!active)return;
+            row.hasFiles=Boolean(files?.attachments?.some(file=>!file.contentId));
+          }
           next.set(
             row.draftId,
             cached?.revision === revision

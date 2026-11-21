@@ -96,43 +96,27 @@
       <ShadowHtml class="message-html" v-if="email.content" :html="email.content" />
       <pre v-else class="message-text">{{ email.text }}</pre>
       <div v-if="email.attList?.length" class="attachments">
-        <button
-          v-for="file in email.attList"
-          :key="file.attId"
-          class="attachment"
-          @click="download(file)"
-          :aria-label="`Download ${file.filename}`"
-        >
-          <Icon icon="material-symbols:attach-file" width="22" /><span
-            >{{ file.filename
-            }}<small>{{ formatBytes(file.size) }}</small></span
-          ><Icon icon="material-symbols:download" width="20" />
-        </button>
-        <button
-          v-for="file in images"
-          :key="`preview-${file.attId}`"
-          class="preview-file"
-          @click="preview(file)"
-        >
-          Preview {{ file.filename }}
-        </button>
+        <div v-for="file in email.attList" :key="file.attId" class="attachment">
+          <button class="attachment-open" :aria-label="'Preview '+file.filename" @click="previewFile=file">
+            <Icon icon="material-symbols:attach-file" width="22"/>
+            <span>{{ file.filename || 'Attachment' }}<small v-if="file.size!=null">{{ formatBytes(file.size) }}</small></span>
+          </button>
+          <button class="icon-button" data-tip="Download" :aria-label="'Download '+file.filename" @click="download(file)"><Icon icon="material-symbols:download" width="20"/></button>
+        </div>
       </div>
 
     </template>
-    <el-image-viewer
-      v-if="previewURL"
-      :url-list="[previewURL]"
-      @close="closePreview"
-    />
+    <FilePreview v-if="previewFile" :file="previewFile" @close="previewFile=null"/>
     <slot />
   </article>
 </template>
 <script setup>
 import { useMailFeedback } from "@/store/mail-feedback";
 const feedback = useMailFeedback();
-import { ref, computed, watch, onUnmounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
+import FilePreview from "@/components/mail-attachments/preview.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { useEmailStore } from "@/store/email";
 import { useUserStore } from "@/store/user";
@@ -158,25 +142,7 @@ const detail = ref(null),
   error = ref(""),
   recipientsOpen = ref(false),
   busy = ref(false);
-const previewURL = ref("");
-const images = computed(() =>
-  (email.value.attList || []).filter((file) =>
-    /\.(png|jpe?g|webp|gif|jfif)$/i.test(file.filename || ""),
-  ),
-);
-function closePreview() {
-  if (previewURL.value) URL.revokeObjectURL(previewURL.value);
-  previewURL.value = "";
-}
-async function preview(file) {
-  try {
-    closePreview();
-    previewURL.value = await privateFileURL(file.key);
-  } catch (e) {
-    ElMessage.error(e.message);
-  }
-}
-onUnmounted(closePreview);
+const previewFile = ref(null);
 const email = computed(() => detail.value || props.message);
 async function load() {
   if (loading.value) return;
@@ -363,11 +329,9 @@ time {
   cursor: pointer;
   max-width: 100%;
 }
-.preview-file {
-  padding: 8px;
-  color: var(--el-color-primary);
-  cursor: pointer;
-}
+.attachment-open {display:flex;align-items:center;gap:10px;min-width:0;color:inherit;text-align:left;cursor:pointer}
+.attachment-open svg {flex:none}
+.attachment-open span {white-space:nowrap}
 .attachment span {
   overflow: hidden;
   text-overflow: ellipsis;
