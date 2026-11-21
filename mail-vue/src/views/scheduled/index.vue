@@ -6,7 +6,7 @@
         class="mail-icon"
         data-tip="Back"
         aria-label="Back to Scheduled"
-        @click="item = null"
+        @click="item = null; error = ''"
       >
         <Icon icon="material-symbols:arrow-back" width="20" /></button
       ><button
@@ -22,6 +22,7 @@
     <p v-if="error" role="alert">
       {{ error }} <button @click="item ? open(item) : load()">Retry</button>
     </p>
+    <p v-if="listError" role="alert">{{ listError }} <button @click="load">Retry</button></p>
     <article v-if="item">
       <h1>{{ item.subject }}</h1>
       <div class="timing">
@@ -148,10 +149,11 @@ async function download(file) {
     error.value = e.message || "Could not download this attachment.";
   }
 }
+const listError=ref("");
 async function load() {
   const request = ++generation;
   loading.value = true;
-  error.value = "";
+  listError.value = "";
   try {
     const data = await http.get("/v1/scheduled", {
       params: { accountId: scope.value },
@@ -163,7 +165,7 @@ async function load() {
       item.value = data.find((m) => m.draftId === item.value.draftId) || null;
   } catch (e) {
     if (request === generation)
-      error.value = e.message || "Could not load Scheduled.";
+      listError.value = e.message || "Could not load Scheduled.";
   } finally {
     if (request === generation) loading.value = false;
   }
@@ -219,6 +221,7 @@ watch(
     item.value = null;
     rows.value = [];
     detail.value = null;
+    error.value = "";
     load();
   },
   { immediate: true },

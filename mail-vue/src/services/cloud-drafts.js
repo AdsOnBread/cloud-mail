@@ -50,7 +50,7 @@ async function cloudRow(database, remote, localId, api) {
   const value = await downloadDraft(remote, api);
   await database.transaction('rw', database.draft, database.att, async () => {
     const current = localId ? await database.draft.get(localId) : null;
-    if (localId && (!current || current.dirty || current.deleted)) return;
+    if (localId && (!current || current.dirty || current.deleted || current.pendingSchedule || current.cloudVersion >= remote.version)) return;
     await writeDraft(database, {...value, draftId:localId, sendAttemptId:current?.sendAttemptId, sendFingerprint:current?.sendFingerprint});
   });
 }
@@ -147,8 +147,14 @@ export function syncCloudDrafts() {
       const page=await api.get('/v1/drafts/changes',{params:{after:cursor,limit:100},noMsg:true});
       for(const event of page.changes) {
         const local=(await database.draft.toArray()).find(r=>r.cloudDraftId===event.draftId);
-        if(local?.dirty)continue; // Keep the cursor behind pending edits: next push handles any conflict.
-        if(event.operation==='delete') {if(local){await database.draft.delete(local.draftId);await database.att.delete(local.draftId);}}
+        if(local?.dirty || local?.pendingSchedule)continue; // The local revision is reconciled before subsequent changes.
+        if(event.operation==='delete') {
+          if(local)await database.transaction('rw',database.draft,database.att,async()=>{
+            const latest=await database.draft.get(local.draftId);
+            if(!latest || latest.pendingSchedule || latest.dirty || latest.cloudVersion!==local.cloudVersion)return;
+            await database.draft.delete(local.draftId);await database.att.delete(local.draftId);
+          });
+        }
         else if(!local||local.cloudVersion!==event.draft.version)await cloudRow(database,event.draft,local?.draftId,api);
       }
       cursor=page.cursor;await database.meta.put({key:'draftCursor',value:cursor});more=page.hasMore;
