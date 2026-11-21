@@ -99,9 +99,11 @@ const searchable = computed(() => ['email','send','star','content','draft','arch
 const searchFolder = computed(() => {
   if (route.name==='content') {
     const origin=route.query.folder;
+    if (!origin) return mailSearch.folder;
     if (origin==='label') return /^\d+$/.test(route.query.labelId || '') ? 'label' : 'all';
     if (['all','draft','archived','snoozed','important',...categoryFolders.map(item=>item.id)].includes(origin)) return origin;
-    return {sent:'send',starred:'star'}[origin] || 'email';
+    if (origin==='sent') return 'send';
+    return origin==='starred' ? 'star' : 'email';
   }
   if (route.name === "scheduled" && route.query.message) {
     if (route.query.from === "starred") return "star";

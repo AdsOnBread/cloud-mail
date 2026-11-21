@@ -3,18 +3,18 @@ import {matchesPeople,peopleTerms} from '../../../shared/mail-search-people';
 import { addresses } from "./recipients";
 import { tzDayjs } from "./day";
 
-function bodyText(draft, snippet) {
-  if (!draft.content) return draft.text || "";
-  const template = document.createElement("template");
-  template.innerHTML = draft.content;
-  for (const quote of template.content.querySelectorAll(
-    snippet ? ".cloudmail-reply-quote, blockquote, script, style" : "script, style",
-  ))
-    quote.remove();
-  for (const br of template.content.querySelectorAll("br")) br.replaceWith(" ");
-  for (const block of template.content.querySelectorAll("p,div,li"))
-    block.append(" ");
-  return template.content.textContent.replace(/\s+/g, " ").trim();
+function draftText(draft) {
+  if (!draft.content) return {body:draft.text || '',snippet:draft.text || ''};
+  const template=document.createElement('template');
+  template.innerHTML=draft.content;
+  const root=template.content;
+  for (const node of root.querySelectorAll('script,style')) node.remove();
+  for (const br of root.querySelectorAll('br')) br.replaceWith(' ');
+  for (const block of root.querySelectorAll('p,div,li')) block.append(' ');
+  const text=()=>root.textContent.replace(/\s+/g,' ').trim();
+  const body=draft.text || text();
+  for (const quote of root.querySelectorAll('.cloudmail-reply-quote,blockquote')) quote.remove();
+  return {body,snippet:text()};
 }
 
 export function draftKey(draft) {
@@ -24,6 +24,7 @@ export function draftKey(draft) {
 }
 
 export function draftSummary(draft) {
+  const {body,snippet}=draftText(draft);
   return {
     draftId: draft.draftId,
     cloudDraftId: draft.cloudDraftId,
@@ -33,12 +34,12 @@ export function draftSummary(draft) {
     accountId: draft.accountId,
     sender: draft.sendEmail || "",
     senderName: draft.name || "",
-    searchBody: draft.text || bodyText(draft,false),
+    searchBody: body,
     labelIds: draft.labelIds || [],
     starred: Boolean(draft.mailboxStarred),
     reply: draft.sendType === "reply",
     subject: draft.subject || "",
-    preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : bodyText(draft,true).slice(0,180),
+    preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : snippet.slice(0,180),
     lastDate: tzDayjs(draft.updatedAt || draft.createTime).valueOf(),
     recipients: [
       ...addresses(draft.receiveEmail),
@@ -51,6 +52,7 @@ export const newestDraft = (a, b) =>
   b.lastDate - a.lastDate || b.draftId - a.draftId;
 
 export function draftSearchMatcher(query, filters, accounts) {
+  if (!query && !Object.keys(filters).length) return ()=>true;
   const bounds=searchDateBounds(filters);
   const from=peopleTerms(filters,'from'), to=peopleTerms(filters,'to');
   const words=(query || '').toLowerCase(), subject=(filters.subject || '').toLowerCase();
