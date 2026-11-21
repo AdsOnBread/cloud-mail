@@ -1,5 +1,6 @@
 <template>
   <el-popover v-model:visible="open" :trigger="external ? [] : 'click'" :placement="submenu ? 'right-start' : 'bottom-start'" :offset="submenu ? 0 : undefined"
+    :fallback-placements="submenu ? ['left-start','bottom-end','bottom-start','top-end','top-start'] : undefined"
     :virtual-triggering="external" :virtual-ref="reference" :width="241" :show-arrow="false"
     :popper-class="submenu ? 'label-picker scheduled-label-flyout' : 'label-picker'" @after-enter="open && menu?.focus()">
     <template v-if="!external" #reference>
