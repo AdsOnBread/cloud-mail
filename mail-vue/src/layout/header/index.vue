@@ -2,7 +2,7 @@
   <div class="header">
     <div class="header-brand">
       <button type="button" class="icon-button" aria-label="Toggle navigation" data-tip="Main menu" :aria-expanded="uiStore.asideShow" @click="changeAside"><Icon icon="material-symbols:menu" width="24" /></button>
-      <router-link to="/inbox" class="brand-name"><Icon icon="material-symbols:mail-outline-rounded" width="32" /><span>{{ settingStore.settings.title || 'Cloudmail' }}</span></router-link>
+      <router-link to="/inbox" class="brand-name"><MailBrand :title="settingStore.settings.title"/></router-link>
     </div>
     <div v-if="searchable" class="mail-search" role="search" @focusout="leaveSuggestions">
       <form class="search-entry" @submit.prevent="submitSearch">
@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+import MailBrand from '@/components/mail-brand.vue';
 import MailboxShortcuts from "@/components/mail-keyboard-shortcuts/index.vue";
 import {labelSuggestions} from '@/utils/search-labels';
 import {systemFolders} from '@/components/mail-labels/system-folders';
@@ -436,8 +437,7 @@ function formatName(email) {
 .header { height:64px; display:grid; grid-template-columns:256px minmax(180px,720px) minmax(160px,1fr); align-items:center; gap:0; padding-right:20px; }
 .header-brand { display:flex; align-items:center; gap:4px; padding-left:16px; min-width:0; }
 .brand-name { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--regular-text-color); font-size:22px; min-width:0; }
-.brand-name svg { color:#d93025; flex-shrink:0; }
-.brand-name span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; max-width:166px; }
+
 .icon-button { width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:50%; cursor:pointer; color:var(--regular-text-color); }
 .icon-button:hover { background:var(--mail-hover); }
 .mail-search { display:flex; align-items:center; height:48px; min-width:0; border-radius:24px; background:var(--mail-search); padding:0 6px; }
@@ -474,4 +474,8 @@ function formatName(email) {
 .search-label-suggestions button,.search-label-suggestions>div{display:flex;align-items:center;gap:16px;width:100%;padding:0 18px;min-height:36px;font:14px/20px Arial,sans-serif;text-align:start}
 .search-label-suggestions button{cursor:pointer}.search-label-suggestions button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .search-label-suggestions button[aria-selected=true],.search-label-suggestions button:hover{background:var(--mail-hover)}
+.header{background:#103c33;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
+.header-brand>.icon-button,.toolbar>.icon-button,.header .page-title{color:#f5f4e8}
+.header-brand>.icon-button:hover,.toolbar>.icon-button:hover{background:#ffffff20}
+.brand-name{color:#f5f4e8}.header .mail-search{--phooey-ink:#173c35}
 </style>

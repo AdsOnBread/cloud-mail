@@ -54,7 +54,7 @@ struct MailHome: View {
                             VStack(spacing:2) {
                                 if store.isSyncing { Text("Checking for Mail…") }
                                 else if let date=profiles.compactMap(\.lastChecked).min() { Text("Updated \(date,style:.relative) ago") }
-                                else { Text("Cloudmail") }
+                                else { Text("phooey! mail") }
                                 Text("\(profiles.reduce(0){$0+$1.unreadTotal}) Unread").foregroundStyle(.secondary)
                             }.font(.caption).foregroundStyle(.primary).lineLimit(1).frame(maxWidth:.infinity)
                             Button("Compose",systemImage:"square.and.pencil") { do { draft=try store.newDraft(profileID:selection.profileID) } catch { self.error=error.localizedDescription } }.labelStyle(.iconOnly).frame(width:44,height:44).accessibilityIdentifier("compose")
@@ -73,7 +73,7 @@ struct MailHome: View {
         .onChange(of:notifications.destination) { _,destination in
             if let destination, store.profile(destination.profileID) != nil { compact = .detail; path=[destination]; notifications.destination=nil }
         }
-        .alert("Cloudmail",isPresented:Binding(get:{error != nil},set:{if !$0{error=nil}})) { Button("OK",role:.cancel) {} } message:{Text(error ?? "")}
+        .alert("phooey! mail",isPresented:Binding(get:{error != nil},set:{if !$0{error=nil}})) { Button("OK",role:.cancel) {} } message:{Text(error ?? "")}
     }
     private func mailboxButton(_ title: String, icon: String, value: MailboxSelection, count: Int = 0) -> some View {
         Button { selection=value;path=[];compact = .detail } label: {

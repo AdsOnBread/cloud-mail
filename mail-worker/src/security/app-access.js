@@ -1,3 +1,4 @@
+import {mailLockup,lockupStyle} from '../../../shared/mail-brand';
 import jwtUtils from '../utils/jwt-utils';
 
 const COOKIE = '__Host-cloudmail_access';
@@ -57,7 +58,7 @@ export async function accessGate(req, env) {
 		} });
 	}
 	if (url.pathname === '/unlock' && req.method === 'GET') return unlockPage();
-	if (!env.app_access_secret) return error('Installation access is not configured. Set app_access_secret before using Cloudmail.', 'APP_ACCESS_UNCONFIGURED', 503);
+	if (!env.app_access_secret) return error('Installation access is not configured. Set app_access_secret before using phooey! mail.', 'APP_ACCESS_UNCONFIGURED', 503);
 	if (url.pathname === '/api/access/unlock' && req.method === 'POST') {
 		if (!await rateLimit(req, env, 'unlock')) return error('Too many attempts. Try again in a minute.', 'RATE_LIMITED', 429);
 		if (Number(req.headers.get('Content-Length') || 0) > 4096) return error('Request is too large.', 'INVALID_REQUEST', 413);
@@ -78,7 +79,7 @@ export async function accessGate(req, env) {
 	}
 	if (!await hasAppAccess(req, env)) {
 		if (!url.pathname.startsWith('/api/') && req.method === 'GET') return Response.redirect(url.origin + '/unlock', 302);
-		return error('Unlock this Cloudmail installation.', 'APP_ACCESS_REQUIRED');
+		return error('Unlock this phooey! mail installation.', 'APP_ACCESS_REQUIRED');
 	}
 	if (url.pathname === '/api/access/status') return Response.json({ code: 200, data: { unlocked: true } }, { headers: { 'Cache-Control': 'no-store' } });
 	if (url.pathname === '/api/login' && !await rateLimit(req, env, 'login')) return error('Too many sign-in attempts. Try again in a minute.', 'RATE_LIMITED', 429);
@@ -86,9 +87,17 @@ export async function accessGate(req, env) {
 }
 
 function unlockPage() {
-	return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unlock Cloudmail</title>
-	<style>html{color-scheme:light dark;font:17px system-ui;background:light-dark(#f2f2f7,#111)}body{min-height:90vh;display:grid;place-items:center;margin:20px}main{max-width:340px;width:100%;padding:32px;border-radius:24px;background:light-dark(white,#222);box-shadow:0 12px 60px #0001}h1{letter-spacing:-1px}input,button{box-sizing:border-box;width:100%;font:inherit;padding:14px;border-radius:12px;margin-top:14px;border:1px solid #8885}button{background:#007aff;color:white;border:0;cursor:pointer}p{color:light-dark(#555,#aaa);line-height:1.5}#error{color:light-dark(#b42318,#ff8e85);min-height:24px}</style>
-	<main><div aria-hidden="true" style="font-size:40px">✉</div><h1>Cloudmail</h1><p>Enter your installation secret to continue. Then sign in to your own mailbox.</p><form><label for="secret">Installation secret</label><input id="secret" type="password" autocomplete="off" required maxlength="512" autofocus><button>Unlock Cloudmail</button><p id="error" role="alert"></p></form></main>
+	return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unlock phooey! mail</title>
+	<style>${lockupStyle}
+  :root{color-scheme:light dark;--paper:light-dark(#fffef8,#172722);--ink:light-dark(#173c35,#f5f4e8);--line:light-dark(#c9d6c9,#52665a);font:16px/1.5 system-ui,sans-serif;color:var(--ink);background:light-dark(#f5f6ee,#10241f)}
+  body{min-height:100dvh;margin:0;display:grid;place-items:center}
+  main{width:min(420px,calc(100% - 32px));box-sizing:border-box;padding:28px;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 34px #173c3514}
+  h1{display:flex;align-items:center;justify-content:center;margin:0 0 20px;padding:14px;background:#103c33;border-radius:6px;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
+  input,button{box-sizing:border-box;width:100%;font:inherit;border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+  input{margin:6px 0 16px;background:var(--paper);color:var(--ink)}button{background:#28634a;color:white;border-color:#28634a;cursor:pointer;font-weight:600}
+  :focus-visible{outline:2px solid #bd522d;outline-offset:3px}button:hover{background:#174e34}
+  #error{color:light-dark(#a53e20,#ffae7c);margin:8px 0 0}#error:empty{display:none}</style>
+  <main><h1>${mailLockup}</h1><p>Enter your installation secret to continue. Then sign in to your own mailbox.</p><form><label for="secret">Installation secret</label><input id="secret" type="password" autocomplete="off" required maxlength="512" autofocus><button>Unlock phooey! mail</button><p id="error" role="alert"></p></form></main>
 	<script>document.querySelector('form').addEventListener('submit',async e=>{e.preventDefault();const b=document.querySelector('button');b.disabled=true;try{const r=await fetch('/api/access/unlock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:document.querySelector('input').value})});const d=await r.json();if(!r.ok)throw Error(d.message);location.replace('/')}catch(e){document.querySelector('#error').textContent=e.message}finally{b.disabled=false}})</script></html>`, { headers: {
 		'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
 		'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",

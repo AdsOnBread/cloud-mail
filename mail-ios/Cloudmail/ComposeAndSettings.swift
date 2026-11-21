@@ -110,22 +110,24 @@ struct LoginView: View {
             Form {
                 Section {
                     VStack(alignment:.leading,spacing:12) {
-                        Image(systemName:"envelope.badge.shield.half.filled").font(.system(size:42)).foregroundStyle(Color.accentColor).accessibilityHidden(true)
-                        Text("Your mail. All together.").font(.title2.bold())
-                        Text("Connect to your internal Cloudmail server, then sign in to a user. You can add more users anytime.").font(.subheadline).foregroundStyle(.secondary)
+                        HStack(spacing:7) {
+                            Image("Wordmark").resizable().scaledToFit().frame(width:95)
+                            Text("mail").font(.system(size:26,weight:.regular))
+                        }.accessibilityElement(children:.ignore).accessibilityLabel("phooey! mail")
+                        Text("Connect to your phooey! mail server, then sign in to a user. You can add more users anytime.").font(.subheadline).foregroundStyle(.secondary)
                     }.padding(.vertical,12).listRowBackground(Color.clear)
                 }
                 Section("Installation") {
                     TextField("https://mail.example.com",text:$server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().disabled(!store.profiles.isEmpty).accessibilityLabel("Server URL").accessibilityIdentifier("login.server")
                     SecureField("Installation secret",text:$secret).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("login.secret")
                 }
-                Section("Cloudmail User") {
+                Section("phooey! mail account") {
                     TextField("Email",text:$email).keyboardType(.emailAddress).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("login.email")
                     SecureField("Password",text:$password).textContentType(.password).accessibilityIdentifier("login.password")
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
                 Section { Button { login() } label: { HStack { Spacer();if working { ProgressView() } else { Text("Sign In").fontWeight(.semibold) };Spacer() } }.disabled(working || server.isEmpty || secret.isEmpty || email.isEmpty || password.isEmpty).accessibilityIdentifier("login.submit") }
-                Section { Text("Background checks are scheduled by iOS. Notifications can arrive hours later; open Cloudmail to check immediately.").font(.footnote).foregroundStyle(.secondary) }
+                Section { Text("Background checks are scheduled by iOS. Notifications can arrive hours later; open phooey! mail to check immediately.").font(.footnote).foregroundStyle(.secondary) }
             }.disabled(working)
             .navigationTitle("Add User").navigationBarTitleDisplayMode(.inline)
             .toolbar { if !store.profiles.isEmpty { ToolbarItem(placement:.cancellationAction) { Button("Cancel") { dismiss() }.disabled(working) } } }
@@ -158,7 +160,7 @@ struct SettingsView: View {
                 Section("Background Checks") {
                     LabeledContent("Background App Refresh",value:background == .available ? "Available":"Unavailable")
                     LabeledContent("Notifications",value:notifications.authorization == .authorized || notifications.authorization == .provisional ? "Allowed":"Not allowed")
-                    Text("Cloudmail requests another check after 15 minutes. iOS decides when it runs and can delay checks for hours. Low Power Mode, force quitting, and system settings can prevent checks.").font(.footnote).foregroundStyle(.secondary)
+                    Text("phooey! mail requests another check after 15 minutes. iOS decides when it runs and can delay checks for hours. Low Power Mode, force quitting, and system settings can prevent checks.").font(.footnote).foregroundStyle(.secondary)
                     Button("Notification Settings",systemImage:"bell") { Task { if notifications.authorization == .notDetermined { await notifications.requestPermission() } else if let url=URL(string:UIApplication.openSettingsURLString) { await UIApplication.shared.open(url) } } }
                     Button("Check All Users Now",systemImage:"arrow.clockwise") { Task { await store.sync() } }.disabled(store.isSyncing)
                 }

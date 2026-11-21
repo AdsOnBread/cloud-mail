@@ -20,7 +20,7 @@ const replyOptions = {
 const key={idempotencyKey:z.string().min(8).max(128)};
 const ids={emailIds:z.array(id).min(1).max(100)};
 export function createServer(c,userId,scopes) {
-  const server=new McpServer({name:'Cloudmail',version:'1.0.0'});
+  const server=new McpServer({name:'phooey! mail',version:'1.0.0'});
   const requiredScopes=scope=>[...new Set(['mail:read',scope])];
   function requireScope(scope) {
     if(scopes.includes(scope))return;

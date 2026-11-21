@@ -1,4 +1,4 @@
-# Cloudmail for iOS
+# phooey! mail for iOS
 
 Native SwiftUI client for iOS 18 and later. Open `Cloudmail.xcodeproj` in Xcode 16 or later (validated here with Xcode 27.1). No third-party iOS packages are required.
 

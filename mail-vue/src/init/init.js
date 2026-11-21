@@ -1,3 +1,4 @@
+import {displayMailName,mailName} from '../../../shared/mail-brand';
 import {useUserStore} from "@/store/user.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
@@ -8,7 +9,7 @@ import {websiteConfig} from "@/request/setting.js";
 import i18n from "@/i18n/index.js";
 
 export async function init() {
-    document.title = '\u200B'
+    document.title = mailName
 
     const settingStore = useSettingStore();
     const userStore = useUserStore();
@@ -27,7 +28,7 @@ export async function init() {
     const [setting, initial] = await Promise.all([websiteConfig(),profile(token)]);
     settingStore.settings = setting;
     settingStore.domainList = setting.domainList;
-    document.title = setting.title;
+    document.title = displayMailName(setting.title);
 
     let user = initial;
     while (token !== localStorage.getItem('token')) {

@@ -179,28 +179,28 @@ button, input, select, textarea {
 
 /* Shared Gmail-inspired surfaces and controls. */
 html:not(.dark) {
-    --mail-canvas: #f6f8fc;
-    --mail-surface: #fff;
-    --mail-search: #eaf1fb;
-    --mail-compose: #c2e7ff;
-    --mail-on-compose: #001d35;
-    --mail-compose-header: #f2f6fc;
-    --mail-selected: #d3e3fd;
-    --mail-hover: #e8edf5;
-    --mail-read: #f2f6fc;
+    --mail-canvas: #f5f6ee;
+    --mail-surface: #fffef8;
+    --mail-search: #edf2e9;
+    --mail-compose: #d9e8d6;
+    --mail-on-compose: #173c35;
+    --mail-compose-header: #f5f6ef;
+    --mail-selected: #cde3cd;
+    --mail-hover: #e6ece3;
+    --mail-read: #f5f6ef;
     --scheduled-notice: rgb(241 243 244 / 87%);
     --scheduled-date: #ad5707;
     --scheduled-date-selected: #9c4c05;
     --scheduled-banner: #f5f5f5;
     --scheduled-action: #175ebc;
-    --el-color-primary: #0b57d0;
-    --el-color-primary-dark-2: #0842a0;
-    --el-color-primary-light-3: #5189df;
-    --el-color-primary-light-5: #88adeb;
-    --el-color-primary-light-7: #c2d7f6;
-    --el-color-primary-light-8: #d3e3fd;
-    --el-color-primary-light-9: #eaf1fb;
-    --el-text-color-primary: #1f1f1f;
+    --el-color-primary: #266a48;
+    --el-color-primary-dark-2: #174e34;
+    --el-color-primary-light-3: #498663;
+    --el-color-primary-light-5: #8cb79a;
+    --el-color-primary-light-7: #bcd6c2;
+    --el-color-primary-light-8: #cde3cd;
+    --el-color-primary-light-9: #edf2e9;
+    --el-text-color-primary: #173c35;
     --el-text-color-regular: #444746;
     --el-bg-color: #fff;
     --aside-backgound: var(--mail-canvas);
@@ -210,7 +210,7 @@ html:not(.dark) {
     --email-scroll-content-color: #5f6368;
     --light-border-color: #e0e3e7;
     --compose-divider: #e0e3e7;
-    --email-hover-background: #e8edf5;
+    --email-hover-background: #e6ece3;
     --base-fill: #eef2f7;
     --settings-page-background: #fff;
     --aside-right-border: none;
@@ -219,10 +219,10 @@ html.dark {
     --mail-canvas: #1b1b1f;
     --mail-surface: #242529;
     --mail-search: #2d2f35;
-    --mail-compose: #004a77;
-    --mail-on-compose: #c2e7ff;
+    --mail-compose: #284f43;
+    --mail-on-compose: #d9e8d6;
     --mail-compose-header: #303238;
-    --mail-selected: #004a77;
+    --mail-selected: #284f43;
     --mail-hover: #36383f;
     --mail-read: #292b30;
     --scheduled-notice: #303238;
@@ -258,7 +258,7 @@ button:disabled { cursor:default; opacity:.5; }
 .el-button { border-radius:20px; }
 .el-dialog { border-radius:16px; max-width:calc(100vw - 24px); }
 .el-dropdown__popper { border-radius:12px; }
-html.dark .el-button--primary { --el-button-text-color:#062e6f; --el-button-hover-text-color:#062e6f; }
+html.dark .el-button--primary { --el-button-text-color:#123b2d; --el-button-hover-text-color:#123b2d; }
 .mailbox-popover.el-popover { padding:0; border-radius:16px; overflow:visible; background:var(--mail-surface); color:var(--el-text-color-primary); }
 .mailbox-popover .account-box { width:100%; height:430px; background:var(--mail-surface); border:0; border-radius:16px; padding:8px; }
 .mailbox-popover .account-box .head-opt { padding:4px 8px 12px; height:42px; display:flex; gap:16px; align-items:center; }
@@ -351,3 +351,6 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 .message-action-menu .el-dropdown-menu__item { height:32px; min-height:32px; padding:0 12px; gap:16px; font:14px/20px Arial,sans-serif; }
 .message-action-menu .el-dropdown-menu__item svg { flex:none; width:16px; height:16px; margin:0; color:var(--regular-text-color); }
 .message-action-menu .el-dropdown-menu__item--divided { margin:8px 0; }
+
+@font-face{font-family:'Phooey Inter';src:url('/brand/inter-latin.woff2') format('woff2');font-weight:100 900;font-display:swap}
+html.dark{--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}

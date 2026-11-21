@@ -1,6 +1,6 @@
-<p align="center"><img src="doc/demo/logo.png" width="80" alt="Cloud Mail logo" /></p>
+<p align="center"><img src="mail-vue/public/brand/icon.svg" width="64" alt="phooey! mail" /></p>
 
-# Cloud Mail
+# phooey! mail
 
 A responsive email application running on Cloudflare Workers, with a Vue interface, multiple mailbox addresses, role-based permissions, and attachment support.
 

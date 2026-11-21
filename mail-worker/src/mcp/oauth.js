@@ -1,3 +1,4 @@
+import {mailLockup,lockupStyle} from '../../../shared/mail-brand';
 import { OAuthProvider,AuthorizationError,CimdFetchError } from '@cloudflare/workers-oauth-provider';
 import { mcpFetch } from './tools';
 import { allowedOrigin,equalSecret,hasAppAccess,rateLimit } from '../security/app-access';
@@ -13,16 +14,17 @@ async function consentPage(req,env,authRequest,message='',selectedScopes) {
   const unlocked=await hasAppAccess(req,env);
   transaction.headers.set('Content-Type','text/html; charset=utf-8');transaction.headers.set('Cache-Control','no-store');
   transaction.headers.set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
-  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect Cloudmail</title>
-  <style>body{font:17px system-ui;max-width:480px;margin:50px auto;padding:24px;line-height:1.5;color:#17223b;background:#f5f7fb}input:not([type=checkbox]),button{box-sizing:border-box;width:100%;padding:12px;margin:8px 0;font:inherit}label{display:block;margin:12px 0}button{cursor:pointer}small{display:block;color:#45536b}.error{color:#b42318}</style>
-  <h1>Connect Cloudmail</h1><p><strong>${escape(info.clientName)}</strong> wants to access all mailboxes belonging to the user you sign in as.</p>
+  return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect phooey! mail</title>
+  <style>${lockupStyle}body{font:17px system-ui;max-width:480px;margin:50px auto;padding:24px;line-height:1.5;color:#173c35;background:#fffef8}input:not([type=checkbox]),button{box-sizing:border-box;width:100%;padding:12px;margin:8px 0;font:inherit}label{display:block;margin:12px 0}button{cursor:pointer}small{display:block;color:#45536b}.error{color:#a53e20}.suite{display:flex;padding:14px 18px;border-radius:6px;background:#103c33;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c}
+  button{border:1px solid #c9d6c9;border-radius:6px;color:#173c35;background:#f5f6ee}button[value=approve]{background:#28634a;color:white}input{accent-color:#28634a}</style>
+  <div class="suite">${mailLockup}</div><h1>Connect an app</h1><p><strong>${escape(info.clientName)}</strong> wants to access all mailboxes belonging to the user you sign in as.</p>
   <p>Callback destination: <strong>${escape(info.redirectHost)}</strong>${info.clientDomain?`<br>Published by ${escape(info.clientDomain)}`:'<br>This client registered its own name.'}${info.redirectIsLoopback?'<br>Only continue if you started connecting an app on this computer.':''}</p>
   <p class="error" role="alert">${escape(message)}</p><form method="post"><input type="hidden" name="handle" value="${escape(transaction.handle)}">
   ${unlocked?'':'<label>Installation secret<input type="password" name="secret" autocomplete="off" required></label>'}
-  <label>Cloudmail email<input name="email" type="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+  <label>phooey! mail email<input name="email" type="email" autocomplete="username" required></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label>
   <p>All supported permissions are available below and selected on a new connection. Review them and uncheck any you do not want before allowing access.</p>
   ${offeredScopes.map(scope=>`<label><input type="checkbox" name="scope" value="${escape(scope)}"${checkedScopes.has(scope)?' checked':''}> ${escape({'mail:read':'Read messages and files','mail:drafts':'Read, create, edit, and discard cloud drafts','mail:send':'Send, reply, and forward email','mail:delete':'Move mail to Trash, restore mail, and permanently delete trashed mail',offline_access:'Stay connected until access expires or is revoked'}[scope]||scope)}</label>`).join('')}
-  <button name="decision" value="approve">Sign in and Allow selected permissions</button><button name="decision" value="deny" formnovalidate>Deny</button></form><small>Manage or revoke this connection in Cloudmail Settings.</small></html>`,{headers:transaction.headers});
+  <button name="decision" value="approve">Sign in and Allow selected permissions</button><button name="decision" value="deny" formnovalidate>Deny</button></form><small>Manage or revoke this connection in phooey! mail Settings.</small></html>`,{headers:transaction.headers});
 }
 async function authorize(req,env) {
   const oauth=env.OAUTH_PROVIDER;

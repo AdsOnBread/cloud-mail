@@ -1,6 +1,7 @@
 <template>
   <el-scrollbar class="scroll">
     <div>
+      <router-link class="mobile-brand" to="/inbox"><MailBrand :title="settingStore.settings.title"/></router-link>
       <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <el-menu :collapse="false"  >
         <el-menu-item @click="router.push({name: 'email'})" index="email" aria-label="Inbox" data-tip="Inbox"
@@ -100,6 +101,7 @@
 </template>
 
 <script setup>
+import MailBrand from '@/components/mail-brand.vue';
 import {categoryFolders} from "@/utils/inbox-categories";
 import {systemFolders,folderMode} from "@/components/mail-labels/system-folders";
 import http from '@/axios';
@@ -358,4 +360,6 @@ const uiStore = useUiStore();
 :global(.mail-layout.nav-compact .mail-sidebar .compose-button) { width:48px; padding:0 12px; margin-left:12px; height:48px; }
 :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button) { padding:0 12px; }
 @media (max-width:767px) { .el-menu-item { height:40px; } }
+.mobile-brand{display:none}
+@media(max-width:767px){.mobile-brand{display:flex;align-items:center;padding:14px 20px;text-decoration:none}}
 </style>

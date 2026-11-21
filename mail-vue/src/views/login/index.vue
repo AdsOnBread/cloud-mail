@@ -1,16 +1,9 @@
 <template>
   <div id="login-box" :style=" background ? 'background: var(--el-bg-color)' : ''" v-loading="oauthLoading" element-loading-text="Signing in...">
-    <div id="background-wrap" v-if="!settingStore.settings.background">
-      <div class="x1 cloud"></div>
-      <div class="x2 cloud"></div>
-      <div class="x3 cloud"></div>
-      <div class="x4 cloud"></div>
-      <div class="x5 cloud"></div>
-    </div>
-    <div v-else :style="background"></div>
+    <div v-if="settingStore.settings.background" :style="background"></div>
     <div class="form-wrapper">
       <div class="container">
-        <span class="form-title">{{ settingStore.settings.title }}</span>
+        <div class="login-wordmark"><MailBrand :title="settingStore.settings.title"/></div>
         <span class="form-desc" v-if="show === 'login'">{{ $t('loginTitle') }}</span>
         <span class="form-desc" v-else>{{ $t('regTitle') }}</span>
         <div v-show="show === 'login'">
@@ -151,6 +144,8 @@
 </template>
 
 <script setup>
+import MailBrand from '@/components/mail-brand.vue';
+import {displayMailName} from '../../../../shared/mail-brand';
 import router from "@/router";
 import {useRoute} from "vue-router";
 import {computed, nextTick, reactive, ref} from "vue";
@@ -464,7 +459,7 @@ function refreshWebsiteConfig() {
     if (!suffix.value && setting.domainList.length > 0) {
       suffix.value = setting.domainList[0]
     }
-    document.title = setting.title
+    document.title = displayMailName(setting.title)
   }).catch(e => {
     console.error(e)
   })
@@ -809,77 +804,7 @@ function submitRegister() {
 }
 
 
-#background-wrap {
-  height: 100%;
-  z-index: 0;
-}
-
-@keyframes animateCloud {
-  0% {
-    margin-left: -500px;
-  }
-
-  100% {
-    margin-left: 100%;
-  }
-}
-
-.x1 {
-  animation: animateCloud 30s linear infinite;
-  transform: scale(0.65);
-}
-
-.x2 {
-  animation: animateCloud 15s linear infinite;
-  transform: scale(0.3);
-}
-
-.x3 {
-  animation: animateCloud 25s linear infinite;
-  transform: scale(0.5);
-}
-
-.x4 {
-  animation: animateCloud 13s linear infinite;
-  transform: scale(0.4);
-}
-
-.x5 {
-  animation: animateCloud 20s linear infinite;
-  transform: scale(0.55);
-}
-
-.cloud {
-  background: linear-gradient(to bottom, #fff 5%, #f1f1f1 100%);
-  border-radius: 100px;
-  box-shadow: 0 8px 5px rgba(0, 0, 0, 0.1);
-  height: 120px;
-  width: 350px;
-  position: relative;
-}
-
-.cloud:after,
-.cloud:before {
-  content: "";
-  position: absolute;
-  background: #fff;
-  z-index: -1;
-}
-
-.cloud:after {
-  border-radius: 100px;
-  height: 100px;
-  left: 50px;
-  top: -50px;
-  width: 100px;
-}
-
-.cloud:before {
-  border-radius: 200px;
-  height: 180px;
-  width: 180px;
-  right: 50px;
-  top: -90px;
-}
-
+.form-wrapper{inset:0;width:100%;background:transparent}
+.container{box-sizing:border-box;width:min(420px,calc(100% - 32px));height:auto;margin:0;max-height:100dvh;overflow:auto;padding:32px;border:1px solid var(--light-border-color);border-radius:12px;background:var(--mail-surface);box-shadow:0 10px 34px #173c3514}
+.login-wordmark{display:flex;align-items:center;justify-content:center;padding:15px;border-radius:6px;background:#103c33;--phooey-ink:#f5f4e8;--phooey-accent:#ffae7c;color:#f5f4e8;margin-bottom:16px}
 </style>

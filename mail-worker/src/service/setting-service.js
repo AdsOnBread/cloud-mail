@@ -1,3 +1,4 @@
+import {displayMailName} from '../../../shared/mail-brand';
 import KvConst from '../const/kv-const';
 import setting from '../entity/setting';
 import orm from '../entity/orm';
@@ -194,7 +195,7 @@ const settingService = {
 
 		return {
 			register: settingRow.register,
-			title: settingRow.title,
+			title: displayMailName(settingRow.title),
 			manyEmail: settingRow.manyEmail,
 			addEmail: settingRow.addEmail,
 			autoRefresh: settingRow.autoRefresh,
@@ -209,7 +210,7 @@ const settingService = {
 			regKey: settingRow.regKey,
 			regVerifyOpen: settingRow.regVerifyOpen,
 			addVerifyOpen: settingRow.addVerifyOpen,
-			noticeTitle: settingRow.noticeTitle,
+			noticeTitle: /^cloud\s*mail$/i.test(settingRow.noticeTitle) ? displayMailName(settingRow.noticeTitle) : settingRow.noticeTitle,
 			noticeContent: settingRow.noticeContent,
 			noticeType: settingRow.noticeType,
 			noticeDuration: settingRow.noticeDuration,
