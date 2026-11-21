@@ -1,3 +1,4 @@
+import {addExcludedFilter} from './mail-word-index';
 import {sizeCriterion} from '../../../shared/mail-search-size';
 import {fullAddress,peopleTerms,personSearchKey} from '../../../shared/mail-search-people';
 import {searchDateBounds} from "../../../shared/mail-search-date";
@@ -65,6 +66,7 @@ export function addSizeFilter(params, filters, args, {columns,files,raw}) {
 
 // Both the conversation and message lists use "e" for the owned, visible email.
 export function addMailFilters(params, filters, args, {conversation = false} = {}) {
+  addExcludedFilter(params,filters,args);
   addPeopleFilter(params, 'from', ['e.send_email', 'e.name'], filters, args);
   addPeopleFilter(params, 'to', ['e.recipient', 'e.cc', "CASE WHEN e.type=1 THEN e.bcc ELSE '' END"], filters, args);
   if (params.subject?.trim()) {

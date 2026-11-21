@@ -1,3 +1,4 @@
+import {prepareExcludedSearch} from './mail-word-index';
 import {withLabelMove} from './label-move.js';
 import { mailboxAttachments } from './mailbox-attachments';
 import { addMailFilters } from '../service/mail-search-filters';
@@ -109,6 +110,7 @@ export async function conversationList(c, p, userId) {
 		filters.push('e.account_id=?');
 		args.push(Number(p.accountId) || 0);
 	}
+	await prepareExcludedSearch(db,userId,p.excluded);
 	addMailFilters(p,filters,args,{conversation:true});
 	if (p.q?.trim()) {
 		const term =

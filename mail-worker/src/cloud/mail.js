@@ -1,3 +1,4 @@
+import {prepareExcludedSearch} from '../service/mail-word-index';
 import { mailboxAttachments } from '../service/mailbox-attachments';
 import {maxPeople,maxPersonTerm} from '../../../shared/mail-search-people';
 import {peopleSuggestions} from '../../../shared/mail-people-suggestions';
@@ -59,6 +60,7 @@ export async function list(c,userId,p={}) {
   if(folder==='starred') filters.push('s.star_id IS NOT NULL');
   if(p.accountId) {filters.push('e.account_id=?');args.push(positive(p.accountId));}
   if(p.cursor) {filters.push('e.email_id<?');args.push(positive(p.cursor));}
+  await prepareExcludedSearch(c.env.db,userId,p.excluded);
   addMailFilters(p,filters,args);
   if(p.q?.trim()) {
     const term='%'+p.q.trim().slice(0,200).replace(/[\\%_]/g,'\\$&')+'%';

@@ -1,3 +1,4 @@
+import {mailWordSchema} from '../service/mail-word-index';
 export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
   user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
   PRIMARY KEY(user_id,folder))`;
@@ -17,6 +18,7 @@ export async function migrateCloud(db) {
   const columns = await readColumns();
   if (!columns.some(c => c.name === 'trashed_at')) await db.prepare('ALTER TABLE email ADD COLUMN trashed_at TEXT').run();
   await db.batch([
+    ...mailWordSchema().map(sql=>db.prepare(sql)),
     db.prepare(signatureSchema),
     db.prepare(systemLabelSchema),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_email_trash ON email(user_id,trashed_at,email_id)'),

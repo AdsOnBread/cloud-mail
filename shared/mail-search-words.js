@@ -1,7 +1,7 @@
 // The search bar spells a single exclusion with a minus, and alternatives with -{…}.
 const clauses = /"(?:[^"]*"|[^"]*$)|[^\s"]+/gu;
 const tokens = /[\p{L}\p{M}\p{N}]+/gu;
-const words = text => String(text ?? '').normalize('NFD').toLowerCase().replace(/\p{M}/gu,'').match(tokens) || [];
+const words = text => String(text ?? '').normalize('NFD').toLowerCase().replace(/(\p{Script=Latin})\p{M}+/gu,'$1').normalize('NFC').match(tokens) || [];
 
 export function excludedPhrases(value) {
   const parts = String(value || '').slice(0,200).match(clauses) || [];
