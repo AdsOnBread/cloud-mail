@@ -11,7 +11,7 @@
           <button type="button" class="chip-address" :draggable="!!session && mouseChip"
             @dragstart="startDrag($event,index)" @dragend="endRecipientDrag(dragField)" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
-            @pointerdown="chipPointerDown($event)" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
+            @pointerdown="chipPointerDown($event,index)" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
             @pointerenter="mouseChip=$event.pointerType!=='touch';hoverChip($event,index)" @pointerleave="leaveCard"
             @keydown="chipKey($event,index)" @copy="clipboardEvent($event,index)" @cut="clipboardEvent($event,index)">
             <span class="avatar" aria-hidden="true">{{ display(address).charAt(0).toUpperCase() }}</span>
@@ -93,7 +93,7 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
     input.value?.focus();
   });
 const {target:cardTarget,card:contactCard,pinned,open:openCard,close:closeCard,hold:holdCard,hover,leave:leaveCard}=useContactCard();
-let touchActivated=false;
+let touchActivated=false, pressedChip=null;
 const root=ref(), mouseChip=ref(false), session=inject(recipientDragSession,null);
 const dragField={
   session:()=>root.value?.closest("fieldset:disabled,[inert]") ? null : session?.(),
@@ -112,15 +112,24 @@ const dropIndex=computed(()=>recipientDrop.value?.field===dragField ? recipientD
 function blurEntry(event) {
   // A mouse drag needs the browser’s default pointerdown. Let the chip click
   // or drop resolve the edit before changing the index underneath the pointer.
+  if (pressedChip?.fromInput && (!event.relatedTarget || entry.value?.contains(event.relatedTarget))) {
+    pressedChip.fromInput=false;
+    return;
+  }
   if (event.relatedTarget?.closest?.(".chip-address") && entry.value?.contains(event.relatedTarget)) return;
   commit();
 }
-function chipPointerDown(event) {
+function chipPointerDown(event,index) {
   touchActivated=false;
   mouseChip.value=event.pointerType!=="touch";
+  pressedChip=null;
   if (!session || !mouseChip.value || event.button!==0) event.preventDefault();
+  else pressedChip={address:props.modelValue[index],element:event.currentTarget,fromInput:document.activeElement===input.value};
 }
 function startDrag(event,index) {
+  const pressed=pressedChip;
+  pressedChip=null;
+  if (!pressed || pressed.element!==event.currentTarget || props.modelValue[index]!==pressed.address) return event.preventDefault();
   closeCard(); closeMenu(false); hideSuggestions();
   startRecipientDrag(event,dragField,index);
 }
@@ -165,6 +174,7 @@ function touchChip(event,index) {
   openMenu(index);
 }
 function selectChip(event,index) {
+  pressedChip=null;
   if (touchActivated && event.detail) {touchActivated=false;return;}
   closeCard();closeMenu(false);
   if (event.pointerType==="touch") return openMenu(index);
@@ -178,6 +188,7 @@ watch(()=>props.modelValue[cardTarget.value?.index],value=>{
   if (cardTarget.value && value!==cardTarget.value.address) closeCard();
 });
 function clear() {
+  pressedChip=null;
   endRecipientDrag(dragField);
   closeCard();
   hideSuggestions();
