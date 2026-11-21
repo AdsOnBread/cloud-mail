@@ -56,7 +56,8 @@ export async function setScheduledMark(c, userId, rawId, { field, value, version
 
 // Apply the user's whole selection to one snapshot. A delivery or cancellation
 // racing the request must not change a different revision or half the selection.
-export async function setScheduledRead(c,userId,{messages,unread}) {
+export async function setScheduledRead(c,userId,input) {
+  const {messages,unread}=input || {};
   if (typeof unread!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
   const selected=scheduledSelection(messages);
   const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (${eligibleSelection})
@@ -66,12 +67,14 @@ export async function setScheduledRead(c,userId,{messages,unread}) {
   if (!result.results.length) throw new BizError('A scheduled message changed. Refresh Scheduled.',409);
   return {updated:result.results.length};
 }
-export function setScheduledInbox(c,userId,{messages,inbox,previousEdit}) {
+export async function setScheduledInbox(c,userId,input) {
+  const {messages,inbox,previousEdit}=input || {};
   if (typeof inbox!=='boolean' || (previousEdit!==undefined && (typeof previousEdit!=='string' || previousEdit.length!==36)))
     throw new BizError('Invalid filing change.',400);
   return setPlacement(c,userId,messages,inbox ? 0 : -1,previousEdit);
 }
-export function snoozeScheduled(c,userId,{messages,wakeAt}) {
+export async function snoozeScheduled(c,userId,input) {
+  const {messages,wakeAt}=input || {};
   if (!Number.isSafeInteger(wakeAt) || wakeAt<=Math.floor(Date.now()/1000) || wakeAt>253402300799)
     throw new BizError('Choose a future snooze time.',400);
   return setPlacement(c,userId,messages,wakeAt);
@@ -86,7 +89,8 @@ function scheduledSelection(selection) {
   if (new Set(messages.map(([id])=>id)).size!==messages.length) throw new BizError('Duplicate scheduled message.',400);
   return messages;
 }
-export async function setScheduledLabels(c,userId,{messages,add,remove}) {
+export async function setScheduledLabels(c,userId,input) {
+  const {messages,add,remove}=input || {};
   validateLabelChange(add,remove);
   const selection=scheduledSelection(messages);
   const labels=[...new Set([...add,...remove])];
@@ -197,7 +201,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
     ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
-    ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
+    ${from} WHERE ${conditions.join(' AND ')} ORDER BY ${filters.mark==='snoozed' ? 'wakeAt' : 'sendAt'},d.draft_id`).bind(...args).all();
   const term=filters.q?.trim().slice(0,200).toLowerCase();
   const phrases=excludedPhrases(filters.excluded), excluded=new Set(), missingText=[];
   const messages=results.map(({html_only,...row})=>{

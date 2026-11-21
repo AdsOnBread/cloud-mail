@@ -685,6 +685,9 @@ describe('Scheduled send',()=>{
    expect(await folder('snoozed')).toEqual([]);
    expect((await folder('inbox')).map(row=>row.draftId)).toEqual([rows[0].draftId]);
    const first=await snooze(rows),later=await snooze([rows[0]],wakeAt+60);
+   expect((await folder('snoozed')).map(row=>row.draftId)).toEqual([rows[1].draftId,rows[0].draftId]);
+   for(const action of [setScheduledInbox,setScheduledRead,snoozeScheduled])
+     await expect(action(c(),1,null)).rejects.toMatchObject({code:400});
    await expect(setScheduledInbox(c(),1,{messages:rows,inbox:false,previousEdit:first.edit})).rejects.toMatchObject({code:409});
    await setScheduledInbox(c(),1,{messages:[rows[0]],inbox:false,previousEdit:later.edit});
    expect(await folder('snoozed')).toMatchObject(rows.map(row=>({...row,wakeAt})));

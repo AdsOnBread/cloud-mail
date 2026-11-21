@@ -110,7 +110,7 @@ const searchFolder = computed(() => {
   if (route.name === "scheduled" && route.query.message) {
     if (route.query.from === "inbox") return "email";
     if (route.query.from === "starred") return "star";
-    if (route.query.from === "important") return "important";
+    if (["important","snoozed"].includes(route.query.from)) return route.query.from;
     if (route.query.from === "label" && /^\d+$/.test(route.query.labelId || "")) return "label";
   }
   return route.name;

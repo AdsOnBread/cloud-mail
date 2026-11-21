@@ -288,7 +288,7 @@ const ordered = computed(() => {
   // Opening the last unread result keeps its reader and pager until the user leaves.
   let matches = search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
   if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
-  if (originFolder.value === "snoozed") matches=matches.filter(row=>row.wakeAt && !row.inbox);
+  if (originFolder.value === "snoozed") matches=matches.filter(row=>row.wakeAt && !row.inbox).sort((a,b)=>a.wakeAt-b.wakeAt || a.draftId-b.draftId);
   if (originFolder.value === "inbox") matches=matches.filter(row=>row.inbox);
   if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
   if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
