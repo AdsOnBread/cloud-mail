@@ -231,7 +231,7 @@
           </div>
         </div>
         <p v-if="sendError" class="send-error" role="alert">{{ sendError }}</p>
-        <div class="compose-footer">
+        <div class="compose-footer" data-tip-placement="top">
           <div class="split-send">
           <el-button
             type="primary"

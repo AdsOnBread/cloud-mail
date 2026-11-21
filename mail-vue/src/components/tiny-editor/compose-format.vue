@@ -2,6 +2,7 @@
   <div
     ref="strip"
     class="format-strip"
+    data-tip-placement="top"
     :class="{'with-history':showHistory}"
     role="toolbar"
     aria-label="Text formatting"
