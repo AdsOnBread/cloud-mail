@@ -11,7 +11,7 @@
       ref="editorRef"
     ></textarea>
     <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
-    <ComposeLink v-if="mailCompose" ref="linkPanel" :editor="editor" />
+    <ComposeLink v-if="mailCompose || signatureEditor" ref="linkPanel" :editor="editor" />
   </div>
 </template>
 
@@ -191,10 +191,10 @@ function initEditor(initialContent) {
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
     ...(props.signatureEditor ? {
-      iframe_aria_text:"Signature text", paste_data_images:false,relative_urls:false,remove_script_host:false,
+      iframe_aria_text:"Signature text", contextmenu:false, paste_data_images:false,relative_urls:false,remove_script_host:false,
       valid_elements:"div[style],p[style],br,strong,b,em,i,u,s,span[style],a[href],ul,ol,li,blockquote,sub,sup",
     } : {}),
-    toolbar: props.mailCompose ? false : props.signatureEditor ? "bold italic underline | fontsize forecolor | link removeformat" :
+    toolbar: props.mailCompose ? false : props.signatureEditor ? "bold italic underline | fontsize forecolor | signaturelink removeformat" :
       "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
     toolbar_location: "bottom",
     toolbar_mode: props.mailCompose ? "floating" : "sliding",
@@ -211,7 +211,10 @@ function initEditor(initialContent) {
     noneditable_class: "mceNonEditable",
     setup: (ed) => {
       editor.value = ed;
-      if (props.mailCompose) {
+      if (props.signatureEditor) {
+        ed.ui.registry.addButton("signaturelink",{icon:"link", tooltip:"Insert link", onAction:openLink});
+      }
+      if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {
           if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();
