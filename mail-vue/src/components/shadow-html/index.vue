@@ -11,8 +11,8 @@
 import {naturalFlow} from './natural-flow';
 import { ref, shallowRef, watch, onUnmounted } from 'vue'
 import { useUiStore } from '@/store/ui.js'
-import { privateFileURL, storedKey } from '@/utils/private-files'
-const props = defineProps({ naturalFlow: Boolean, html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateFileURL }, fileKey: { type: Function, default: storedKey } })
+import { privateImageURL, storedKey } from '@/utils/private-files'
+const props = defineProps({ naturalFlow: Boolean, html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateImageURL }, fileKey: { type: Function, default: storedKey } })
 const remote = ref(false)
 const hasRemoteImages = ref(false)
 const uiStore = useUiStore()
@@ -29,11 +29,15 @@ function plainParagraphs(doc) {
   return nodes.map(node=>[...node.childNodes].map(child=>child.nodeName==='BR'?'\n':child.textContent.replace(/[\t\n\f\r ]+/g,' ')).join(''))
 }
 const error = ref('')
-let urls = []
+let images = new Map()
 let generation = 0
-watch(() => [props.html, props.naturalFlow, remote.value, uiStore.dark], async () => {
+watch(() => [props.html,props.fileKey,props.resolveFileUrl],()=>{
+  images=new Map()
+  remote.value=false
+},{flush:'sync'})
+watch(() => [props.html, props.naturalFlow, props.fileKey, props.resolveFileUrl, remote.value, uiStore.dark], async () => {
   const current = ++generation
-  const created = []
+  const files = images
   const doc = new DOMParser().parseFromString(props.html, 'text/html')
   const plain=plainParagraphs(doc);
   const safeFlow=props.naturalFlow && !plain ? naturalFlow(doc) : null;
@@ -47,11 +51,17 @@ watch(() => [props.html, props.naturalFlow, remote.value, uiStore.dark], async (
   await Promise.all(Array.from(doc.images).map(async image => {
     const key=props.fileKey(image.getAttribute('src'))
     if (!key) return
-    try { const url=await props.resolveFileUrl(key);created.push(url);image.src=url } catch { image.removeAttribute('src');error.value='Some inline images are unavailable.' }
+    try {
+      if (!files.has(key)) files.set(key,props.resolveFileUrl(key))
+      image.src=await files.get(key)
+    } catch {
+      files.delete(key)
+      image.removeAttribute('src')
+      if (current===generation) error.value='Some inline images are unavailable.'
+    }
   }))
-  if (current !== generation) { created.forEach(URL.revokeObjectURL);return }
+  if (current !== generation) return
   paragraphs.value=plain;flow.value=safeFlow;
-  urls.forEach(URL.revokeObjectURL);urls=created
   const sources=remote.value ? 'https: http:' : ''
   const dir=(doc.body.dir || doc.documentElement.dir).toLowerCase()
   const lang=doc.body.lang || doc.documentElement.lang
@@ -59,7 +69,7 @@ watch(() => [props.html, props.naturalFlow, remote.value, uiStore.dark], async (
   const language=/^[a-z0-9-]{1,63}$/i.test(lang) ? ` lang="${lang}"` : ''
   documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:#007aff}</style></head><body>${doc.body.innerHTML}</body></html>`
 }, {immediate:true})
-onUnmounted(() => { generation++;urls.forEach(URL.revokeObjectURL) })
+onUnmounted(() => { generation++;images.clear() })
 </script>
 <style scoped>
 .natural-flow {font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere}

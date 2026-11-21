@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import MessageBody from '../src/components/shadow-html/index.vue';
 import { useUiStore } from '../src/store/ui.js';
-vi.mock('../src/utils/private-files',()=>({privateFileURL:vi.fn(),storedKey:src=>src?.includes('attachments/')?'attachments/test.png':null}));
+vi.mock('../src/utils/private-files',()=>({privateImageURL:vi.fn(),storedKey:src=>src?.includes('attachments/')?'attachments/test.png':null}));
 beforeEach(()=>{setActivePinia(createPinia());vi.stubGlobal('URL', class extends URL { static revokeObjectURL=vi.fn(); });});
 afterEach(()=>vi.unstubAllGlobals());
 describe('isolated message rendering',()=>{
@@ -15,11 +15,11 @@ describe('isolated message rendering',()=>{
   expect(document).toContain("default-src 'none'");expect(wrapper.find('button').exists()).toBe(false);wrapper.unmount();
  });
  it('resolves stored images through the current folder attachment reader',async()=>{
-  const resolveFileUrl=vi.fn(async ()=>'blob:trash-image');
+  const resolveFileUrl=vi.fn(async ()=>'data:image/png;base64,dGVzdA==');
   const wrapper=mount(MessageBody,{props:{html:'<img src="attachments/test.png">',resolveFileUrl}});
   await flushPromises();
   expect(resolveFileUrl).toHaveBeenCalledWith('attachments/test.png');
-  expect(wrapper.get('iframe').attributes('srcdoc')).toContain('src="blob:trash-image"');
+  expect(wrapper.get('iframe').attributes('srcdoc')).toContain('src="data:image/png;base64,dGVzdA=="');
   wrapper.unmount();
  });
  it('offers opt-in remote images only when present and preserves content when the theme changes',async()=>{
@@ -28,7 +28,10 @@ describe('isolated message rendering',()=>{
   const original=wrapper.get('iframe').attributes('srcdoc');expect(original).toContain('img-src blob: data: ;');
   useUiStore().dark=true;await flushPromises();expect(wrapper.get('iframe').attributes('srcdoc')).toContain('Hello');
   expect(wrapper.get('iframe').attributes('srcdoc')).toContain('#242529');
-  await wrapper.get('button').trigger('click');await flushPromises();expect(wrapper.get('iframe').attributes('srcdoc')).toContain('img-src blob: data: https: http:');wrapper.unmount();
+  await wrapper.get('button').trigger('click');await flushPromises();expect(wrapper.get('iframe').attributes('srcdoc')).toContain('img-src blob: data: https: http:');
+  await wrapper.setProps({html:'<img src="https://example.net/another.png">'});await flushPromises();
+  expect(wrapper.get('button').text()).toBe('Load remote images');
+  expect(wrapper.get('iframe').attributes('srcdoc')).toContain('img-src blob: data: ;');wrapper.unmount();
  });
 });
 

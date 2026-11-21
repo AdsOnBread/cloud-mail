@@ -71,6 +71,7 @@ import { computed } from "vue";
 import { Icon } from "@iconify/vue";
 import http from "@/axios";
 import MailImportance from "@/components/mail-importance.vue";
+import {inlineImageURL} from "@/utils/private-files";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 const props = defineProps({
@@ -112,7 +113,7 @@ function inlineKey(src) {
   )?.attachmentId;
 }
 async function fileURL(id) {
-  return URL.createObjectURL(
+  return inlineImageURL(
     await http.get(
       "/v1/drafts/attachments/" + encodeURIComponent(id) + "/content",
       { responseType: "blob", noMsg: true },

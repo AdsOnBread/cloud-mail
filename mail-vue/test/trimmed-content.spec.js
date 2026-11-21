@@ -29,7 +29,7 @@ it('folds plain-text reply sections independently without changing CRLF or hidin
  expect(messageParts({text:'Measurements\n> 4',subject:'Re: Budget'})).toEqual([{text:'Measurements\n> 4'}]);
 });
 it('defers private files until a quote is opened, retains focus, and resets on a different body',async()=>{
- const resolveFileUrl=vi.fn(async()=>'blob:quote-file');
+ const resolveFileUrl=vi.fn(async()=>'data:image/png;base64,dGVzdA==');
  const wrapper=mount(MessageContent,{attachTo:document.body,props:{html:'<div>New response</div>'+quote.replace('Older answer','<img src="attachments/quote.png">'),fileKey:src=>src?.startsWith('attachments/') ? src : null,resolveFileUrl}});
  await flushPromises();
  const button=wrapper.get('button');expect(button.attributes('aria-label')).toBe('Show trimmed content');expect(resolveFileUrl).not.toHaveBeenCalled();
@@ -69,4 +69,13 @@ it('groups wrapped plain-text date and address lines with their quoted text',()=
  const text='My answer.\r\n'+header+'> Old reply\r\nNext answer';
  const parts=messageParts({text});
  expect(parts.map(p=>[!!p.quote,p.text])).toEqual([[false,'My answer.\r\n'],[true,header+'> Old reply\r\n'],[false,'Next answer']]);
+});
+
+it('recognizes a wrapped reply header after the time or the sender address',()=>{
+ const instruction='On Tuesday please update slide 2\n';
+ expect(messageParts({text:instruction+'Pat <pat@example.org> wrote:\n> Slide deck attached'})[0]).toEqual({text:instruction});
+ for(const header of ['On Tue, Nov 10, 2026 at 3:44 PM\nPat <pat@example.org> wrote:', 'On Tue, Nov 10, 2026 at 3:44 PM Pat <pat@example.org>\nwrote:']){
+   const parts=messageParts({text:'Answer\n'+header+'\n> Question'});
+   expect(parts).toEqual([{text:'Answer\n'},{text:header+'\n> Question',quote:true}]);
+ }
 });

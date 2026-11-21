@@ -217,7 +217,7 @@ import {useMailLabels} from "@/store/mail-labels";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
-import {downloadablePart} from "@/utils/private-files";
+import {downloadablePart,inlineImageURL} from "@/utils/private-files";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MessageRecipients from "@/components/message-recipients.vue";
@@ -540,7 +540,7 @@ function attachmentBlob(file) {
 async function inlineFileURL(key) {
   const file = detail.value?.attList?.find((file) => file.key === key);
   if (!file) throw new Error("Attachment unavailable.");
-  return URL.createObjectURL(await attachmentBlob(file));
+  return inlineImageURL(await attachmentBlob(file));
 }
 onBeforeUnmount(() => {
   disposed = true;

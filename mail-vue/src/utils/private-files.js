@@ -18,13 +18,21 @@ export function storedKey(src) {
   const match = src?.match(/(?:^|\/|\}\})(attachments\/[^?#]+)/);
   return match ? match[1] : null;
 }
+export function inlineImageURL(blob) {
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+export async function privateImageURL(key) { return inlineImageURL(await privateFile(key)); }
 export async function inlineDataHTML(html) {
   const doc = new DOMParser().parseFromString(html || '', 'text/html');
   await Promise.all(Array.from(doc.images).map(async image => {
     const key = storedKey(image.getAttribute('src'));
     if (!key) return;
-    const blob = await privateFile(key);
-    image.src = await new Promise((resolve,reject) => { const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob); });
+    image.src = await privateImageURL(key);
   }));
   return doc.body.innerHTML;
 }

@@ -68,6 +68,10 @@ function htmlParts(html,reply) {
   return parts;
 }
 
+// Require a calendar date before joining a wrapped line to the sender.
+const month='(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+const weekday='(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)';
+const datedReply=new RegExp(`^On\\s+(?:${weekday},?\\s+)?(?:\\d{1,2}\\s+${month}\\b|${month}\\s+\\d{1,2}\\b|\\d{1,4}[-/.]\\d{1,2}[-/.]\\d{1,4}\\b)`,'i');
 function attributionStart(lines,end,visible) {
   if (end===visible) return end;
   const last=lines[end-1].trim();
@@ -77,8 +81,8 @@ function attributionStart(lines,end,visible) {
   for (let i=end-2;i>=Math.max(visible,end-3);i--) {
     const line=lines[i].trim();
     if (!line || /[.!?]$/.test(line)) break;
-    if (/^On (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|\d)/i.test(line) &&
-      /(?:\d|,)$/.test(line) && isAttribution(lines.slice(i,end).map(s=>s.trim()).join(' '))) return i;
+    if (datedReply.test(line) &&
+      /(?:\d|,|\b[ap]m|<[^<>\s]+@[^<>\s]+>)$/i.test(line) && isAttribution(lines.slice(i,end).map(s=>s.trim()).join(' '))) return i;
   }
   return isAttribution(last) ? end-1 : end;
 }
