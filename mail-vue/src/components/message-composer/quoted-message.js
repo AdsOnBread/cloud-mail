@@ -13,14 +13,15 @@ export async function quotedMessage(message, mode, signal, token) {
     signal.throwIfAborted();
     if (!contents.has(file)) {
       const blob = await attachmentBlob(file, signal, false, token);
-      contents.set(file, await inlineImageURL(blob));
+      const type=file.mimeType || blob.type || "application/octet-stream";
+      contents.set(file, {content:await inlineImageURL(blob.slice(0,blob.size,type)),size:blob.size,contentType:type});
     }
     return contents.get(file);
   }
   for (const image of template.content.querySelectorAll("img[src]")) {
     const src = image.getAttribute("src"), key = storedKey(src);
     const file = files.find(f => key && key === f.key || src.startsWith("cid:") && src.slice(4) === f.contentId?.replace(/^<|>$/g,""));
-    if (file) image.src = await fileData(file);
+    if (file) image.src = (await fileData(file)).content;
     else if (key || src.startsWith("cid:")) throw new Error("An inline image is unavailable. Reopen the original message and try again.");
   }
   const body = template.innerHTML || '<pre style="font-family:inherit;white-space:pre-wrap">' + escape(message.text) + '</pre>';
@@ -30,7 +31,7 @@ export async function quotedMessage(message, mode, signal, token) {
   let quote;
   if (mode === "forward") {
     for (const file of files.filter(downloadablePart)) {
-      attachments.push({filename:file.filename || "Attachment", contentType:file.mimeType || "application/octet-stream", content:await fileData(file)});
+      attachments.push({filename:file.filename || "Attachment", ...await fileData(file)});
     }
     const headers = [["From",sender], ["Date",date], ["Subject",message.subject],
       ["To",headerRecipients(message.recipient).map(headerAddressText).join(", ")],

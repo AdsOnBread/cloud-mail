@@ -1464,6 +1464,8 @@ watch([()=>form.draftId,minimized,expanded,caption],([draftId,minimized,expanded
 },{flush:"sync"});
 defineExpose({
   focusBody: () => editor.value?.focus(),
+  draftId: computed(() => form.draftId),
+  scrollIntoView: () => composeRoot.value?.scrollIntoView({block:"nearest"}),
   followDelivery,
   visible:show,focusWindow,
   ownsFocus:()=>composeRoot.value?.contains(document.activeElement),

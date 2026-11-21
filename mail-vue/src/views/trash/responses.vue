@@ -1,7 +1,7 @@
 <template>
   <div class="trash-responses">
     <SavedReplies :drafts="saved" @open="resume"/>
-    <MessageComposer v-if="editing" ref="composer" inline @closed="closed" @sent="closed"/>
+    <component :is="editorType" v-if="editing" ref="composer" inline @closed="closed" @sent="closed"/>
     <div v-if="message && !editing" class="response-buttons">
       <button v-for="choice in choices" :key="choice.command" type="button" @click="open(choice.command)">
         <Icon :icon="choice.icon" width="20"/>{{choice.title}}
@@ -10,22 +10,20 @@
   </div>
 </template>
 <script setup>
-import {computed,nextTick,ref,onBeforeUnmount} from "vue";
+import {computed,nextTick,ref,shallowRef,onBeforeUnmount} from "vue";
 import {onBeforeRouteLeave,onBeforeRouteUpdate} from "vue-router";
 import {Icon} from "@iconify/vue";
 import {ElMessage} from "element-plus";
 import SavedReplies from "@/components/conversation-view/saved-replies.vue";
-import MessageComposer from "@/components/message-composer/index.vue";
 import {userDraftStore} from "@/store/draft";
 import {useUserStore} from "@/store/user";
 import {useUiStore} from "@/store/ui";
-import {readSavedDraft} from "@/services/draft-list";
 
 const props=defineProps({message:Object, sourceId:Number, choices:Array});
 const drafts=userDraftStore(), user=useUserStore(), ui=useUiStore();
-const composer=ref(), editing=ref(false), opening=ref(false), activeId=ref(null);
+const editorType=shallowRef(), composer=ref(), editing=ref(false), opening=ref(false), activeId=ref(null);
 const saved=computed(()=>drafts.items.filter(d=>(d.trashSource===props.sourceId || d.reply && d.emailId===props.sourceId) &&
-  d.draftId!==activeId.value));
+  d.draftId!==(composer.value?.draftId || activeId.value)));
 let mounted=true;
 onBeforeUnmount(()=>{mounted=false;});
 async function save() {
@@ -49,6 +47,7 @@ async function open(command,summary) {
     let draft;
     if (summary) {
       if (await ui.writerRef?.focusDraft?.(summary.draftId) || !current()) return;
+      const {readSavedDraft}=await import("@/services/draft-list");
       draft=await readSavedDraft(summary.draftId);
       if (!current()) return;
       if ((draft.trashSource || draft.emailId)!==source || (draft.ownerEmail && draft.ownerEmail!==user.user.email) ||
@@ -56,13 +55,15 @@ async function open(command,summary) {
       if (editing.value && !(await composer.value?.saveAndClose())) return;
     }
     if (!current()) return;
+    editorType.value ??= (await import("@/components/message-composer/index.vue")).default;
+    if (!current()) return;
     activeId.value=draft?.draftId;
     editing.value=true;
     await nextTick();
     if (!current() || !composer.value) {closed();return;}
     if (draft) await composer.value.openDraft(draft);
     else if (!await composer.value[command](props.message)) {closed();return;}
-    composer.value?.$el?.parentElement?.querySelector(".send.inline")?.scrollIntoView({block:"nearest"});
+    composer.value?.scrollIntoView?.();
   } catch(error) {
     if (current()) {
       if (!composer.value?.visible) closed();
@@ -70,7 +71,10 @@ async function open(command,summary) {
     }
   } finally {opening.value=false;}
 }
-function resume(summary) {return open(null,summary);}
+function resume(summary) {
+  if (composer.value?.draftId===summary.draftId) {composer.value.focusBody();return;}
+  return open(null,summary);
+}
 defineExpose({open,save});
 </script>
 <style scoped>
