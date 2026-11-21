@@ -30,6 +30,9 @@ it("only links an entire explicit web address immediately", () => {
     expect(selectedWebUrl(text)).toBe("");
   }
   expect(normalizeLinkUrl("example.org")).toBe("https://example.org/");
+  expect(normalizeLinkUrl("jane.doe?tag@example.net")).toBe("mailto:jane.doe%3Ftag@example.net");
+  expect(normalizeLinkUrl("first.last/reports@example.net")).toBe("mailto:first.last%2Freports@example.net");
+  expect(normalizeLinkUrl("first.last#reports@example.net")).toBe("mailto:first.last%23reports@example.net");
   expect(normalizeLinkUrl("orders/returns@example.org")).toBe("mailto:orders%2Freturns@example.org");
   expect(normalizeLinkUrl("orders?tag+new@example.org")).toBe("mailto:orders%3Ftag+new@example.org");
   expect(normalizeLinkUrl("mailto:orders@example.org?subject=Returns")).toBe("mailto:orders@example.org?subject=Returns");
