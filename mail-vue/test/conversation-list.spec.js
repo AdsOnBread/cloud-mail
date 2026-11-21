@@ -86,6 +86,35 @@ beforeEach(() => {
   push.mockClear();
 });
 describe("conversation lists", () => {
+  it("applies the right-click command to the checked group and replaces it on another row", async () => {
+    const sender={...row(3,"Three"),lastSenderEmail:"sender@example.test",lastSenderName:"Sender"};
+    conversationList.mockResolvedValue(page([row(1,"One"),row(2,"Two"),sender]));
+    useUserStore().user.permKeys=["email:delete"];
+    const wrapper=mountList("all"), search=useMailSearchStore();
+    const openMenu=async i=>{
+      await wrapper.findAll(".conversation-row")[i].trigger("contextmenu",{clientX:25,clientY:30});
+      await flushPromises();
+      return [...document.querySelectorAll('.row-context-menu [role=menuitem]')];
+    };
+    try {
+      await flushPromises();
+      await wrapper.get('[aria-label="Select One"]').setValue(true);
+      await wrapper.get('[aria-label="Select Two"]').setValue(true);
+      const group=await openMenu(1);
+      expect(group.some(button=>button.textContent.startsWith("Find emails from"))).toBe(false);
+      group.find(button=>button.textContent==="Delete").click();
+      await flushPromises();
+      expect(conversationAction).toHaveBeenCalledWith("delete",[1,2],{});
+      search.visit("all");
+      search.filters={hasAttachment:true};
+      await flushPromises();
+      await wrapper.get('[aria-label="Select Two"]').setValue(true);
+      const single=await openMenu(2);
+      expect(wrapper.get('[aria-label="Select Two"]').element.checked).toBe(false);
+      single.find(button=>button.textContent==="Find emails from Sender").click();
+      expect(search.filters).toEqual({from:"sender@example.test"});
+    } finally { wrapper.unmount(); }
+  });
   it.each([".conversation-open", ".drag-grip"])("releases an active drag if its row disappears (%s)", async selector => {
     localStorage.setItem("token", "fixture-token");
     useUserStore().authenticatedToken = "fixture-token";

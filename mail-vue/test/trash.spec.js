@@ -5,6 +5,7 @@ import { createRouter, createMemoryHistory } from "vue-router";
 import Trash from "../src/views/trash/index.vue";
 import { useAccountStore } from "../src/store/account";
 import { useUserStore } from "../src/store/user";
+import { useMailSearchStore } from "../src/store/mail-search";
 import http from "../src/axios";
 import { ElMessageBox } from "element-plus";
 
@@ -17,12 +18,12 @@ const message = (emailId) => ({
   name: "Alex",
   createTime: "2026-11-01",
 });
-async function mountTrash() {
+async function mountTrash(path="/trash") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/trash", component: Trash }],
   });
-  await router.push("/trash");
+  await router.push(path);
   await router.isReady();
   const wrapper = mount(Trash, {
     global: { plugins: [router], stubs: { Icon: true } },
@@ -90,4 +91,20 @@ it("marks a row read without removing it and preserves the selection for another
   expect(wrapper.get('.conversation-row').classes()).toContain('selected');
   expect(wrapper.find('.mail-toolbar [aria-label="Mark as unread"]').exists()).toBe(true);
   wrapper.unmount();
+});
+
+it("replaces filters within a pinned Trash window when finding a sender", async () => {
+  const search=useMailSearchStore();
+  search.filters={hasAttachment:true};
+  http.get.mockResolvedValue({messages:[{...message(4),sendEmail:"alex@example.test"}],nextCursor:null});
+  const wrapper=await mountTrash("/trash?window=1&sender=7");
+  try {
+    await wrapper.get(".conversation-row").trigger("contextmenu",{clientX:50,clientY:50});
+    await flushPromises();
+    const item=[...document.querySelectorAll(".row-context-menu button")].find(button=>button.textContent==="Find emails from Alex");
+    item.click();
+    await flushPromises();
+    expect(search.filters).toEqual({from:"alex@example.test"});
+    expect(http.get.mock.calls.at(-1)[1].params).toMatchObject({folder:"trash",accountId:7,from:"alex@example.test"});
+  } finally { wrapper.unmount(); }
 });

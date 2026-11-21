@@ -73,7 +73,7 @@ const groups=computed(()=>{
       ...(!props.trash ? [rows.every(row=>row.importanceReason) ? action("unimportant","Mark as not important","label-important-outline") : action("important","Mark as important","label-important-outline")] : []),
     ],
     rows.length===1 && sender ? [action("find","Find emails from "+senderName,"search")] : [],
-    [action("window","Open in new window","open-in-new")],
+    rows.length===1 ? [action("window","Open in new window","open-in-new")] : [],
   ].filter(group=>group.length);
 });
 function place() {
@@ -108,16 +108,18 @@ function choose(event,item) {
   if(["reply","all","forward"].includes(item.key)) {
     ui.writerRef?.openRowResponses(rows.map(r=>props.trash?r:{emailId:idOf(r)}),item.key);
   } else if(item.key==="window") {
-    for(const row of rows) {
-      const location=props.trash ? {name:"trash",query:{message:row.emailId,sender:row.accountId,window:"1"}} :
+    const row=rows[0];
+    const location=props.trash ? {name:"trash",query:{message:row.emailId,sender:row.accountId,window:"1"}} :
         {path:"/mail",query:{emailId:idOf(row),folder:props.folder,labelId:props.labelId,category:props.category || undefined,window:"1"}};
-      window.open(router.resolve(location).href,"_blank","popup,noopener,noreferrer,width=1000,height=760");
-    }
+    window.open(router.resolve(location).href,"_blank","popup,noopener,noreferrer,width=1000,height=760");
   } else if(item.key==="find") {
     const address=props.trash?rows[0].sendEmail:rows[0].lastSenderEmail;
     // Preserve a separately opened Trash window's mailbox scope.
-    if(props.trash && route.query.window) search.$patch({filters:{from:address},query:""});
-    else { search.visit("all");search.$patch({filters:{from:address},query:""});router.push({name:"all"}); }
+    const pinned=props.trash && route.query.window==="1";
+    if (!pinned) search.visit("all");
+    search.query="";
+    search.filters={from:address};
+    if (!pinned && route.name!=="all") router.push({name:"all"});
   } else emit("command",item.key,ids,opener);
 }
 function hover(event,item) {
@@ -186,4 +188,8 @@ defineExpose({show});
 .row-context-menu [role=separator] {border-top:1px solid var(--light-border-color);margin:6px 0}
 :global(.row-category-menu.el-popper) {padding:6px 0}
 .row-category-menu button {padding:6px 16px}
+@media (forced-colors:active) {
+  .row-context-menu, :global(.row-category-menu.el-popper) {border:1px solid CanvasText}
+  .row-context-menu button:focus-visible, .row-category-menu button:focus-visible {outline:2px solid Highlight;outline-offset:-2px}
+}
 </style>
