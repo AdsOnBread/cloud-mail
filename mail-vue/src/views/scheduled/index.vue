@@ -440,8 +440,9 @@ function select(option) {
 }
 async function setRead(batch,unread,leaveReader=false) {
   if (!batch.length || batch.some(row=>!canCancel(row) || reading.value.has(row.draftId))) return;
-  const owner=identity.value, session=localStorage.getItem("token"), origin=route.fullPath;
-  const current=()=>!disposed && identity.value===owner && localStorage.getItem("token")===session;
+  const owner=identity.value, email=user.user.email, session=localStorage.getItem("token"), origin=route.fullPath;
+  const sameSession=()=>user.user.email===email && localStorage.getItem("token")===session;
+  const current=()=>!disposed && identity.value===owner && sameSession();
   const focused=document.activeElement;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   let finish;
@@ -449,10 +450,11 @@ async function setRead(batch,unread,leaveReader=false) {
   for (const {draftId} of messages) reading.value.set(draftId,pending);
   try {
     await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true});
+    // The user may already be back in a filtered Starred, Important or label list.
+    if (sameSession()) drafts.scheduledRevision++;
     if (!current()) return;
     const ids=new Set(messages.map(row=>row.draftId));
     for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
-    drafts.scheduledRevision++;
     if (leaveReader && route.fullPath===origin) back();
     else if (!messageId.value && search.filters.isUnread && !unread) {
       await nextTick();
