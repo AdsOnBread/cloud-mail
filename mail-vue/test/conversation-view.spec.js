@@ -336,3 +336,22 @@ it('places the saved row after its source and opens it directly from the toolbar
   expect(state.draft).toHaveBeenCalledWith(summary);
   wrapper.unmount();
 });
+
+it("fills a gap before moving keyboard focus past a deep-linked draft", async () => {
+  const draft = { emailId: 1, draftId: 3, cloudDraftId: 7, reply: true };
+  userDraftStore().items = [draft];
+  state.readSaved.mockResolvedValueOnce(draft);
+  vi.spyOn(useEmailStore(), "ensureDetail").mockResolvedValue(message(1));
+  conversationMessages
+    .mockResolvedValueOnce(page([message(71), message(72)], { total: 5, hasMore: true, nextCursor: 71 }))
+    .mockResolvedValueOnce(page([message(69), message(70)], { total: 5 }));
+  const { wrapper } = await setup("emailId=1&draft=cloud-7", document.body);
+  const header = wrapper.get('[data-reader-message="71"] .message-toggle');
+  header.element.focus();
+  await header.trigger("keydown", { key: "p" });
+  await flushPromises();
+  expect(document.activeElement).toBe(wrapper.get('[data-reader-message="70"] .message-toggle').element);
+  expect(wrapper.findAll("[data-reader-message]").map(card => Number(card.attributes("data-reader-message"))))
+    .toEqual([1, 69, 70, 71, 72]);
+  wrapper.unmount();
+});
