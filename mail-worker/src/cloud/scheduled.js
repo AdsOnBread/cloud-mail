@@ -50,8 +50,9 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   const fileNames = `(SELECT json_group_array(json_object('attachmentId',attachment_id,'filename',filename,'mimeType',mime_type,'size',size))
     FROM (SELECT attachment_id,filename,mime_type,size FROM draft_files f
       WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='' ORDER BY f.attachment_id LIMIT 3))`;
+  const senderName="COALESCE(NULLIF(json_extract(d.data,'$.name'),''),NULLIF(a.name,''),a.email)";
   const columns = {
-    from: ['a.email', 'a.name', "json_extract(d.data,'$.name')"],
+    from: ['a.email',senderName],
     to: ['receiveEmail', 'cc', 'bcc'].map(key => `json_extract(d.data,'$.${key}')`),
     subject: ["json_extract(d.data,'$.subject')"],
   };
@@ -73,29 +74,34 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     args.push('-' + days + ' days');
   }
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    a.email AS senderEmail,COALESCE(NULLIF(json_extract(d.data,'$.name'),''),NULLIF(a.name,''),a.email) AS senderName,
+    a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
     ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
     ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
-  const messages=results.map(row=>({...row,attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')}));
   const term=filters.q?.trim().slice(0,200).toLowerCase();
-  if(!term)return messages;
-  const included=[];
-  for(const row of messages){
-    if(row.preview?.trim() || [row.senderName,row.senderEmail,row.subject,...row.recipients,...row.cc,...row.bcc].some(value=>value?.toLowerCase().includes(term))){
-      included.push(row);
-      continue;
-    }
-    // Read one body at a time to bound memory if a mailbox has large HTML-only messages.
-    const body=await c.env.db.prepare(`SELECT json_extract(data,'$.content') AS html FROM cloud_drafts
-      WHERE user_id=? AND draft_id=? AND version=? AND json_extract(data,'$.scheduledAt') IS NOT NULL`).bind(userId,row.draftId,row.version).first();
-    const visible=emailUtils.htmlToText(body?.html).replace(/\s+/g,' ').trim();
-    if(visible.toLowerCase().includes(term))included.push({...row,preview:visible.slice(0,180)});
+  const missingText=[];
+  const messages=results.map(({html_only,...row})=>{
+    const message={...row,attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')};
+    if(term && html_only && ![message.senderName,message.senderEmail,message.subject,...message.recipients,...message.cc,...message.bcc]
+      .some(value=>value?.toLowerCase().includes(term)))missingText.push(message);
+    return message;
+  });
+  const excluded=new Set();
+  // Bound peak memory when several HTML-only messages on the same page have large bodies.
+  for(let i=0;i<missingText.length;i+=4){
+    const batch=missingText.slice(i,i+4);
+    const bodies=await c.env.db.batch(batch.map(row=>c.env.db.prepare(`SELECT json_extract(data,'$.content') AS html FROM cloud_drafts
+      WHERE user_id=? AND draft_id=? AND version=? AND json_extract(data,'$.scheduledAt') IS NOT NULL`).bind(userId,row.draftId,row.version)));
+    batch.forEach((row,index)=>{
+      const visible=emailUtils.htmlToText(bodies[index].results[0]?.html).replace(/\s+/g,' ').trim();
+      if(visible.toLowerCase().includes(term))row.preview=visible.slice(0,180);
+      else excluded.add(row.draftId);
+    });
   }
-  return included;
+  return messages.filter(row=>!excluded.has(row.draftId));
 }
 
 export async function cancel(c, userId, id, version) {
