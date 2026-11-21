@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="spell-layer">
+  <div ref="root" class="spell-layer" @keydown.esc.stop.prevent="finish">
     <button v-for="mark in boxes" :key="mark.key" type="button" class="word-mark" :style="mark.style"
       :aria-label="mark.issue.word" aria-haspopup="menu" :tabindex="mark.first ? 0 : -1"
       @mousedown.prevent @click="correct(mark.issue, $event.currentTarget)" />
@@ -44,7 +44,7 @@ const choices = [['auto','','Auto'], ...languages];
 const root = ref(), bar = ref(), menu = ref();
 const busy = ref(false), error = ref(false), status = ref('');
 const boxes = shallowRef([]), suggestions = ref([]), popup = ref(''), menuStyle = ref({});
-let issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
+let entering = true, issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
 const ed = props.editor;
 
 function finish() {
@@ -101,6 +101,11 @@ function draw() {
   }
   boxes.value = marks;
   if (popup.value) nextTick(place);
+  if (entering && !busy.value) {
+    entering = false;
+    if (bar.value.contains(document.activeElement)) nextTick(() =>
+      (root.value?.querySelector('.word-mark') || bar.value?.querySelector('button'))?.focus({preventScroll:true}));
+  }
 }
 function redraw() {
   if (!frame) frame = requestAnimationFrame(draw);
@@ -108,11 +113,17 @@ function redraw() {
 function place() {
   if (!menu.value) return;
   if (!opener?.isConnected) { dismiss(); return; }
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+  const width = viewport?.width || document.documentElement.clientWidth;
+  const height = viewport?.height || document.documentElement.clientHeight;
+  const bounds = {maxWidth:Math.max(0, width - 16) + 'px', maxHeight:Math.max(0, Math.min(380, height - 16)) + 'px'};
+  Object.assign(menu.value.style, bounds);
   const rect = opener.getBoundingClientRect(), panel = menu.value.getBoundingClientRect();
-  const above = popup.value === 'language' || rect.bottom + panel.height > innerHeight - 8;
-  menuStyle.value = {
-    left:Math.max(8, Math.min(rect.left, innerWidth - panel.width - 8)) + 'px',
-    top:Math.max(8, Math.min(above ? rect.top - panel.height : rect.bottom, innerHeight - panel.height - 8)) + 'px',
+  const above = popup.value === 'language' || rect.bottom + panel.height > top + height - 8;
+  menuStyle.value = {...bounds,
+    left:Math.max(left + 8, Math.min(rect.left, left + width - panel.width - 8)) + 'px',
+    top:Math.max(top + 8, Math.min(above ? rect.top - panel.height : rect.bottom, top + height - panel.height - 8)) + 'px',
   };
 }
 async function display(type, trigger) {
@@ -205,6 +216,12 @@ function replace(value) {
   ed.dispatch('change');
   ignore();
 }
+function editorEscape(event) {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  finish();
+}
 function edited() {
   textChanged = true;
   if (selected && !valid(selected)) dismiss();
@@ -215,12 +232,16 @@ onMounted(() => {
   observer.observe(root.value);
   observer.observe(ed.iframeElement);
   ed.on('input change undo redo SetContent', edited);
+  ed.on('keydown', editorEscape, true);
   ed.getWin().addEventListener('scroll', redraw);
   ed.getDoc().addEventListener('pointerdown', outside, true);
   document.addEventListener('pointerdown', outside, true);
   window.addEventListener('scroll', redraw, true);
   window.addEventListener('resize', redraw);
+  window.visualViewport?.addEventListener('resize', redraw);
+  window.visualViewport?.addEventListener('scroll', redraw);
   scan();
+  bar.value.querySelector('[aria-label="Language"]').focus({preventScroll:true});
 });
 onBeforeUnmount(() => {
   destroyed = true;
@@ -229,11 +250,14 @@ onBeforeUnmount(() => {
   observer?.disconnect();
   cancelAnimationFrame(frame);
   ed.off('input change undo redo SetContent', edited);
+  ed.off('keydown', editorEscape);
   ed.getWin()?.removeEventListener('scroll', redraw);
   ed.getDoc()?.removeEventListener('pointerdown', outside, true);
   document.removeEventListener('pointerdown', outside, true);
   window.removeEventListener('scroll', redraw, true);
   window.removeEventListener('resize', redraw);
+  window.visualViewport?.removeEventListener('resize', redraw);
+  window.visualViewport?.removeEventListener('scroll', redraw);
 });
 </script>
 
@@ -249,10 +273,10 @@ onBeforeUnmount(() => {
 .spell-bar button:nth-child(2) {min-width:20px;width:20px;}
 .spell-bar button:hover,.spell-menu button:hover,.spell-menu button:focus-visible {background:var(--el-fill-color-light);}
 .spell-bar button:disabled {opacity:.55;}
-.spell-menu {position:fixed;z-index:4000;min-width:144px;max-width:calc(100vw - 16px);max-height:min(380px,calc(100dvh - 16px));
+.spell-menu {position:fixed;z-index:4000;min-width:min(144px,100%);box-sizing:border-box;max-width:calc(100vw - 16px);max-height:min(380px,calc(100dvh - 16px));
   overflow:auto;padding:6px 0;background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:4px;
   box-shadow:0 8px 10px 1px #00000024,0 3px 14px 2px #0000001f,0 5px 5px -3px #0003;}
-.spell-menu button {position:relative;display:block;text-align:left;width:100%;padding:6px 48px;min-height:32px;font-size:14px;line-height:20px;white-space:nowrap;}
+.spell-menu button {position:relative;display:block;text-align:left;width:100%;padding:6px clamp(26px,10vw,48px);min-height:32px;overflow-wrap:anywhere;font-size:14px;line-height:20px;}
 .spell-menu button svg {position:absolute;left:20px;top:7px;}
 .spell-menu hr {border:0;border-top:1px solid var(--light-border-color);margin:6px 0;}
 .sr-only {position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap;}
