@@ -55,14 +55,15 @@
   </div>
 </template>
 <script setup>
-import { computed, nextTick, onMounted, onBeforeUnmount, ref } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import MessageComposer from "@/components/message-composer/index.vue";
 import {useRouter} from "vue-router";
 import {useAccountStore} from "@/store/account";
 import {hasPerm} from "@/perm/perm";
-import {readSavedDraft} from "@/services/draft-list";
-import {checkWindowSession, separateEditors, focusSeparateDraft, openSeparateWindow, receiveComposeWindows, saveWindowState, windowState} from "./separate-window";
+import {userDraftStore} from "@/store/draft";
+import {refreshLocalDraft, readSavedDraft} from "@/services/draft-list";
+import {checkWindowSession, notifyWindowDraft, separateEditors, focusSeparateDraft, openSeparateWindow, receiveComposeWindows, saveWindowState, windowState} from "./separate-window";
 import { ElMessage } from "element-plus";
 import { draftSession, discardDrafts } from "@/services/cloud-drafts";
 import { useMailFeedback } from "@/store/mail-feedback";
@@ -130,6 +131,7 @@ function activate(item) {
 }
 function remove(item) {
   if (props.separateWindow) {
+    notifyWindowDraft(props.separateWindow);
     // Keep action feedback and Undo available in this window after sending,
     // scheduling or discarding. A plain save-and-close closes the window.
     if (feedback.notice) router.replace("/inbox");
@@ -267,11 +269,13 @@ async function openFromButton(event) {
     await openSeparateWindow(() => ({owner:session.owner,sender:{accountId:account.accountId,email:account.email,name:account.name || user.user.name}}),session);
   } catch (error) { ElMessage.error(error.message); }
 }
+const draftStore = userDraftStore();
+watch(() => [draftStore.items,draftStore.refreshList], () => notifyWindowDraft(props.separateWindow), {flush:"post"});
 let stopReceiving;
 onMounted(async () => {
   window.addEventListener("resize", resize);
   const id = props.separateWindow;
-  const endpoint = receiveComposeWindows({restore:restoreWindow, getSession:draftSession, id,
+  const endpoint = receiveComposeWindows({restore:restoreWindow, getSession:draftSession, draftChanged:refreshLocalDraft, id,
     discardEditor(draftId) {
       const item = occupied.value.find(row => row.draftId === draftId);
       const editor = item && editors.get(item.key);

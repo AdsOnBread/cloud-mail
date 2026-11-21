@@ -113,6 +113,23 @@ export function startDraftList() {
   };
 }
 
+// A popped-out editor updates one row at a time. Refresh that row without
+// reloading every draft or fetching the conversation summaries on each edit.
+export async function refreshLocalDraft(id) {
+  if (!id) return;
+  const database = db.value, store = userDraftStore();
+  try {
+    const row = await database.draft.get(id);
+    if (database !== db.value) return;
+    const items = store.items.filter(item => item.draftId !== id);
+    if (row && !row.deleted && !(row.syncState === "holding" && !row.dirty))
+      items.push(draftSummary(row));
+    store.items = items.sort(newestDraft);
+  } catch (error) {
+    if (database === db.value) store.listError = error.message || "Could not refresh draft.";
+  }
+}
+
 export async function readSavedDraft(draftId) {
   const database = db.value;
   const [draft, files] = await Promise.all([

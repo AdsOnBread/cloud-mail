@@ -90,7 +90,7 @@ export async function checkWindowSession(state, session) {
 
 // Each endpoint lives as long as its document. Reconnect through the actual
 // opener after a reload, verifying the grant from when that child was created.
-export function receiveComposeWindows({restore, getSession, discardEditor, id}) {
+export function receiveComposeWindows({restore, getSession, discardEditor, draftChanged, id}) {
   const discovery = new BroadcastChannel("phooey-compose-windows");
   async function register(child, key) {
     if (!isComposer(child,key)) throw new Error("The compose window changed.");
@@ -106,6 +106,12 @@ export function receiveComposeWindows({restore, getSession, discardEditor, id}) 
   let ready = false;
   const api = {
     discardEditor,
+    changed(child,key) {
+      const entry = children.get(child);
+      if (!entry || entry.id !== key || !isComposer(child,key)) return;
+      entry.check();
+      draftChanged(windowState(key,child).draftId);
+    },
     async accept(child,key) {
       const entry = await register(child,key);
       entry.finish?.(true);
@@ -132,6 +138,10 @@ export function receiveComposeWindows({restore, getSession, discardEditor, id}) 
     failed() { window.opener?.[bridge]?.failed(window,id); },
     stop() { discovery.close(); if (window[bridge] === api) delete window[bridge]; },
   };
+}
+export function notifyWindowDraft(id) {
+  if (!id) return;
+  try { window.opener?.[bridge]?.changed(window,id); } catch { /* The original mailbox is no longer open. */ }
 }
 export async function returnComposeWindow(id) {
   let api;
