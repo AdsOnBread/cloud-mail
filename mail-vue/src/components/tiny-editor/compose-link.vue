@@ -1,37 +1,26 @@
 <template>
-  <div
-    v-if="panel"
-    ref="box"
-    class="link-card"
-    role="dialog"
-    aria-label="Link"
-    @keydown.esc.stop.prevent="close(true)"
-    @pointerdown.stop
-  >
+  <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview}" role="dialog"
+    :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
+    @keydown.esc.stop.prevent="close(true)" @pointerdown.stop>
     <template v-if="panel.preview">
-      <a :href="safeUrl" target="_blank" rel="noopener noreferrer">{{
-        panel.url
-      }}</a>
-      <button @click="edit">Change</button
-      ><button @click="remove">Remove</button>
+      <span>Go to link:</span>
+      <a v-if="safeUrl" :href="safeUrl" target="_blank" rel="noopener noreferrer">{{ panel.url }}</a>
+      <span v-else class="address">{{ panel.url }}</span>
+      <span aria-hidden="true">|</span>
+      <button type="button" @click="edit">Change</button>
+      <span aria-hidden="true">|</span>
+      <button type="button" @click="remove">Remove</button>
     </template>
     <form v-else @submit.prevent="apply">
-      <label
-        ><span>Text</span
-        ><input
-          v-model="panel.text"
-          aria-label="Text to display"
-          placeholder="Text to display"
-      /></label>
-      <label
-        ><Icon icon="material-symbols:link" width="18" /><input
-          ref="urlField"
-          v-model="panel.url"
-          aria-label="Link address"
-          placeholder="Paste or search for a link"
-          autocomplete="off"
-      /></label>
-      <button class="apply-link" :disabled="!safeUrl">Apply</button>
+      <label>
+        <Icon icon="material-symbols:short-text" width="18" aria-hidden="true" />
+        <input ref="textField" v-model="panel.text" aria-label="Anchor Text" placeholder="Text" autocomplete="off" />
+      </label>
+      <label>
+        <Icon icon="material-symbols:link" width="18" aria-hidden="true" />
+        <input v-model="panel.url" aria-label="Link" placeholder="Type or paste a link" autocomplete="off" />
+      </label>
+      <button type="submit" class="apply-link" :disabled="!safeUrl">Apply</button>
     </form>
   </div>
 </template>
@@ -41,8 +30,8 @@ import { Icon } from "@iconify/vue";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
-  urlField = ref(null);
-let bookmark, anchor, originalText, owner;
+  textField = ref(null);
+let bookmark, anchor, originalText, owner, range, resize;
 const safeUrl = computed(() => {
   const raw = panel.value?.url.trim();
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
@@ -67,40 +56,79 @@ function outside(event) {
   )
     close(false);
 }
+// The editor selection is inside an iframe, while the card belongs to the outer editor box.
+function position() {
+  const card = box.value;
+  const frame = owner?.iframeElement;
+  const parent = card?.offsetParent;
+  if (!frame || !parent) return;
+  const bounds = parent.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
+  const line = (anchor || range)?.getClientRects()[0] || owner.getBody().getBoundingClientRect();
+  const edge = 3;
+  const x = frameRect.left - bounds.left + frame.clientLeft + line.left;
+  const top = frameRect.top - bounds.top + frame.clientTop + line.top;
+  const below = Math.min(frameRect.bottom - bounds.top, top + line.height) + edge;
+  const maxTop = bounds.height - card.offsetHeight - edge;
+  const above = top - card.offsetHeight - edge;
+  card.style.left = Math.max(edge, Math.min(x, bounds.width - card.offsetWidth - edge)) + "px";
+  card.style.top = Math.max(edge, Math.min(below <= maxTop ? below : above, maxTop)) + "px";
+}
 function close(focus = false) {
   if (!panel.value) return;
   document.removeEventListener("pointerdown", outside, true);
-  owner?.off("mousedown", insideEditor);
+  owner.off("mousedown", insideEditor);
+  owner.off("keydown", editorKey);
+  owner.getWin()?.removeEventListener("scroll", position);
+  resize?.disconnect();
   panel.value = null;
   if (focus && owner === props.editor && !owner.removed) owner.focus();
-  anchor = bookmark = owner = null;
+  anchor = bookmark = range = owner = resize = null;
 }
 function insideEditor() {
+  close(false);
+}
+function editorKey(event) {
+  if (!panel.value?.preview || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === "Tab" && !event.shiftKey) {
+    event.preventDefault();
+    box.value?.querySelector("a[href],button")?.focus();
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
   close(false);
 }
 async function open(existing = null, preview = false) {
   close(false);
   const ed = props.editor;
-  if (!ed?.initialized) return;
+  if (!ed?.initialized || ed.removed) return;
   owner = ed;
   anchor = existing || ed.dom.getParent(ed.selection.getNode(), "a[href]");
+  range = ed.selection.getRng().cloneRange();
   bookmark = ed.selection.getBookmark(2, true);
-  originalText =
-    anchor?.textContent || ed.selection.getContent({ format: "text" });
-  panel.value = {
-    text: originalText,
-    url: anchor?.getAttribute("href") || "",
-    preview,
-  };
+  originalText = anchor?.textContent || ed.selection.getContent({format:"text"});
+  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview};
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown", insideEditor);
+  ed.on("keydown", editorKey, true);
+  ed.getWin().addEventListener("scroll", position, {passive:true});
   await nextTick();
-  if (!preview) urlField.value?.focus();
+  if (!box.value || owner !== ed) return;
+  position();
+  resize = new ResizeObserver(position);
+  resize.observe(box.value);
+  resize.observe(box.value.parentElement);
+  resize.observe(ed.iframeElement);
+  if (!preview) textField.value?.focus({preventScroll:true});
 }
 async function edit() {
   panel.value.preview = false;
   await nextTick();
-  urlField.value?.focus();
+  position();
+  textField.value?.focus({preventScroll:true});
 }
 function change(fn) {
   if (!owner || owner !== props.editor || owner.removed) {
@@ -151,82 +179,43 @@ defineExpose({ open, close });
 </script>
 <style scoped>
 .link-card {
-  position: absolute;
-  z-index: 8;
-  left: 4px;
-  bottom: 4px;
-  width: max-content;
-  max-width: calc(100% - 8px);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--mail-surface);
-  color: var(--regular-text-color);
-  padding: 8px 12px;
-  border-radius: 8px;
-  box-shadow:
-    0 2px 6px 2px #3c404326,
-    0 1px 2px #3c40434d;
-  font:
-    14px/20px Arial,
-    sans-serif;
+  box-sizing:border-box;
+  position:absolute;
+  z-index:8;
+  width:324px;
+  max-width:calc(100% - 6px);
+  background:var(--mail-surface);
+  color:var(--regular-text-color);
+  border-radius:12px;
+  padding:16px;
+  box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
+  font:14px/20px Arial,sans-serif;
 }
-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 2px 6px;
-  width: 320px;
-  max-width: 100%;
-}
+form { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; }
 label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: 34px;
+  display:flex; align-items:center; gap:12px; min-width:0; height:32px;
+  grid-column:1; padding:0 8px; box-sizing:border-box; cursor:text;
+  border:1px solid var(--secondary-text-color); border-radius:4px;
 }
-label:first-child {
-  grid-column: 1/-1;
-  border-bottom: 1px solid var(--light-border-color);
-}
-label span {
-  font-size: 12px;
-}
+label:focus-within { border-color:var(--el-color-primary); box-shadow:inset 0 0 0 1px var(--el-color-primary); }
+label svg { flex:none; }
 input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  color: inherit;
-  border: 0;
-  background: transparent;
-  outline: none;
+  width:100%; min-width:0; padding:0; color:inherit; background:transparent;
+  font:inherit; border:0; outline:none;
 }
-label:focus-within {
-  box-shadow: inset 0 -2px var(--el-color-primary);
-}
-button,
-a {
-  color: var(--el-color-primary);
-  font:
-    500 14px/20px Arial,
-    sans-serif;
-}
-a {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-button {
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 4px;
-}
-button:hover:not(:disabled) {
-  background: var(--mail-read);
-}
+button { font:inherit; cursor:pointer; }
 .apply-link {
-  border-radius: 16px;
-  padding-inline: 12px;
+  grid-column:2; grid-row:2; padding:6px 14px; border-radius:16px;
+  font-weight:500; color:var(--el-color-primary);
 }
+.apply-link:disabled { color:var(--secondary-text-color); opacity:0.65; cursor:default; }
+.apply-link:hover:enabled { background:var(--mail-hover); }
+.link-preview {
+  display:flex; align-items:center; gap:5px; width:max-content; border-radius:2px;
+  padding:5px 10px; font:13px/18px Arial,sans-serif;
+}
+.link-preview span,.link-preview button { flex:none; white-space:nowrap; }
+.link-preview a,.link-preview .address { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.link-preview a,.link-preview button { padding:0; color:var(--el-color-primary); text-decoration:none; }
+.link-preview a:hover,.link-preview button:hover { text-decoration:underline; }
 </style>
