@@ -1,4 +1,4 @@
-import {addPeopleFilter,addSearchDates} from '../service/mail-search-filters';
+import {addPeopleFilter,addSearchDates,addSizeFilter} from '../service/mail-search-filters';
 import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
 import { permission, positive, conflict } from './auth';
@@ -99,6 +99,10 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     args.push(...choices.map(() => term));
   }
   if (filters.hasAttachment === '1') conditions.push(fileCount + '>0');
+  addSizeFilter(filters,conditions,args,{
+    columns:["json_extract(d.data,'$.subject')",text,"json_extract(d.data,'$.content')"],
+    files:'SELECT sum(f.size) FROM draft_files f WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id',
+  });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
     ${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,

@@ -1,3 +1,4 @@
+import {sizeCriterion} from '../../../shared/mail-search-size';
 import {fullAddress,peopleTerms,personSearchKey} from '../../../shared/mail-search-people';
 import {searchDateBounds} from "../../../shared/mail-search-date";
 import { attachedFile } from "./mailbox-attachments";
@@ -50,6 +51,18 @@ export function addPeopleFilter(params, field, columns, filters, args, suggestio
   args.push(JSON.stringify(patterns));
 }
 
+// SQLite length(text) counts characters. Casting to BLOB counts stored UTF-8 bytes.
+export function addSizeFilter(params, filters, args, {columns,files,raw}) {
+  const criterion=sizeCriterion(params);
+  if (!criterion) return;
+  const parts=columns.map(column=>`coalesce(length(cast(${column} as blob)),0)`);
+  parts.push(`coalesce((${files}),0)`);
+  const estimate=parts.join('+');
+  const bytes=raw ? `coalesce(${raw},${estimate})` : `(${estimate})`;
+  filters.push(bytes+(criterion.larger ? '>?' : '<?'));
+  args.push(criterion.bytes);
+}
+
 // Both the conversation and message lists use "e" for the owned, visible email.
 export function addMailFilters(params, filters, args, {conversation = false} = {}) {
   addPeopleFilter(params, 'from', ['e.send_email', 'e.name'], filters, args);
@@ -66,6 +79,10 @@ export function addMailFilters(params, filters, args, {conversation = false} = {
           AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7))`
       : `EXISTS (SELECT 1 FROM attachments att WHERE ${attachedFile})`);
 	if (String(params.isUnread) === '1') filters.push('e.type=0 AND e.unread=0');
+  addSizeFilter(params,filters,args,{
+    raw:'e.raw_size',columns:['e.subject','e.text','e.content'],
+    files:'SELECT sum(att.size) FROM attachments att WHERE att.email_id=e.email_id AND att.user_id=e.user_id AND att.account_id=e.account_id',
+  });
   addSearchDates(params, 'e.create_time', filters, args);
 }
 
