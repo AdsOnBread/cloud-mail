@@ -1,5 +1,5 @@
 import { parseHTML } from "linkedom";
-import { recipientEntries } from "./recipients";
+import { storedRecipients } from "./recipients";
 import { tzDayjs } from "./day";
 import { storedKey } from "./private-files";
 
@@ -33,6 +33,24 @@ function mailbox({ address, name }) {
   return name && name !== address
     ? encodedWords(name) + " <" + addr + ">"
     : addr;
+}
+
+function addressList(value) {
+  return storedRecipients(value)
+    .map((entry) => {
+      if (!entry) return "";
+      if (entry.name && Array.isArray(entry.group)) {
+        const members = entry.group
+          .filter((member) => member?.address)
+          .map(mailbox)
+          .filter(Boolean);
+        return (
+          encodedWords(entry.name) + ": " + members.join("," + eol + " ") + ";"
+        );
+      }
+      return mailbox(entry);
+    })
+    .filter(Boolean);
 }
 
 function filenameParams(value) {
@@ -146,7 +164,7 @@ export async function messageFile(message, owner, readFile, signal) {
         : null,
     ],
   ]) {
-    const addresses = recipientEntries(value).map(mailbox).filter(Boolean);
+    const addresses = addressList(value);
     if (addresses.length)
       headers.push(header + ": " + addresses.join("," + eol + " "));
   }
@@ -186,11 +204,16 @@ export async function messageFile(message, owner, readFile, signal) {
         : inlinePart
           ? crypto.randomUUID() + "@cloudmail"
           : "";
-    // Encapsulated mail must remain readable as a message, including its own headers (RFC 2046).
-    const nestedMessage = /^message\/(rfc822|global)$/i.test(mime);
+    // Structured message parts expose their own headers and report fields (RFC 2046 and RFC 6533).
+    const structured = /^message\//i.test(mime);
+    const encoding = /^message\/(?:rfc822|global(?:-[\w-]+)?)$/i.test(mime)
+      ? "binary"
+      : structured
+        ? "7bit"
+        : "base64";
     const fields = [
       "Content-Type: " + mime,
-      "Content-Transfer-Encoding: " + (nestedMessage ? "binary" : "base64"),
+      "Content-Transfer-Encoding: " + encoding,
       "Content-Disposition: " +
         (inlinePart ? "inline" : "attachment") +
         ";" +
@@ -205,7 +228,7 @@ export async function messageFile(message, owner, readFile, signal) {
     (inlinePart ? inline : attached).push(
       new Blob([
         fields.join(eol) + eol + eol,
-        nestedMessage ? data : await base64Body(data, signal),
+        structured ? data : await base64Body(data, signal),
       ]),
     );
   }

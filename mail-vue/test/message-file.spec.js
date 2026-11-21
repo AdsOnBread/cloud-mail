@@ -73,6 +73,41 @@ describe("Download message", () => {
       (await file.text()).split("\r\n").every((line) => line.length <= 998),
     ).toBe(true);
   });
+  it("preserves addressed and empty RFC groups from incoming messages", async () => {
+    const input = await PostalMime.parse(
+      "From: sender@example.net\r\nTo: Project Team: Bea <bea@example.net>, Cory <cory@example.net>;\r\nCc: undisclosed-recipients:;\r\n\r\nHello",
+    );
+    const file = await messageFile(
+      {
+        ...base,
+        recipient: JSON.stringify(input.to),
+        cc: JSON.stringify(input.cc),
+      },
+      1,
+      null,
+      signal,
+    );
+    const parsed = await PostalMime.parse(await file.arrayBuffer());
+    expect(parsed.to).toEqual(input.to);
+    expect(parsed.cc).toEqual(input.cc);
+  });
+  it("keeps machine-readable delivery-status fields in a bounce", async () => {
+    const report =
+      "Reporting-MTA: dns; sender.example.net\r\n\r\nFinal-Recipient: rfc822; user@example.net\r\nAction: failed\r\nStatus: 5.1.1\r\n";
+    const attList = [
+      { filename: "delivery-status", mimeType: "message/delivery-status" },
+    ];
+    const file = await messageFile(
+      { ...base, attList },
+      1,
+      () => new Blob([report]),
+      signal,
+    );
+    expect(await file.text()).toContain(
+      "Content-Type: message/delivery-status\r\nContent-Transfer-Encoding: 7bit",
+    );
+    expect(await file.text()).toContain(report);
+  });
   it("preserves the headers and body of an attached email", async () => {
     const nested =
       "From: nested@example.net\r\nSubject: Forwarded note\r\n\r\nOriginal text";

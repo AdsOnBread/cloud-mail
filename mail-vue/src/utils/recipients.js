@@ -40,13 +40,17 @@ export function addresses(value) {
   return recipientEntries(value).map(entry=>entry.address);
 }
 
-export function recipientEntries(value) {
+// Incoming address lists can include RFC 5322 groups as well as individual mailboxes.
+export function storedRecipients(value) {
   try {
     const entries=typeof value==="string" ? JSON.parse(value || "[]") : value;
     if (!Array.isArray(entries)) return [];
-    return entries.map(entry=>typeof entry==="string" ? {address:entry} : entry)
-      .filter(entry=>typeof entry?.address==="string" && entry.address.trim());
+    return entries.map(entry=>typeof entry==="string" ? {address:entry} : entry);
   } catch { return []; }
+}
+
+export function recipientEntries(value) {
+  return storedRecipients(value).filter(entry=>typeof entry?.address==="string" && entry.address.trim());
 }
 
 export function normalizeRecipients(form, pending = {}) {
