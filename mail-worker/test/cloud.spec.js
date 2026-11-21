@@ -607,6 +607,14 @@ describe('Scheduled send',()=>{
    expect((await conversationList(c(),{folder:'archived',accountId:1},1)).threads).toMatchObject([{lastEmailId:sentId}]);
    expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(0);
  });
+ it('removes pending Inbox placement when the message or its owner is permanently removed',async()=>{
+   const first=await message(),second=await message({message_id:'<another@example.net>'});
+   await env.db.prepare('INSERT INTO scheduled_inbox_deliveries(user_id,email_id) VALUES(1,?),(1,?)').bind(first.email_id,second.email_id).run();
+   await env.db.prepare('DELETE FROM email WHERE email_id=?').bind(first.email_id).run();
+   expect((await env.db.prepare('SELECT email_id FROM scheduled_inbox_deliveries').all()).results).toEqual([{email_id:second.email_id}]);
+   await drafts.deleteUserData(c(),[1]);
+   expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(0);
+ });
  it('keeps filing choices through cancellation, edits and delivery, on the sender copy only',async()=>{
    const {schedule,scheduledList,cancel,setScheduledMark}=await import('../src/cloud/scheduled');
    const draftRow=await draft(),id=draftRow.draftId,sendAt=Math.floor(Date.now()/1000)+3600;
