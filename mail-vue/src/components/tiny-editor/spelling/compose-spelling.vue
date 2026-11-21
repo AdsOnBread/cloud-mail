@@ -47,7 +47,7 @@ const boxes = shallowRef([]), suggestions = ref([]), popup = ref(''), menuStyle 
 let entering = true, issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
 const ed = props.editor;
 const apple=/Mac|iPhone|iPad/.test(navigator.platform);
-let keyboardRequest, needsScan=true, fromKeyboard=false;
+let keyboardRequest, needsScan=true, fromKeyboard=false, ignored=[];
 defineExpose({navigate});
 function sameSelection(range) {
   const current=ed.selection.getRng();
@@ -59,7 +59,7 @@ function navigate(action) {
   entering=false;
   keyboardRequest={action,range:ed.selection.getRng().cloneRange()};
   if (busy.value) return;
-  if (needsScan) scan();
+  if (needsScan) scan(false);
   else runNavigation();
 }
 async function runNavigation() {
@@ -73,7 +73,7 @@ async function runNavigation() {
     return;
   }
   ed.selection.setRng(issue.range.cloneRange());
-  ed.selection.scrollIntoView(issue.range);
+  ed.selection.scrollIntoView();
   status.value='Misspelled word: '+issue.word;
   if (request.action==='suggest') {
     draw();
@@ -217,7 +217,8 @@ function failed() {
   error.value = true;
   status.value = 'Spell check unavailable. Select Recheck to try again.';
 }
-function scan() {
+function scan(resetIgnored=true) {
+  if (resetIgnored) ignored=[];
   dismiss();
   busy.value = true;
   error.value = false;
@@ -232,12 +233,20 @@ function scan() {
       words:Array.from(new Set(words.map(item => item.word))),
       base:new URL(import.meta.env.BASE_URL, document.baseURI).href}, ({wrong}) => {
       const invalid = new Set(wrong);
-      issues = liveWords(ed.getBody(), words.filter(item => invalid.has(item.word)));
+      ignored=ignored.filter(valid);
+      const skip=new Map();
+      for (const {range} of ignored) {
+        const node=range.startContainer;
+        if (!skip.has(node)) skip.set(node,new Set());
+        skip.get(node).add(range.startOffset);
+      }
+      issues = liveWords(ed.getBody(), words.filter(item => invalid.has(item.word) &&
+        !skip.get(item.range.startContainer)?.has(item.range.startOffset)));
       issues.forEach((issue, index) => { issue.index = index; });
       busy.value = false;
       status.value = 'Spell checking completed';
       redraw();
-      if (keyboardRequest) needsScan ? scan() : runNavigation();
+      if (keyboardRequest) needsScan ? scan(false) : runNavigation();
     });
   } catch { failed(); }
 }
@@ -253,6 +262,7 @@ function correct(issue, trigger, keyboard=false) {
   });
 }
 function ignore() {
+  if (selected && valid(selected)) ignored.push(selected);
   issues = issues.filter(issue => issue !== selected);
   dismiss();
   redraw();
@@ -274,8 +284,11 @@ function editorEscape(event) {
   event.stopImmediatePropagation();
   finish();
 }
-function edited() {
-  keyboardRequest=undefined;needsScan=true;
+function edited(event) {
+  // TinyMCE can finalize the preceding undo level on shortcut keyup. Its change
+  // event leaves the caret in place and must not cancel a pending first lookup.
+  if (event.type.toLowerCase()!=='change') keyboardRequest=undefined;
+  needsScan=true;
   textChanged = true;
   if (selected && !valid(selected)) dismiss();
   redraw();

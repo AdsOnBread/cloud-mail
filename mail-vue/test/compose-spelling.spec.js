@@ -1,6 +1,6 @@
 import {expect, it} from 'vitest';
 import {dictionaryData} from '../src/components/tiny-editor/spelling/dictionary-data';
-import {collectWords, liveWords, replaceWord} from '../src/components/tiny-editor/spelling/words';
+import {collectWords, liveWords, replaceWord, spellingTarget, spellingShortcut} from '../src/components/tiny-editor/spelling/words';
 import {languages, preferredDictionary} from '../src/components/tiny-editor/spelling/languages';
 
 function editor(html) {
@@ -44,4 +44,24 @@ it('rejects a fallback page and accepts a word count with a dictionary producer 
   await expect(dictionaryData(new Response('<html>Sign in</html>'), 'dic')).rejects.toThrow();
   await expect(dictionaryData(new Response('Not an affix file'), 'aff')).rejects.toThrow();
   await expect(dictionaryData(new Response('2 # producer\none\ntwo'), 'dic')).resolves.toBeInstanceOf(Uint8Array);
+});
+
+it('finds the word under the caret and wraps past an already selected error',()=>{
+  const body=editor('A <b>spe</b>ling error and anothr mistake.');
+  const issues=collectWords(body).filter(item=>['speling','anothr'].includes(item.word));
+  const caret=issues[0].range.cloneRange();
+  caret.setStart(issues[0].range.startContainer,1);caret.collapse(true);
+  expect(spellingTarget(issues,caret,'suggest')).toBe(issues[0]);
+  expect(spellingTarget(issues,caret,'next')).toBe(issues[0]);
+  expect(spellingTarget(issues,issues[0].range,'next')).toBe(issues[1]);
+  expect(spellingTarget(issues,issues[1].range,'next')).toBe(issues[0]);
+  caret.selectNodeContents(body);expect(spellingTarget(issues,caret,'suggest')).toBeUndefined();
+});
+it('uses the platform spelling shortcuts without consuming IME or other modifier combinations',()=>{
+  expect(spellingShortcut({key:'m',metaKey:true},true)).toBe('suggest');
+  expect(spellingShortcut({key:'m',ctrlKey:true},false)).toBe('suggest');
+  expect(spellingShortcut({key:';',metaKey:true},true)).toBe('next');
+  for (const event of [{key:';',ctrlKey:true},{key:'m',ctrlKey:true,isComposing:true},
+    {key:'m',ctrlKey:true,shiftKey:true},{key:'m',ctrlKey:true,altKey:true}])
+    expect(spellingShortcut(event,false)).toBeUndefined();
 });
