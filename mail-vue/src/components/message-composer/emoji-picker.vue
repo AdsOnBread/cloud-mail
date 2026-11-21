@@ -85,7 +85,10 @@ const activeTab = computed(() => searching.value ? -1 : rows.value[Math.floor(sc
 const firstRow = computed(() => Math.max(0, Math.floor(scrollTop.value / rowHeight) - 1));
 const visibleRows = computed(() => rows.value.slice(firstRow.value,
   firstRow.value + Math.ceil((height.value || 260) / rowHeight) + 3));
-const firstEmoji = computed(() => visibleRows.value.findIndex(row => row.items) + firstRow.value);
+const firstEmoji = computed(() => {
+  const firstVisible = Math.ceil(scrollTop.value / rowHeight);
+  return rows.value.findIndex((row, index) => index >= firstVisible && row.items);
+});
 
 let restoreSelection;
 let opening = 0;

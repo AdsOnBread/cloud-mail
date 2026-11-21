@@ -82,11 +82,10 @@ function tabOut(event) {
   const controls = [
     ...panel.value.querySelectorAll("input:not(:disabled), button:not(:disabled)"),
   ].filter((b) => b.tabIndex >= 0);
-  if (
-    props.role === "menu" ||
-    event.target === (event.shiftKey ? controls[0] : controls.at(-1))
-  )
-    closeToTrigger();
+  const edge = event.shiftKey ? controls[0] : controls.at(-1);
+  const beyondEdge = event.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+  if (props.role === "menu" || event.target === edge ||
+      (edge?.compareDocumentPosition(event.target) & beyondEdge)) closeToTrigger();
 }
 watch(
   () => props.modelValue,
