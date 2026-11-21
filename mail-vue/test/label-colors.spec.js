@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import ColorChoices from "../src/components/mail-labels/color-choices.vue";
 import {
   customColors,
+  customPalette,
   presetColors,
   presetText,
 } from "../src/components/mail-labels/colors";
@@ -10,9 +11,11 @@ import {
 describe("label colors", () => {
   it("offers unique custom colors and includes the starting text and background for every preset", () => {
     expect(new Set(customColors).size).toBe(customColors.length);
+    expect(customColors).toHaveLength(64);
+    expect(customPalette(null)).toBe(customColors);
     presetColors.forEach((background, index) => {
-      expect(customColors).toContain(background);
-      expect(customColors).toContain(presetText(index));
+      expect(customPalette(background)).toContain(background);
+      expect(customPalette(presetText(index))).toContain(presetText(index));
     });
   });
 

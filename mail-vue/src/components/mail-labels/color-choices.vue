@@ -17,7 +17,7 @@
       samples
       @choose="(color, i) => $emit('choose', color, presetText(i))"
     />
-    <div class="recent" role="group" aria-label="Recent custom colors">
+    <div v-if="recent.length" class="recent" role="group" aria-label="Recent custom colors">
       <button
         v-for="pair in recent"
         :key="pair.background + pair.foreground"
@@ -38,7 +38,6 @@
       >
         a
       </button>
-      <span v-for="n in 6 - recent.length" :key="n" aria-hidden="true"></span>
     </div>
     <button type="button" :disabled="saving" @click="$emit('custom')">
       Add custom color
@@ -80,48 +79,26 @@ function leave(event) {
 }
 </script>
 <style scoped>
-.label-palette {
-  padding: 4px 10px;
+.label-palette {padding:0;}
+strong {display:block; padding:6px 16px; font:500 14px/20px Arial,sans-serif; color:var(--secondary-text-color);}
+.color-grid, .recent {width:144px; margin:0 auto; gap:0;}
+.color-grid :deep(button), .recent button {
+  width:24px; height:24px; box-sizing:border-box; padding:0; border:2px solid transparent;
+  border-radius:4px; background-clip:padding-box; font:500 13px Arial,sans-serif;
 }
-strong {
-  display: block;
-  font-weight: 500;
-  font-size: 13px;
-  margin: 0 0 8px;
+.color-grid :deep(button:is(:hover,:focus-visible,[aria-pressed=true])), .recent button:is(:hover,:focus-visible,[aria-pressed=true]) {
+  outline:1px solid currentColor; outline-offset:-2px;
 }
-.color-grid {
-  margin-bottom: 5px;
-}
-.recent {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 2px;
-  margin: 0 0 6px;
-  padding-top: 5px;
-  border-top: 1px solid var(--light-border-color);
-}
-.recent > * {
-  aspect-ratio: 1;
-  border-radius: 2px;
-  border: 1px solid var(--light-border-color);
-}
-.recent button:is(:focus-visible, [aria-pressed="true"]) {
-  outline: 2px solid var(--el-text-color-primary);
-}
-.recent button {
-  cursor: pointer;
-  font:
-    600 13px Arial,
-    sans-serif;
-}
+.recent {display:grid;grid-template-columns:repeat(6,24px);}
+.recent button {cursor:pointer;}
 .label-palette > button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 4px;
-  color: inherit;
-  font-size: 14px;
-  cursor: pointer;
+  display:block; width:100%; text-align:left; padding:6px 12px 6px 48px;
+  height:32px; color:inherit; font:14px/20px Arial,sans-serif; cursor:pointer;
+}
+.label-palette > button:first-of-type {margin-top:4px;}
+@media (forced-colors:active) {
+  .recent button {forced-color-adjust:none;}
+  .label-palette button:focus-visible {outline:2px solid Highlight; outline-offset:-2px;}
 }
 .label-palette > button:is(:hover, :focus-visible) {
   background: var(--mail-hover);

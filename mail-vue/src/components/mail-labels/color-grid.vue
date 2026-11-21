@@ -86,4 +86,8 @@ function navigate(event, index) {
   outline-offset: 0;
   z-index: 1;
 }
+@media (forced-colors:active) {
+  .color-grid button {forced-color-adjust:none;}
+  .color-grid button:focus-visible {outline:2px solid Highlight; outline-offset:-2px;}
+}
 </style>

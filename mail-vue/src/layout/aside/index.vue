@@ -322,21 +322,21 @@ const uiStore = useUiStore();
 .more-labels svg { flex:none; }
 .label-count { pointer-events:none; position:absolute; right:10px; font-size:12px; font-weight:600; }
 .label-row.unread-label { font-weight:600; }
-.label-row:hover .label-count,.label-row:focus-within .label-count,.label-row:has([aria-expanded=true]) .label-count { visibility:hidden; }
+.label-row:hover .label-count,.label-row:focus-within .label-count,.label-row:has(.label-options[aria-expanded=true]) .label-count { visibility:hidden; }
 @media (hover:none) { .label-count { position:static; padding-left:4px; } }
-.label-row { position:relative; display:flex; align-items:center; margin-right:8px; height:32px; border-radius:0 16px 16px 0; }
+.label-row { position:relative; display:flex; align-items:center; margin-right:16px; height:32px; border-radius:0 16px 16px 0; }
 .label-row:hover { background:var(--mail-hover); }
 .label-row.selected-label { background:var(--mail-selected); font-weight:600; }
 .label-disclosure { position:absolute; left:calc(3px + var(--branch-indent)); display:grid; place-items:center; padding:0; width:20px; height:24px; border-radius:12px; color:inherit; cursor:pointer; }
 .label-disclosure:hover { background:var(--mail-hover); }
 :global(.mail-layout.nav-compact .label-disclosure) { display:none; }
 :global(.mail-layout.nav-compact .label-row a) { padding-left:24px; }
-.label-row a { display:flex; align-items:center; gap:16px; padding-left:calc(24px + var(--branch-indent)); min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
+.label-row a { display:flex; align-items:center; gap:20px; padding-left:calc(24px + var(--branch-indent)); min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
 .label-row a svg { flex-shrink:0; }
 .label-row a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.label-row :deep(.label-options) { opacity:0; }
+.label-row :deep(.label-options) { width:20px; height:20px; margin-inline:6px; color:inherit; opacity:0; }
 .label-row:hover :deep(.label-options),.label-row:focus-within :deep(.label-options),.label-row :deep(.label-options[aria-expanded=true]) { opacity:1; }
-@media (hover:none) { .label-row :deep(.label-options) { opacity:1; } }
+@media (hover:none) { .label-row :deep(.label-options) { width:32px; height:32px; margin:0; opacity:1; } }
 :global(.mail-layout.nav-compact .label-row .label-options) { display:none; }
 .labels-error { margin:8px 24px; color:var(--el-color-primary); }
 .scroll { height:100%; }

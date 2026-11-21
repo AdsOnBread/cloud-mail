@@ -5,7 +5,8 @@
     placement="bottom-start"
     :fallback-placements="['top-start','right-start','left-start']"
     :popper-options="{ modifiers: [{name:'preventOverflow',options:{altAxis:true,tether:false,padding:8}}] }"
-    :width="188"
+    :offset="0"
+    :width="198"
     :show-arrow="false"
     :persistent="false"
     popper-class="label-options-popover"
@@ -21,7 +22,7 @@
         data-tip="More options"
         @keydown.down.prevent="open = true"
       >
-        <Icon icon="material-symbols:more-vert" width="18" />
+        <Icon icon="material-symbols:more-vert" width="20" />
       </button>
     </template>
     <div
@@ -35,8 +36,8 @@
         :teleported="false"
         :persistent="false"
         placement="right-start"
-        :offset="2"
-        :width="182"
+        :offset="0"
+        :width="236"
         :show-arrow="false"
         :fallback-placements="['left-start', 'bottom-start']"
         popper-class="label-options-popover"
@@ -53,8 +54,8 @@
             @click="showPalette(true)"
             @keydown.right.prevent.stop="showPalette(true)"
           >
-            Label color <span class="sample" :style="labelStyle(label)">a</span
-            ><span aria-hidden="true">▸</span>
+            <span>Label color</span><span class="sample" :style="labelStyle(label)">a</span
+            ><span class="submenu-arrow" aria-hidden="true">▸</span>
           </button>
         </template>
         <ColorChoices
@@ -129,7 +130,8 @@
     v-model="custom"
     title="Add custom color"
     class="mail-dialog color-dialog"
-    width="440px"
+    width="min(412px, calc(100vw - 24px))"
+    align-center
     append-to-body
     :show-close="false"
     :close-on-press-escape="!saving"
@@ -140,14 +142,14 @@
       <span :style="{ backgroundColor: background, color: foreground }">{{
         label.name
       }}</span>
+      Preview label color - pick colors below.
     </p>
-    <p class="preview-caption">Preview label color – pick colors below.</p>
     <div class="custom-palettes">
       <div v-for="channel in channels" :key="channel.key">
         <h3>{{ channel.title }}</h3>
         <ColorGrid
           :title="channel.title"
-          :colors="customColors"
+          :colors="customPalette(label[channel.key])"
           :columns="8"
           :disabled="saving"
           :selected="channel.key === 'background' ? background : foreground"
@@ -180,7 +182,7 @@ import { Icon } from "@iconify/vue";
 import { useMailLabels } from "@/store/mail-labels";
 import ColorChoices from "./color-choices.vue";
 import ColorGrid from "./color-grid.vue";
-import { customColors, labelStyle } from "./colors";
+import { customPalette, labelStyle } from "./colors";
 
 const show = { mode: "show", text: "Show" },
   hide = { mode: "hide", text: "Hide" };
@@ -276,8 +278,8 @@ function edit(remove) {
 function customize() {
   open.value = false;
   error.value = "";
-  background.value = props.label.background || "#e7e7e7";
-  foreground.value = props.label.foreground || "#000000";
+  background.value = props.label.background || "#999999";
+  foreground.value = props.label.foreground || "#f3f3f3";
   customMounted.value = true;
   custom.value = true;
 }
@@ -355,21 +357,28 @@ function menuKey(event) {
 </script>
 <style scoped>
 .display-section {
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid var(--light-border-color);
-  padding: 4px 0;
 }
 .display-section:last-of-type {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
   border-bottom: 1px solid var(--light-border-color);
 }
 .section-title {
-  font-size: 12px;
-  padding: 3px 16px;
+  box-sizing: border-box;
+  height: 32px;
+  font: 500 14px/20px Arial,sans-serif;
+  padding: 6px 16px;
   color: var(--secondary-text-color);
 }
 .display-section .option {
   gap: 8px;
 }
 .choice-check {
+  position: absolute;
+  inset-inline-start: 16px;
   width: 16px;
   display: inline-flex;
 }
@@ -380,13 +389,14 @@ function menuKey(event) {
 }
 
 .option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   text-align: left;
   width: 100%;
   height: 32px;
-  padding: 0 16px;
+  padding: 0 16px 0 48px;
   color: inherit;
   font:
     14px Arial,
@@ -396,58 +406,44 @@ function menuKey(event) {
 .option:is(:hover, :focus-visible, [aria-expanded="true"]) {
   background: var(--mail-hover);
 }
+.submenu-arrow {margin-inline-start:auto;}
 .sample {
-  margin-left: auto;
-  padding: 0 4px;
+  display:inline-grid; place-items:center; width:20px; height:20px;
   border-radius: 2px;
   background: var(--light-border-color);
   font-weight: 600;
 }
-.color-preview,
-.preview-caption {
-  text-align: center;
-  margin: 8px 0;
+.color-preview {
+  display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+  min-height:24px; margin:0 0 16px; font:14px/20px Arial,sans-serif;
 }
 .color-preview span {
-  border-radius: 4px;
-  max-width: 100%;
-  display: inline-block;
-  overflow-wrap: anywhere;
-  padding: 3px 9px;
-  font:
-    500 14px Arial,
-    sans-serif;
+  display:inline-block; max-width:100%; overflow-wrap:anywhere;
+  border-radius:4px; padding:0 6px; font:12px/18px Arial,sans-serif;
 }
-.preview-caption {
-  color: var(--regular-text-color);
-  font-size: 13px;
+.custom-palettes {display:grid; grid-template-columns:repeat(2,minmax(0,146px)); gap:clamp(8px,12vw,52px);}
+h3 {font:400 14px/20px Arial,sans-serif; margin:0;}
+.custom-palettes :deep(.color-grid) {padding:6px 0; gap:0;}
+.custom-palettes :deep(.color-grid button) {
+  height:17.33px; aspect-ratio:auto; border:1px solid transparent; background-clip:padding-box; border-radius:0;
 }
-.custom-palettes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin: 15px 0 24px;
+.custom-palettes :deep(.color-grid button:nth-child(-n+16)) {height:19px; margin-bottom:12px;}
+:global(.color-dialog.el-dialog) {border-radius:28px; box-shadow:none; max-height:calc(100dvh - 24px); overflow:auto; padding:24px;}
+:global(.color-dialog .el-dialog__header) {padding:0 0 16px;}
+:global(.color-dialog .el-dialog__title) {font:400 24px/32px Arial,sans-serif;}
+.color-dialog .dialog-actions button {height:40px; padding:0 12px;}
+.color-dialog .dialog-actions .primary {min-width:86px; color:var(--mail-on-primary,white); background:var(--mail-blue,var(--el-color-primary));}
+@media (pointer:coarse), (max-width:420px) {
+  .custom-palettes {grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;}
+  .custom-palettes :deep(.color-grid button) {height:24px;}
+  .custom-palettes :deep(.color-grid button:nth-child(-n+16)) {height:24px; margin-bottom:6px;}
 }
-@media (max-width: 560px), (pointer: coarse) {
-  .custom-palettes {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .custom-palettes :deep(.color-grid button) {
-    min-height: 24px;
-    max-height: 30px;
-    aspect-ratio: auto;
-  }
-  :global(.el-dialog.color-dialog) {
-    max-height: 88dvh;
-    overflow: auto;
-    margin: 6dvh auto;
-  }
+@media (max-width:380px) {
+  .custom-palettes {grid-template-columns:minmax(0,1fr);}
 }
-h3 {
-  font-size: 13px;
-  margin: 0 0 6px;
-  font-weight: 500;
+@media (forced-colors:active) {
+  :global(.el-popper.label-options-popover), :global(.color-dialog.el-dialog) {outline:1px solid CanvasText;}
+  .sample, .color-preview span {forced-color-adjust:none;}
 }
 @media (max-width:600px), (max-height:540px) {
   :global(.el-popper.label-options-popover) { max-height:calc(100dvh - 16px); overflow-y:auto; overscroll-behavior:contain; }
@@ -455,11 +451,10 @@ h3 {
 :global(.el-popper.label-options-popover) {
   padding: 6px 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--mail-surface);
   color: var(--regular-text-color);
   box-shadow:
-    0 2px 6px 2px #3c404324,
-    0 1px 2px #3c404333;
+    0 8px 10px 1px #00000024, 0 3px 14px 2px #0000001f, 0 5px 5px -3px #0003;
 }
 </style>
