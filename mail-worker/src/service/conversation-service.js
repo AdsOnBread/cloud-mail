@@ -1,3 +1,4 @@
+import {conversationSenders} from './conversation-senders';
 import {prepareExcludedSearch} from './mail-word-index';
 import {withLabelMove} from './label-move.js';
 import { mailboxAttachments } from './mailbox-attachments';
@@ -27,7 +28,7 @@ async function resolve(db, userId, anchor) {
 	if (!row) throw new BizError('Conversation not found.', 404);
 	return row.thread_id;
 }
-function participants(row, folder) {
+function participants(row, folder, senders) {
 	if (folder === 'sent') {
 		try {
 			for (const [label, field] of [['To', row.sent_recipients], ['Cc', row.sent_cc], ['Bcc', row.sent_bcc]]) {
@@ -39,7 +40,7 @@ function participants(row, folder) {
 			/* Older rows may lack structured recipients. */
 		}
 	}
-	const names = JSON.parse(row.participants).filter(Boolean);
+	const names = senders.map(sender => sender.name);
 	return names.map((name) => (names.length > 1 ? name.split(/\s+/)[0] : name)).join(', ');
 }
 // Match a label folder's account-scoped membership and whole-conversation unread state.
@@ -136,8 +137,7 @@ export async function conversationList(c, p, userId) {
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
     summaries AS (SELECT m.thread_id,${importanceFields},${purchases?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
-      MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
-      JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
+      MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred
       FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       ${importanceJoin}
@@ -190,12 +190,16 @@ export async function conversationList(c, p, userId) {
       )`).bind(userId,userId),
 	]);
 	const rows = page.results.slice(0, limit);
-  const files = await mailboxAttachments(db, userId, rows, 'threads');
+  const [files, authors] = await Promise.all([
+    mailboxAttachments(db, userId, rows, 'threads'),
+    conversationSenders(db, userId, rows.map(row => row.thread_id)),
+  ]);
   const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
 			const { sent_recipients, sent_cc, sent_bcc, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
-			return { ...camel(summary), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
+			const senders = authors.get(row.thread_id)?.senders || [];
+			return { ...camel(summary), ...(p.folder === 'sent' ? {} : {senders}), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder, senders) };
 		}),
 		unreadThreads: totals?.unread_threads||0,
     ...(category?{categoryUnread:Object.fromEntries(count.results.map(row=>[row.category,row.unread_threads]))}:{}),
@@ -223,7 +227,8 @@ export async function draftThreads(c, ids, userId) {
 		)
 		.bind(userId, ...ids)
 		.all();
-	return results.map(camel);
+	const authors = await conversationSenders(db,userId,[...new Set(results.map(row => row.thread_id))]);
+  return results.map(row => ({...camel(row),...authors.get(row.thread_id)}));
 }
 export async function conversationMessages(c, p, userId) {
 	const db = c.env.db;

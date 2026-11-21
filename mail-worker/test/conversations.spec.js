@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { dbInit } from '../src/init/init';
-import { conversationList, conversationMessages, conversationAction } from '../src/service/conversation-service';
+import { conversationList, conversationMessages, conversationAction, draftThreads } from '../src/service/conversation-service';
 import * as cloudMail from '../src/cloud/mail';
 import emailService from '../src/service/email-service';
 import settingService from '../src/service/setting-service';
@@ -60,6 +60,22 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe('Web conversations', () => {
+  it('keeps read state per sender and shares visible thread counts with saved replies',async()=>{
+    const first=await insert({message_id:'<first@external.com>',name:'Taylor Ray',unread:1});
+    const reply={in_reply_to:first.message_id,refs:first.message_id};
+    const second=await insert({...reply,message_id:'<second@external.com>',send_email:'other@external.com',name:'Casey Blue',unread:0});
+    await insert({...reply,message_id:'<third@external.com>',send_email:'OTHER@external.com',name:'Casey Blue',unread:1});
+    await insert({...reply,name:'Deleted author',send_email:'hidden@external.com',trashed_at:'2026-11-19'});
+    const own=await insert({...reply,type:1,send_email:'admin@example.com'});
+    const row=(await list()).threads[0];
+    expect(row.senders.map(({name,unread})=>[name,unread])).toEqual([['Taylor Ray',false],['Casey Blue',true],['me',false]]);
+    expect(row.participants).toBe('Taylor, Casey, me');
+    expect(row.messageCount).toBe(4);
+    expect(await draftThreads(context(),[second.email_id,own.email_id],1)).toEqual([second,own].map(r=>({
+      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,
+    })));
+    expect(await draftThreads(context(),[second.email_id],2)).toEqual([]);
+  });
 	it('names the destination of a sent blind-copy-only message without returning its raw address fields', async () => {
 		await insert({ type: 1, status: 1, recipient: '[]', cc: '[]', bcc: '[{"address":"private@example.com"}]' });
 		const [row] = (await list({folder:'sent'})).threads;
