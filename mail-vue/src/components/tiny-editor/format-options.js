@@ -146,7 +146,7 @@ const unshifted = {
 };
 
 // Attach to the editor so shortcuts also work while its formatting bar is hidden.
-export function formattingShortcut(ed, event) {
+export function formattingShortcut(ed, event, requestFormat) {
   if (event.isComposing || event.altKey || !(event.metaKey || event.ctrlKey))
     return;
   let command = (event.shiftKey ? shifted : unshifted)[event.code],
@@ -165,6 +165,7 @@ export function formattingShortcut(ed, event) {
   if (!command) return;
   event.preventDefault();
   event.stopImmediatePropagation();
+  if (requestFormat) return requestFormat(command, value);
   ed.execCommand(command, false, value);
   ed.nodeChanged();
 }

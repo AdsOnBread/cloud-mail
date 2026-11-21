@@ -10,7 +10,7 @@
       :id="editorId"
       ref="editorRef"
     ></textarea>
-    <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
+    <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" :request-format="plainText ? requestFormat : undefined" />
     <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.openPhoto(link)" />
     <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
   </div>
@@ -27,7 +27,7 @@ import {
 } from "vue";
 import {replaceSignature,signatureId} from "../mail-signatures/content";
 import {hasFiles,hasRichSelection} from "../message-composer/files";
-import {plainBodyText, plainMarkup} from "../message-composer/plain-text";
+import {plainBodyText, plainMarkup, plainSelection, restorePlainSelection} from "../message-composer/plain-text";
 import {fonts, formattingShortcut} from "./format-options";
 import ComposeFormat from "./compose-format.vue";
 import ComposePhoto from "./compose-photo.vue";
@@ -50,6 +50,7 @@ defineExpose({
   insertEmoji,
   insertPhotos,
   command,
+  applyPlainSelection,
 });
 
 const props = defineProps({
@@ -69,7 +70,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["change", "focus", "compose-keydown", "file-drag", "file-leave", "file-drop", "file-paste"]);
+const emit = defineEmits(["change", "focus", "rich-command", "compose-keydown", "file-drag", "file-leave", "file-drop", "file-paste"]);
 let pendingInit = Promise.resolve();
 let themeRevision = 0,
   disposed = false;
@@ -105,10 +106,20 @@ function insertEmoji(character) {
   ed.dispatch("change");
   return true;
 }
-function command(name) {
+function requestFormat(name, value) {
+  const ed = editor.value;
+  emit("rich-command", name, value, plainSelection(ed.getBody(), ed.selection.getRng()));
+}
+function applyPlainSelection(positions) {
+  const ed = editor.value;
+  ed.focus();
+  ed.selection.setRng(restorePlainSelection(ed.getBody(), positions));
+}
+function command(name, value) {
   if (!isInitialized.value) return;
   editor.value.focus();
-  editor.value.execCommand(name);
+  editor.value.execCommand(name, false, value);
+  editor.value.nodeChanged();
 }
 function insertPhotos(photos) {
   if (props.plainText || !isInitialized.value) return;
@@ -284,9 +295,11 @@ function initEditor(initialContent) {
       }
       if (props.plainText) {
         ed.on("keydown", event => {
-          if ((event.metaKey || event.ctrlKey) && !event.altKey && ["b","i","u","k"].includes(event.key.toLowerCase())) {
+          const shortcut = {b:"Bold", i:"Italic", u:"Underline", k:"link"}[event.key.toLowerCase()];
+          if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !event.isComposing && shortcut) {
             event.preventDefault(); event.stopImmediatePropagation();
-          }
+            requestFormat(shortcut);
+          } else formattingShortcut(ed, event, requestFormat);
         }, true);
       } else if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {

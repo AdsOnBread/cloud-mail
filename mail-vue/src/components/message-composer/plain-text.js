@@ -87,3 +87,45 @@ export function richMarkup(plain) {
   }
   return template.innerHTML;
 }
+
+// A plaintext-only host can store newlines in text nodes or in separate blocks.
+// Map the selection into the line-based markup produced when formatting is enabled.
+export function plainSelection(body, range) {
+  function position(node, offset) {
+    const path = [];
+    while (node !== body) {
+      if (!node.parentNode) return [0, 0];
+      path.unshift(Array.prototype.indexOf.call(node.parentNode.childNodes, node));
+      node = node.parentNode;
+    }
+    const copy = body.cloneNode(true);
+    const point = copy.ownerDocument.createRange();
+    point.setStart(path.reduce((parent, index) => parent.childNodes[index], copy), offset);
+    point.collapse(true);
+    const marker = crypto.randomUUID();
+    point.insertNode(copy.ownerDocument.createTextNode(marker));
+    const text = plainBodyText(copy);
+    const lines = text.slice(0, Math.max(0, text.indexOf(marker))).split('\n');
+    return [lines.length - 1, lines.at(-1).length];
+  }
+  const start = position(range.startContainer, range.startOffset);
+  return [start, range.collapsed ? start : position(range.endContainer, range.endOffset)];
+}
+
+export function restorePlainSelection(body, positions) {
+  const lines = Array.from(body.querySelectorAll('div,p,pre')).filter(node => !node.querySelector('div,p,pre'));
+  const range = body.ownerDocument.createRange();
+  function point([line, column]) {
+    const block = lines[Math.min(line, lines.length - 1)] || body;
+    const walker = body.ownerDocument.createTreeWalker(block, 4);
+    let text;
+    while ((text = walker.nextNode())) {
+      if (column <= text.length) return [text, column];
+      column -= text.length;
+    }
+    return [block, block.childNodes.length && block.lastChild.nodeName !== 'BR' ? block.childNodes.length : 0];
+  }
+  range.setStart(...point(positions[0]));
+  range.setEnd(...point(positions[1]));
+  return range;
+}

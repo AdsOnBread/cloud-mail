@@ -175,7 +175,7 @@
           class="compose-editor" :inert="sending || attaching"
           :class="{
             'editor-disabled': sending,
-            'formatting-open': inline && !form.plainText && showFormatting,
+            'formatting-open': inline && showFormatting,
             'quote-open': inline && quoteExpanded,
           }"
         >
@@ -184,11 +184,12 @@
             :plain-text="form.plainText"
             :def-value="defValue"
             mail-compose
-            :show-toolbar="!form.plainText && showFormatting"
+            :show-toolbar="showFormatting"
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
             ref="editor"
             @focus="focusBody"
+            @rich-command="useRichCommand"
             @compose-keydown="addressShortcut"
             @file-drag="dragFiles($event, true)" @file-leave="dragHint = ''"
             @file-drop="dropFiles($event, true)" @file-paste="pasteFiles"
@@ -245,7 +246,6 @@
           </el-dropdown></div>
           <button
             type="button"
-            v-if="!form.plainText"
             class="compose-tool formatting-toggle"
             aria-label="Formatting options"
             :aria-pressed="showFormatting"
@@ -531,7 +531,13 @@ const show = ref(false);
 const editingRecipients = ref(false);
 const addressExpanded = ref(true);
 const subjectCaption = ref("");
-const caption = computed(() => subjectCaption.value || ({reply: "Reply", forward: "Forward"}[form.sendType] || "New Message"));
+const formatCaption = ref("");
+let formatCaptionTimer;
+function clearFormatCaption() {
+  clearTimeout(formatCaptionTimer);
+  formatCaption.value = "";
+}
+const caption = computed(() => formatCaption.value || subjectCaption.value || ({reply: "Reply", forward: "Forward"}[form.sendType] || "New Message"));
 const settingStore = useSettingStore();
 const showSender = computed(() => {
   if (form.sendEmail?.toLowerCase() !== userStore.user.email?.toLowerCase()) return true;
@@ -731,6 +737,7 @@ function startSignatureDefault(){
   })();
 }
 function resetForm() {
+  clearFormatCaption();
   fileGeneration++;
   photosOpen.value = false;
   photoSelection = undefined;
@@ -944,6 +951,14 @@ function openReplyAll(email) {
 function openForward(email) {
   return prepareMessage(email, "forward");
 }
+async function useRichCommand(command, value, selection) {
+  if (!form.plainText || !show.value || sending.value) return;
+  const currentEditor = await moreCommand("enable-rich");
+  if (!currentEditor) return;
+  currentEditor.applyPlainSelection(selection);
+  if (command === "link") currentEditor.openLink();
+  else currentEditor.command(command, value);
+}
 async function moreCommand(command) {
   const owner = userStore.user.email;
   const generation = signatureGeneration;
@@ -975,6 +990,7 @@ async function moreCommand(command) {
     printDraft({...form, content:editor.value.getContent()});
     return;
   }
+  if (command === "enable-rich" && !form.plainText) return;
   const plainText = !form.plainText;
   const content = editor.value.getContent();
   if (plainText && /<img[\s>]/i.test(content)) {
@@ -991,10 +1007,15 @@ async function moreCommand(command) {
   } else form.content = richMarkup(content);
   defValue.value = form.content;
   form.plainText = plainText;
+  clearFormatCaption();
+  formatCaption.value = plainText ? "Plain text" : "Rich text";
+  formatCaptionTimer = setTimeout(clearFormatCaption, 1500);
   uiPreferences.composeModes[owner] = {...composeMode.value, plainText};
   await nextTick();
   await editor.value?.ready();
-  if (current()) editor.value?.focus();
+  if (!current() || form.plainText !== plainText) return;
+  if (command === "enable-rich") return editor.value;
+  editor.value?.focus();
 }
 function change(content, text) {
   form.content = content;
@@ -1336,6 +1357,7 @@ onMounted(() => {
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  clearFormatCaption();
   stopStarActions?.();
   mounted = false;
   clearTimeout(cloudSaveTimer);

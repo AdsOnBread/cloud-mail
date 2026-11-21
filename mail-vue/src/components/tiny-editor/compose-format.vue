@@ -162,7 +162,7 @@ import {
   fonts,
   sizes,
 } from "./format-options";
-const props = defineProps({ editor: Object });
+const props = defineProps({ editor: Object, requestFormat: Function });
 const strip = ref(null),
   palette = ref(null),
   colorOpen = ref(false);
@@ -394,6 +394,10 @@ function editingSelection() {
 function apply(command, value) {
   const ed = editingSelection();
   if (!ed) return;
+  if (props.requestFormat && command !== "Undo" && command !== "Redo") {
+    props.requestFormat(command, value);
+    return;
+  }
   ed.execCommand(command, false, value);
   ed.nodeChanged();
   update();
