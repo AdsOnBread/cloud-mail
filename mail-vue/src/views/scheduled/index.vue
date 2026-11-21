@@ -242,7 +242,7 @@ const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Im
 const scope = computed(() =>
   account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
 );
-const identity = computed(() => JSON.stringify([user.user.email, scope.value]));
+const identity = computed(() => JSON.stringify([user.user.email, account.currentAccountId, Boolean(account.currentAccount.allReceive)]));
 const messageId = computed(() => Number(route.query.message) || 0);
 const rows = ref([]),
   selected = ref([]),
@@ -255,16 +255,20 @@ const loading = ref(true),
   listError = ref(""),
   detailError = ref(false),
   error = ref("");
-const ordered = computed(() =>
-  latestFirst.value ? [...rows.value].reverse() : rows.value,
-);
+const ordered = computed(() => {
+  let matches = rows.value;
+  if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
+  if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
+  return latestFirst.value && !originFolder.value ? [...matches].reverse() : matches;
+});
 const page = computed(() =>
   ordered.value.slice(offset.value, offset.value + 50),
 );
 const position = computed(() =>
   ordered.value.findIndex((row) => row.draftId === messageId.value),
 );
-const item = computed(() => ordered.value[position.value]);
+// Keep the open message readable when its last mark is removed.
+const item = computed(() => rows.value.find(row => row.draftId === messageId.value));
 const targets = computed(() =>
   page.value.filter((row) => selected.value.includes(row.draftId)),
 );
