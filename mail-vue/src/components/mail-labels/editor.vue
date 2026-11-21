@@ -12,12 +12,13 @@
     :class="{ 'label-name-dialog': !labels.edit?.remove && !labels.edit?.destination }"
     :width="labels.edit?.remove || labels.edit?.destination ? '360px' : 'min(498px, calc(100vw - 32px))'"
     align-center
+    destroy-on-close
     append-to-body
     :show-close="false"
     :close-on-click-modal="!saving"
     :close-on-press-escape="!saving"
     @close="!saving && (labels.edit = null)"
-    @opened="input?.focus()"
+    @opened="focusName"
     @closed="restoreOpener"
   >
     <form @submit.prevent="submit">
@@ -39,22 +40,8 @@
           <span class="check-area"><input v-model="nested" type="checkbox" :disabled="saving" @change="parentId = null" /></span>
           Nest label under:
         </label>
-        <el-select
-          v-model="parentId"
-          class="parent-picker"
-          aria-label="Nest label under:"
-          placeholder=" "
-          popper-class="label-parent-options"
-          fit-input-width
-          :teleported="false"
-          :show-arrow="false"
-          :offset="0"
-          :disabled="saving"
-          @change="nested = true"
-        >
-          <el-option label="Please select a parent..." value="" disabled />
-          <el-option v-for="parent in parents" :key="parent.id" :value="parent.id" :label="parent.name" />
-        </el-select>
+        <ParentPicker :model-value="parentId" :labels="parents" :disabled="saving"
+          @update:model-value="id => { parentId = id; nested = true; }" />
       </template>
       <p v-if="error" role="alert">{{ error }}</p>
       <div class="dialog-actions">
@@ -78,6 +65,7 @@
 </template>
 <script setup>
 import { computed, ref, watch } from "vue";
+import ParentPicker from "./parent-picker.vue";
 import { labelTree, inLabelBranch } from "./tree";
 import { useRouter, useRoute } from "vue-router";
 import { useMailLabels } from "@/store/mail-labels";
@@ -101,6 +89,10 @@ const parents = computed(() =>
   ),
 );
 let opener;
+function focusName() {
+  const field = input.value;
+  if (field && !field.form.contains(document.activeElement)) field.focus();
+}
 function restoreOpener() { const restore=opener; opener=null; restore?.(); }
 watch(
   () => labels.edit,
@@ -151,7 +143,7 @@ async function submit() {
 .label-name-dialog .el-dialog__body { line-height: 20px; color: var(--regular-text-color); }
 .label-name-dialog .name-label { display: block; font-size: 14px; }
 .label-name-dialog .name-label input,
-.label-name-dialog .el-select__wrapper {
+.label-name-dialog [role="combobox"] {
   box-sizing: border-box;
   display: flex;
   width: 100%;
@@ -166,9 +158,9 @@ async function submit() {
 }
 .label-name-dialog .name-label input { margin: 8px 0; }
 .label-name-dialog .name-label input:hover,
-.label-name-dialog .el-select__wrapper.is-hovering { box-shadow: inset 0 0 0 1px currentColor; }
+.label-name-dialog [role="combobox"]:hover { box-shadow: inset 0 0 0 1px currentColor; }
 .label-name-dialog .name-label input:focus,
-.label-name-dialog .el-select__wrapper.is-focused {
+.label-name-dialog [role="combobox"]:focus {
   outline: 0;
   box-shadow: inset 0 0 0 3px var(--mail-blue,var(--el-color-primary));
 }
@@ -205,9 +197,20 @@ async function submit() {
   color: color-mix(in srgb,var(--el-text-color-primary) 38%,transparent);
   background: var(--base-fill);
 }
+.label-name-dialog [role="combobox"] { justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; }
+.label-name-dialog [role="combobox"] > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parent-caret { border: 5px solid transparent; border-top-color: currentColor; border-bottom: 0; }
 .label-parent-options.el-popper { border: 0; border-radius: 4px; }
-.label-parent-options .el-select-dropdown__list { padding: 8px 0; }
-.label-parent-options .el-select-dropdown__wrap { max-height: min(352px, 42vh); }
-.label-parent-options .el-select-dropdown__item { height: 48px; line-height: 48px; padding: 0 16px; }
+.label-parent-options ul { padding: 8px 0; margin: 0; max-height: min(352px,42vh); overflow-y: auto; list-style: none; }
+.label-parent-options [role="option"] { display: block; height: 48px; line-height: 48px; padding: 0 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.label-parent-options [aria-disabled="true"] { color: var(--secondary-text-color); cursor: default; }
+.label-parent-options [role="option"]:focus,
+.label-parent-options [role="option"]:hover { background: var(--mail-hover); outline: 0; }
+.label-parent-options [aria-selected="true"]:not([aria-disabled]) { background: var(--mail-selected); }
+@media (forced-colors: active) {
+  .label-name-dialog .name-label input,.label-name-dialog [role="combobox"] { border: 1px solid ButtonText; }
+  .label-name-dialog .name-label input:focus,.label-name-dialog [role="combobox"]:focus,
+  .label-parent-options [role="option"]:focus { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 .label-dialog [role="alert"] { color: var(--mail-draft); }
 </style>
