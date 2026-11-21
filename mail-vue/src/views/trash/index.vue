@@ -384,10 +384,9 @@ function open(message) {
   router.push({ path: route.path, query: { message: message.emailId } });
 }
 function showTrash() {
-  if (!search.query && !filtered.value) { back(); return; }
-  router.replace({path:route.path});
-  search.query="";
-  search.filters={};
+  history.value=[];
+  if (search.query || filtered.value) search.$patch({query:"",filters:{}});
+  else back();
 }
 function back() {
   if (window.history.state.back === route.path) router.back();

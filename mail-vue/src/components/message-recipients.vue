@@ -1,9 +1,9 @@
 <template>
-  <el-popover v-model:visible="open" trigger="click" placement="bottom-start" :offset="4"
+  <el-popover v-model:visible="open" trigger="click" role="dialog" placement="bottom-start" :offset="4"
     :show-arrow="false" width="max-content" popper-class="message-details-popper">
     <template #reference>
       <button ref="trigger" type="button" class="recipient-toggle" aria-label="Show details" data-tip="Show details"
-        aria-haspopup="dialog" :aria-expanded="open" @keydown.esc.stop.prevent="close">
+        aria-haspopup="dialog" :aria-expanded="open" :aria-description="summary" @keydown.esc="escape">
         <span>{{summary}}</span><Icon icon="material-symbols:arrow-drop-down" width="14" aria-hidden="true"/>
       </button>
     </template>
@@ -29,7 +29,7 @@ const groups=computed(()=>{
     .filter(([,entries])=>entries.length);
 });
 function addressText({name,address}) {
-  return name && name!==address ? name+" <"+address+">" : address;
+  return name && address && name!==address ? name+" <"+address+">" : address || name;
 }
 const summary=computed(()=>{
   const first=groups.value[0];
@@ -47,7 +47,13 @@ const fields=computed(()=>{
     ["subject",m.subject || "(no subject)"]
   ].filter(([,value])=>value);
 });
-function close(){open.value=false;trigger.value?.focus();}
+function escape(event) {
+  if (!open.value) return;
+  event.stopPropagation();
+  event.preventDefault();
+  open.value=false;
+  trigger.value?.focus();
+}
 </script>
 <style scoped>
 .recipient-toggle {display:inline-flex;align-items:center;max-width:100%;min-width:0;height:20px;padding:0;border:0;background:transparent;color:var(--regular-text-color);font:12px/16px Arial,sans-serif;cursor:pointer;text-align:start}

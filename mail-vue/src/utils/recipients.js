@@ -6,10 +6,7 @@ export function splitRecipients(value = '') {
 }
 
 export function addresses(value) {
-  try {
-    const list = typeof value === 'string' ? JSON.parse(value || '[]') : value;
-    return Array.isArray(list) ? list.map(item => typeof item === 'string' ? item : item?.address).filter(Boolean) : [];
-  } catch { return []; }
+  return recipientEntries(value).map(entry=>entry.address);
 }
 
 export function recipientEntries(value) {
