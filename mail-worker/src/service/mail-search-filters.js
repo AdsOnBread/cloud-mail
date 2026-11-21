@@ -1,19 +1,28 @@
+import {peopleTerms} from '../../../shared/mail-search-people';
 import {searchDateBounds} from "../../../shared/mail-search-date";
 import { attachedFile } from "./mailbox-attachments";
 
+export function addPeopleFilter(params, field, columns, filters, args) {
+  const terms = peopleTerms(params, field);
+  if (!terms.length) return;
+  if (terms.length === 1) {
+    filters.push('(' + columns.map(column => `instr(lower(${column}),lower(?))>0`).join(' OR ') + ')');
+    args.push(...columns.map(() => terms[0]));
+    return;
+  }
+  const matches = columns.map(column => `instr(lower(${column}),lower(person.value))>0`).join(' OR ');
+  filters.push(`EXISTS (SELECT 1 FROM json_each(?) person WHERE ${matches})`);
+  args.push(JSON.stringify(terms));
+}
+
 // Both the conversation and message lists use "e" for the owned, visible email.
 export function addMailFilters(params, filters, args, {conversation = false} = {}) {
-	for (const [field, columns] of Object.entries({
-		from: ['e.send_email', 'e.name'],
-		to: ['e.recipient', 'e.cc', "CASE WHEN e.type=1 THEN e.bcc ELSE '' END"],
-		subject: ['e.subject'],
-	})) {
-		const value = params[field]?.trim();
-		if (!value) continue;
-		// instr treats wildcard characters in names and addresses literally.
-		filters.push('(' + columns.map((column) => `instr(lower(${column}),lower(?))>0`).join(' OR ') + ')');
-		args.push(...columns.map(() => value.slice(0, 200)));
-	}
+  addPeopleFilter(params, 'from', ['e.send_email', 'e.name'], filters, args);
+  addPeopleFilter(params, 'to', ['e.recipient', 'e.cc', "CASE WHEN e.type=1 THEN e.bcc ELSE '' END"], filters, args);
+  if (params.subject?.trim()) {
+    filters.push('instr(lower(e.subject),lower(?))>0');
+    args.push(params.subject.trim().slice(0,200));
+  }
 	if (String(params.hasAttachment) === '1')
 		filters.push(conversation
       ? `EXISTS (SELECT 1 FROM mobile_thread_members fm JOIN email e ON e.email_id=fm.email_id AND e.user_id=fm.user_id

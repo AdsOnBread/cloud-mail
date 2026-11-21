@@ -1,4 +1,4 @@
-import {addSearchDates} from '../service/mail-search-filters';
+import {addPeopleFilter,addSearchDates} from '../service/mail-search-filters';
 import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
 import { permission, positive, conflict } from './auth';
@@ -86,6 +86,10 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   const text = "json_extract(d.data,'$.text')";
   columns.q = [...columns.from, ...columns.to, ...columns.subject, text];
   for (const [field, choices] of Object.entries(columns)) {
+    if (field === 'from' || field === 'to') {
+      addPeopleFilter(filters, field, choices, conditions, args);
+      continue;
+    }
     const term = filters[field]?.trim().slice(0, 200);
     if (!term) continue;
     const matches = choices.map(column => `instr(lower(${column}),lower(?))>0`);

@@ -1,3 +1,4 @@
+import {peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
 import {searchDateBounds,withinDateBounds} from '../../shared/mail-search-date.js';
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
 import { inLabelBranch } from '../src/components/mail-labels/tree.js';
@@ -77,7 +78,7 @@ function matchesDate(created,p) {
 }
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
- return matches([row.name,row.sendEmail],p.from) && matches([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])],p.to) &&
+ return matchesPeople([row.name,row.sendEmail],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])],peopleTerms(p,'to')) &&
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p);
 }
@@ -127,7 +128,7 @@ const api=createHTTPServer(async(req,res)=>{
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matches([row.senderEmail,row.senderName],p.from)&&matches(recipients,p.to)&&matches([row.subject],p.subject)&&
+     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([row.senderEmail,row.senderName],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(path.startsWith('/v1/scheduled/')){
