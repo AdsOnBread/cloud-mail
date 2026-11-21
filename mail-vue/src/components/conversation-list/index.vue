@@ -193,6 +193,7 @@
           v-for="{ data: row } in virtualRows"
           :key="row.threadId"
           :participants="row.participants"
+          :senders="row.senders"
           :count="row.messageCount"
           :subject="row.subject"
           :attachments="row.attachments"

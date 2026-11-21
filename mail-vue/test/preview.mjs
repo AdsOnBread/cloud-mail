@@ -76,6 +76,17 @@ function grouped(){
 }
 function threadFor(id){return [...grouped().values()].find(thread=>thread.some(row=>row.emailId===Number(id)))||[];}
 const systemLabels={};
+function previewSenders(members) {
+  const people = new Map();
+  for (const row of members.toSorted((a,b)=>a.emailId-b.emailId)) {
+    const key = row.type===1 ? 'me' : row.sendEmail.toLowerCase();
+    const person = people.get(key) || {name:row.type===1 ? 'me' : row.name || row.sendEmail, unread:false};
+    person.unread ||= row.type===0 && row.unread===0;
+    person.lastId = row.emailId;
+    people.set(key,person);
+  }
+  return [...people.values()];
+}
 const labels = new Map(), membership = new Map();
 let recentColors=[];
 let nextLabel = 1;
@@ -310,7 +321,7 @@ const api=createHTTPServer(async(req,res)=>{
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
      threads.push({threadId,purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
-       participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
+       ...(p.folder==='sent'?{}:{senders:previewSenders(members)}),participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});
    }
@@ -327,7 +338,7 @@ const api=createHTTPServer(async(req,res)=>{
    data={importanceReason:importanceReason(members),filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
-   data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId})));
+   data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId,messageCount:members.length,senders:previewSenders(members)})));
  }else if(path==='/email/conversation/label-unread'){
    const accountId=Number(url.searchParams.get('accountId')),combined=url.searchParams.get('allReceive')==='1';
    data={};

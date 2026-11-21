@@ -22,6 +22,7 @@ export const userDraftStore = defineStore('draft', {
         setDraft: {},
         items: [],
         threads: {},
+        threadSummaries: {},
         listError: '',
     }),
     getters: {

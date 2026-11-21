@@ -21,6 +21,7 @@ export function startDraftList() {
       if (database !== old?.[0]) {
         store.items = [];
         store.threads = {};
+        store.threadSummaries = {};
         cache = new Map();
       }
       try {
@@ -76,13 +77,14 @@ export function startDraftList() {
       // A cloud refresh can change thread membership even when the set of drafts is identical.
       if (!ids) {
         store.threads = {};
+        store.threadSummaries = {};
         return;
       }
       let active = true;
       onCleanup(() => {
         active = false;
       });
-      const threads = {};
+      const threads = {}, summaries = {};
       try {
         const list = ids.split(",").map(Number);
         for (let i = 0; i < list.length; i += 95) {
@@ -92,9 +94,13 @@ export function startDraftList() {
             { noMsg: true },
           );
           if (!active || db.value !== database) return;
-          for (const row of rows) threads[row.emailId] = row.threadId;
+          for (const row of rows) {
+            threads[row.emailId] = row.threadId;
+            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount};
+          }
         }
         store.threads = threads;
+        store.threadSummaries = summaries;
       } catch {
         /* Offline drafts remain available in Drafts. The next sync retries this lookup. */
       }

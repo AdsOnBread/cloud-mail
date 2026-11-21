@@ -32,17 +32,19 @@
     <MailImportance v-if="showImportance" class="row-importance" :reason="importanceReason" :disabled="busy" @toggle="$emit('importance', $event)" />
     <button
       class="conversation-open"
-      :aria-description="dateTitle"
+      :aria-description="[senders?.map(person=>person.name).join(', '), dateTitle].filter(Boolean).join('. ')"
       :aria-label="openLabel + (attachmentCount ? ', has attachment' : '')"
       @click="$emit('open')"
     >
       <span class="participants">
-        <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="17" aria-hidden="true" /><span v-if="participants" class="names">{{ participants }}</span>
+        <Icon v-if="trash" class="trash-marker" icon="material-symbols:delete-outline" width="17" aria-hidden="true" />
+        <span v-if="people.length" class="names sender-names"><template v-for="(person,i) in people" :key="i"><span>{{ person.separator }}</span><span :class="{'unread-sender':person.unread}" :title="person.name">{{ person.label }}</span></template></span>
+        <span v-else-if="participants" class="names">{{ participants }}</span>
         <span v-if="draftCount" class="draft-marker"
-          ><span v-if="participants">, </span
+          ><span v-if="participants || people.length" class="draft-comma">, </span
           >{{ draftCount > 1 ? "Drafts (" + draftCount + ")" : "Draft" }}</span
         >
-        <span v-if="count > 1" class="thread-count">{{ count }}</span>
+        <span v-if="rowCount > 1" class="thread-count">{{ rowCount }}</span>
       </span>
       <span class="summary"
         ><span v-for="label in labels" :key="label.id" class="row-label" :style="labelStyle(label)">{{ label.name }}</span><span class="subject">{{ subject || "(no subject)" }}</span
@@ -68,6 +70,7 @@
 </template>
 <script setup>
 import { Icon } from "@iconify/vue";
+import {senderLine} from "./senders";
 import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
 import {computed,ref} from "vue";
@@ -82,6 +85,7 @@ const props=defineProps({
   showImportance: Boolean,
   importanceReason: String,
   participants: String,
+  senders: Array,
   labels: Array,
   subject: String,
   preview: String,
@@ -98,6 +102,8 @@ const props=defineProps({
   hideStar: Boolean,
   trash: Boolean,
 });
+const people = computed(() => senderLine(props.senders));
+const rowCount = computed(() => (props.count || 0) + (props.draftCount || 0));
 const showChips=computed(()=>ui.density==='default' && props.attachments?.length>0);
 function fileColor(file){
   if(file.mimeType==='application/pdf' || /\.pdf$/i.test(file.filename))return 'pdf';
@@ -123,7 +129,7 @@ defineEmits(["select", "star", "open", "importance"]);
 }
 .unread {
   --row-fill: var(--mail-surface);
-  font-weight: 600;
+  font-weight: 700;
 }
 .selected {
   --row-fill: var(--mail-selected);
@@ -172,6 +178,9 @@ defineEmits(["select", "star", "open", "importance"]);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sender-names,.draft-comma { font-weight: 400; }
+.sender-names .unread-sender { font-weight: 700; }
+.draft-comma { color: var(--el-text-color-primary); }
 .thread-count {
   font-size: 12px;
   font-weight: 400;

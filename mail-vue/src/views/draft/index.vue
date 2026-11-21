@@ -65,7 +65,8 @@
         draft-only can-star-draft
         :starred="draft.starred" :busy="busy" @star="toggleStar(draft)"
         :draft-count="1"
-        :participants="draft.recipients"
+        :senders="threadSummary(draft)?.senders"
+        :count="threadSummary(draft)?.messageCount"
         :subject="draft.subject"
         :labels="labels.items.filter(label=>draft.labelIds?.includes(label.id) && label.messages!=='hide')"
         :attachment-count="draft.hasFiles ? 1 : 0"
@@ -139,6 +140,9 @@ watch(page, (rows) => {
     rows.some((d) => d.draftId === id),
   );
 });
+function threadSummary(draft) {
+  return draft.reply && !draft.trashSource ? drafts.threadSummaries[drafts.threads[draft.emailId]] : null;
+}
 function toggle(id) {
   selected.value = selected.value.includes(id)
     ? selected.value.filter((old) => old !== id)

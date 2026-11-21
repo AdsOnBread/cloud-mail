@@ -62,7 +62,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('Web conversations', () => {
   it('keeps read state per sender and shares visible thread counts with saved replies',async()=>{
     const first=await insert({message_id:'<first@external.com>',name:'Taylor Ray',unread:1});
-    const reply={in_reply_to:first.message_id,refs:first.message_id};
+    const reply={in_reply_to:first.message_id};
     const second=await insert({...reply,message_id:'<second@external.com>',send_email:'other@external.com',name:'Casey Blue',unread:0});
     await insert({...reply,message_id:'<third@external.com>',send_email:'OTHER@external.com',name:'Casey Blue',unread:1});
     await insert({...reply,name:'Deleted author',send_email:'hidden@external.com',trashed_at:'2026-11-19'});
