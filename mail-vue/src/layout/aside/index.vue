@@ -1,14 +1,14 @@
 <template>
   <el-scrollbar class="scroll">
-    <div>
+    <div @keydown.up="stepFolder($event,-1)" @keydown.down="stepFolder($event,1)">
       <router-link class="mobile-brand" to="/inbox"><MailBrand :title="settingStore.settings.title"/></router-link>
       <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <nav aria-label="Mail folders">
-        <router-link class="folder-row" :to="{name:'email'}" aria-label="Inbox" data-tip="Inbox"
+        <router-link class="folder-row" :to="{name:'email'}" aria-label="Inbox" data-tip="Inbox" :aria-description="inboxUnread ? inboxUnread+' unread' : undefined"
                       @dragenter="hoverDestination($event,0)" @dragover="hoverDestination($event,0)" @dragleave="leaveDestination($event,0)" @drop="dropConversations($event,0)"
                       :class="{'choose-item':activeFolder==='email','drop-destination':dropTarget===0}">
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread + drafts.scheduledInboxUnread" class="menu-name draft-count">{{ unread + drafts.scheduledInboxUnread }}</span>
+          <span class="menu-name folder-name">{{$t('inbox')}}</span><span v-if="inboxUnread" class="menu-name draft-count">{{ inboxUnread }}</span>
         </router-link>
         <template v-for="hidden in [false,true]" :key="String(hidden)">
           <button v-if="hidden" ref="moreFolders" class="folder-row" type="button" :aria-expanded="more" :aria-label="more ? 'Fewer folders' : 'More folders'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
@@ -18,7 +18,7 @@
             <div v-for="folder in folderGroups[Number(hidden)]" :key="folder.id" class="folder-line"
               :data-folder="folder.id" :class="{'choose-item': activeFolder===folder.id}">
               <router-link :to="{name:folder.id}" class="folder-row" :aria-label="folder.name" :data-tip="folder.name"
-                :aria-description="folderCounts[folder.id] ? String(folderCounts[folder.id]) : undefined"
+                :aria-description="folderCounts[folder.id] ? folderCounts[folder.id]+' '+(folder.id==='draft' ? 'drafts' : folder.id==='scheduled' ? 'scheduled' : 'unread') : undefined"
                 @keydown.right="focusCategoryOptions">
                 <Icon :icon="'material-symbols:'+folder.icon" width="20" height="20"/>
                 <span class="menu-name folder-name">{{ folder.translation ? $t(folder.translation) : folder.name }}</span>
@@ -153,6 +153,14 @@ const activeFolder = computed(() => {
 const labels = useMailLabels(), user=useUserStore();
 const more=ref(false), moreFolders=ref([]);
 const categoryIds=new Set(categoryFolders.map(folder=>folder.id));
+function stepFolder(event,direction) {
+  if(event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey)return;
+  const selector='.compose-button,.folder-row,.label-heading button,.label-row a,.more-labels';
+  if(!event.target.matches(selector))return;
+  const rows=Array.from(event.currentTarget.querySelectorAll(selector)).filter(el=>el.getClientRects().length);
+  const next=rows[rows.indexOf(event.target)+direction];
+  if(next){event.preventDefault();next.focus();}
+}
 function focusCategoryOptions(event) {
   const button=event.currentTarget.parentElement.querySelector('.category-trigger');
   if(button){event.preventDefault();button.focus();}
@@ -160,7 +168,11 @@ function focusCategoryOptions(event) {
 async function restoreCategoryFocus(id) {
   await nextTick();
   const row=document.querySelector(`.mail-sidebar [data-folder="${id}"]`);
-  (row?.querySelector('.category-trigger') || moreFolders.value[0])?.focus();
+  if(!row){moreFolders.value[0]?.focus();return;}
+  // Focus the visible link first so that a compact rail expands before its actions receive focus.
+  row.querySelector('.folder-row')?.focus();
+  await nextTick();
+  row.querySelector('.category-trigger')?.focus();
 }
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
 watch([()=>user.user.email,()=>user.authenticatedToken],([email,token])=>{
@@ -171,6 +183,7 @@ watch([()=>user.user.email,()=>user.authenticatedToken],([email,token])=>{
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();
 const unread=ref(0);
+const inboxUnread=computed(()=>unread.value+drafts.scheduledInboxUnread);
 const labelUnread=ref({}), countsReady=ref(false), showHiddenLabels=ref(false);
 const isHiddenLabel=label=>label.sidebar==='hide' || (label.sidebar==='unread' && !labelUnread.value[label.id]);
 const hiddenLabels=computed(()=>labels.items.filter(isHiddenLabel));
@@ -338,7 +351,7 @@ const uiStore = useUiStore();
 </script>
 
 <style scoped>
-.folder-name { margin-left:16px; }
+.folder-name { margin-left:20px; }
 .label-heading { height:48px; margin:10px 16px 0 24px; display:flex; align-items:center; justify-content:space-between; }
 .label-heading span { font-size:16px; font-weight:500; }
 .more-labels { display:flex; align-items:center; height:32px; gap:16px; padding:0 12px 0 24px; width:calc(100% - 8px); color:inherit; border-radius:0 16px 16px 0; font:inherit; cursor:pointer; }
@@ -376,21 +389,22 @@ nav { width:100%; }
 .folder-line:hover,.folder-line:focus-within { background:var(--mail-hover); }
 .folder-line .folder-row { width:100%; margin:0; }
 .folder-line:has(.category-trigger):is(:hover,:focus-within,:has([aria-expanded=true])) .draft-count { visibility:hidden; }
-.folder-line:has(.category-trigger) .folder-row { padding-inline-end:32px; }
-.folder-row { box-sizing:border-box; display:flex; align-items:center; text-align:start; text-decoration:none; cursor:pointer; font:inherit; width:calc(100% - 16px); height:32px; line-height:32px; margin:0 16px 0 0; padding:0 24px; border-radius:0 18px 18px 0; color:var(--el-text-color-primary); }
+
+.folder-row { box-sizing:border-box; display:flex; align-items:center; text-align:start; text-decoration:none; cursor:pointer; font:inherit; width:calc(100% - 16px); height:32px; line-height:32px; margin:0 16px 0 0; padding:0 12px 0 24px; border-radius:0 16px 16px 0; color:var(--el-text-color-primary); }
 .folder-row:focus-visible { outline:2px solid currentColor; outline-offset:-2px; }
 .folder-row svg { flex-shrink:0; }
-.folder-row:hover:not(.folder-line .folder-row) { background:var(--mail-hover); }
+nav > .folder-row:hover { background:var(--mail-hover); }
 .choose-item { background:var(--mail-selected) !important; font-weight:600; }
 .menu-name { font-size:14px; }
-.draft-count { margin-left:auto; font-size:12px; font-weight:600; }
+.folder-row:has(.draft-count),.folder-line.choose-item .folder-row,.folder-row.choose-item { font-weight:700; }
+.draft-count { margin-left:auto; font-size:12px; font-weight:700; }
 .manage-title { padding:24px 24px 8px; font-size:12px; color:var(--regular-text-color); }
 :global(.mail-layout.nav-compact .mail-sidebar .menu-name), :global(.mail-layout.nav-compact .mail-sidebar .manage-title), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button span), :global(.mail-layout.nav-compact .mail-sidebar .mailbox-chevron), :global(.mail-layout.nav-compact .mail-sidebar .compose-button span) { display:none; }
 :global(.mail-layout.nav-compact .mail-sidebar .folder-row) { padding:0 24px; width:64px; margin-right:0; height:40px; border-radius:0 20px 20px 0; }
 :global(.mail-layout.nav-compact .mail-sidebar .folder-line) { margin-right:8px; border-radius:0 20px 20px 0; }
 :global(.mail-layout.nav-compact .mail-sidebar .compose-button) { width:48px; padding:0 12px; margin-left:12px; height:48px; }
 :global(.mail-layout.nav-compact .mail-sidebar .mailbox-button) { padding:0 12px; }
-@media (hover:none) { .folder-line:has(.category-trigger) .draft-count { margin-inline-end:8px; visibility:visible; } }
+@media (hover:none) { .folder-line:has(.category-trigger) .folder-row { padding-inline-end:36px; } }
 @media (max-width:767px) { .folder-row { height:40px; } }
 .mobile-brand{display:none}
 @media(max-width:767px){.mobile-brand{display:flex;align-items:center;padding:14px 20px;text-decoration:none}}
