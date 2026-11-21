@@ -84,7 +84,7 @@
           <button
             type="button"
             aria-label="Close and save draft"
-            data-tip="Close"
+            data-tip="Save &amp; close"
             :disabled="sending || attaching"
             @click="close"
           >
@@ -190,7 +190,7 @@
             ref="editor"
             @focus="focusBody"
             @rich-command="useRichCommand"
-            @compose-keydown="addressShortcut"
+            @compose-keydown="composeShortcut($event,true)"
             @file-drag="dragFiles($event, true)" @file-leave="dragHint = ''"
             @file-drop="dropFiles($event, true)" @file-paste="pasteFiles"
             @change="change"
@@ -237,6 +237,8 @@
             type="primary"
             round
             :loading="sending || attaching"
+            :data-tip="shortcutHint('Send','Enter')"
+            :aria-keyshortcuts="primaryKey+'+Enter'"
             @click="sendEmail()"
             >{{ sending ? "Sending…" : "Send" }}</el-button
           >
@@ -265,7 +267,7 @@
           >
             <Icon icon="material-symbols:attach-file" width="22" />
           </button>
-          <button v-if="!form.plainText" type="button" class="compose-tool" data-compose-link data-tip="Insert link (⌘/Ctrl+K)" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
+          <button v-if="!form.plainText" type="button" class="compose-tool" data-compose-link :data-tip="shortcutHint('Insert link','K')" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
             <Icon icon="material-symbols:link" width="20" />
           </button>
           <ComposeEmoji ref="emojiPicker" :editor="editor" :owner="userStore.user.email"
@@ -301,7 +303,8 @@
           <button
             type="button"
             class="compose-tool"
-            data-tip="Discard draft"
+            :data-tip="shortcutHint('Discard draft','D',true)"
+            :aria-keyshortcuts="primaryKey+'+Shift+D'"
             aria-label="Discard draft"
             :disabled="sending || attaching"
             @click="discard"
@@ -410,7 +413,7 @@ import {
 } from "@/utils/recipients.js";
 import db from "@/db/db.js";
 import dayjs from "dayjs";
-import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 const props = defineProps({ inline: Boolean });
 const emit = defineEmits(["sent", "closed"]);
@@ -594,21 +597,42 @@ function focusRecipients(field) {
   const input = {receiveEmail: toField, cc: ccField, bcc: bccField}[field];
   nextTick(() => input?.value?.focus());
 }
-function copyShortcutHint(label) {
-  const keys = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘⇧" : "Ctrl+Shift+";
-  return "Add " + label + " recipients (" + keys + label[0].toUpperCase() + ")";
+const appleKeys=/Mac|iPhone|iPad/.test(navigator.platform);
+const primaryKey=appleKeys ? 'Meta' : 'Control';
+function shortcutHint(label,key,shift=false) {
+  const modifiers=appleKeys ? '⌘'+(shift?'⇧':'') : 'Ctrl+'+(shift?'Shift+':'');
+  return label+' ('+modifiers+key+')';
 }
-function addressShortcut(event) {
-  if (event.defaultPrevented || event.isComposing || event.altKey || !event.shiftKey ||
-      !(event.metaKey || event.ctrlKey) || sending.value || preparing.value || attaching.value ||
-      showContacts.value || managingSignatures.value || scheduling.value) return;
+function copyShortcutHint(label) {
+  return shortcutHint('Add '+label+' recipients',label[0].toUpperCase(),true);
+}
+function composeShortcut(event,body=false) {
+  if (event.defaultPrevented || event.isComposing || event.altKey || !(event.metaKey || event.ctrlKey) ||
+      !show.value || minimized.value || sending.value || preparing.value || attaching.value ||
+      showContacts.value || managingSignatures.value || scheduling.value || photosOpen.value || labelStore.edit) return;
+  const key=event.key?.toLowerCase();
+  const send=key==='enter' && !event.shiftKey, discardDraft=key==='d' && event.shiftKey;
+  if (send || discardDraft) {
+    // Address fields and the editor share this action. Inputs in nested link,
+    // photo and formatting dialogs keep their own Enter and Escape behavior.
+    if (!(body || event.target.matches?.('.subject-input,.recipient-entry input')) ||
+        (appleKeys ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!event.repeat) {
+      if (send) sendEmail();
+      else discard();
+    }
+    return;
+  }
+  if (!event.shiftKey) return;
   if (event.code === "Digit2" || event.key === "@") {
     event.preventDefault();
     event.stopImmediatePropagation();
     emojiPicker.value?.open();
     return;
   }
-  const field = {c: "cc", b: "bcc"}[event.key?.toLowerCase()];
+  const field = {c: "cc", b: "bcc"}[key];
   if (!field) return;
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -1204,11 +1228,8 @@ async function sendEmail(sendAt=null) {
       ...new Set([...recent, ...writerStore.sendRecipientRecord]),
     ].slice(0, 500);
     userStore.refreshUserInfo();
-    ElNotification.success({
-      title: "Message sent",
-      message: preservedNotice || form.subject,
-      position: "bottom-right",
-    });
+    feedback.show(preservedNotice || "Message sent");
+    if (sent[0]?.emailId) feedback.notice.sentEmailId=sent[0].emailId;
     show.value = false;
     resetForm();
     emit("sent", sent);
@@ -1275,7 +1296,7 @@ function keydown(event) {
   if (labelStore.edit || photosOpen.value || event.target.closest?.(".photo-picker")) return;
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".label-dialog,.recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
-  if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
+  if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) composeShortcut(event);
   if (
     event.key === "Tab" &&
     modal.value &&

@@ -38,6 +38,7 @@ function commit() {
 }
 function remove(index) { emit('update:modelValue', props.modelValue.filter((_, i) => i !== index)); }
 function keydown(event) {
+  if (event.isComposing || (event.key==='Enter' && (event.metaKey || event.ctrlKey))) return;
   if (['Enter', ',', ';'].includes(event.key)) { event.preventDefault(); commit(); }
   if (event.key === 'Tab') commit();
   if (event.key === 'Backspace' && !pending.value) remove(props.modelValue.length - 1);

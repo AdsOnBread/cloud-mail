@@ -3,6 +3,7 @@
     <div v-if="feedback.notice" class="mail-feedback" @mouseenter="pause" @mouseleave="schedule" @focusin="pause" @focusout="schedule">
       <span role="status">{{ feedback.notice.message }}</span>
       <button v-if="feedback.notice.recovery || feedback.notice.undoFiling || feedback.notice.emailIds.length" :disabled="feedback.notice.busy" @click="feedback.undo()">Undo</button>
+      <RouterLink v-if="feedback.notice.sentEmailId" :to="{path:'/mail',query:{emailId:feedback.notice.sentEmailId,folder:'sent'}}" @click="feedback.dismiss()">View message</RouterLink>
       <button v-if="feedback.notice.retry" :disabled="feedback.notice.busy" @click="feedback.notice.retry()">Retry</button>
       <button class="dismiss" aria-label="Dismiss notification" @click="feedback.dismiss()"><Icon icon="material-symbols:close" width="18" /></button>
     </div>
@@ -31,8 +32,8 @@ onBeforeUnmount(() => { window.removeEventListener('online',retryPendingTrash); 
 </script>
 <style scoped>
 .mail-feedback { position:fixed; z-index:1500; bottom:24px; left:24px; max-width:calc(100vw - 48px); min-height:48px; padding:8px 12px 8px 20px; border-radius:6px; display:flex; align-items:center; gap:16px; background:#323232; color:#fff; box-shadow:0 2px 6px #0003; font-size:14px; }
-button { color:#a8c7fa; padding:6px; font-weight:600; border-radius:4px; cursor:pointer; }
-button:hover { background:#ffffff14; }
+button,a { color:#a8c7fa;text-decoration:none; padding:6px; font-weight:600; border-radius:4px; cursor:pointer; }
+button:hover,a:hover { background:#ffffff14; }
 .dismiss { color:#e3e3e3; display:grid; place-items:center; }
 .mail-feedback-enter-active,.mail-feedback-leave-active { transition:opacity .14s,transform .14s; }
 .mail-feedback-enter-from,.mail-feedback-leave-to { opacity:0; transform:translateY(5px); }
