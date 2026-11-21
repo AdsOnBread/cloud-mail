@@ -9,7 +9,7 @@ export async function withLabelMove(db,userId,token,labelId,request,apply) {
   async function replay() {
     const row=await db.prepare(`SELECT c.label_id,m.intent,m.result,u.state AS undo_state FROM mailbox_label_creations c
       LEFT JOIN mailbox_label_moves m ON m.user_id=c.user_id AND m.token=c.token
-      LEFT JOIN conversation_move_undo u ON u.user_id=c.user_id AND u.token=json_extract(m.result,'$.undoToken')
+      LEFT JOIN conversation_move_undo u ON u.user_id=c.user_id AND u.token=json_extract(m.result,'$.undoToken') AND u.expires>unixepoch()
       WHERE c.user_id=? AND c.token=?`).bind(userId,token).first();
     if (!row || row.label_id!==labelId || (row.intent && row.intent!==intent)) throw new BizError('This request is for a different move.',409);
     if (!row.result) return null;

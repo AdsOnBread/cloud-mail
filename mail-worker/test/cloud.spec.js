@@ -476,6 +476,9 @@ describe('Recoverable Trash',()=>{
    const move=await recover();
    expect(move.undoToken).toBeTruthy();
    expect(await recover()).toEqual(move);
+   await env.db.prepare('UPDATE conversation_move_undo SET expires=unixepoch()-1 WHERE token=?').bind(move.undoToken).run();
+   expect(await recover()).toEqual({messageCount:1,alreadyProcessed:true});
+   await env.db.prepare('UPDATE conversation_move_undo SET expires=unixepoch()+3600 WHERE token=?').bind(move.undoToken).run();
    await mail.trash(c(),1,[row.email_id]);
    expect(await recover()).toEqual({messageCount:1,alreadyProcessed:true});
    expect((await mail.detail(c(),1,row.email_id)).trashedAt).toBeTruthy();

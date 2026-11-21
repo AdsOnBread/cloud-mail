@@ -43,7 +43,7 @@ export async function withMoveRetry(db,userId,requestId,intent,apply) {
   if (typeof requestId!=='string' || !/^[a-f\d-]{36}$/i.test(requestId)) throw new BizError('Invalid move request.',400);
   async function replay() {
     const row=await db.prepare(`SELECT r.intent,r.result,u.state FROM conversation_move_requests r
-      LEFT JOIN conversation_move_undo u ON u.token=json_extract(r.result,'$.undoToken') AND u.user_id=r.user_id
+      LEFT JOIN conversation_move_undo u ON u.token=json_extract(r.result,'$.undoToken') AND u.user_id=r.user_id AND u.expires>unixepoch()
       WHERE r.user_id=? AND r.request_id=? AND r.expires>unixepoch()`).bind(userId,requestId).first();
     if (!row) return null;
     if (row.intent!==intent) throw new BizError('This request is for a different move.',409);
