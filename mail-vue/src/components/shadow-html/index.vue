@@ -63,6 +63,7 @@ onUnmounted(() => { generation++;urls.forEach(URL.revokeObjectURL) })
 </script>
 <style scoped>
 .natural-flow {font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere}
+.natural-flow :deep(a) {color:var(--el-color-primary);text-decoration:underline}
 .natural-flow :deep(blockquote) {margin:0 0 0 .8ex;border-inline-start:1px solid var(--light-border-color);padding-inline-start:1ex}
 .plain-paragraphs { font:14px/1.6 Arial,Helvetica,sans-serif; overflow-wrap:anywhere; }
 .plain-paragraphs p { margin:0 0 1em; white-space:pre-line; }

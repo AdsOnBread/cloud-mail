@@ -26,7 +26,9 @@ function htmlParts(html,reply) {
     const gmail=node.classList.contains('gmail_quote');
     const cloud=node.classList.contains('cloudmail-reply-quote');
     if (forwardMarker.test(node.textContent.trim())) continue;
-    if (!(gmail || attribution || (cloud && (reply || isAttribution(node.firstElementChild?.textContent || ''))) ||
+    // The composer also wraps forwarded content in the Cloudmail class, even
+    // when its original subject starts with Re:. Only its reply has an attribution.
+    if (!(gmail || attribution || (cloud && isAttribution(node.firstElementChild?.textContent || '')) ||
       (reply && node.matches('blockquote[type="cite"]')))) continue;
     if (!node.textContent.trim() && !node.querySelector('img,hr,video,audio')) continue;
     quotes.push({start:attribution || node,end:node});
