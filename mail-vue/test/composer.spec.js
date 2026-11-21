@@ -59,7 +59,11 @@ vi.mock("../src/services/cloud-drafts.js",()=>({
   },
   removeLocalDraft:async id=>{await db.value.draft.delete(id);await db.value.att.delete(id);},
   syncCloudDrafts:async()=>{},
-  sendCloudDraft:async id=>emailSend({...state.drafts.get(id),attachments:state.attachments.get(id)?.attachments||[]},()=>{}),
+  sendCloudDraft:async id=>{
+    const messages=await emailSend({...state.drafts.get(id),attachments:state.attachments.get(id)?.attachments||[]},()=>{});
+    state.drafts.delete(id);state.attachments.delete(id);
+    return messages;
+  },
 }));
 vi.mock("../src/request/email.js", () => ({
   emailSend: vi.fn(),

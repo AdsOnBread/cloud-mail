@@ -434,6 +434,49 @@ export async function scheduleCloudDraft(id,sendAt,editToken) {
   if(result.error)throw new Error(result.error);
   return result;
 }
+async function finishSentAttempt(database, id, attemptId, messages) {
+  const snapshot = await database.transaction('r', database.draft, database.att, async () => {
+    const row = await database.draft.get(id);
+    if (row?.sendAttemptId === attemptId) return withFiles(database, row);
+  });
+  if (!snapshot) return messages;
+  // Hash outside IndexedDB; after hashing, recheck the revision inside the write
+  // transaction to also preserve any edits made while reading the receipt.
+  const changed = snapshot.sendFingerprint && await signature(snapshot) !== snapshot.sendFingerprint;
+  const preserved = await database.transaction('rw', database.draft, database.att, async () => {
+    const current = await database.draft.get(id);
+    if (current?.sendAttemptId !== attemptId) return false;
+    const keep = !current.deleted && (changed || !matchesEditor(current, snapshot));
+    if (keep) {
+      const {draftId, cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, uploadIntent, ...copy} = await withFiles(database, current);
+      await writeDraft(database, {...copy, clientId:crypto.randomUUID(), editToken:crypto.randomUUID(),
+        dirty:true, conflictCopy:true, syncState:'conflict'});
+    }
+    await database.draft.delete(id);
+    await database.att.delete(id);
+    return keep;
+  });
+  userDraftStore().refreshList++;
+  if (preserved) {
+    throw Object.assign(new Error('The original message was sent. Your newer edits are preserved in a separate draft.'), {sentMessages:messages});
+  }
+  return messages;
+}
+
+async function updateSendAttempt(database, id, attemptId, state, version, basis) {
+  return database.transaction('rw', database.draft, async () => {
+    const current = await database.draft.get(id);
+    if (!current || current.deleted || current.sendAttemptId !== attemptId) return;
+    const cleared = state === 'failed' || state === 'not_started';
+    const next = {...current,
+      sendAttemptId:cleared ? null : attemptId, sendFingerprint:cleared ? null : current.sendFingerprint,
+      syncState:cleared ? (current.dirty ? 'saving' : 'saved') : state};
+    if (version != null && current.editToken === basis.editToken && current.cloudVersion === basis.cloudVersion) next.cloudVersion = version;
+    await database.draft.put(next);
+    return next;
+  });
+}
+
 export async function sendCloudDraft(id, editToken) {
   const database=db.value,api=sessionAPI(database);
   const before=await database.draft.get(id);
@@ -442,17 +485,12 @@ export async function sendCloudDraft(id, editToken) {
   if(before?.pendingSchedule)throw new Error('Check Scheduled before sending this message.');
   if(before?.sendAttemptId) {
     const attempt=await api.get(`/v1/send-attempts/${before.sendAttemptId}`,{noMsg:true});
-    if(attempt.state==='sent'){
-      if(before.sendFingerprint && await signature(await withFiles(database,before))!==before.sendFingerprint) {
-        const {draftId,cloudDraftId,cloudVersion,sendAttemptId,sendFingerprint,...copy}=await withFiles(database,before);
-        const newRow={...copy,clientId:crypto.randomUUID(),editToken:crypto.randomUUID(),dirty:true,conflictCopy:true,syncState:'conflict'};
-        newRow.draftId=await database.draft.add({...newRow,attachments:undefined});await put(database,newRow,newRow.attachments||[]);
-        await removeLocalDraft(id,{sent:true,database});throw new Error('The original message was sent. Your newer edits are preserved in a separate draft.');
-      }
-      await removeLocalDraft(id,{sent:true,database});return attempt.messages;
+    if (attempt.state === 'sent') return finishSentAttempt(database, id, before.sendAttemptId, attempt.messages);
+    if (attempt.state === 'uncertain') throw new Error(attempt.message || 'Delivery is uncertain. Check Sent before sending another copy.');
+    if (attempt.state === 'failed') {
+      const latest = await updateSendAttempt(database, id, before.sendAttemptId, attempt.state);
+      if (!latest || latest.editToken !== editToken) throw new Error('Reopen the current draft before sending.');
     }
-    if(attempt.state==='uncertain')throw new Error(attempt.message||'Delivery is uncertain. Check Sent before sending another copy.');
-    if(attempt.state==='failed')await database.draft.put({...before,sendAttemptId:null});
   }
   const synced=await syncForDelivery(database,id,editToken);if(synced?.conflicts?.[id])throw new Error('Both versions were saved in Drafts. Review the saved copy before sending.');const row=await database.draft.get(id);
   if(!row||row.editToken!==editToken||row.deleted||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
@@ -472,20 +510,17 @@ export async function sendCloudDraft(id, editToken) {
   } catch (raw) {
     if ([400,403,404,409,413].includes(Number(apiError(raw).code))) {
       const receipt = await api.get('/v1/send-attempts/' + sendAttemptId, {noMsg:true});
-      if (['failed','not_started'].includes(receipt.state)) await database.transaction('rw', database.draft, async () => {
-        const latest = await database.draft.get(id);
-        if (latest?.sendAttemptId === sendAttemptId && !latest.deleted)
-          await database.draft.put({...latest, sendAttemptId:null, sendFingerprint:null, syncState:latest.dirty ? 'saving' : 'saved'});
-      });
+      if (['failed','not_started'].includes(receipt.state))
+        await updateSendAttempt(database, id, sendAttemptId, receipt.state);
     }
     throw raw;
   }
   if(result.state!=='sent') {
     const current=await api.get(`/v1/drafts/${row.cloudDraftId}`,{noMsg:true});
-    await database.draft.put({...row,cloudVersion:current.version,sendAttemptId:result.state==='failed'?null:sendAttemptId,syncState:result.state});
+    await updateSendAttempt(database, id, sendAttemptId, result.state, current.version, row);
     throw new Error(result.message||'Delivery is uncertain. Check Sent before sending another copy.');
   }
-  await removeLocalDraft(id,{sent:true,database});return result.messages;
+  return finishSentAttempt(database,id,sendAttemptId,result.messages);
 }
 export function startDraftSync() {
   const sync=()=>{if(document.visibilityState!=='hidden')syncCloudDrafts().catch(()=>{});};

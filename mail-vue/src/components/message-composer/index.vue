@@ -1191,26 +1191,22 @@ async function sendEmail(sendAt=null) {
       feedback.show(result.pending?"Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.":"Send scheduled for "+new Date(sendAt*1000).toLocaleString()+".");
       show.value=false;resetForm();emit("closed");return;
     }
-    const sent = await sendCloudDraft(saved.draftId,saved.editToken);
+    let preservedNotice = "";
+    const sent = await sendCloudDraft(saved.draftId,saved.editToken).catch(error => {
+      if (!error.sentMessages) throw error;
+      preservedNotice = error.message;
+      return error.sentMessages;
+    });
     sent.forEach((message) => emailStore.sendScroll?.addItem?.(message));
     emailStore.conversationRevision++;
     const recent = recipientFields.flatMap((field) => form[field]);
     writerStore.sendRecipientRecord = [
       ...new Set([...recent, ...writerStore.sendRecipientRecord]),
     ].slice(0, 500);
-    try {
-      await removeSavedDraft();
-    } catch {
-      ElNotification.warning({
-        title: "Message sent",
-        message:
-          "Could not remove the saved draft. Check Sent before sending it again.",
-      });
-    }
     userStore.refreshUserInfo();
     ElNotification.success({
       title: "Message sent",
-      message: form.subject,
+      message: preservedNotice || form.subject,
       position: "bottom-right",
     });
     show.value = false;

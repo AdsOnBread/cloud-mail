@@ -324,6 +324,51 @@ describe('Cloud draft synchronization',()=>{
    const {draftSummary}=await import('../src/utils/draft-summary');
    expect(draftSummary(restored).preview).toMatch(/Scheduling failed/);
  });
+ it.each(['sent','failed'])('preserves an edit made during a delayed %s receipt lookup', async stateName => {
+   const row = await saveLocalDraft(input());
+   await syncCloudDrafts();
+   http.post.mockRejectedValueOnce(new Error('Send response lost'));
+   await expect(sendCloudDraft(row.draftId)).rejects.toThrow('response lost');
+   const pending = await db.value.draft.get(row.draftId);
+   let release;
+   const lookup = new Promise(resolve => {
+     http.get.mockImplementationOnce(async () => {
+       resolve();
+       await new Promise(done => { release = done; });
+       return {state:stateName, messages:[{emailId:100}]};
+     });
+   });
+   const retry = sendCloudDraft(row.draftId,pending.editToken);
+   await lookup;
+   const file = {filename:'notes.txt',content:'YQ==',contentType:'text/plain'};
+   await saveLocalDraft({...pending, subject:'Changed while checking', attachments:[file]});
+   release();
+   await expect(retry).rejects.toThrow(stateName === 'sent' ? 'newer edits are preserved' : 'Reopen');
+   expect(state.rows.size).toBe(1);
+   const [kept] = state.rows.values();
+   expect(kept.subject).toBe('Changed while checking');
+   expect((await db.value.att.get(kept.draftId)).attachments).toEqual([file]);
+   expect(kept.sendAttemptId).toBeFalsy();
+   expect(http.post.mock.calls.filter(([url]) => url.endsWith('/send'))).toHaveLength(1);
+ });
+ it.each(['sent','uncertain'])('retains edits made before a fresh send returns %s', async resultState => {
+   const row = await saveLocalDraft(input());
+   await syncCloudDrafts();
+   let release;
+   const started = new Promise(resolve => {
+     http.post.mockImplementationOnce(async () => {
+       resolve();
+       await new Promise(done => { release = done; });
+       return {state:resultState, messages:[{emailId:100}], message:'Uncertain result'};
+     });
+   });
+   const deliver = sendCloudDraft(row.draftId,row.editToken);
+   await started;
+   await saveLocalDraft({...await db.value.draft.get(row.draftId), subject:'Edited elsewhere',attachments:[]});
+   release();
+   await expect(deliver).rejects.toThrow(resultState === 'sent' ? 'newer edits are preserved' : 'Uncertain result');
+   expect([...state.rows.values()]).toMatchObject([{subject:'Edited elsewhere'}]);
+ });
  it('preserves newer edits when recovering an earlier successful send',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const original=http.post.getMockImplementation();http.post.mockImplementationOnce(async(...args)=>{await original(...args);throw new Error('Reply lost');});
   await expect(sendCloudDraft(row.draftId)).rejects.toThrow('Reply lost');
