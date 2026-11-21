@@ -71,33 +71,59 @@ export function MessageText({ text }) {
 }
 MessageText.props = ['text'];
 
-function linkTextRun(doc, nodes) {
+function linkTextRun(doc, nodes, stylesheet) {
   const links = linksIn(nodes.map(node => node.data).join(''));
-  // Work backwards so offsets for earlier matches still refer to the original nodes.
-  let index = nodes.length - 1;
-  let endOffset = nodes.reduce((length, node) => length + node.length, 0);
+  if (!links.length) return;
+  let index = 0, base = 0;
   function locate(offset, isStart) {
-    while (index > 0) {
-      const base = endOffset - nodes[index].length;
-      if (offset > base || (isStart && offset === base)) break;
-      endOffset = base;
-      index--;
+    while (index < nodes.length - 1) {
+      const next = base + nodes[index].length;
+      if (offset < next || (!isStart && offset === next)) break;
+      base = next;
+      index++;
     }
-    return [nodes[index], offset - endOffset + nodes[index].length];
+    return { node: nodes[index], offset: offset - base };
   }
-  for (const link of links.reverse()) {
-    const end = locate(link.end, false);
-    const start = locate(link.start, true);
-    const range = doc.createRange();
-    range.setStart(...start);
-    range.setEnd(...end);
-    // extractContents can shorten the current node; retain its original base for the next match.
-    const base = endOffset - nodes[index].length;
-    const anchor = doc.createElement('a');
-    anchor.href = link.href;
-    anchor.append(range.extractContents());
-    range.insertNode(anchor);
-    endOffset = base + nodes[index].length;
+  const spans = links.map(link => ({
+    href: link.href, start: locate(link.start, true), end: locate(link.end, false),
+  }));
+  let range;
+  // Work backwards so earlier offsets survive later replacements. Batch all
+  // links in a single text node into one write, even in a long newsletter.
+  for (let i = spans.length - 1; i >= 0; i--) {
+    const { start, end, href } = spans[i];
+    if (start.node !== end.node) {
+      // Sender stylesheets can hide pieces of a visually contiguous address.
+      // Leave this entire ambiguous match as text.
+      if (stylesheet) continue;
+      range ??= doc.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      const anchor = doc.createElement('a');
+      anchor.href = href;
+      anchor.append(range.extractContents());
+      range.insertNode(anchor);
+      continue;
+    }
+    const node = start.node;
+    const last = i;
+    while (i > 0 && spans[i - 1].start.node === node && spans[i - 1].end.node === node) i--;
+    const firstOffset = spans[i].start.offset;
+    const original = node.data;
+    const fragment = doc.createDocumentFragment();
+    let offset = firstOffset;
+    for (let j = i; j <= last; j++) {
+      const span = spans[j];
+      if (offset < span.start.offset) fragment.append(original.slice(offset, span.start.offset));
+      const anchor = doc.createElement('a');
+      anchor.href = span.href;
+      anchor.textContent = original.slice(span.start.offset, span.end.offset);
+      fragment.append(anchor);
+      offset = span.end.offset;
+    }
+    if (offset < original.length) fragment.append(original.slice(offset));
+    node.deleteData(firstOffset, original.length - firstOffset);
+    node.after(fragment);
   }
 }
 
@@ -108,7 +134,7 @@ export function detectDocumentLinks(doc) {
   const stack = [...doc.body.childNodes].reverse();
   let run = [];
   function flush() {
-    if (run.length) linkTextRun(doc, run);
+    if (run.length) linkTextRun(doc, run, stylesheet);
     run = [];
   }
   while (stack.length) {
@@ -121,11 +147,9 @@ export function detectDocumentLinks(doc) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     if (node.matches(literal) || node.hidden || node.style?.display === 'none' ||
         ['hidden', 'collapse'].includes(node.style?.visibility)) { flush(); continue; }
-    if (node.localName === 'wbr' && !stylesheet && !node.hasAttribute('style')) continue;
-    // Detached documents do not resolve sender stylesheets. Keep their element
-    // boundaries so hidden or block content cannot silently change a destination.
+    if (node.localName === 'wbr' && !node.hasAttribute('style')) continue;
     const display = node.style?.display;
-    if (stylesheet || !node.matches(inline) || node.id || (display && !['inline', 'contents'].includes(display))) {
+    if (!node.matches(inline) || node.id || (display && !['inline', 'contents'].includes(display))) {
       flush();
       stack.push(null);
     }

@@ -92,3 +92,13 @@ it('ends mail links at sentence boundaries and retains balanced parentheses', as
   expect(reader.findAll('a').map(link => link.attributes('href'))).toEqual([a, b]);
   reader.unmount();
 });
+
+it('leaves ambiguous styled spans intact instead of linking a truncated path', async () => {
+  const html = '<style>body{font-family:Arial}</style><div>https://example.org/<b>billing</b> or https://example.org/help.</div>';
+  const reader = mount(MessageContent, { props: { html } });
+  await flushPromises();
+  const doc = new DOMParser().parseFromString(reader.get('iframe').attributes('srcdoc'), 'text/html');
+  expect([...doc.querySelectorAll('a')].map(a => a.textContent)).toEqual(['https://example.org/help']);
+  expect(doc.body.textContent).toContain('https://example.org/billing');
+  reader.unmount();
+});
