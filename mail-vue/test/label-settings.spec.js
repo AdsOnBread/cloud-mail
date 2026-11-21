@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {createPinia,setActivePinia} from 'pinia';
 import {useMailLabels} from '../src/store/mail-labels';
 import http from '../src/axios';
-vi.mock('../src/axios',()=>({default:{get:vi.fn(),put:vi.fn(),post:vi.fn()}}));
+vi.mock('../src/axios',()=>({default:{get:vi.fn(),put:vi.fn(),post:vi.fn(),delete:vi.fn()}}));
 beforeEach(()=>{vi.resetAllMocks();setActivePinia(createPinia());localStorage.clear();});
 describe('Label settings session',()=>{
   it('retries a compose label with the same ID and applies it before refreshing the list',async()=>{
@@ -20,6 +20,15 @@ describe('Label settings session',()=>{
     expect(labels.edit).toBeNull();
     finish([{id:7,name:'Project'}]);
     await saving;
+  });
+  it('closes the edit dialog and refreshes the list after removing a label',async()=>{
+    const labels=useMailLabels();
+    localStorage.setItem('token','test-token');labels.bindSession('person@example.com','test-token');
+    labels.items=[{id:4,name:'Unused'}];labels.edit={id:4,remove:true};
+    http.delete.mockResolvedValueOnce({});http.get.mockResolvedValueOnce([]);
+    await labels.remove(4);
+    expect(labels.edit).toBeNull();
+    expect(labels.items).toEqual([]);
   });
   it('requires the authenticated owner before sending and rebinds on a new login to the same account',async()=>{
     const labels=useMailLabels();

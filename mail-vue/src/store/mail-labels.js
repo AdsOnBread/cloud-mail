@@ -148,7 +148,6 @@ export const useMailLabels = defineStore("mail-labels", {
       if (owner !== this.owner) return;
       ++this.request;
       this.items = this.items.filter((item) => item.id !== id);
-      if (creation === this.edit) creation?.onCreated?.(label.id);
       this.edit = null;
       await this.load(owner);
     },
