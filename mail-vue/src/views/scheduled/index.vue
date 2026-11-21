@@ -237,8 +237,9 @@ const router = useRouter(),
   drafts = userDraftStore(),
   feedback = useMailFeedback(),
   search = useMailSearchStore();
-const originFolder = computed(() => ["starred","important"].includes(route.query.from) ? route.query.from : "");
-const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important"}[originFolder.value] || "Scheduled"));
+const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
+const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important"].includes(route.query.from) ? route.query.from : "");
+const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label"}[originFolder.value] || "Scheduled"));
 const scope = computed(() =>
   account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
 );
@@ -257,6 +258,7 @@ const loading = ref(true),
   error = ref("");
 const ordered = computed(() => {
   let matches = rows.value;
+  if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
   if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
   if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
   return latestFirst.value && !originFolder.value ? [...matches].reverse() : matches;
@@ -382,12 +384,12 @@ function retry() {
   else loadDetail();
 }
 function open(row, replace = false) {
-  const location = { name: "scheduled", query: { message: row.draftId, from: originFolder.value || undefined } };
+  const location = { name: "scheduled", query: { message: row.draftId, from: originFolder.value || undefined, labelId:originLabelId.value || undefined } };
   return replace ? router.replace(location) : router.push(location);
 }
 function back() {
   if (originFolder.value) {
-    const path = "/" + originFolder.value;
+    const path = originLabelId.value ? "/label/"+originLabelId.value : "/" + originFolder.value;
     if (window.history.state?.back?.split("?")[0] === path) router.back();
     else router.replace(path);
     return;

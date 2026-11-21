@@ -428,6 +428,31 @@ describe('Attachment retention',()=>{
 });
 
 describe('Scheduled send',()=>{
+ it.each([false,true])('files only the sender copy with surviving owned compose labels (scheduled=%s)',async queued=>{
+   const {schedule,scheduledList,deliverDue}=await import('../src/cloud/scheduled');
+   const label=async(owner,name)=>(await env.db.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id')
+     .bind(owner,name).first()).label_id;
+   const keep=await label(1,'Keep'),removed=await label(1,'Delete later'),foreign=await label(2,'Private');
+   const d=await draft({labelIds:[keep,keep,removed,foreign],mailboxStarred:true});
+   const saved=await drafts.save(c(),1,{version:d.version,subject:'Revised'},d.draftId);
+   expect(saved.labelIds).toEqual([keep,removed,foreign]);
+   expect(saved.mailboxStarred).toBe(1);
+   await env.db.prepare('DELETE FROM mailbox_labels WHERE label_id=?').bind(removed).run();
+   if(queued) {
+     await schedule(c(),1,d.draftId,{version:saved.version,sendAt:Math.floor(Date.now()/1000)+600});
+     expect(await scheduledList(c(),1,1,{labelId:keep})).toHaveLength(1);
+     expect(await scheduledList(c(),1,1,{labelId:foreign})).toHaveLength(0);
+     await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(d.draftId).run();
+     await deliverDue(c());
+   } else {
+     const request={version:saved.version,idempotencyKey:'compose-label-filing'};
+     expect((await send(c(),1,request,{draftId:d.draftId})).state).toBe('sent');
+     expect((await send(c(),1,request,{draftId:d.draftId})).state).toBe('sent');
+   }
+   const filed=await env.db.prepare('SELECT m.label_id,e.user_id,e.type FROM mailbox_label_members m JOIN email e USING(email_id)').all();
+   expect(filed.results).toEqual([{label_id:keep,user_id:1,type:1}]);
+   expect((await env.db.prepare('SELECT user_id FROM star').all()).results).toEqual([{user_id:1}]);
+ });
  it('delivers an empty blind-copy-only scheduled draft and keeps its envelope private',async()=>{
    const {schedule,deliverDue}=await import('../src/cloud/scheduled');
    const d=await draft({subject:'',text:'',content:'',receiveEmail:[],bcc:['person@example.com'],plainText:true});

@@ -29,6 +29,7 @@ export function draftSummary(draft) {
     emailId: Number(draft.emailId),
     hasFiles: Boolean(draft.hasFiles),
     accountId: draft.accountId,
+    sender: draft.sendEmail || draft.ownerEmail || "",
     labelIds: draft.labelIds || [],
     starred: Boolean(draft.mailboxStarred),
     reply: draft.sendType === "reply",

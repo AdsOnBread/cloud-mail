@@ -157,11 +157,21 @@
     <p v-if="error" role="alert" class="list-status">
       {{ error }} <button @click="refresh">Retry</button>
     </p>
+    <details v-if="filedDrafts.length" class="marked-scheduled" open>
+      <summary>Drafts ({{ filedDrafts.length }})</summary>
+      <div class="scheduled-links">
+        <button v-for="draft in filedDrafts" :key="draft.draftId" type="button"
+          :aria-label="'Open draft: '+(draft.subject || '(no subject)')" @click="openFiledDraft(draft)">
+          <span class="draft-marker">Draft</span><span>{{ draft.subject || '(no subject)' }}</span>
+          <time :title="formatDetailDate(draft.lastDate)">{{ mailboxDate(draft.lastDate) }}</time>
+        </button>
+      </div>
+    </details>
     <details v-if="scheduledMatches.length" class="marked-scheduled" open>
       <summary>Scheduled ({{ scheduledMatches.length }})</summary>
       <div class="scheduled-links">
         <RouterLink v-for="message in scheduledMatches" :key="message.draftId"
-          :to="{name:'scheduled', query:{message:message.draftId,from:folder}}">
+          :to="{name:'scheduled', query:{message:message.draftId,from:folder,labelId:folder==='label' ? labelId : undefined}}">
           <Icon icon="material-symbols:schedule-send-outline" width="18" />
           <span>{{ message.subject || '(no subject)' }}</span>
           <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
@@ -295,7 +305,7 @@
       <p v-if="loading" role="status" class="list-status">
         Loading conversations…
       </p>
-      <p v-else-if="!rows.length && !scheduledMatches.length && !scheduledError && !error" class="list-status">
+      <p v-else-if="!rows.length && !filedDrafts.length && !scheduledMatches.length && !scheduledError && !error" class="list-status">
         {{
           search.query
             ? "No conversations match your search."
@@ -462,6 +472,24 @@ function params() {
   };
 }
 const history = ref([]);
+const filedDrafts = computed(() => {
+  if (offset.value || !["label","starred"].includes(props.folder) || search.filters.isUnread) return [];
+  const f=search.filters;
+  const includes=(value,term)=>!term || (value || "").toLowerCase().includes(term.toLowerCase());
+  return drafts.items.filter(draft => {
+    if (props.folder==="starred" ? !draft.starred : !draft.labelIds?.includes(props.labelId)) return false;
+    if (props.folder==="label" && !account.currentAccount.allReceive && draft.accountId!==account.currentAccountId) return false;
+    if (f.hasAttachment && !draft.hasFiles || f.days && draft.lastDate<Date.now()-Number(f.days)*86400000) return false;
+    return includes(draft.sender,f.from) && includes(draft.recipients,f.to) && includes(draft.subject,f.subject) &&
+      [draft.subject,draft.preview,draft.sender,draft.recipients].some(text=>includes(text,search.query));
+  });
+});
+async function openFiledDraft(draft) {
+  try {
+    const {openSavedDraft}=await import("@/services/draft-list");
+    await openSavedDraft(draft.draftId, router, props.folder, props.labelId);
+  } catch (e) {error.value=e.message || "Could not open this draft.";}
+}
 const pageCursor = ref(null);
 const offset = ref(0);
 const selectedUnread = computed(() =>
@@ -570,11 +598,11 @@ async function load(
   loading.value = true;
   error.value = "";
   try {
-    const includeScheduled = !target.cursor && ["starred","important"].includes(props.folder)
+    const includeScheduled = !target.cursor && ["starred","important","label"].includes(props.folder)
       && !search.filters.isUnread && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
       conversationList({ ...params(), cursor: target.cursor }),
-      includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder,
+      includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
         accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
         noMsg:true}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
     ]);
@@ -779,9 +807,11 @@ defineExpose({ refresh });
 .marked-scheduled { flex:none; font-size:14px; border-bottom:1px solid var(--el-border-color-lighter); }
 .marked-scheduled summary { cursor:pointer; padding:8px 16px; font-weight:500; }
 .scheduled-links { max-height:min(30vh,240px); overflow:auto; }
-.scheduled-links a { display:flex; gap:12px; align-items:center; padding:8px 16px; color:inherit; text-decoration:none; }
-.scheduled-links a:hover,.scheduled-links a:focus-visible,.marked-scheduled summary:hover { background:var(--mail-hover); }
-.scheduled-links a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.scheduled-links button,.scheduled-links a { display:flex; gap:12px; align-items:center; padding:8px 16px; color:inherit; text-decoration:none; }
+.scheduled-links button:hover,.scheduled-links button:focus-visible,.scheduled-links a:hover,.scheduled-links a:focus-visible,.marked-scheduled summary:hover { background:var(--mail-hover); }
+.scheduled-links button {width:100%;text-align:left;cursor:pointer;font:inherit}
+.draft-marker {color:var(--mail-draft,#b3261e)}
+.scheduled-links button span,.scheduled-links a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .scheduled-links time { margin-left:auto; flex:none; font-size:12px; }
 .conversation-scroll {
   flex: 1;

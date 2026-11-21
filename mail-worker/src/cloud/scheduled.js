@@ -57,6 +57,10 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     conditions.push('d.account_id=?');
     args.push(positive(accountId));
   }
+  if (filters.labelId) {
+    conditions.push("EXISTS (SELECT 1 FROM mailbox_labels l JOIN json_each(d.data,'$.labelIds') j ON j.value=l.label_id WHERE l.user_id=d.user_id AND l.label_id=?)");
+    args.push(positive(filters.labelId));
+  }
   const from = 'FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0';
   const starred = "COALESCE(json_extract(d.data,'$.mailboxStarred'),0)";
   const important = "json_extract(d.data,'$.mailboxImportant')";
@@ -99,6 +103,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     ${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
+    json_extract(d.data,'$.labelIds') AS labelIds,
     json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
     ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
@@ -106,7 +111,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   const term=filters.q?.trim().slice(0,200).toLowerCase();
   const missingText=[];
   const messages=results.map(({html_only,...row})=>{
-    const message={...row,attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')};
+    const message={...row,labelIds:JSON.parse(row.labelIds || '[]'),attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')};
     if(term && html_only && ![message.senderName,message.senderEmail,message.subject,...message.recipients,...message.cc,...message.bcc]
       .some(value=>value?.toLowerCase().includes(term)))missingText.push(message);
     return message;
