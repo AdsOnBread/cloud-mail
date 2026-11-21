@@ -1,3 +1,4 @@
+import {readGeneralSettings} from './general-settings';
 import BizError from '../error/biz-error';
 import emailService from '../service/email-service';
 import emailUtils from '../utils/email-utils';
@@ -72,8 +73,9 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
     if(input.version!==draft.version||draft.state!==sourceState)throw conflict(draft);
     if (!undoSeconds) payload=await drafts.payload(c,userId,draft);
   } else payload=await prepare(c,userId,input,mode);
-  const hold = undoSeconds ? {state:'holding', attemptId:key, draftId:draft.draftId,
-    version:draft.version + 1, undoUntil:Date.now() + undoSeconds * 1000} : null;
+  const holdSeconds = undoSeconds && ((await readGeneralSettings(c.env.db, userId)).undoSeconds ?? undoSeconds);
+  const hold = holdSeconds ? {state:'holding', attemptId:key, draftId:draft.draftId,
+    version:draft.version + 1, undoUntil:Date.now() + holdSeconds * 1000} : null;
   // Keep the durable receipt and the exact draft revision in the same transaction.
   const statements=[c.env.db.prepare(`INSERT OR IGNORE INTO send_attempts(user_id,idempotency_key,request_hash,draft_id,state,result)
     SELECT ?,?,?,?,?,? ${draft?"WHERE EXISTS(SELECT 1 FROM cloud_drafts WHERE user_id=? AND draft_id=? AND version=? AND state=?)":''}`)

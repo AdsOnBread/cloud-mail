@@ -1,11 +1,13 @@
+import {readGeneralSettings} from '../cloud/general-settings';
 import app from '../hono/hono';
 import userService from '../service/user-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 
 app.get('/my/loginUserInfo', async (c) => {
-	const user = await userService.loginUserInfo(c, userContext.getUserId(c));
-	return c.json(result.ok(user));
+	const userId = userContext.getUserId(c);
+	const [user, generalSettings] = await Promise.all([userService.loginUserInfo(c, userId), readGeneralSettings(c.env.db, userId)]);
+	return c.json(result.ok({...user, generalSettings}));
 });
 
 app.put('/my/resetPassword', async (c) => {

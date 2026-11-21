@@ -3,6 +3,9 @@ import {mailWordSchema} from '../service/mail-word-schema.js';
 export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_display (
   user_id INTEGER NOT NULL, folder TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('show','hide','unread')),
   PRIMARY KEY(user_id,folder))`;
+export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_settings (
+  user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1,
+  undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
@@ -27,6 +30,7 @@ export async function migrateCloud(db) {
     ...scheduledTrashSchema.map(sql=>db.prepare(sql)),
     ...mailWordSchema().map(sql=>db.prepare(sql)),
     db.prepare(signatureSchema),
+    db.prepare(generalSettingsSchema),
     db.prepare(systemLabelSchema),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_email_trash ON email(user_id,trashed_at,email_id)'),
     db.prepare(`CREATE TABLE IF NOT EXISTS cloud_drafts (
