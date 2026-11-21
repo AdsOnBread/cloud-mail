@@ -35,7 +35,15 @@ function browse(step) {
   cursor.value=moveMonth(cursor.value,step);
 }
 function focusDay() {
-  nextTick(()=>root.value?.querySelector('[data-date="'+rangeInput(cursor.value)+'"]')?.focus({preventScroll:true}));
+  nextTick(()=>{
+    const calendar=root.value, day=calendar?.querySelector('[data-date="'+rangeInput(cursor.value)+'"]');
+    if (!day) return;
+    day.focus({preventScroll:true});
+    const bounds=calendar.getBoundingClientRect(), focused=day.getBoundingClientRect();
+    const top=bounds.top+calendar.clientTop, bottom=top+calendar.clientHeight;
+    if (focused.top<top) calendar.scrollTop+=focused.top-top;
+    else if (focused.bottom>bottom) calendar.scrollTop+=focused.bottom-bottom;
+  });
 }
 function gridKeys(event) {
   const date=event.target.dataset.date && parseRangeInput(event.target.dataset.date);

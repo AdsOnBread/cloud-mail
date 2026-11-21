@@ -1,6 +1,6 @@
 <template>
   <button ref="trigger" type="button" class="mail-icon" data-search-options aria-label="Show search options"
-    data-tip="Show search options" aria-haspopup="dialog" :aria-expanded="Boolean(opener)"
+    @pointerdown.left.prevent data-tip="Show search options" aria-haspopup="dialog" :aria-expanded="Boolean(opener)"
     @click="opener=opener ? null : trigger">
     <Icon icon="material-symbols:tune" width="22"/>
   </button>

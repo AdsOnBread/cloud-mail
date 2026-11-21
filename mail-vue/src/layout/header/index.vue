@@ -6,10 +6,10 @@
     </div>
     <div v-if="searchable" class="mail-search" role="search">
       <form class="search-entry" @submit.prevent="submitSearch">
-      <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
+      <button type="submit" @pointerdown.left.prevent class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
       <span v-if="searchScope" id="mail-search-scope" class="search-folder">{{ searchScope }}</span>
       <input v-model="searchText" aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @keydown.esc="clearSearch" />
-      <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
+      <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" @pointerdown.left.prevent class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
       <SearchOptions :query-text="searchText" @applied="applyAdvanced" />
     </div>
