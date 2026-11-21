@@ -1,3 +1,4 @@
+import {base64Bytes,fileContentBytes,storedMessageBytes} from "../../../../shared/mail-search-size";
 import { MAX_MESSAGE_BYTES, messageSize } from "../../../../shared/message-size";
 
 export const photoTypes = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/heic", "image/avif"];
@@ -42,7 +43,7 @@ export function planFiles(files, mode, form, content) {
   const filePart = file => ({
     filename: file.name || file.filename,
     type: file.type || file.contentType || file.mimeType || "application/octet-stream",
-    size: file.size || file.content?.byteLength || base64Length(file.content || ""),
+    size:fileContentBytes(file),
   });
   const parts = [...existing, ...attachments].map(filePart);
   const cid = "cid:" + "0".repeat(32);
@@ -50,7 +51,7 @@ export function planFiles(files, mode, form, content) {
     const src = image.getAttribute("src");
     if (src.startsWith("data:")) {
       const type = src.slice(5, src.indexOf(";"));
-      parts.push({filename: "inline-image-" + Date.now() + "." + type.slice(6), type, size: base64Length(src)});
+      parts.push({filename: "inline-image-" + Date.now() + "." + type.slice(6), type, size: base64Bytes(src)});
       image.setAttribute("src", cid);
     } else {
       const file = form.attachments.find(item => item.contentId === src.slice(4));
@@ -78,10 +79,27 @@ export function planFiles(files, mode, form, content) {
 }
 
 
-function base64Length(content) {
-  if (typeof content !== "string") return content.byteLength || 0;
-  const data = content.slice(content.indexOf(",") + 1).replace(/\s/g, "");
-  return Math.max(0, Math.floor(data.length * 3 / 4) - (data.endsWith("==") ? 2 : Number(data.endsWith("="))));
+// Cloud drafts store inline images as CID references and separate binary files.
+export function draftSearchBytes(draft,files=draft.attachments || []) {
+  let fileBytes=files.reduce((sum,file)=>sum+fileContentBytes(file),0);
+  if (!draft.content?.includes('data:image/')) return storedMessageBytes(draft,fileBytes);
+  const template=document.createElement('template');
+  template.innerHTML=draft.content;
+  const sources=new Map();
+  for (const file of files) {
+    if (file.contentId) for (const src of inlineImageSources(file)) sources.set(src,file.contentId);
+  }
+  for (const image of template.content.querySelectorAll('img[src]')) {
+    const src=image.getAttribute('src');
+    if (!src.startsWith('data:image/')) continue;
+    if (!sources.has(src)) {
+      // The cloud assigns one UUID to each distinct embedded image.
+      sources.set(src,'0'.repeat(36));
+      fileBytes+=base64Bytes(src);
+    }
+    image.setAttribute('src','cid:'+sources.get(src));
+  }
+  return storedMessageBytes({...draft,content:template.innerHTML},fileBytes);
 }
 
 export function inlineImageSources(file) {

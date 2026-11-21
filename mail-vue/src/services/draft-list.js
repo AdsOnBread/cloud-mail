@@ -1,3 +1,4 @@
+import {draftSearchBytes} from '@/components/message-composer/files';
 import { watch } from "vue";
 import db from "@/db/db";
 import { userDraftStore } from "@/store/draft";
@@ -37,10 +38,11 @@ export function startDraftList() {
             row.schedulingError,
           ].join("|");
           const cached = cache.get(row.draftId);
-          if (row.hasFiles == null && cached?.revision !== revision) {
+          if ((row.hasFiles == null || row.sizeBytes == null) && cached?.revision !== revision) {
             const files=await database.att.get(row.draftId);
             if(!active)return;
             row.hasFiles=Boolean(files?.attachments?.some(file=>!file.contentId));
+            row.sizeBytes=draftSearchBytes(row,files?.attachments || []);
           }
           next.set(
             row.draftId,

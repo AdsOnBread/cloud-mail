@@ -1,4 +1,4 @@
-import {referencedAttachments} from "../components/message-composer/files";
+import {draftSearchBytes,referencedAttachments} from "../components/message-composer/files";
 import { draftEditBase, draftFilingFingerprint } from '@/utils/recipients';
 import { draftSummary, newestDraft } from '@/utils/draft-summary';
 import { useUserStore } from '@/store/user';
@@ -46,24 +46,26 @@ function savedFingerprint(row) {
   return JSON.stringify([fingerprint({...row, content:template.innerHTML, attachments}),draftFilingFingerprint(row)]);
 }
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
-const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','starEditBase','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','attachments'])delete copy[key];return copy;};
+const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','starEditBase','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','sizeBytes','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
   const {attachments:ignored,...metadata}=row;
   metadata.hasFiles=attachments.some(file=>!file.contentId);
+  metadata.sizeBytes=draftSearchBytes(metadata,attachments);
   await database.transaction('rw',database.draft,database.att,async()=>{await database.draft.put(metadata);await database.att.put({draftId:row.draftId,attachments});});
 }
 // Called inside a draft/attachment transaction so an interrupted save cannot leave a partial draft.
 async function writeDraft(database, row) {
   const {attachments = [], ...metadata} = row;
   metadata.hasFiles=attachments.some(file=>!file.contentId);
+  metadata.sizeBytes=draftSearchBytes(metadata,attachments);
   if (row.draftId) await database.draft.put(metadata);
   else {
     delete metadata.draftId;
     row.draftId = await database.draft.add(metadata);
   }
   await database.att.put({draftId:row.draftId, attachments});
-  return row;
+  return {...row,hasFiles:metadata.hasFiles,sizeBytes:metadata.sizeBytes};
 }
 async function downloadDraft(remote, api) {
   const attachments=[];

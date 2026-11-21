@@ -1,3 +1,4 @@
+import {matchesSize,sizeCriterion,storedMessageBytes} from '../../../shared/mail-search-size';
 import {searchDateBounds,withinDateBounds} from '../../../shared/mail-search-date';
 import {matchesPeople,peopleTerms} from '../../../shared/mail-search-people';
 import { addresses } from "./recipients";
@@ -31,6 +32,7 @@ export function draftSummary(draft) {
     clientId: draft.clientId,
     emailId: Number(draft.emailId),
     hasFiles: Boolean(draft.hasFiles),
+    sizeBytes:draft.sizeBytes ?? storedMessageBytes(draft),
     accountId: draft.accountId,
     sender: draft.sendEmail || "",
     senderName: draft.name || "",
@@ -53,11 +55,11 @@ export const newestDraft = (a, b) =>
 
 export function draftSearchMatcher(query, filters, accounts) {
   if (!query && !Object.keys(filters).length) return ()=>true;
-  const bounds=searchDateBounds(filters);
+  const bounds=searchDateBounds(filters),size=sizeCriterion(filters);
   const from=peopleTerms(filters,'from'), to=peopleTerms(filters,'to');
   const words=(query || '').toLowerCase(), subject=(filters.subject || '').toLowerCase();
   return draft=>{
-    if (filters.isUnread || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
+    if (!matchesSize(draft.sizeBytes,size) || filters.isUnread || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
     const account=accounts.find(mailbox=>mailbox.accountId===draft.accountId);
     const sender={address:draft.sender || account?.email,name:draft.senderName || account?.name};
     return matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) &&

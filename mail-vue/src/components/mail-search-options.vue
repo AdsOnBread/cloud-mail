@@ -17,6 +17,20 @@
           <input v-model="form[key]" :aria-label="names[key]" maxlength="200" type="text"/>
         </label>
         <div class="criterion">
+          <label :for="id+'-size'">Size</label>
+          <div class="size-fields">
+            <select v-model="form.sizeOperator" aria-label="Size operator">
+              <option value="larger">greater than</option><option value="smaller">less than</option>
+            </select>
+            <input :id="id+'-size'" ref="sizeInput" v-model="form.sizeValue" aria-label="Size value" type="text"
+              inputmode="numeric" maxlength="20" autocomplete="off" :aria-invalid="Boolean(sizeError)" @input="sizeError=''"/>
+            <select v-model="form.sizeUnit" aria-label="Size unit" @change="sizeError=''">
+              <option v-for="(_,unit) in sizeUnits" :key="unit" :value="unit">{{ unit }}</option>
+            </select>
+          </div>
+        </div>
+        <span v-if="sizeError" role="alert" class="date-error">{{ sizeError }}</span>
+        <div class="criterion">
           <label :for="id+'-within'">Date within</label>
           <div class="date-fields">
             <select :id="id+'-within'" v-model="form.time" aria-label="Date within">
@@ -70,6 +84,7 @@ import {hasPerm} from '@/perm/perm';
 import {categoryFolders} from '@/utils/inbox-categories';
 import {systemFolders} from './mail-labels/system-folders';
 import {positionMailboxPopup} from './mail-popup-position';
+import {sizeCriterion,sizeUnits} from '../../../shared/mail-search-size';
 import {maxPersonTerm,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {centeredRange,olderChoices,parseRangeInput,rangeInput,recentChoices,timeCaption,withinChoices,withoutTime} from './mail-date-time/search-range';
 
@@ -83,6 +98,7 @@ let stillCurrent=()=>false;
 const dateInput=ref(),dateEntry=ref(),calendar=ref(),calendarOpen=ref(false),calendarStyle=ref({}),today=ref(new Date()),cursor=ref(new Date()),dateError=ref('');
 const parsedDate=computed(()=>parseRangeInput(form.value.date || ''));
 let returning=false;
+const sizeInput=ref(), sizeError=ref('');
 const names={from:'From',to:'To',subject:'Subject',q:'Has the words'};
 const relativeChoices=[...recentChoices,...olderChoices];
 const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'},
@@ -95,6 +111,7 @@ function reset() {
   form.value={from:f.from ? peopleTerms(f,'from') : [''],to:f.to ? peopleTerms(f,'to') : [''],
     subject:f.subject || '',q:props.queryText ?? store.query,
     scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),
+    sizeValue:String(f.sizeValue ?? ''),sizeUnit:f.sizeUnit || 'MB',sizeOperator:f.sizeOperator || 'larger',
     date:f.dateCenter || '',
     time:f.dateWindow ? 'center:'+f.dateWindow : preset ? 'relative:'+preset : customRange.value ? 'custom' : 'center:1d'};
 }
@@ -146,6 +163,16 @@ function apply() {
   if (!stillCurrent()) {dismiss();return;}
   const origin=opener.value;
   const f=form.value, next=f.time==='custom' ? {...store.filters} : withoutTime(store.filters);
+  const sizeValue=f.sizeValue.trim();
+  if (sizeValue) {
+    if (!sizeCriterion({...f,sizeValue})) {
+      sizeError.value='Enter a whole number within the supported range.';
+      sizeInput.value?.focus();return;
+    }
+    Object.assign(next,{sizeOperator:f.sizeOperator,sizeUnit:f.sizeUnit,sizeValue});
+  } else {
+    delete next.sizeOperator;delete next.sizeUnit;delete next.sizeValue;
+  }
   if (f.time.startsWith('center:') && f.date) {
     const bounds=centeredRange(parseRangeInput(f.date),f.time.slice(7));
     if (!bounds) {dateError.value='Enter a valid date, such as 2026/11/21.';dateInput.value?.focus();return;}
@@ -182,7 +209,7 @@ function listen(visible) {
 }
 watch(opener,origin=>{
   listen(Boolean(origin));
-  closeCalendar();dateError.value='';
+  closeCalendar();dateError.value='';sizeError.value='';
   if (!origin) return;
   const session=identity.value, token=localStorage.getItem('token');
   stillCurrent=()=>identity.value===session && token===localStorage.getItem('token');
@@ -204,6 +231,7 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
   border-bottom:1px solid var(--light-border-color);border-radius:0;background:var(--mail-surface);color:var(--el-text-color-primary);font:inherit;padding:0;}
 .options-form :is(input[type=text],input[type=date],select):focus {outline:0;box-shadow:inset 0 -2px var(--el-color-primary);}
 .people-terms {display:grid;gap:4px;}
+.size-fields {display:grid;grid-template-columns:minmax(0,252fr) minmax(0,138fr) minmax(0,114fr);gap:24px;}
 .date-fields {display:grid;grid-template-columns:1fr 1.1fr;gap:24px;min-width:0;}
 .date-entry {position:relative;min-width:0;}
 .date-entry input {padding-right:22px !important;}
@@ -215,5 +243,5 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
 .option-actions {display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-top:18px;flex-shrink:0;}
 .option-actions button {cursor:pointer;height:36px;border-radius:18px;padding:0 18px;color:var(--el-color-primary);font-weight:500;}
 .option-actions button[type=submit] {background:var(--el-color-primary);color:var(--mail-surface);}
-@media(max-width:620px) {.options-form{padding:16px;}.criterion{grid-template-columns:minmax(60px,22%) minmax(0,1fr);gap:10px;}.date-fields{gap:8px;}}
+@media(max-width:620px) {.options-form{padding:16px;}.criterion{grid-template-columns:minmax(60px,22%) minmax(0,1fr);gap:10px;}.date-fields,.size-fields{gap:8px;}}
 </style>
