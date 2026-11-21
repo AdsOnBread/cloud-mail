@@ -550,7 +550,10 @@ describe('Scheduled send',()=>{
    await env.db.prepare("UPDATE cloud_drafts SET created_at='2023-11-06 07:00:00' WHERE draft_id=?").bind(inline.draftId).run();
    const range={dateAfter:Date.parse('2023-11-05T06:00:00Z')/1000, dateBefore:Date.parse('2023-11-06T07:00:00Z')/1000};
    expect((await scheduledList(c(),1,1,range)).map(m=>m.draftId)).toEqual([attached.draftId]);
-   for(const filter of [{to:'FINANCE@'},{q:'Quarterly statement'},{hasAttachment:'1'}]){
+   const {searchPeople}=await import('../src/cloud/mail');
+   expect(await searchPeople(c(),1,{folder:'scheduled',accountId:'1',field:'to',q:'finance'})).toEqual([{email:'finance@example.net',name:'finance@example.net'}]);
+   expect(await searchPeople(c(),1,{folder:'scheduled',accountId:'2',field:'to',q:'finance'})).toEqual([]);
+   for(const filter of [{to:'nobody',toAny:'["FINANCE@"]'},{to:'FINANCE@'},{q:'Quarterly statement'},{hasAttachment:'1'}]){
      const found=await scheduledList(c(),1,1,filter);
      expect(found.map(m=>m.draftId)).toEqual([attached.draftId]);
      expect(found[0]).toMatchObject({attachmentCount:1,attachments:[{filename:'ledger.txt'}]});

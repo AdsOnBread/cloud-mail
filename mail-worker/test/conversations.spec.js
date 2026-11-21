@@ -532,3 +532,21 @@ it('filters Trash by message date across an inclusive local day before paginatio
  expect(result.messages.map(row=>row.emailId).sort()).toEqual([rows[1].email_id,rows[2].email_id].sort());
  expect((await cloudMail.list(context(),1,{folder:'trash',...bounds,limit:1})).messages).toHaveLength(1);
 });
+
+it('suggests scoped senders and recipients and matches either selected person in Trash', async()=>{
+ const a=await insert({name:'Maya Chen',send_email:'maya@example.net',recipient:'[{"name":"Robin","address":"robin@example.net"}]',bcc:'[{"address":"hidden@example.net"}]'});
+ const b=await insert({name:'Lee',send_email:'lee@example.net',type:1,status:2,bcc:'[{"address":"blind@example.net"}]'});
+ const c=await insert({name:'Jess',send_email:'jess@example.net'});
+ await insert({name:'Another owner',send_email:'owner@example.org',user_id:2,account_id:2});
+ await insert({name:'Other alias',send_email:'alias@example.org',account_id:3});
+ await cloudMail.trash(context(),1,[a,b,c].map(row=>row.email_id));
+ const options=(field,q)=>cloudMail.searchPeople(context(),1,{folder:'trash',accountId:'1',field,q});
+ expect(await options('from','example.org')).toEqual([]);
+ expect(await options('from','chen')).toEqual([{name:'Maya Chen',email:'maya@example.net'}]);
+ expect(await options('to','hidden')).toEqual([]);
+ expect(await options('to','blind')).toEqual([{name:'blind@example.net',email:'blind@example.net'}]);
+ expect(await options('to','Robin')).toEqual([{name:'Robin',email:'robin@example.net'}]);
+ const p={folder:'trash',accountId:'1',from:'chen',fromAny:'["LEE@"]'};
+ expect((await cloudMail.list(context(),1,p)).messages.map(r=>r.emailId)).toEqual([b.email_id,a.email_id]);
+ expect((await cloudMail.list(context(),1,{...p,to:'hidden',toAny:'["ROBIN"]'})).messages.map(r=>r.emailId)).toEqual([a.email_id]);
+});
