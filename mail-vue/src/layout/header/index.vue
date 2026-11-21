@@ -7,8 +7,8 @@
     <div v-if="searchable" class="mail-search" role="search">
       <form class="search-entry" @submit.prevent="submitSearch">
       <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
-      <span v-if="['trash','scheduled'].includes(searchFolder)" class="search-folder">in:{{ searchFolder }}</span>
-      <input v-model="searchText" aria-label="Search mail" :placeholder="['trash','scheduled'].includes(searchFolder) ? '' : 'Search mail'" @keydown.esc="clearSearch" />
+      <span v-if="searchScope" class="search-folder">{{ searchScope }}</span>
+      <input v-model="searchText" aria-label="Search mail" :placeholder="searchScope ? '' : 'Search mail'" @keydown.esc="clearSearch" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
       <SearchOptions v-if="route.name!=='draft'" :query-text="searchText" @applied="query=>{searchText=query;returnToResults()}" />
@@ -94,8 +94,8 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
-const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name));
 import {categoryFolders} from "@/utils/inbox-categories";
+const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name) || categoryFolders.some(item=>item.id===route.name));
 const searchFolder = computed(() => {
   if (route.name === "content" && categoryFolders.some(item=>item.id===route.query.folder)) return route.query.folder;
   if (route.name === "scheduled" && route.query.message) {
@@ -103,6 +103,10 @@ const searchFolder = computed(() => {
     if (route.query.from === "important") return "important";
   }
   return route.name;
+});
+const searchScope = computed(() => {
+  if (categoryFolders.some(item=>item.id===searchFolder.value)) return "category:" + searchFolder.value;
+  return ["trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
 });
 watch([searchFolder,()=>route.params.labelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
