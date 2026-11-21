@@ -642,6 +642,9 @@ onBeforeUnmount(() => {
   font-size:14px;
   font-weight:700;
 }
+.awaiting-delivery.selected :deep(.row-date time) {
+  color:var(--scheduled-date-selected,var(--scheduled-date));
+}
 .cancel-action {
   padding: 8px 12px;
   border-radius: 20px;
