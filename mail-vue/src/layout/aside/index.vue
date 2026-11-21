@@ -22,7 +22,7 @@
           <span class="menu-name" style="margin-left: 16px">{{$t('sent')}}</span>
         </el-menu-item>
         <el-menu-item @click="router.push('/scheduled')" index="scheduled" aria-label="Scheduled" data-tip="Scheduled" :class="{'choose-item':activeFolder==='scheduled'}">
-          <Icon icon="material-symbols:schedule-send-outline" width="20"/><span class="menu-name folder-name">Scheduled</span>
+          <Icon icon="material-symbols:schedule-send-outline" width="20"/><span class="menu-name folder-name">Scheduled</span><span v-if="scheduledCount" class="menu-name draft-count">{{ scheduledCount }}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" data-tip="Drafts" v-perm="'email:send'"
                       :class="activeFolder === 'draft' ? 'choose-item' : ''">
@@ -121,6 +121,7 @@
 </template>
 
 <script setup>
+import http from '@/axios';
 import {conversationList,labelUnreadCounts} from '@/request/conversation';
 import { useEmailStore } from '@/store/email';
 import { userDraftStore } from '@/store/draft';
@@ -130,7 +131,7 @@ import { useUiStore } from '@/store/ui.js';
 import { hasPerm } from '@/perm/perm.js';
 import router from "@/router/index.js";
 import { useRoute } from 'vue-router';
-import { computed, ref, watch, nextTick } from 'vue';
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
 import {labelTree,openLabelRows} from "@/components/mail-labels/tree";
 import LabelOptions from "@/components/mail-labels/options.vue";
 import { useMailLabels } from '@/store/mail-labels';
@@ -236,6 +237,25 @@ watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(account
     },100);
     cleanup(()=>{current=false;clearTimeout(timer);});
   },{immediate:true});
+const scheduledCount=ref(0);
+let countRequest=0;
+async function refreshScheduledCount(){
+  const request=++countRequest;
+  if(!user.user.email || !accountStore.currentAccountId)return;
+  try {
+    const result=await http.get('/v1/scheduled',{params:{countOnly:1,accountId:accountStore.currentAccount.allReceive?undefined:accountStore.currentAccountId},noMsg:true});
+    if(request===countRequest)scheduledCount.value=result.count;
+  }catch{/* Retain this mailbox's last successful count while offline. */}
+}
+watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>accountStore.currentAccount.allReceive],()=>{
+  scheduledCount.value=0;
+  refreshScheduledCount();
+},{immediate:true,flush:'sync'});
+watch(()=>drafts.scheduledRevision,refreshScheduledCount);
+const refreshIfVisible=()=>{if(!document.hidden)refreshScheduledCount();};
+const scheduledTimer=setInterval(refreshIfVisible,60000);
+document.addEventListener('visibilitychange',refreshIfVisible);
+onBeforeUnmount(()=>{countRequest++;clearInterval(scheduledTimer);document.removeEventListener('visibilitychange',refreshIfVisible);});
 watch(()=>emailStore.inboxUnread, snapshot=>{
   if(snapshot?.accountId===accountStore.currentAccountId && snapshot.allReceive===Boolean(accountStore.currentAccount.allReceive))
     unread.value=snapshot.count;

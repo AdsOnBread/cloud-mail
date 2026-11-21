@@ -55,7 +55,7 @@
     </button>
     <div v-if="$slots.actions" class="row-actions"><slot name="actions" /></div>
     <div v-if="showChips" class="file-chips" aria-label="Attachments">
-      <button v-for="file in attachments" :key="file.attId" class="file-chip" :aria-label="'Preview '+file.filename" :title="file.filename" @click="previewFile=file">
+      <button v-for="file in attachments" :key="file.attachmentId || file.attId" class="file-chip" :aria-label="'Preview '+file.filename" :title="file.filename" @click="previewFile=file">
         <Icon :class="fileColor(file)" :icon="file.mimeType?.startsWith('image/')?'material-symbols:image-outline':'material-symbols:description-outline'" width="16" />
         <span>{{ file.filename }}</span>
       </button>

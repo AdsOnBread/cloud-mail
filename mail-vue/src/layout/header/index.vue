@@ -7,8 +7,8 @@
     <div v-if="searchable" class="mail-search" role="search">
       <form class="search-entry" @submit.prevent="submitSearch">
       <button type="submit" class="icon-button" aria-label="Search mail" data-tip="Search mail"><Icon icon="material-symbols:search" width="24" /></button>
-      <span v-if="route.name==='trash'" class="search-folder">in:trash</span>
-      <input v-model="searchText" aria-label="Search mail" :placeholder="route.name==='trash' ? '' : 'Search mail'" @keydown.esc="clearSearch" />
+      <span v-if="['trash','scheduled'].includes(route.name)" class="search-folder">in:{{ route.name }}</span>
+      <input v-model="searchText" aria-label="Search mail" :placeholder="['trash','scheduled'].includes(route.name) ? '' : 'Search mail'" @keydown.esc="clearSearch" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
       <SearchOptions v-if="route.name!=='draft'" :query-text="searchText" @applied="query=>{searchText=query;returnToResults()}" />
@@ -94,7 +94,7 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
-const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','all','label'].includes(route.name));
+const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name));
 watch([() => route.name,()=>route.params.labelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
 watch(() => mailSearch.query, query => { searchText.value = query; });
 function submitSearch() {
@@ -102,6 +102,7 @@ function submitSearch() {
   returnToResults();
 }
 function returnToResults() {
+  if (route.name === 'scheduled' && route.query.message) router.replace({name:'scheduled'});
   if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder,query:mailSearch.folder==="email" && route.query.category?{category:route.query.category}:{}});
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }

@@ -32,7 +32,8 @@ const controller=new AbortController();
 async function load(){
   error.value='';
   try{
-    const data=await http.get('/v1/attachments/'+props.file.attId+'/content',{responseType:'blob',signal:controller.signal,noMsg:true});
+    const path=props.file.attachmentId ? '/v1/drafts/attachments/'+encodeURIComponent(props.file.attachmentId) : '/v1/attachments/'+props.file.attId;
+    const data=await http.get(path+'/content',{responseType:'blob',signal:controller.signal,noMsg:true});
     if(controller.signal.aborted)return;
     let mime=data.type.split(';')[0].toLowerCase();
     const name=props.file.filename;

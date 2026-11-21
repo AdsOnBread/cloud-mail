@@ -96,8 +96,20 @@ const api=createHTTPServer(async(req,res)=>{
    return {...e,operation:draft?'upsert':'delete',draft};
  }),cursor:draftEvents.length,hasMore:false};
  else if(path==='/v1/scheduled'){
-   const scope=Number(url.searchParams.get('accountId'));
-   data=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope)).map(d=>({draftId:d.draftId,version:d.version,state:d.state,subject:d.subject,recipients:d.receiveEmail,preview:d.text,sendAt:d.scheduledAt}));
+   const p=Object.fromEntries(url.searchParams),scope=Number(p.accountId);
+   const queued=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope));
+   if(p.countOnly==='1')data={count:queued.length};
+   else data=queued.map(d=>{
+     const sender=accounts.find(a=>a.accountId===d.accountId);
+     const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
+     return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
+       senderEmail:sender.email,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
+   }).filter(row=>{
+     const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
+     const recipients=[...row.recipients,...row.cc,...row.bcc];
+     return matches([row.senderEmail,row.senderName],p.from)&&matches(recipients,p.to)&&matches([row.subject],p.subject)&&
+       matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
+   }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(path.startsWith('/v1/scheduled/')){
    const draft=cloudDrafts.get(Number(path.split('/')[3]));
    if(!draft?.scheduledAt){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Scheduled message not found.'}));return;}

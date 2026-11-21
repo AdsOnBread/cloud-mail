@@ -46,6 +46,9 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     return c.env.db.prepare(`SELECT COUNT(*) count ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
   }
   const fileCount = "(SELECT COUNT(*) FROM draft_files f WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='')";
+  const fileNames = `(SELECT json_group_array(json_object('attachmentId',attachment_id,'filename',filename,'mimeType',mime_type,'size',size))
+    FROM (SELECT attachment_id,filename,mime_type,size FROM draft_files f
+      WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='' ORDER BY f.attachment_id LIMIT 3))`;
   const columns = {
     from: ['a.email', 'a.name', "json_extract(d.data,'$.name')"],
     to: ['receiveEmail', 'cc', 'bcc'].map(key => `json_extract(d.data,'$.${key}')`),
@@ -70,9 +73,9 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.cc') AS cc,json_extract(d.data,'$.bcc') AS bcc,
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
-    ${fileCount} attachmentCount,json_extract(d.data,'$.scheduleError') AS error
+    ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
     ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
-  return results.map(row => ({ ...row, recipients:JSON.parse(row.recipients || '[]'), cc:JSON.parse(row.cc || '[]'), bcc:JSON.parse(row.bcc || '[]') }));
+  return results.map(row => ({ ...row, attachments:JSON.parse(row.attachments), recipients:JSON.parse(row.recipients || '[]'), cc:JSON.parse(row.cc || '[]'), bcc:JSON.parse(row.bcc || '[]') }));
 }
 
 export async function cancel(c, userId, id, version) {

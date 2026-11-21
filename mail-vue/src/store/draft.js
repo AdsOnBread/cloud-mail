@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 export const userDraftStore = defineStore('draft', {
     state: () => ({
         refreshList: 0,
+        scheduledRevision: 0,
         setDraft: {},
         items: [],
         threads: {},

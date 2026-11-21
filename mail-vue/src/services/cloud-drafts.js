@@ -201,6 +201,7 @@ async function reconcileSchedule(database,api,row) {
     }
   });
   userDraftStore().refreshList++;
+  userDraftStore().scheduledRevision++;
   return {pending:false};
 }
 export async function scheduleCloudDraft(id,sendAt) {

@@ -9,6 +9,7 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Mailbox toolbar | Selection menu, refresh, page range, previous and next, contextual bulk actions |
 | Message and draft rows | Sender width, unread weight, subject and snippet truncation, draft marker, date replaced by actions on hover or keyboard focus |
 | Mailbox attachments | Filename chips in Default density, a paperclip in denser views, image, text and paged PDF previews, keyboard dismissal and downloads |
+| Scheduled mailbox | Folder count, scoped search, delivery notice, selection, paging, recipient details, delivery time and Cancel send |
 | Message reader | Compact toolbar, subject, message headers, recipient details, per-message menu, collapsed history, reply buttons |
 | Compose window and replies | Docked, minimized, expanded and inline states, recipient chips, subject, editing area, save and close |
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |

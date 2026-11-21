@@ -58,7 +58,7 @@
           ><input v-model="form.hasAttachment" type="checkbox" /> Has
           attachment</label
         >
-        <label class="check"
+        <label v-if="store.folder!=='scheduled'" class="check"
           ><input v-model="form.isUnread" type="checkbox" /> Is unread</label
         >
       </template>
