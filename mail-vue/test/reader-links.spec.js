@@ -71,3 +71,24 @@ it('preserves mailto recipients and fields, and encodes delimiters in bare addre
   ]);
   reader.unmount();
 });
+
+it('distinguishes soft wraps from hidden and block content', async () => {
+  const html = '<div>https://example.org/<wbr>billing https://example.com<span hidden>draft</span>' +
+    ' https://example.dev<span style="display:none">test</span>' +
+    ' https://example.app<span style="display:block">next</span></div>';
+  const reader = mount(MessageContent, { props: { html } });
+  await flushPromises();
+  const doc = new DOMParser().parseFromString(reader.get('iframe').attributes('srcdoc'), 'text/html');
+  expect([...doc.querySelectorAll('a')].map(a => a.textContent)).toEqual([
+    'https://example.org/billing', 'https://example.com', 'https://example.dev', 'https://example.app',
+  ]);
+  reader.unmount();
+});
+
+it('ends mail links at sentence boundaries and retains balanced parentheses', async () => {
+  const a = 'mailto:a@example.org?subject=Hello', b = 'mailto:b@example.org?body=Meet%20(Friday)';
+  const reader = mount(MessageContent, { props: { text: a + '。下一句。 (' + b + ').' } });
+  await flushPromises();
+  expect(reader.findAll('a').map(link => link.attributes('href'))).toEqual([a, b]);
+  reader.unmount();
+});

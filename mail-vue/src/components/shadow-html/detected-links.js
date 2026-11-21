@@ -4,7 +4,27 @@ import { h } from 'vue';
 
 const detector = new LinkifyIt({ fuzzyLink: true, tlds });
 const addressRules = new LinkifyIt();
-const query = /\?(?=[\w%-]+=)[^\s<>"\u0000-\u001f]*/uy;
+const query = /\?(?=[\w%-]+=)[^\s<>"\u0000-\u001f。，、；！？「」『』《》【】“”‘’]*/uy;
+function queryLength(fields) {
+  // Unencoded sentence punctuation can follow a URI. Keep paired delimiters
+  // inside a value, such as ?body=Meet%20(Friday).
+  const openers = { ')': '(', ']': '[', '}': '{' };
+  const balance = { '(': 0, '[': 0, '{': 0 };
+  for (const char of fields) {
+    if (char in balance) balance[char]++;
+    else if (char in openers) balance[openers[char]]--;
+  }
+  let end = fields.length;
+  while (end > 0) {
+    const last = fields[end - 1];
+    if (/[.,!?:;]/.test(last)) end--;
+    else if (last in openers && balance[openers[last]] < 0) {
+      balance[openers[last]]++;
+      end--;
+    } else break;
+  }
+  return end;
+}
 detector.add('mailto:', {
   validate(text, start) {
     let end = start;
@@ -17,7 +37,7 @@ detector.add('mailto:', {
     }
     query.lastIndex = end;
     const fields = query.exec(text)?.[0];
-    if (fields) end += fields.replace(/[.,!?:;)\]}]+$/u, '').length;
+    if (fields) end += queryLength(fields);
     return end - start;
   },
 });
@@ -84,6 +104,7 @@ function linkTextRun(doc, nodes) {
 const literal = 'a,pre,code,script,style,textarea,title,template,noscript,svg,math,iframe,object,form';
 const inline = 'b,strong,i,em,u,s,strike,small,big,span,font,sub,sup,mark';
 export function detectDocumentLinks(doc) {
+  const stylesheet = Boolean(doc.querySelector('style,link[rel~=stylesheet]'));
   const stack = [...doc.body.childNodes].reverse();
   let run = [];
   function flush() {
@@ -98,8 +119,13 @@ export function detectDocumentLinks(doc) {
       continue;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
-    if (node.matches(literal)) { flush(); continue; }
-    if (!node.matches(inline) || node.id) {
+    if (node.matches(literal) || node.hidden || node.style?.display === 'none' ||
+        ['hidden', 'collapse'].includes(node.style?.visibility)) { flush(); continue; }
+    if (node.localName === 'wbr' && !stylesheet && !node.hasAttribute('style')) continue;
+    // Detached documents do not resolve sender stylesheets. Keep their element
+    // boundaries so hidden or block content cannot silently change a destination.
+    const display = node.style?.display;
+    if (stylesheet || !node.matches(inline) || node.id || (display && !['inline', 'contents'].includes(display))) {
       flush();
       stack.push(null);
     }
