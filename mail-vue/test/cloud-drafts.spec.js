@@ -252,6 +252,14 @@ describe('Cloud draft synchronization',()=>{
    finishDelete();await syncCloudDrafts();
    expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);await operation.dispose();
  });
+ it('checks the saved version for every open editor in a bulk discard',async()=>{
+   const first=await saveLocalDraft(input()), second=await saveLocalDraft({...input(),subject:'Another draft'});
+   const latest=await saveLocalDraft({...second,subject:'Updated elsewhere'});
+   // Check the stale editor first. The test database does not emulate transaction rollback.
+   await expect(discardDrafts([second.draftId,first.draftId],[first,second])).rejects.toThrow('changed elsewhere');
+   expect((await db.value.draft.get(second.draftId)).editToken).toBe(latest.editToken);
+   expect((await db.value.draft.get(first.draftId)).deleted).toBeFalsy();
+ });
  it('keeps a newer draft when a stale unchanged editor tries to discard',async()=>{
    const original=await saveLocalDraft(input());await syncCloudDrafts();
    const latest=await saveLocalDraft({...await db.value.draft.get(original.draftId),subject:'Other edit'});
