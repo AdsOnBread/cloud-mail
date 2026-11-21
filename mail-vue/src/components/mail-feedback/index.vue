@@ -47,10 +47,10 @@ let timer;
 function pause() { clearTimeout(timer); }
 function schedule() {
   pause();
-  if (feedback.notice && !feedback.notice.busy && !feedback.notice.retry)
+  if (feedback.notice && !feedback.notice.busy && !feedback.notice.retry && !feedback.notice.holding)
     timer = setTimeout(() => { feedback.dismiss(); }, 10000);
 }
-watch(() => [feedback.notice, feedback.notice?.busy], schedule, {immediate:true});
+watch(() => [feedback.notice, feedback.notice?.busy, feedback.notice?.holding], schedule, {immediate:true});
 watch(() => user.user.email, () => { feedback.dismiss(); });
 watch(()=>[user.user.email,user.authenticatedToken],retryPendingTrash,{immediate:true});
 watch(()=>feedback.notice?.scheduledTrash,(current,previous)=>{if (previous && !current) retryPendingTrash();});

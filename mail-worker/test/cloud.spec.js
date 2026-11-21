@@ -3,7 +3,7 @@ import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
 import {dbInit} from '../src/init/init';
 import * as drafts from '../src/cloud/drafts';
 import * as mail from '../src/cloud/mail';
-import {send,prepare} from '../src/cloud/send';
+import {send,prepare,undoSend,dispatchHeld,recoverHeld} from '../src/cloud/send';
 import * as mobile from '../src/mobile/service';
 import settingService from '../src/service/setting-service';
 import cryptoUtils from '../src/utils/crypto-utils';
@@ -99,6 +99,32 @@ describe('Cloud drafts',()=>{
  });
 });
 describe('Send attempts',()=>{
+ it('cancels a held delivery idempotently and restores the exact editable draft',async()=>{
+   const draftRow=await draft({bcc:['person@example.com'],labelIds:[]});
+   const input={version:draftRow.version,idempotencyKey:'held-cancel-test',undoSeconds:5};
+   const held=await send(c(),1,input,{draftId:draftRow.draftId});
+   expect(held.state).toBe('holding');
+   expect(await send(c(),1,input,{draftId:draftRow.draftId})).toEqual(held);
+   await expect(undoSend(c(),2,held.attemptId)).rejects.toMatchObject({code:409});
+   await dispatchHeld(c(),1,held.attemptId);
+   expect((await drafts.list(c(),1)).drafts).toHaveLength(0);
+   const canceled=await undoSend(c(),1,held.attemptId);
+   expect(await undoSend(c(),1,held.attemptId)).toEqual(canceled);
+   await recoverHeld(c());
+   expect((await env.db.prepare('SELECT COUNT(*) n FROM email').first()).n).toBe(0);
+   expect(await drafts.get(c(),1,draftRow.draftId)).toMatchObject({state:'draft',bcc:['person@example.com'],version:draftRow.version+2});
+ });
+ it('recovers an expired hold with no browser and fences concurrent dispatch and late Undo',async()=>{
+   const draftRow=await draft();
+   const held=await send(c(),1,{version:draftRow.version,idempotencyKey:'held-recover-test',undoSeconds:5},{draftId:draftRow.draftId});
+   await env.db.prepare("UPDATE send_attempts SET result=json_set(result,'$.undoUntil',1) WHERE idempotency_key=?").bind(held.attemptId).run();
+   await expect(undoSend(c(),1,held.attemptId)).rejects.toMatchObject({code:409});
+   await Promise.all([dispatchHeld(c(),1,held.attemptId),recoverHeld(c())]);
+   expect((await env.db.prepare('SELECT COUNT(*) n FROM email WHERE type=1').first()).n).toBe(1);
+   const receipt=await env.db.prepare('SELECT state,result FROM send_attempts WHERE idempotency_key=?').bind(held.attemptId).first();
+   expect(receipt.state).toBe('sent');
+   expect(JSON.parse(receipt.result).messages[0].emailId).toBeGreaterThan(0);
+ });
  it('sends a saved draft once, replays its result and refuses changed key reuse',async()=>{
    const d=await draft();const input={version:d.version,idempotencyKey:'send-draft-0001'};
    const sent=await send(c(),1,input,{draftId:d.draftId});expect(sent.state).toBe('sent');

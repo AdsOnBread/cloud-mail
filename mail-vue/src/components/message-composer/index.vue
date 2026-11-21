@@ -1204,6 +1204,9 @@ function scheduledFeedback(result, sendAt, session) {
   if (!result.scheduled) return;
   const receipt = result.scheduled;
   feedback.notice.scheduledMessage = receipt;
+  attachUndo(() => cancelScheduledReceipt(receipt, session), session);
+}
+function attachUndo(cancel, session) {
   feedback.notice.undoFiling = async () => {
     session.check();
     const notice = feedback.notice;
@@ -1212,7 +1215,7 @@ function scheduledFeedback(result, sendAt, session) {
       () => accountStore.currentAccount.allReceive], () => { moved = true; }, {flush:"sync"});
     const canOpen = () => !moved && feedback.notice === notice;
     try {
-      const restored = await cancelScheduledReceipt(receipt, session);
+      const restored = await cancel();
       // The cloud cancellation is final even if the local draft cannot yet be reopened.
       try {
         const draft = await restored.localDraft();
@@ -1228,6 +1231,46 @@ function scheduledFeedback(result, sendAt, session) {
     } finally { stop(); }
     return "Sending undone. Message returned to Drafts.";
   };
+}
+function rememberRecipients(recent) {
+  writerStore.sendRecipientRecord = [...new Set([...recent, ...writerStore.sendRecipientRecord])].slice(0,500);
+}
+function recordSent(messages) {
+  messages.forEach(message => emailStore.sendScroll?.addItem?.(message));
+  emailStore.conversationRevision++;
+  userStore.refreshUserInfo();
+}
+async function followDelivery(delivery, recent, replyTo) {
+  const session=draftSession();
+  feedback.show("Sending…");
+  const notice=feedback.notice;
+  notice.holding=true;
+  attachUndo(delivery.cancel,session);
+  try {
+    await new Promise(resolve=>setTimeout(resolve,delivery.delay));
+    session.check();
+    delete notice.undoFiling;
+    let preserved;
+    const messages=await delivery.finish().catch(error=>{
+      if (!error.sentMessages) throw error;
+      preserved=error.message;
+      return error.sentMessages;
+    });
+    session.check();
+    if (!messages) {
+      if (feedback.notice===notice && !notice.busy) feedback.show("Sending undone. Message returned to Drafts.");
+      return;
+    }
+    if (replyTo) feedback.deliveredReply={emailId:replyTo};
+    recordSent(messages);
+    rememberRecipients(recent);
+    if (feedback.notice===notice) {
+      feedback.show(preserved || "Message sent");
+      if (messages[0]?.emailId) feedback.notice.sentEmailId=messages[0].emailId;
+    }
+  } catch (error) {
+    if (feedback.notice===notice) feedback.show(error.message || "Delivery has not been confirmed. Check Sent.");
+  }
 }
 async function sendEmail(sendAt=null) {
   if (!validForSend()) return;
@@ -1252,18 +1295,18 @@ async function sendEmail(sendAt=null) {
       show.value=false;resetForm();emit("closed");return;
     }
     let preservedNotice = "";
-    const sent = await sendCloudDraft(saved.draftId,saved.editToken).catch(error => {
+    const sent = await sendCloudDraft(saved.draftId,saved.editToken,composeMode.value.undoSeconds || 5).catch(error => {
       if (!error.sentMessages) throw error;
       preservedNotice = error.message;
       return error.sentMessages;
     });
-    sent.forEach((message) => emailStore.sendScroll?.addItem?.(message));
-    emailStore.conversationRevision++;
-    const recent = recipientFields.flatMap((field) => form[field]);
-    writerStore.sendRecipientRecord = [
-      ...new Set([...recent, ...writerStore.sendRecipientRecord]),
-    ].slice(0, 500);
-    userStore.refreshUserInfo();
+    const recent = recipientFields.flatMap(field => form[field]);
+    if (sent.state === 'holding') {
+      void followDelivery(sent,recent,form.sendType==="reply" ? form.emailId : 0);
+      show.value=false;resetForm();emit("closed");return;
+    }
+    recordSent(sent);
+    rememberRecipients(recent);
     feedback.show(preservedNotice || "Message sent");
     if (sent[0]?.emailId) feedback.notice.sentEmailId=sent[0].emailId;
     show.value = false;

@@ -3,7 +3,7 @@ import { useEmailStore } from "./email";
 import http from "@/axios";
 
 export const useMailFeedback = defineStore("mail-feedback", {
-  state: () => ({ notice: null, restored: 0 }),
+  state: () => ({ notice: null, restored: 0, deliveredReply:null }),
   actions: {
     show(message, emailIds = []) {
       this.dismiss();

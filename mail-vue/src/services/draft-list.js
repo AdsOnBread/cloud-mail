@@ -28,7 +28,7 @@ export function startDraftList() {
         if (!active) return;
         const next = new Map();
         for (const row of rows) {
-          if (row.deleted) continue;
+          if (row.deleted || (row.syncState==='holding' && !row.dirty)) continue;
           const revision = [
             row.editToken,
             row.cloudVersion,

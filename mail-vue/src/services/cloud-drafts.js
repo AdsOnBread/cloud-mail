@@ -322,7 +322,7 @@ export async function discardDrafts(ids, expectedEditor, session = draftSession(
     if (!row?.sendAttemptId) continue;
     const api = sessionAPI(database);
     const attempt = await api.get('/v1/send-attempts/' + row.sendAttemptId, {noMsg:true});
-    if (attempt.state === 'failed') resolvedAttempts.set(id, row.sendAttemptId);
+    if (['failed','canceled'].includes(attempt.state)) resolvedAttempts.set(id, row.sendAttemptId);
     if (attempt.state === 'not_started' && row.cloudDraftId) {
       const remote = await api.get('/v1/drafts/' + row.cloudDraftId, {noMsg:true});
       if (remote.state === 'draft' && remote.version !== row.cloudVersion) resolvedAttempts.set(id, row.sendAttemptId);
@@ -448,6 +448,10 @@ export async function cancelScheduledReceipt(receipt, session) {
   await sessionAPI(session.database).post('/v1/scheduled/' + receipt.draftId + '/cancel', {version:receipt.version}, {noMsg:true});
   session.check();
   userDraftStore().scheduledRevision++;
+  return restoredReceipt(receipt,session);
+}
+
+function restoredReceipt(receipt, session) {
   return {
     async localDraft() {
       session.check();
@@ -506,7 +510,7 @@ async function updateSendAttempt(database, id, attemptId, state, version, basis)
   return database.transaction('rw', database.draft, async () => {
     const current = await database.draft.get(id);
     if (!current || current.deleted || current.sendAttemptId !== attemptId) return;
-    const cleared = state === 'failed' || state === 'not_started';
+    const cleared = ['failed','not_started','canceled'].includes(state);
     const next = {...current,
       sendAttemptId:cleared ? null : attemptId, sendFingerprint:cleared ? null : current.sendFingerprint,
       syncState:cleared ? (current.dirty ? 'saving' : 'saved') : state};
@@ -516,7 +520,38 @@ async function updateSendAttempt(database, id, attemptId, state, version, basis)
   });
 }
 
-export async function sendCloudDraft(id, editToken) {
+function heldDelivery(receipt, database, api, id) {
+  const session=draftSession(database);
+  const path='/v1/send-attempts/'+encodeURIComponent(receipt.attemptId);
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  return {
+    state:'holding', delay: Math.max(0,receipt.remainingMs ?? receipt.undoUntil-Date.now()),
+    async cancel() {
+      await api.post(path+'/undo',{}, {noMsg:true});
+      await updateSendAttempt(database,id,receipt.attemptId,'canceled');
+      return restoredReceipt(receipt,session);
+    },
+    async finish() {
+      // The server owns dispatch. Polling only updates this mailbox's confirmation.
+      for (let i=0;i<30;i++) {
+        session.check();
+        const status=await api.get(path,{noMsg:true});
+        if (status.state==='sent') return finishSentAttempt(database,id,receipt.attemptId,status.messages);
+        if (status.state==='canceled') return null;
+        if (status.state==='failed') {
+          await updateSendAttempt(database,id,receipt.attemptId,'failed');
+          await syncCloudDrafts();
+          throw new Error(status.message || 'Delivery failed. Your message is in Drafts.');
+        }
+        if (status.state==='uncertain' && status.message) throw new Error(status.message);
+        await wait(1000);
+      }
+      throw new Error('Delivery has not been confirmed. Check Sent before retrying.');
+    },
+  };
+}
+
+export async function sendCloudDraft(id, editToken, undoSeconds) {
   const database=db.value,api=sessionAPI(database);
   const before=await database.draft.get(id);
   editToken ??= before?.editToken;
@@ -526,7 +561,8 @@ export async function sendCloudDraft(id, editToken) {
     const attempt=await api.get(`/v1/send-attempts/${before.sendAttemptId}`,{noMsg:true});
     if (attempt.state === 'sent') return finishSentAttempt(database, id, before.sendAttemptId, attempt.messages);
     if (attempt.state === 'uncertain') throw new Error(attempt.message || 'Delivery is uncertain. Check Sent before sending another copy.');
-    if (attempt.state === 'failed') {
+    if (attempt.state === 'holding') return heldDelivery(attempt,database,api,id);
+    if (['failed','canceled'].includes(attempt.state)) {
       const latest = await updateSendAttempt(database, id, before.sendAttemptId, attempt.state);
       if (!latest || latest.editToken !== editToken) throw new Error('Reopen the current draft before sending.');
     }
@@ -545,7 +581,7 @@ export async function sendCloudDraft(id, editToken) {
   });
   let result;
   try {
-    result = await api.post(`/v1/drafts/${row.cloudDraftId}/send`, {version:row.cloudVersion,idempotencyKey:sendAttemptId},{noMsg:true});
+    result = await api.post(`/v1/drafts/${row.cloudDraftId}/send`, {version:row.cloudVersion,idempotencyKey:sendAttemptId,...(undoSeconds ? {undoSeconds} : {})},{noMsg:true});
   } catch (raw) {
     if ([400,403,404,409,413].includes(Number(apiError(raw).code))) {
       const receipt = await api.get('/v1/send-attempts/' + sendAttemptId, {noMsg:true});
@@ -553,6 +589,11 @@ export async function sendCloudDraft(id, editToken) {
         await updateSendAttempt(database, id, sendAttemptId, receipt.state);
     }
     throw raw;
+  }
+  if(result.state==='holding') {
+    await updateSendAttempt(database,id,sendAttemptId,'holding');
+    userDraftStore().refreshList++;
+    return heldDelivery(result,database,api,id);
   }
   if(result.state!=='sent') {
     const current=await api.get(`/v1/drafts/${row.cloudDraftId}`,{noMsg:true});

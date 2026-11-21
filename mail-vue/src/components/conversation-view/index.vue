@@ -523,6 +523,14 @@ async function mutate(action, extra = {}) {
   }
 }
 function remove() { return mutate("delete"); }
+let pendingDelivery=null;
+watch([()=>feedback.deliveredReply,activeTarget],([delivery,target],[previous])=>{
+  if (delivery && delivery!==previous && messages.value.some(message=>message.emailId===delivery.emailId)) pendingDelivery=delivery;
+  if (pendingDelivery && !target) {
+    if (messages.value.some(message=>message.emailId===pendingDelivery.emailId)) load();
+    pendingDelivery=null;
+  }
+});
 watch(() => feedback.restored, () => { if (!activeTarget.value) load(); });
 async function deleted(message) {
   if (activeTarget.value === message.emailId && !(await save())) return;

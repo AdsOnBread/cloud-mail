@@ -220,11 +220,30 @@ const api=createHTTPServer(async(req,res)=>{
    if(path.endsWith('/schedule')){
      if(input.version!==draft.version || draft.state!=='draft'){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.'}));return;}
      draft.state='scheduled';draft.scheduledAt=input.sendAt;draft.version++;recordDraft(draft);data={draftId:id,version:draft.version,sendAt:input.sendAt};
-   }else if(path.endsWith('/send')){data=sendAttempts.get(input.idempotencyKey);if(!data){data={state:'sent',attemptId:input.idempotencyKey,messages:previewSend(draft)};sendAttempts.set(input.idempotencyKey,data);draft.state='sent';draft.version++;recordDraft(draft);}}
+   }else if(path.endsWith('/send')){
+     const key=input.idempotencyKey;
+     const deliver=()=>{const receipt={state:'sent',attemptId:key,messages:previewSend(draft)};sendAttempts.set(key,receipt);draft.state='sent';draft.version++;recordDraft(draft);return receipt;};
+     data=sendAttempts.get(key);
+     if(!data && input.undoSeconds){
+       draft.state='sending';draft.version++;recordDraft(draft);
+       data={state:'holding',draftId:id,attemptId:key,version:draft.version,undoUntil:Date.now()+input.undoSeconds*1000};
+       sendAttempts.set(key,data);
+       setTimeout(()=>{if(sendAttempts.get(key)?.state==='holding')deliver();},input.undoSeconds*1000);
+     }else if(!data)data=deliver();
+   }
    else if(req.method==='DELETE'){draft.state='deleted';draft.version++;recordDraft(draft);data={deleted:true};}
    else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:fileContentBytes(f)}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
- }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
+ }else if(path.startsWith('/v1/send-attempts/')){
+   const key=path.split('/')[3],receipt=sendAttempts.get(key);
+   if(path.endsWith('/undo')){
+     if(receipt?.state==='holding' && Date.now()<receipt.undoUntil){
+       receipt.state='canceled';const d=cloudDrafts.get(receipt.draftId);d.state='draft';d.version++;recordDraft(d);
+     }
+     if(receipt?.state!=='canceled'){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Cancellation period ended.'}));return;}
+   }
+   data=receipt||{state:'not_started'};
+ }
  else if(path==='/v1/search/people'){
    const p=Object.fromEntries(url.searchParams), scoped=rows.filter(r=>!p.accountId||r.accountId===Number(p.accountId));
    const initial=p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]

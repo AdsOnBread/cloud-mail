@@ -31,7 +31,7 @@ app.post(root+'/drafts/:id/send',async c=>{
       .then(()=>dispatchHeld({env:c.env},userId,receipt.attemptId));
     c.executionCtx.waitUntil(job);
   }
-  return c.json(result.ok(receipt));
+  return c.json(result.ok(receipt.state==='holding' ? {...receipt,remainingMs:Math.max(0,receipt.undoUntil-Date.now())} : receipt));
 });
 app.post(root+'/send-attempts/:id/undo',async c=>c.json(result.ok(await undoSend(c,uid(c),c.req.param('id')))));
 app.post(root+'/drafts/:id/schedule',async c=>c.json(result.ok(await schedule(c,uid(c),c.req.param('id'),await c.req.json()))));
@@ -71,5 +71,7 @@ for(const action of ['trash','restore','purge']) app.post(root+'/messages/'+acti
 });
 app.get(root+'/send-attempts/:id',async c=>{
   const row=await c.env.db.prepare('SELECT state,result FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(uid(c),c.req.param('id')).first();
-  return c.json(result.ok(row?row.result?JSON.parse(row.result):{state:'uncertain',attemptId:c.req.param('id')}:{state:'not_started',attemptId:c.req.param('id')}));
+  const receipt=row?.result ? JSON.parse(row.result) : {state:row?'uncertain':'not_started',attemptId:c.req.param('id')};
+  if(receipt.state==='holding') receipt.remainingMs=Math.max(0,receipt.undoUntil-Date.now());
+  return c.json(result.ok(receipt));
 });

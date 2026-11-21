@@ -32,6 +32,14 @@
       </div>
     </div>
     <div class="container">
+      <div class="title">Undo Send</div>
+      <div class="item"><label for="undo-send-period">Send cancellation period</label>
+        <span><select id="undo-send-period" v-model.number="undoSeconds">
+          <option v-for="seconds in [5,10,20,30]" :key="seconds" :value="seconds">{{ seconds }}</option>
+        </select> seconds</span>
+      </div>
+    </div>
+    <div class="container">
       <div class="title">Signatures</div>
       <div class="item"><span>Signatures and defaults for outgoing messages</span>
         <el-button @click="manageSignatures=true">Manage signatures</el-button></div>
@@ -60,7 +68,8 @@
 import SettingsTabs from "./tabs.vue";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import ConnectedApps from "@/components/connected-apps/index.vue";
-import {reactive, ref, defineOptions} from 'vue'
+import {useUiStore} from '@/store/ui';
+import {reactive, ref, computed, defineOptions} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
@@ -71,6 +80,11 @@ import {useI18n} from "vue-i18n";
 const { t } = useI18n()
 const accountStore = useAccountStore()
 const userStore = useUserStore();
+const ui = useUiStore();
+const undoSeconds = computed({
+  get: () => ui.composeModes[userStore.user.email]?.undoSeconds || 5,
+  set: seconds => { const owner=userStore.user.email; ui.composeModes[owner]={...ui.composeModes[owner],undoSeconds:seconds}; },
+});
 const setPwdLoading = ref(false)
 const manageSignatures=ref(false);
 const setNameShow = ref(false)
