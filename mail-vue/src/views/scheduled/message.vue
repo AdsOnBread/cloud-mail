@@ -18,30 +18,7 @@
       <div class="sender-info">
         <ReaderContact v-bind="senderContact"><strong>{{ sender }}</strong></ReaderContact>
         <span class="address">&lt;{{ row.senderEmail }}&gt;</span>
-        <el-popover
-          trigger="click"
-          placement="bottom-start"
-          :show-arrow="false"
-          :width="330"
-          popper-class="recipient-popper"
-        >
-          <template #reference>
-            <button
-              class="to"
-              aria-label="Show details"
-              data-tip="Show details"
-            >
-              to {{ shortRecipients }}
-              <Icon icon="material-symbols:arrow-drop-down" width="16" />
-            </button>
-          </template>
-          <dl class="details">
-            <template v-for="[name, value] in fields" :key="name">
-              <dt>{{ name }}:</dt>
-              <dd>{{ value }}</dd>
-            </template>
-          </dl>
-        </el-popover>
+        <div><MessageDetails :summary="'to '+shortRecipients" :fields="fields"/></div>
       </div>
       <time v-if="deliveryTime" class="delivery-time" :datetime="deliveryTime.toISOString()">{{ deliveryDate }}</time>
       <button class="mail-icon message-star" :aria-pressed="Boolean(row.starred)"
@@ -70,6 +47,8 @@
   </article>
 </template>
 <script setup>
+import MessageDetails from "@/components/message-details.vue";
+import {headerAddressText} from "@/utils/recipients";
 import ReaderContact from "@/components/reader-contact.vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import {formatDetailDate} from "@/utils/day";
@@ -106,12 +85,12 @@ const deliveryTime = computed(() => {
 const deliveryDate = computed(() => deliveryTime.value ? formatDetailDate(deliveryTime.value) : "");
 const fields = computed(() =>
   [
-    ["from", props.row.senderEmail],
+    ["from", headerAddressText({name:props.row.senderName,address:props.row.senderEmail})],
     ["to", props.row.recipients.join(", ")],
     ["cc", props.row.cc?.join(", ")],
     ["bcc", props.row.bcc?.join(", ")],
     ["date", deliveryDate.value],
-    ["subject", props.row.subject],
+    ["subject", props.row.subject || "(no subject)"],
   ].filter(([, value]) => value),
 );
 function inlineKey(src) {
@@ -169,33 +148,9 @@ h1 {
   min-width: 0;
   line-height: 20px;
 }
-.address,
-.to {
+.address {
   font-size: 12px;
   color: var(--regular-text-color);
-}
-.to {
-  display: flex;
-  align-items: center;
-  max-width: 100%;
-  cursor: pointer;
-}
-.details {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  margin: 4px;
-  font:
-    13px/18px Arial,
-    sans-serif;
-}
-.details dt {
-  text-align: right;
-  color: var(--regular-text-color);
-}
-.details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 .message-content {
   margin: 16px 0 0 56px;
