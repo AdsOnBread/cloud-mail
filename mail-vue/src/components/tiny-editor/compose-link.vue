@@ -274,7 +274,7 @@ watch(() => props.editor, (ed, _, cleanup) => {
   const moved = () => { if (moving) followCaret(); };
   const stop = () => { moving = false; };
   const up = event => {
-    if (movesSelection(event)) followCaret();
+    if (moving || movesSelection(event)) followCaret();
     stop();
   };
   const input = event => {
