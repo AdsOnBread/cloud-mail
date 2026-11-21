@@ -11,6 +11,7 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Mailbox attachments | Filename chips in Default density, a paperclip in denser views, image, text and paged PDF previews, keyboard dismissal and downloads |
 | Scheduled mailbox | Folder count, scoped search, delivery notice, selection, paging, recipient details, delivery time and Cancel send |
 | Message reader | Compact toolbar, subject, message headers, recipient details, per-message menu, collapsed history, reply buttons |
+| Compose More options | Checked Gmail’s order, checkmarks, row height, divider and menu width for Default to full screen, Plain text mode and Print. Cloudmail also preserves the selected format through draft reopening and scheduled delivery. Gmail’s Spell check, Label and Help me schedule menu entries remain differences. |
 | Compose window and replies | Docked, minimized, expanded and inline states, recipient chips, subject, editing area, save and close |
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |
 | Importance | Outline and filled markers, reason on hover, keyboard toggle, selection menu and Important folder |

@@ -404,6 +404,18 @@ describe('Scheduled send',()=>{
    expect(await scheduledList(c(),1,1,{countOnly:'1',subject:'Notes'})).toEqual({count:2});
    expect(await scheduledList(c(),1,2,{countOnly:'1'})).toEqual({count:0});
  });
+ it('delivers a scheduled plain-text draft literally with its ordinary attachment', async () => {
+   const {schedule,deliverDue}=await import('../src/cloud/scheduled');
+   const text='A <literal> message\nNext line';
+   const d=await draft({plainText:true,content:'<div>A &lt;literal&gt; message</div><div>Next line</div>',text,
+     attachments:[{filename:'note.txt',content:'bm90ZQ==',contentType:'text/plain'}]});
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+120});
+   expect(await drafts.get(c(),1,d.draftId,true)).toMatchObject({plainText:true,text});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());
+   const sent=await env.db.prepare('SELECT text,content FROM email WHERE type=1 AND user_id=1').first();
+   expect(sent).toEqual({content:'',text});
+ });
  it('dispatches a due internal message only once even when two ticks overlap',async()=>{
    const {schedule,deliverDue,scheduledList}=await import('../src/cloud/scheduled');
    const d=await draft();

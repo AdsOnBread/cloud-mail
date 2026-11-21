@@ -11,7 +11,7 @@
       ref="editorRef"
     ></textarea>
     <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
-    <ComposeLink v-if="mailCompose || signatureEditor" ref="linkPanel" :editor="editor" />
+    <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
   </div>
 </template>
 
@@ -25,6 +25,7 @@ import {
   shallowRef,
 } from "vue";
 import {replaceSignature,signatureId} from "../mail-signatures/content";
+import {plainBodyText, plainMarkup} from "../message-composer/plain-text";
 import ComposeFormat from "./compose-format.vue";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
@@ -51,6 +52,7 @@ const props = defineProps({
   showToolbar: { type: Boolean, default: true },
   mailCompose: Boolean,
   signatureEditor: Boolean,
+  plainText: Boolean,
   collapseQuote: Boolean,
   showQuote: Boolean,
   editorId: {
@@ -76,7 +78,8 @@ function openLink() { linkPanel.value?.open(); }
 function setSignature(item, beforeQuote, reply, manual = true) {
   const ed = editor.value;
   if (!ed?.initialized || ed.removed) return;
-  const apply = () => replaceSignature(ed.getBody(), item, beforeQuote, reply);
+  const signature = props.plainText && item ? {...item, html:plainMarkup(item.html).content} : item;
+  const apply = () => replaceSignature(ed.getBody(), signature, beforeQuote, reply);
   if (manual) ed.undoManager.transact(apply);
   else ed.undoManager.ignore(apply);
   ed.nodeChanged();
@@ -89,7 +92,7 @@ function command(name) {
   editor.value.execCommand(name);
 }
 function insertPhoto(data, name) {
-  if (!isInitialized.value) return;
+  if (props.plainText || !isInitialized.value) return;
   const ed = editor.value;
   ed.focus();
   const image = ed.getDoc().createElement("img");
@@ -189,7 +192,10 @@ function initEditor(initialContent) {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
-    plugins: "link image advlist lists emoticons fullscreen table preview code",
+    plugins: props.plainText ? "emoticons" : "link image advlist lists emoticons fullscreen table preview code",
+    ...(props.plainText ? {
+      valid_elements: "div[class|data-signature-id],p,br", paste_as_text:true, paste_data_images:false, paste_block_drop:true, contextmenu:false,
+    } : {}),
     ...(props.signatureEditor ? {
       iframe_aria_text:"Signature text", contextmenu:false, paste_data_images:false,relative_urls:false,remove_script_host:false,
       valid_elements:"div[style],p[style],br,strong,b,em,i,u,s,span[style],a[href],ul,ol,li,blockquote,sub,sup",
@@ -214,7 +220,13 @@ function initEditor(initialContent) {
       if (props.signatureEditor) {
         ed.ui.registry.addButton("signaturelink",{icon:"link", tooltip:"Insert link", onAction:openLink});
       }
-      if (props.mailCompose || props.signatureEditor) {
+      if (props.plainText) {
+        ed.on("keydown", event => {
+          if ((event.metaKey || event.ctrlKey) && !event.altKey && ["b","i","u","k"].includes(event.key.toLowerCase())) {
+            event.preventDefault(); event.stopImmediatePropagation();
+          }
+        }, true);
+      } else if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {
           if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();
@@ -228,16 +240,20 @@ function initEditor(initialContent) {
           }
         });
       }
+      const messageText = () => props.plainText ? plainBodyText(ed.getBody()) : ed.getContent({format:"text"});
       ed.on("init", () => {
+        if (disposed) return;
+        if (props.plainText) ed.getBody().setAttribute("contenteditable","plaintext-only");
         ed.setContent(initialContent ?? props.defValue);
         if (props.collapseQuote)
           ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
         isInitialized.value = true;
-        emit("change", ed.getContent(), ed.getContent({ format: "text" }));
+        emit("change", ed.getContent(), messageText());
       });
       ed.on("input change undo redo", () => {
+        if (disposed) return;
         const content = ed.getContent();
-        const text = ed.getContent({ format: "text" });
+        const text = messageText();
         emit("change", content, text);
       });
       ed.on("focus", () => {

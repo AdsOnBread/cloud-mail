@@ -12,6 +12,7 @@ export const useUiStore = defineStore('ui', {
         writerRef: null,
         changePreview: 0,
         composeFormatting:false,
+        composeModes:{},
         previewData: {},
         key: 0,
         dark: false,
@@ -39,6 +40,6 @@ export const useUiStore = defineStore('ui', {
         }
     },
     persist: {
-        pick: ['dark','composeFormatting','density','inboxTabs'],
+        pick: ['dark','composeFormatting','composeModes','density','inboxTabs'],
     },
 })

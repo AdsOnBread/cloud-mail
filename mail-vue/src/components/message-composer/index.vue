@@ -171,14 +171,16 @@
           class="compose-editor" :inert="sending"
           :class="{
             'editor-disabled': sending,
-            'formatting-open': inline && showFormatting,
+            'formatting-open': inline && !form.plainText && showFormatting,
             'quote-open': inline && quoteExpanded,
           }"
         >
           <tinyEditor
+            :key="form.plainText ? 'plain' : 'rich'"
+            :plain-text="form.plainText"
             :def-value="defValue"
             mail-compose
-            :show-toolbar="showFormatting"
+            :show-toolbar="!form.plainText && showFormatting"
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
             ref="editor"
@@ -235,6 +237,7 @@
           </el-dropdown></div>
           <button
             type="button"
+            v-if="!form.plainText"
             class="compose-tool formatting-toggle"
             aria-label="Formatting options"
             :aria-pressed="showFormatting"
@@ -254,13 +257,13 @@
           >
             <Icon icon="material-symbols:attach-file" width="22" />
           </button>
-          <button type="button" class="compose-tool" data-compose-link data-tip="Insert link (⌘/Ctrl+K)" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
+          <button v-if="!form.plainText" type="button" class="compose-tool" data-compose-link data-tip="Insert link (⌘/Ctrl+K)" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
             <Icon icon="material-symbols:link" width="20" />
           </button>
           <button type="button" class="compose-tool" data-tip="Insert emoji" aria-label="Insert emoji" :disabled="sending" @mousedown.prevent @click="editor?.openEmoji()">
             <Icon icon="material-symbols:mood-outline" width="20" />
           </button>
-          <button type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
+          <button v-if="!form.plainText" type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
             <Icon icon="material-symbols:image-outline" width="20" />
           </button>
           <el-dropdown trigger="click" placement="top-start" :show-arrow="false"
@@ -278,6 +281,20 @@
               <el-dropdown-item :divided="!menuItems.length" command="none" role="menuitemcheckbox" :aria-checked="!selectedSignature">
                 <span class="signature-check"><Icon v-if="!selectedSignature" icon="material-symbols:check" width="17"/></span>No signature
               </el-dropdown-item>
+            </el-dropdown-menu></template>
+          </el-dropdown>
+          <el-dropdown trigger="click" placement="top-end" :show-arrow="false" popper-class="mail-action-menu compose-format-popup compose-more-menu" @command="moreCommand">
+            <button type="button" class="compose-tool" aria-label="More options" data-tip="More options" :disabled="sending || preparing || attaching">
+              <Icon icon="material-symbols:more-vert" width="20"/>
+            </button>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item command="fullscreen" role="menuitemcheckbox" :aria-checked="Boolean(composeMode.fullScreen)">
+                <span class="signature-check"><Icon v-if="composeMode.fullScreen" icon="material-symbols:check" width="18"/></span>Default to full screen
+              </el-dropdown-item>
+              <el-dropdown-item command="plain" role="menuitemcheckbox" :aria-checked="form.plainText">
+                <span class="signature-check"><Icon v-if="form.plainText" icon="material-symbols:check" width="18"/></span>Plain text mode
+              </el-dropdown-item>
+              <el-dropdown-item command="print" divided><span class="signature-check"></span>Print</el-dropdown-item>
             </el-dropdown-menu></template>
           </el-dropdown>
           <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
@@ -342,6 +359,8 @@ import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
+import {plainMarkup} from "./plain-text";
+import {printDraft} from "./print-draft";
 import SchedulePicker from "./schedule.vue";
 import {useMailFeedback} from "@/store/mail-feedback";
 import tinyEditor from "@/components/tiny-editor/index.vue";
@@ -429,6 +448,7 @@ const bccField = ref();
 const show = ref(false);
 const editingRecipients = ref(false);
 const uiPreferences=useUiStore();
+const composeMode = computed(() => uiPreferences.composeModes[userStore.user.email] || {});
 const showFormatting=computed({get:()=>uiPreferences.composeFormatting,set:value=>{uiPreferences.composeFormatting=value;}});
 const quoteExpanded = ref(false);
 const hasQuotedContent = computed(() =>
@@ -476,6 +496,7 @@ const emptyForm = () => ({
   name: "",
   subject: "",
   content: "",
+  plainText: false,
   sendType: "",
   text: "",
   emailId: 0,
@@ -561,12 +582,14 @@ function setSender() {
   const account = accountStore.currentAccount?.email
     ? accountStore.currentAccount
     : userStore.user.account;
+  form.plainText = Boolean(composeMode.value.plainText);
   form.ownerEmail=userStore.user.email;
   form.sendEmail = account.email;
   form.accountId = account.accountId;
   form.name = account.name || userStore.user.name || "";
 }
 function reveal() {
+  expanded.value = desktop.value && !props.inline && Boolean(composeMode.value.fullScreen);
   showCc.value = form.cc.length > 0;
   showBcc.value = form.bcc.length > 0;
   show.value = true;
@@ -712,6 +735,7 @@ async function prepareMessage(message, mode, all = false) {
           form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
       }
     } else form.content = `<div><br></div><div class="cloudmail-reply-quote">${html}</div>`;
+    if (form.plainText) Object.assign(form, plainMarkup(form.content));
     defValue.value = form.content;
     reveal();
     await nextTick();
@@ -738,6 +762,47 @@ function openReplyAll(email) {
 }
 function openForward(email) {
   return prepareMessage(email, "forward");
+}
+async function moreCommand(command) {
+  const owner = userStore.user.email;
+  const generation = signatureGeneration;
+  const current = () => show.value && !sending.value && owner === userStore.user.email && generation === signatureGeneration;
+  if (!current()) return;
+  if (command === "fullscreen") {
+    const fullScreen = !composeMode.value.fullScreen;
+    uiPreferences.composeModes[owner] = {...composeMode.value, fullScreen};
+    if (desktop.value && !props.inline) expanded.value = fullScreen;
+    return;
+  }
+  await pendingDefault;
+  await editor.value?.ready();
+  if (!current()) return;
+  if (command === "print") {
+    commitRecipients();
+    printDraft({...form, content:editor.value.getContent()});
+    return;
+  }
+  const plainText = !form.plainText;
+  let content = editor.value.getContent();
+  if (plainText && /<img[\s>]/i.test(content)) {
+    try {
+      await ElMessageBox.confirm("Plain text removes images from the message body.", "Switch to plain text?", {
+        confirmButtonText:"Switch to plain text", cancelButtonText:"Cancel", customClass:"mail-dialog",
+      });
+    } catch { return; }
+    if (!current()) return;
+    content = editor.value.getContent();
+  }
+  if (plainText) {
+    Object.assign(form, plainMarkup(content));
+    form.attachments = form.attachments.filter(file => !file.contentId);
+  } else form.content = content;
+  defValue.value = form.content;
+  form.plainText = plainText;
+  uiPreferences.composeModes[owner] = {...composeMode.value, plainText};
+  await nextTick();
+  await editor.value?.ready();
+  if (current()) editor.value?.focus();
 }
 function change(content, text) {
   form.content = content;
@@ -848,7 +913,7 @@ function validForSend() {
     sendError.value = "Enter a subject.";
     return false;
   }
-  if (!form.content.trim()) {
+  if (!(form.plainText ? form.text : form.content).trim()) {
     sendError.value = "Enter a message body.";
     return false;
   }
@@ -1253,6 +1318,8 @@ defineExpose({
   background: var(--base-fill);
 }
 .signature-check { width:22px;flex:none;display:inline-flex; }
+:global(.compose-more-menu .el-dropdown-menu) { min-width:228px; padding:8px 0; }
+:global(.compose-more-menu .el-dropdown-menu__item) { min-height:32px; font-size:14px; line-height:20px; }
 :global(.signature-menu .el-dropdown-menu) { min-width:216px;max-width:min(340px,90vw); }
 :global(.signature-menu .el-dropdown-menu__item) { min-height:32px;overflow-wrap:anywhere; }
 .draft-status {
