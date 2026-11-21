@@ -1,4 +1,4 @@
-import {captureMove} from './conversation-move-undo.js';
+import {captureMove,withMoveRetry} from './conversation-move-undo.js';
 import {conversationSenders} from './conversation-senders';
 import {prepareExcludedSearch} from './mail-word-index';
 import {withLabelMove} from './label-move.js';
@@ -294,6 +294,8 @@ export async function conversationAction(c, p, userId, action) {
 	const apply=record=>applyConversationAction(c,p,userId,action,anchors,record);
 	if (action==='move' && p.clientId!==undefined)
 		return withLabelMove(c.env.db,userId,p.clientId,p.labelId,['move',p.fromLabelId??0,[...anchors].sort((a,b)=>a-b)],apply);
+  if (action==='move' && p.undoable===true && p.requestId!==undefined)
+    return withMoveRetry(c.env.db,userId,p.requestId,JSON.stringify([p.labelId,p.fromLabelId??0,[...anchors].sort((a,b)=>a-b)]),apply);
 	return apply(null);
 }
 async function applyConversationAction(c,p,userId,action,anchors,record) {
@@ -369,7 +371,7 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 				db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) VALUES(?,'message',?,'upsert')").bind(userId, id),
 			);
 		if (result.undoToken) statements.push(db.prepare("UPDATE conversation_move_undo SET state='ready' WHERE token=?").bind(result.undoToken));
-    if (record) statements.unshift(record(result));
+    if (record) statements.push(record(result));
 		await db.batch(statements);
     return result;
 	} else if (action === 'delete') {

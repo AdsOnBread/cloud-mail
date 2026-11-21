@@ -12,6 +12,10 @@ function invalidate(table, event, row, labelChange = false) {
 }
 
 export const moveUndoSchema = [
+  `CREATE TABLE IF NOT EXISTS conversation_move_requests (
+    user_id INTEGER NOT NULL, request_id TEXT NOT NULL, intent TEXT NOT NULL,
+    result TEXT NOT NULL, expires INTEGER NOT NULL, PRIMARY KEY(user_id,request_id))`,
+  'CREATE INDEX IF NOT EXISTS idx_move_request_expiry ON conversation_move_requests(expires)',
   `CREATE TABLE IF NOT EXISTS conversation_move_undo (
     token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL, state TEXT NOT NULL,
     source INTEGER REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
@@ -30,9 +34,36 @@ export const moveUndoSchema = [
   invalidate('mailbox_label_members','DELETE','OLD',true)
 ];
 
+// Replaying a lost response must never move a later reply or replace the
+// original Undo snapshot. Keep the request receipt even if Undo is invalidated.
+export async function withMoveRetry(db,userId,requestId,intent,apply) {
+  if (typeof requestId!=='string' || !/^[a-f\d-]{36}$/i.test(requestId)) throw new BizError('Invalid move request.',400);
+  async function replay() {
+    const row=await db.prepare(`SELECT r.intent,r.result,u.state FROM conversation_move_requests r
+      LEFT JOIN conversation_move_undo u ON u.token=json_extract(r.result,'$.undoToken') AND u.user_id=r.user_id
+      WHERE r.user_id=? AND r.request_id=? AND r.expires>unixepoch()`).bind(userId,requestId).first();
+    if (!row) return null;
+    if (row.intent!==intent) throw new BizError('This request is for a different move.',409);
+    const result=JSON.parse(row.result);
+    if (row.state!=='ready') { delete result.undoToken; result.alreadyProcessed=true; }
+    return result;
+  }
+  const existing=await replay();
+  if (existing) return existing;
+  try {
+    return await apply(result=>db.prepare(`INSERT INTO conversation_move_requests(user_id,request_id,intent,result,expires)
+      VALUES(?,?,?,?,unixepoch()+86400)`).bind(userId,requestId,intent,JSON.stringify(result)));
+  } catch(error) {
+    const existing=await replay();
+    if (existing) return existing;
+    throw error;
+  }
+}
+
 export function captureMove(db, userId, token, source, destination, ids) {
   const statements = [
     db.prepare('DELETE FROM conversation_move_undo WHERE expires<=unixepoch()'),
+    db.prepare('DELETE FROM conversation_move_requests WHERE expires<=unixepoch()'),
     db.prepare(`INSERT INTO conversation_move_undo(token,user_id,expires,state,source,destination)
       VALUES(?,?,unixepoch()+86400,'capturing',?,?)`).bind(token,userId,source || null,destination || null)
   ];

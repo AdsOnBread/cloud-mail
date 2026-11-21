@@ -26,6 +26,7 @@ export const useMailLabels = defineStore("mail-labels", {
   state: () => ({
     items: [],
     system: {}, systemRequest:0, systemReady:false, systemError:"", moved:null,
+    undoneMove:0, pendingMoves:{},
     recentColors: [],
     optionsAnchor: null,
     colorRequest: 0,
@@ -42,14 +43,19 @@ export const useMailLabels = defineStore("mail-labels", {
     async moveConversations(ids, destination) {
       const client=labelAPI(this);
       const name=destination.labelId ? this.items.find(label=>label.id===destination.labelId)?.name : 'Inbox';
-      const result=await conversationAction('move', ids, {...destination,undoable:true}, client);
+      const key=JSON.stringify([destination.fromLabelId || 0,destination.labelId,[...ids].sort((a,b)=>a-b)]);
+      const pending=this.pendingMoves;
+      const requestId=destination.clientId ? undefined : pending[key] || (pending[key]=crypto.randomUUID());
+      const result=await conversationAction('move', ids, {...destination,undoable:true,requestId}, client);
+      delete pending[key];
       const feedback=useMailFeedback();
-      feedback.show((ids.length===1 ? 'Conversation' : ids.length+' conversations')+' moved'+(name?' to '+name:'')+'.');
+      feedback.show(result?.alreadyProcessed ? 'This move was already processed.' : (ids.length===1 ? 'Conversation' : ids.length+' conversations')+' moved'+(name?' to '+name:'')+'.');
       if (result?.undoToken) {
         const notice=feedback.notice;
         notice.undoFiling=async()=>{
           try {
             await client.post('/email/conversation/undo-move',{token:result.undoToken});
+            this.undoneMove++;
             useEmailStore().conversationRevision++;
           } catch (error) {
             if (error.code===409 || error.response?.status===409) delete notice.undoFiling;

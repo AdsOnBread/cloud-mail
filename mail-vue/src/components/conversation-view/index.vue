@@ -306,11 +306,27 @@ async function save() {
 }
 onBeforeRouteLeave(async () => await save());
 onBeforeRouteUpdate(async () => await save());
+let filingVersion=0;
+function applyFiling(data) {
+  labelIds.value=data.labelIds || [];
+  filedAway.value=Boolean(data.filedAway);
+}
+watch(()=>labels.undoneMove, async()=>{
+  const anchor=Number(route.query.emailId);
+  if (route.name!=="content" || !anchor) return;
+  const version=++filingVersion, current=readerCurrent();
+  try {
+    const data=await conversationMessages({emailId:anchor,limit:1});
+    if (current() && version===filingVersion) applyFiling(data);
+  } catch(e) {
+    if (current() && version===filingVersion) error.value=e.message || "Could not refresh the conversation.";
+  }
+});
 async function load(older = false) {
   if (older && (loading.value || expanding.value)) return;
   expandRun++;expanding.value=false;
   const current=readerCurrent();
-  const requestedImportanceRevision = importanceRevision;
+  const requestedImportanceRevision = importanceRevision, requestedFilingVersion=filingVersion;
   const request = ++generation,
     anchor = Number(route.query.emailId);
   loading.value = true;
@@ -335,11 +351,11 @@ async function load(older = false) {
     } else messages.value=data.messages;
     firstPagedId=data.messages[0]?.emailId ?? (older ? firstPagedId : null);
     threadId.value = data.threadId;
-    labelIds.value=data.labelIds || [];
+    if (requestedFilingVersion===filingVersion) applyFiling(data);
     unreadCount.value=data.unreadCount ?? messages.value.filter(m=>m.type===0 && m.unread===0).length;
     incoming.value=data.incoming ?? messages.value.filter(m=>m.type===0).length;
     if (importanceRevision === requestedImportanceRevision) importanceReason.value = data.importanceReason;
-    filedAway.value=Boolean(data.filedAway);
+
     threadSubject.value = data.subject ?? messages.value[0]?.subject;
     total.value = data.total;
     hasMore.value = data.hasMore;
@@ -571,7 +587,7 @@ async function mutate(action, extra = {}) {
       importanceRevision++;
       importanceReason.value = extra.important ? "user" : null;
     }
-    else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
+    else if (action === "label") { filingVersion++; labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id)); }
     else {
       unreadCount.value=extra.unread===0?incoming.value:0;
       messages.value.forEach((message) => {

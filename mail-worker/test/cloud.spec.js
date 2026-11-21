@@ -487,6 +487,24 @@ describe('Recoverable Trash',()=>{
      .toEqual([{label_id:source,email_id:first},{label_id:destination,email_id:second},{label_id:unrelated,email_id:first}]);
    expect(await sql('SELECT email_id FROM conversation_filing WHERE email_id=?',reply).first()).toBeNull();
  });
+ it('recovers the original move after a lost response and leaves new replies untouched',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {conversationAction}=await import('../src/service/conversation-service');
+   const {undoConversationMove}=await import('../src/service/conversation-move-undo');
+   const dest=await saveLabel(env.db,1,'Later');
+   const original=await message();
+   const request={emailIds:[original.email_id],labelId:dest.id,undoable:true,requestId:crypto.randomUUID()};
+   const run=()=>conversationAction(c(),request,1,'move');
+   const [a,b]=await Promise.all([run(),run()]);
+   expect(a).toEqual(b);
+   const reply=await message({message_id:'<new@example.net>',in_reply_to:'<original@example.net>'});
+   expect(await run()).toEqual(a);
+   await expect(conversationAction(c(),{...request,labelId:0},1,'move')).rejects.toMatchObject({code:409});
+   await undoConversationMove(env.db,1,a.undoToken);
+   expect(await run()).toEqual({messageCount:1,conversationCount:1,alreadyProcessed:true});
+   expect((await env.db.prepare('SELECT email_id FROM mailbox_label_members WHERE email_id IN (?,?)').bind(original.email_id,reply.email_id).all()).results).toEqual([]);
+   expect((await env.db.prepare('SELECT email_id FROM conversation_filing WHERE user_id=1').all()).results).toEqual([]);
+ });
  it('rejects undo for the whole selection after another filing or a touched label changes',async()=>{
    const {saveLabel}=await import('../src/service/mailbox-labels');
    const {conversationAction}=await import('../src/service/conversation-service');

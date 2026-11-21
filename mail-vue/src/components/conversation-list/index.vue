@@ -628,6 +628,9 @@ watch(
     if (active && !busy.value) refresh();
   },
 );
+// Undo can commit while the move is still loading the list. Starting a newer
+// load discards the older response via its existing generation check.
+watch(()=>labels.undoneMove,()=>{ if (active && busy.value) refresh(); });
 watch(()=>labels.moved,change=>{
   if(change && !change.trash && change.path===route.fullPath)
     selected.value=selected.value.filter(id=>!change.ids.includes(id));
