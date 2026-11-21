@@ -2,6 +2,8 @@
   <button
     ref="trigger"
     :id="id"
+    :class="triggerClass"
+    :disabled="disabled"
     type="button"
     :aria-label="label"
     :data-tip="tooltip || label"
@@ -35,6 +37,8 @@
 import { nextTick, ref, useId, watch } from "vue";
 const props = defineProps({
   modelValue: Boolean,
+  triggerClass: String,
+  disabled: Boolean,
   label: String,
   tooltip: String,
   panelLabel: String,
@@ -76,7 +80,7 @@ function closeToTrigger() {
 }
 function tabOut(event) {
   const controls = [
-    ...panel.value.querySelectorAll("button:not([disabled])"),
+    ...panel.value.querySelectorAll("input:not(:disabled), button:not(:disabled)"),
   ].filter((b) => b.tabIndex >= 0);
   if (
     props.role === "menu" ||

@@ -262,9 +262,8 @@
           <button v-if="!form.plainText" type="button" class="compose-tool" data-compose-link data-tip="Insert link (⌘/Ctrl+K)" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
             <Icon icon="material-symbols:link" width="20" />
           </button>
-          <button type="button" class="compose-tool" data-tip="Insert emoji" aria-label="Insert emoji" :disabled="sending" @mousedown.prevent @click="editor?.openEmoji()">
-            <Icon icon="material-symbols:mood-outline" width="20" />
-          </button>
+          <ComposeEmoji ref="emojiPicker" :editor="editor" :owner="userStore.user.email"
+            :active="show && !minimized" :disabled="sending || preparing" />
           <button v-if="!form.plainText" type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
             <Icon icon="material-symbols:image-outline" width="20" />
           </button>
@@ -359,6 +358,7 @@ import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
+import ComposeEmoji from "./emoji-picker.vue";
 import ComposeMore from "./more-options.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useRouter } from "vue-router";
@@ -427,6 +427,7 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
+const emojiPicker = ref();
 const photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
 const feedback=useMailFeedback();
 const photoTypes = ["image/png","image/jpeg","image/gif","image/webp","image/heic","image/avif"];
@@ -523,6 +524,12 @@ function addressShortcut(event) {
   if (event.defaultPrevented || event.isComposing || event.altKey || !event.shiftKey ||
       !(event.metaKey || event.ctrlKey) || sending.value || preparing.value || attaching.value ||
       showContacts.value || managingSignatures.value || scheduling.value) return;
+  if (event.code === "Digit2" || event.key === "@") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    emojiPicker.value?.open();
+    return;
+  }
   const field = {c: "cc", b: "bcc"}[event.key?.toLowerCase()];
   if (!field) return;
   event.preventDefault();

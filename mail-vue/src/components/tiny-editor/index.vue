@@ -43,7 +43,7 @@ defineExpose({
   openLink,
   setSignature,
   currentSignature: () => editor.value?.initialized ? signatureId(editor.value.getBody()) : "",
-  openEmoji,
+  insertEmoji,
   insertPhoto,
   command,
 });
@@ -89,7 +89,13 @@ function setSignature(item, beforeQuote, reply, manual = true) {
   ed.nodeChanged();
   ed.dispatch("change");
 }
-function openEmoji() { command("mceEmoticons"); }
+function insertEmoji(character) {
+  if (!isInitialized.value) return false;
+  const ed = editor.value;
+  ed.focus();
+  ed.insertContent(ed.dom.encode(character));
+  return true;
+}
 function command(name) {
   if (!isInitialized.value) return;
   editor.value.focus();

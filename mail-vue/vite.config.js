@@ -23,7 +23,7 @@ export default defineConfig(({mode}) => {
                 targets: ['wasm', 'cmaps', 'standard_fonts', 'iccs', 'LICENSE'].map(name => ({
                     src: path.resolve(__dirname, 'node_modules/pdfjs-dist', name),
                     dest: 'pdf/' + pdfPackage.version,
-                })),
+                })).concat({ src: path.resolve(__dirname, 'node_modules/emojibase-data/LICENSE'), dest: 'licenses/emojibase-data' }),
             }),
             VitePWA({
                 injectRegister: 'script-defer',
