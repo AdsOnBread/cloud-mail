@@ -1,4 +1,4 @@
-import {computed, nextTick, ref, watch} from 'vue';
+import {computed, ref, watch} from 'vue';
 import http from '@/axios';
 import {isEmail} from '@/utils/verify-utils';
 import {maxPersonTerm, personSearchKey} from '../../../../shared/mail-search-people';
@@ -50,8 +50,8 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
     const retained=selected ? items.findIndex(person=>person.email===selected.email) : -1;
     const exact=items.findIndex(person=>person.email.toLowerCase()===query.value.toLowerCase());
     active.value=retained>=0 ? retained : exact>=0 ? exact : items.length && !isEmail(query.value) ? 0 : -1;
-    nextTick(place);
   },{flush:'sync'});
+  watch([panel,options],place,{flush:'post'});
   watch(()=>Boolean(options.value.length), (open,_,cleanup)=>{
     if (!open) return;
     window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
