@@ -33,7 +33,6 @@ export function draftSummary(draft) {
     searchBody: draft.labelIds?.length || draft.mailboxStarred ? draft.text || bodyText(draft,false) : "",
     labelIds: draft.labelIds || [],
     starred: Boolean(draft.mailboxStarred),
-    starEditBase: draft.starEditBase,
     reply: draft.sendType === "reply",
     subject: draft.subject || "",
     preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : bodyText(draft,true).slice(0,180),

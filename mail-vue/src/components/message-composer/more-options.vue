@@ -57,8 +57,8 @@
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { useMailLabels } from "@/store/mail-labels";
-const props = defineProps({disabled:Boolean, active:Boolean, fullScreen:Boolean, plainText:Boolean, starred:[Boolean,Number], labelIds:Array});
-const emit = defineEmits(["command","labels","star"]);
+const props = defineProps({disabled:Boolean, active:Boolean, fullScreen:Boolean, plainText:Boolean, readStar:{type:Function,required:true}, labelIds:Array});
+const emit = defineEmits(["command","labels","star","error"]);
 const labels = useMailLabels();
 const id=useId();
 defineExpose({focus:()=>trigger.value?.focus()});
@@ -66,7 +66,9 @@ const trigger=ref(), menu=ref(), labelButton=ref(), panel=ref(), input=ref();
 const open=ref(false), labelsOpen=ref(false), query=ref(""), selected=ref([]);
 const filtered=computed(()=>labels.items.filter(item=>item.name.toLowerCase().includes(query.value.trim().toLowerCase())));
 const changed=computed(()=>selected.value.length!==(props.labelIds || []).length || selected.value.some(id=>!props.labelIds?.includes(id)));
-function closeLabels() { labelsOpen.value=false; }
+const starred=ref(false);
+let opening=null;
+function closeLabels() { opening=null; labelsOpen.value=false; }
 function close(focus=false) {
   closeLabels();
   open.value=false;
@@ -78,11 +80,25 @@ function openMenu() {
 }
 function toggleMenu() { if(open.value) close(true); else openMenu(); }
 function command(name) { close(true); emit("command",name); }
-function showLabels(focus) {
-  if(!labelsOpen.value) {
-    selected.value=[...(props.labelIds || [])];
-    query.value="";
-    labelsOpen.value=true;
+async function showLabels(focus) {
+  if (!labelsOpen.value) {
+    if (opening) { opening.focus ||= focus; return; }
+    const request={focus};
+    opening=request;
+    try {
+      const freshStar=await props.readStar();
+      if (opening!==request || !open.value) return;
+      starred.value=freshStar;
+      selected.value=[...(props.labelIds || [])];
+      query.value="";
+      labelsOpen.value=true;
+      focus=request.focus;
+    } catch {
+      if (opening===request) emit("error","Could not read this draft. Reopen the label menu to retry.");
+      return;
+    } finally {
+      if (opening===request) opening=null;
+    }
   }
   if(focus) nextTick(()=>input.value?.focus());
 }
@@ -90,7 +106,7 @@ function toggleLabel(id) {
   selected.value=selected.value.includes(id) ? selected.value.filter(other=>other!==id) : [...selected.value,id];
 }
 function apply() { emit("labels",selected.value); close(true); }
-function star() { emit("star",!props.starred); close(true); }
+function star() { emit("star",!starred.value); close(true); }
 function move(event,root) {
   const options=[...root.querySelectorAll("button:not(:disabled),input")];
   const index=options.indexOf(document.activeElement);

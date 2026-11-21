@@ -287,8 +287,8 @@
           </el-dropdown>
           <ComposeMore ref="moreOptions" :disabled="sending || preparing || attaching" :active="show && !minimized"
             :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
-            :label-ids="form.labelIds" :starred="displayStar"
-            @labels="form.labelIds = $event" @star="chooseStar" @command="moreCommand"/>
+            :label-ids="form.labelIds" :read-star="readComposeStar"
+            @labels="form.labelIds = $event" @star="chooseStar" @error="sendError=$event" @command="moreCommand"/>
           <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
@@ -395,7 +395,6 @@ import {
   hasDraftContent,
   draftFingerprint,
   draftFilingFingerprint,
-  draftEditBase,
   replyRecipients,
   recipientFields,
 } from "@/utils/recipients.js";
@@ -591,11 +590,16 @@ const emptyForm = () => ({
 const form = reactive(emptyForm());
 const starChoice = ref(null);
 const starRevision = ref(0);
-const displayStar = computed(() => {
-  const row = form.draftId && draftStore.items.find(item=>item.draftId===form.draftId);
-  if (!starChoice.value && row && row.starEditBase===draftEditBase(form)) return row.starred;
+async function readComposeStar() {
+  const {draftId,ownerEmail}=form;
+  const database=db.value;
+  if (draftId && !starChoice.value && database?.name===ownerEmail && userStore.user.email===ownerEmail) {
+    const row=await database.draft.get(draftId);
+    if (row && !row.deleted && !starChoice.value && database===db.value && form.draftId===draftId &&
+        userStore.user.email===ownerEmail) return Boolean(row.mailboxStarred);
+  }
   return Boolean(form.mailboxStarred);
-});
+}
 function chooseStar(value) {
   starChoice.value={value};
   starRevision.value++;
