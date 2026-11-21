@@ -55,7 +55,8 @@ async function fileDeliveredInbox(db,userId) {
     db.prepare(`DELETE FROM scheduled_inbox_deliveries AS p WHERE p.user_id=? AND EXISTS(
       SELECT 1 FROM conversation_filing f WHERE f.user_id=p.user_id AND f.email_id=p.email_id)`).bind(userId),
     db.prepare(`INSERT OR REPLACE INTO conversation_filing(user_id,email_id,wake_at)
-      SELECT DISTINCT e.user_id,e.email_id,0 FROM scheduled_inbox_deliveries p
+      SELECT DISTINCT e.user_id,e.email_id,first_value(p.wake_at) OVER (
+        PARTITION BY e.user_id,e.email_id ORDER BY p.email_id DESC) FROM scheduled_inbox_deliveries p
       JOIN mobile_thread_members sent ON sent.user_id=p.user_id AND sent.email_id=p.email_id
       JOIN email copy ON copy.email_id=p.email_id AND copy.user_id=p.user_id AND copy.is_del=0 AND copy.trashed_at IS NULL
       JOIN account sender ON sender.account_id=copy.account_id AND sender.user_id=p.user_id AND sender.is_del=0

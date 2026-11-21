@@ -1,4 +1,4 @@
-import { filingSchema } from '../service/conversation-filing';
+import { filingSchema,ensureDeliveredWakeColumn } from '../service/conversation-filing';
 
 // Additive and repeatable: the existing installation initializer calls this after legacy upgrades.
 export async function migrateMobile(db) {
@@ -54,4 +54,6 @@ export async function migrateMobile(db) {
 			INSERT INTO mobile_changes(user_id,entity,entity_id,operation,previous_thread_id) VALUES (NEW.user_id,'message',NEW.email_id,'upsert',${event === 'UPDATE' ? 'OLD.thread_id' : 'NULL'}); END`));
 	}
 	await db.batch(statements);
+  await ensureDeliveredWakeColumn(async()=>(await db.prepare('PRAGMA table_info(scheduled_inbox_deliveries)').all()).results,
+    sql=>db.prepare(sql).run());
 }

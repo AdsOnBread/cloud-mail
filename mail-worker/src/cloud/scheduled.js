@@ -56,14 +56,30 @@ export async function setScheduledMark(c, userId, rawId, { field, value, version
 
 // Apply the user's whole selection to one snapshot. A delivery or cancellation
 // racing the request must not change a different revision or half the selection.
-export function setScheduledRead(c,userId,input) {
-  return setScheduledFlag(c,userId,input?.messages,'$.scheduledUnread',input?.unread);
+export async function setScheduledRead(c,userId,{messages,unread}) {
+  if (typeof unread!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
+  const selected=scheduledSelection(messages);
+  const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (${eligibleSelection})
+    UPDATE cloud_drafts SET data=json_set(data,'$.scheduledUnread',?)
+    WHERE draft_id IN (SELECT draft_id FROM eligible) AND (SELECT count(*) FROM eligible)=? RETURNING draft_id`)
+    .bind(JSON.stringify(selected),userId,Number(unread),selected.length).all();
+  if (!result.results.length) throw new BizError('A scheduled message changed. Refresh Scheduled.',409);
+  return {updated:result.results.length};
 }
-export function setScheduledInbox(c,userId,input) {
-  const expected=input?.previousEdit;
-  if (expected!==undefined && (typeof expected!=='string' || expected.length!==36)) throw new BizError('Invalid filing change.',400);
-  return setScheduledFlag(c,userId,input?.messages,'$.scheduledInbox',input?.inbox,expected);
+export function setScheduledInbox(c,userId,{messages,inbox,previousEdit}) {
+  if (typeof inbox!=='boolean' || (previousEdit!==undefined && (typeof previousEdit!=='string' || previousEdit.length!==36)))
+    throw new BizError('Invalid filing change.',400);
+  return setPlacement(c,userId,messages,inbox ? 0 : -1,previousEdit);
 }
+export function snoozeScheduled(c,userId,{messages,wakeAt}) {
+  if (!Number.isSafeInteger(wakeAt) || wakeAt<=Math.floor(Date.now()/1000) || wakeAt>253402300799)
+    throw new BizError('Choose a future snooze time.',400);
+  return setPlacement(c,userId,messages,wakeAt);
+}
+const eligibleSelection=`SELECT d.draft_id,d.data FROM cloud_drafts d
+  JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
+  JOIN json_each(?) r ON json_extract(r.value,'$[0]')=d.draft_id AND json_extract(r.value,'$[1]')=d.version
+  WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')`;
 function scheduledSelection(selection) {
   if (!Array.isArray(selection) || !selection.length || selection.length>50) throw new BizError('Invalid scheduled message selection.',400);
   const messages=selection.map(row=>[positive(row?.draftId),positive(row?.version)]);
@@ -94,30 +110,22 @@ export async function setScheduledLabels(c,userId,{messages,add,remove}) {
   if (changed.results.length!==selection.length) throw new BizError('A message or label changed. Refresh Scheduled.',409);
   return {updated:selection.length};
 }
-async function setScheduledFlag(c,userId,selection,path,value,previousEdit) {
-  if (typeof value!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
-  const messages=scheduledSelection(selection);
-  const inbox=path==='$.scheduledInbox', edit=inbox ? crypto.randomUUID() : null;
-  // Materialize the old flags before updating. Undo restores only messages this action moved.
-  const selectionArgs=[path,JSON.stringify(messages),userId];
-  if (previousEdit) selectionArgs.push(previousEdit);
-  const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (
-    SELECT d.draft_id,coalesce(json_extract(d.data,?),0) old_value FROM cloud_drafts d
-    JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
-    JOIN json_each(?) r ON json_extract(r.value,'$[0]')=d.draft_id AND json_extract(r.value,'$[1]')=d.version
-    WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')
-    ${previousEdit ? "AND json_extract(d.data,'$.scheduledInboxEdit')=?" : ''}
-  ) UPDATE cloud_drafts SET data=json_set(data,?,?${inbox ? ",'$.scheduledInboxEdit',?" : ''})
-    WHERE draft_id IN (SELECT draft_id FROM eligible) AND (SELECT count(*) FROM eligible)=?
-    RETURNING draft_id,(SELECT old_value FROM eligible WHERE eligible.draft_id=cloud_drafts.draft_id) AS old_value`)
-    .bind(...selectionArgs,path,Number(value),...(inbox ? [edit] : []),messages.length).all();
+// A queued message can be outside Inbox (-1), in Inbox (0), or due back at a timestamp.
+async function setPlacement(c,userId,messages,placement,previousEdit) {
+  const selection=scheduledSelection(messages),edit=crypto.randomUUID();
+  const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (${eligibleSelection}
+      ${previousEdit ? "AND json_extract(d.data,'$.scheduledInboxEdit')=?" : ''}),
+    changes AS MATERIALIZED (
+      SELECT draft_id,CASE WHEN json_extract(data,'$.scheduledInbox') IS NOT 1 THEN -1
+        WHEN json_extract(data,'$.scheduledWakeAt')>unixepoch() THEN json_extract(data,'$.scheduledWakeAt') ELSE 0 END old,
+        ${previousEdit ? "coalesce(json_extract(data,'$.scheduledPreviousPlacement'),?)" : '?'} destination FROM eligible
+    ) UPDATE cloud_drafts SET data=json_set(data,'$.scheduledInbox',cast(destination>=0 AS INTEGER),
+      '$.scheduledWakeAt',max(0,destination),'$.scheduledPreviousPlacement',old,'$.scheduledInboxEdit',?)
+    FROM changes WHERE cloud_drafts.draft_id=changes.draft_id AND (SELECT count(*) FROM changes)=?
+    RETURNING draft_id,(SELECT old!=destination FROM changes WHERE changes.draft_id=cloud_drafts.draft_id) changed`)
+    .bind(JSON.stringify(selection),userId,...(previousEdit ? [previousEdit] : []),placement,edit,selection.length).all();
   if (!result.results.length) throw new BizError('A scheduled message changed. Refresh Scheduled.',409);
-  const reply={updated:result.results.length};
-  if (inbox) {
-    reply.edit=edit;
-    reply.changed=result.results.filter(row=>Boolean(row.old_value)!==value).map(row=>row.draft_id);
-  }
-  return reply;
+  return {updated:result.results.length,edit,changed:result.results.filter(row=>row.changed).map(row=>row.draft_id)};
 }
 
 export async function scheduledList(c, userId, accountId, filters = {}) {
@@ -137,7 +145,9 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   const reason = `CASE WHEN ${important}=1 THEN 'user' WHEN ${important}=0 THEN NULL
     WHEN json_extract(d.data,'$.sendType')='reply' AND json_extract(d.data,'$.emailId')>0 THEN 'reply'
     WHEN EXISTS (SELECT 1 FROM json_each(d.data,'$.receiveEmail') address WHERE address.value=a.email COLLATE NOCASE) THEN 'direct' END`;
-  const inbox="coalesce(json_extract(d.data,'$.scheduledInbox'),0)";
+  const wake="coalesce(json_extract(d.data,'$.scheduledWakeAt'),0)";
+  const inbox=`(coalesce(json_extract(d.data,'$.scheduledInbox'),0)=1 AND ${wake}<=unixepoch())`;
+  if (filters.mark==='snoozed') conditions.push(wake+'>unixepoch()');
   const unread="COALESCE(json_extract(d.data,'$.scheduledUnread'),0)";
   if (filters.mark==='inbox') conditions.push(inbox+'=1');
   if (filters.mark==='starred') conditions.push(starred+'=1');
@@ -179,7 +189,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    ${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,${blankMailText(text)} AS html_only,
+    ${wake} AS wakeAt,${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,${blankMailText(text)} AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.labelIds') AS labelIds,
@@ -224,7 +234,7 @@ export async function cancel(c, userId, id, version) {
 	const draft = await drafts.get(c, userId, id, true);
 	const changed = await c.env.db
 		.prepare(
-			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread','$.scheduledInbox','$.scheduledInboxEdit'),state='draft',
+			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread','$.scheduledInbox','$.scheduledInboxEdit','$.scheduledWakeAt','$.scheduledPreviousPlacement'),state='draft',
     version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=?
     AND state IN ('scheduled','schedule_failed') RETURNING draft_id`,
 		)

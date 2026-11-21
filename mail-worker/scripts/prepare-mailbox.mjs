@@ -1,7 +1,7 @@
 // Apply the additive mailbox schema before switching traffic to a version that reads it.
 import { execFileSync } from 'node:child_process';
 import {mailWordSchema,seedWordIndex,wordIndexProgress} from '../src/service/mail-word-schema.js';
-import { filingSchema } from '../src/service/conversation-filing.js';
+import { filingSchema,ensureDeliveredWakeColumn } from '../src/service/conversation-filing.js';
 
 import { ensureRawSizeColumn,signatureSchema,systemLabelSchema } from '../src/cloud/schema.js';
 
@@ -23,4 +23,5 @@ if (existing.has('email')) {
   }
 }
 for (const statement of [...filingSchema(existing), signatureSchema, systemLabelSchema]) execute(statement);
+await ensureDeliveredWakeColumn(()=>execute('PRAGMA table_info(scheduled_inbox_deliveries)')[0].results,execute);
 console.log('Mailbox filing schema is ready.');

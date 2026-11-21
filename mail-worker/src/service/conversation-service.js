@@ -182,7 +182,12 @@ export async function conversationList(c, p, userId) {
       ${category?'WHERE g.category=?':''} ${cursor ? (category?'AND ':'WHERE ') + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
 			)
 			.bind(...bound, userId, ...(category?[category]:[]), ...(cursor && byTime ? [Number(parts[0])] : []), ...(cursor ? [cursor] : []), limit + 1),
-		db.prepare('SELECT MIN(wake_at) wake FROM conversation_filing WHERE user_id=? AND wake_at>unixepoch()').bind(userId),
+		db.prepare(`SELECT min(wake_at) wake FROM (
+        SELECT min(wake_at) wake_at FROM conversation_filing WHERE user_id=? AND wake_at>unixepoch()
+        UNION ALL SELECT min(json_extract(d.data,'$.scheduledWakeAt')) FROM cloud_drafts d
+        JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
+        WHERE d.user_id=? AND json_extract(d.data,'$.scheduledAt') IS NOT NULL AND json_extract(d.data,'$.scheduledWakeAt')>unixepoch()
+      )`).bind(userId,userId),
 	]);
 	const rows = page.results.slice(0, limit);
   const files = await mailboxAttachments(db, userId, rows, 'threads');

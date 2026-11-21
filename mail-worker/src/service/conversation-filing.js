@@ -3,7 +3,13 @@ import { categorySchema } from './inbox-categories.js';
 import { labelSchema } from './mailbox-labels.js';
 // A filing follows the latest received message. A new reply therefore reopens the thread.
 export const scheduledInboxSchema = `CREATE TABLE IF NOT EXISTS scheduled_inbox_deliveries (
-  user_id INTEGER NOT NULL, email_id INTEGER NOT NULL REFERENCES email(email_id) ON DELETE CASCADE, PRIMARY KEY(user_id,email_id))`;
+  user_id INTEGER NOT NULL, email_id INTEGER NOT NULL REFERENCES email(email_id) ON DELETE CASCADE, wake_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,email_id))`;
+export async function ensureDeliveredWakeColumn(readColumns,execute) {
+  const hasColumn=async()=>(await readColumns()).some(column=>column.name==='wake_at');
+  if (await hasColumn()) return;
+  try { await execute('ALTER TABLE scheduled_inbox_deliveries ADD COLUMN wake_at INTEGER NOT NULL DEFAULT 0'); }
+  catch (error) { if (!(await hasColumn())) throw error; }
+}
 export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 	const statements = [
 		...labelSchema, categorySchema, importanceSchema, scheduledInboxSchema,

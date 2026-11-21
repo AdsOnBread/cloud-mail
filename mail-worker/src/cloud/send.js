@@ -94,8 +94,8 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
       const ids = [userId,draft.draftId,messages[0].emailId];
       if (scheduled) {
         // Commit placement with the send receipt. Normal mailbox indexing resolves its conversation.
-        filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO scheduled_inbox_deliveries(user_id,email_id)
-          SELECT d.user_id,e.email_id ${sender} AND json_extract(d.data,'$.scheduledInbox')=1`).bind(...ids));
+        filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO scheduled_inbox_deliveries(user_id,email_id,wake_at)
+          SELECT d.user_id,e.email_id,coalesce(json_extract(d.data,'$.scheduledWakeAt'),0) ${sender} AND json_extract(d.data,'$.scheduledInbox')=1`).bind(...ids));
       }
       if (scheduled || draft.labelIds?.length) {
         filing.push(c.env.db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)

@@ -4,7 +4,7 @@ import userContext from '../security/user-context';
 import { activeUser,permission } from '../cloud/auth';
 import * as drafts from '../cloud/drafts';
 import * as mail from '../cloud/mail';
-import {schedule,scheduledList,setScheduledLabels,setScheduledInbox,setScheduledRead,setScheduledMark,cancel} from '../cloud/scheduled';
+import {schedule,scheduledList,snoozeScheduled,setScheduledLabels,setScheduledInbox,setScheduledRead,setScheduledMark,cancel} from '../cloud/scheduled';
 import { send } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
 import { moveFromTrash,setTrashRead,setTrashLabels } from '../cloud/trash-actions';
@@ -31,6 +31,7 @@ app.get(root+'/scheduled/:id',async c=>{
   return c.json(result.ok(row));
 });
 app.post(root+'/scheduled/labels',async c=>c.json(result.ok(await setScheduledLabels(c,uid(c),await c.req.json()))));
+app.post(root+'/scheduled/snooze',async c=>c.json(result.ok(await snoozeScheduled(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/inbox',async c=>c.json(result.ok(await setScheduledInbox(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/read',async c=>c.json(result.ok(await setScheduledRead(c,uid(c),await c.req.json()))));
 app.post(root+'/scheduled/:id/mark',async c=>c.json(result.ok(await setScheduledMark(c,uid(c),c.req.param('id'),await c.req.json()))));
