@@ -5,6 +5,7 @@ import Composer from "../src/layout/write/index.vue";
 import { useUserStore } from "../src/store/user.js";
 import { useSettingStore } from "../src/store/setting.js";
 import { useAccountStore } from "../src/store/account.js";
+import { starInOpenEditor } from "../src/store/draft";
 import { useEmailStore } from "../src/store/email.js";
 import db from "../src/db/db.js";
 import { emailSend } from "../src/request/email.js";
@@ -313,6 +314,17 @@ describe("composer persistence and sending", () => {
       wrapper.unmount();
       confirm.mockRestore();
     }
+  });
+  it.each([false,true])("keeps row star changes when typing in an open composer (inline %s)", async inline => {
+    const wrapper=composer({inline});
+    try {
+      await wrapper.vm.openDraft({draftId:25,subject:"Shared",content:"Original",receiveEmail:["contact@example.com"],sendType:inline?"reply":""});
+      await flushPromises();
+      await starInOpenEditor(25,"me@example.com",true);
+      await wrapper.get('[aria-label="Message body"]').setValue("Original continued");
+      await flushPromises();
+      expect(state.drafts.get(25)).toMatchObject({mailboxStarred:true,content:"Original continued"});
+    } finally {wrapper.unmount();}
   });
   it("restores a subject selection from the minimized caption", async () => {
     const wrapper = composer();

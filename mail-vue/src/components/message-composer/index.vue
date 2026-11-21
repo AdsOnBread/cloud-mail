@@ -384,7 +384,7 @@ import { useEmailStore } from "@/store/email.js";
 import { fileToBase64, formatBytes } from "@/utils/file-utils.js";
 import { getIconByName } from "@/utils/icon-utils.js";
 import { formatDetailDate } from "@/utils/day.js";
-import { userDraftStore } from "@/store/draft.js";
+import { userDraftStore, watchDraftStars } from "@/store/draft.js";
 import { useSettingStore } from "@/store/setting.js";
 import { useWriterStore } from "@/store/writer.js";
 import { hasPerm } from "@/perm/perm.js";
@@ -1233,12 +1233,22 @@ function containFocus(event) {
 function resize() {
   desktop.value = window.innerWidth >= 768;
 }
+let stopStarActions;
+function starFromList(id, owner, starred) {
+  if (!show.value || form.draftId!==id || form.ownerEmail!==owner) return;
+  if (sending.value || preparing.value || attaching.value)
+    return Promise.reject(new Error("Wait until the message is ready to change its star."));
+  form.mailboxStarred=starred;
+  return nextTick().then(()=>saveQueue);
+}
 onMounted(() => {
+  stopStarActions=watchDraftStars(starFromList);
   window.addEventListener("keydown", keydown);
   window.addEventListener("resize", resize);
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  stopStarActions?.();
   mounted = false;
   clearTimeout(cloudSaveTimer);
   releaseModal();

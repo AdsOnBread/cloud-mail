@@ -101,7 +101,7 @@ import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useMailFeedback } from "@/store/mail-feedback";
 import {useUiStore} from "@/store/ui";
-import { userDraftStore } from "@/store/draft";
+import { userDraftStore, starInOpenEditor } from "@/store/draft";
 import { useMailSearchStore } from "@/store/mail-search";
 import { draftSession, discardDrafts, saveLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft, readSavedDraft } from "@/services/draft-list";
@@ -180,6 +180,8 @@ async function toggleStar(item) {
   try {
     error.value="";
     const session=draftSession();
+    const editing=starInOpenEditor(item.draftId,session.owner,!item.starred);
+    if (editing) { await editing; return; }
     const draft=await readSavedDraft(item.draftId);
     if (draft.sendAttemptId) throw new Error("Check the delivery status before changing this draft.");
     await saveLocalDraft({...draft,mailboxStarred:!item.starred},{requireCurrent:true,session});

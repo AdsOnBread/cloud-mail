@@ -22,7 +22,7 @@
         popper-class="compose-format-popup compose-choice-popup compose-label-popup">
         <template #reference><span class="label-anchor">
           <button ref="labelButton" role="menuitem" aria-haspopup="menu" :aria-expanded="labelsOpen" :aria-controls="labelsOpen ? id+'-labels' : undefined"
-            @pointerenter="showLabels(false)" @keydown.right.stop.prevent="showLabels(true)" @click="showLabels(true)">
+            @pointermove="$event.pointerType === 'mouse' && showLabels(false)" @keydown.right.stop.prevent="showLabels(true)" @click="showLabels(true)">
             <span/>Label<Icon class="arrow" icon="material-symbols:arrow-right" width="18"/>
           </button>
         </span></template>
