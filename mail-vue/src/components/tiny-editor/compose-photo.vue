@@ -226,7 +226,7 @@ function keys(event) {
 defineExpose({open,close});
 </script>
 <style scoped>
-.photo-options {position:fixed;z-index:2400;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:0 5px;width:max-content;max-width:calc(100vw - 8px);padding:5px 8px;border:1px solid var(--light-border-color);border-radius:2px;background:var(--mail-surface);box-shadow:0 2px 5px #0003;color:var(--regular-text-color);font:13px/16px Arial,sans-serif}
+.photo-options {position:fixed;z-index:2400;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:0 6.75px;width:max-content;max-width:calc(100vw - 8px);padding:5px 8px;border:1px solid var(--light-border-color);border-radius:2px;background:var(--mail-surface);box-shadow:0 2px 5px #0003;color:var(--regular-text-color);font:13px/16.5px Arial,sans-serif}
 .photo-options button {padding:0;background:transparent;border:0;color:#1155cc;font:inherit;white-space:nowrap;cursor:pointer}
 :global(.dark) .photo-options button {color:#a8c7fa}
 .photo-options button:disabled {color:var(--secondary-text-color);cursor:default}
