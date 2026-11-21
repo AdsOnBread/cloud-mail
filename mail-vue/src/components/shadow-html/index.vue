@@ -10,7 +10,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { useUiStore } from '@/store/ui.js'
 import { privateFileURL, storedKey } from '@/utils/private-files'
-const props = defineProps({ html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateFileURL } })
+const props = defineProps({ html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateFileURL }, fileKey: { type: Function, default: storedKey } })
 const remote = ref(false)
 const hasRemoteImages = ref(false)
 const uiStore = useUiStore()
@@ -39,9 +39,9 @@ watch(() => [props.html, remote.value, uiStore.dark], async () => {
   }))
   doc.querySelectorAll('a').forEach(a => { a.target='_blank';a.rel='noopener noreferrer' })
   error.value = ''
-  hasRemoteImages.value = Array.from(doc.images).some(image => !storedKey(image.getAttribute('src')) && /^(https?:)?\/\//i.test(image.getAttribute('src') || ''))
+  hasRemoteImages.value = Array.from(doc.images).some(image => !props.fileKey(image.getAttribute('src')) && /^(https?:)?\/\//i.test(image.getAttribute('src') || ''))
   await Promise.all(Array.from(doc.images).map(async image => {
-    const key=storedKey(image.getAttribute('src'))
+    const key=props.fileKey(image.getAttribute('src'))
     if (!key) return
     try { const url=await props.resolveFileUrl(key);created.push(url);image.src=url } catch { image.removeAttribute('src');error.value='Some inline images are unavailable.' }
   }))

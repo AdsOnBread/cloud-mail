@@ -1,6 +1,6 @@
 # Cloudmail component comparison
 
-Compared the signed-in Gmail web interface in Chrome on November 20, 2026. The reference account had a photo theme. Cloudmail uses its light and dark palettes. Browser interaction checks use a fictional mailbox.
+Compared the signed-in Gmail web interface on November 20, 2026. The reference account had a photo theme. Cloudmail uses its light and dark palettes. Browser interaction checks use a fictional mailbox.
 
 | Component | Compare in the rendered interface |
 | --- | --- |
@@ -26,5 +26,8 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Writing | Compared the live docked composer and its bottom formatting strip. Checked font, size, text color, selection, formatted links, keyboard link insertion, removing a link, an inline image and reopening a saved draft. |
 | Filing | Tested moving mail to Trash and undoing it from a message, conversation, row and bulk selection. Created and applied a label from a selection and from an open thread. |
 | Keyboard and search | Checked focus entering and leaving the search and label popovers, the effect of typing before opening search options, and keyboard access to row actions. |
+| Quick settings | Opened the side panel, changed the theme and verified that compact row density persisted after reload. |
+| Move to | Moved a selection to a label, opened the conversation there and moved it back to Inbox. |
+| Scheduled send | Compared Gmail’s Send dropdown and recipient validation. In Cloudmail, chose a custom time, checked the timezone and past-date validation, downloaded an attached file from Scheduled and canceled back to an editable draft. Delivery and interruption tests used fictional mailboxes. |
 
 The Gmail account’s photo background, inbox category tabs and Google Workspace side panel are visible differences. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.

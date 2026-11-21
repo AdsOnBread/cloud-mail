@@ -168,7 +168,7 @@
           />
         </fieldset>
         <div
-          class="compose-editor"
+          class="compose-editor" :inert="sending"
           :class="{
             'editor-disabled': sending,
             'formatting-open': inline && showFormatting,
@@ -221,13 +221,18 @@
         </div>
         <p v-if="sendError" class="send-error" role="alert">{{ sendError }}</p>
         <div class="compose-footer">
+          <div class="split-send">
           <el-button
             type="primary"
             round
             :loading="sending || attaching"
-            @click="sendEmail"
+            @click="sendEmail()"
             >{{ sending ? "Sending…" : "Send" }}</el-button
           >
+          <el-dropdown trigger="click" placement="top-start" :show-arrow="false" popper-class="mail-action-menu compose-format-popup">
+            <button class="send-options" aria-label="More send options" data-tip="More send options" :disabled="sending || attaching"><Icon icon="material-symbols:arrow-drop-down" width="18"/></button>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item @click="validForSend() && schedulePicker.open()"><Icon icon="material-symbols:schedule-send-outline" width="18"/>Schedule send</el-dropdown-item></el-dropdown-menu></template>
+          </el-dropdown></div>
           <button
             type="button"
             class="compose-tool formatting-toggle"
@@ -275,6 +280,7 @@
         </div>
       </div>
     </div>
+    <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
     <el-dialog
       v-model="showContacts"
       append-to-body
@@ -313,9 +319,11 @@
   </section>
 </template>
 <script setup>
-import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft } from "@/services/cloud-drafts";
+import { saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
+import SchedulePicker from "./schedule.vue";
+import {useMailFeedback} from "@/store/mail-feedback";
 import tinyEditor from "@/components/tiny-editor/index.vue";
 import RecipientField from "@/components/recipient-field/index.vue";
 import {
@@ -370,7 +378,8 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
-const photoInput = ref();
+const photoInput = ref(), schedulePicker=ref(), scheduling=ref(false);
+const feedback=useMailFeedback();
 const photoTypes = ["image/png","image/jpeg","image/gif","image/webp","image/heic","image/avif"];
 async function insertPhoto(event) {
   const input = event.target, file = input.files?.[0];
@@ -519,6 +528,7 @@ async function openDraft(draft) {
   try {
     resetForm();
     Object.assign(form, restoreDraft(draft));
+    if(draft.schedulingError)sendError.value="Scheduling failed. "+draft.schedulingError;
     form.ownerEmail = userStore.user.email;
     if (!form.sendEmail) {
       const account = [...accountStore.accounts, accountStore.currentAccount, userStore.user.account]
@@ -683,7 +693,7 @@ async function persistDraftNow() {
   data.createTime =
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
   const saved=await saveLocalDraft({...data,draftId,attachments});
-  Object.assign(form,{draftId:saved.draftId,clientId:saved.clientId,cloudDraftId:saved.cloudDraftId,cloudVersion:saved.cloudVersion,syncState:saved.syncState});
+  Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
   return saved;
 }
 async function removeSavedDraft() {
@@ -697,8 +707,14 @@ watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.s
   clearTimeout(cloudSaveTimer);
   const localSave=persistDraft().catch(()=>{form.syncState="offline";});
   cloudSaveTimer=setTimeout(async()=>{
-    try {await localSave;const synced=await syncCloudDrafts();if(synced?.conflicts?.[form.draftId])form.draftId=synced.conflicts[form.draftId];const saved=await db.value.draft.get(form.draftId);if(saved)Object.assign(form,{cloudDraftId:saved.cloudDraftId,cloudVersion:saved.cloudVersion,syncState:saved.syncState});}
-    catch {form.syncState='offline';}
+    const draftId = (await localSave)?.draftId;
+    if (!draftId || form.draftId !== draftId) return;
+    try {
+      await syncCloudDrafts();
+      const saved = await db.value.draft.get(draftId);
+      if (form.draftId === draftId && saved && form.editToken === saved.editToken)
+        Object.assign(form, {clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
+    } catch { if (form.draftId === draftId) form.syncState='offline'; }
   },1000);
 },{deep:true});
 
@@ -745,8 +761,8 @@ async function discard() {
       ElMessage.error("Could not discard the saved draft. Please try again.");
   }
 }
-async function sendEmail() {
-  if (sending.value || attaching.value) return;
+function validForSend() {
+  if (sending.value || attaching.value) return false;
   commitRecipients();
   const recipients = normalizeRecipients(form);
   recipientErrors.value = recipients.errors;
@@ -757,19 +773,23 @@ async function sendEmail() {
       editingRecipients.value = true;
       nextTick(() => toField.value?.focus());
     }
-    return;
+    return false;
   }
   recipientFields.forEach((field) => {
     form[field] = recipients[field];
   });
   if (!form.subject.trim()) {
     sendError.value = "Enter a subject.";
-    return;
+    return false;
   }
   if (!form.content.trim()) {
     sendError.value = "Enter a message body.";
-    return;
+    return false;
   }
+  return true;
+}
+async function sendEmail(sendAt=null) {
+  if(!validForSend())return;
   clearTimeout(cloudSaveTimer);
   sending.value = true;
   sendError.value = "";
@@ -777,6 +797,11 @@ async function sendEmail() {
     await editor.value?.ready?.();
     // Save first so authentication/network failures cannot lose a message or its Bcc recipients.
     await persistDraft();
+    if(sendAt){
+      const result=await scheduleCloudDraft(form.draftId,sendAt);
+      feedback.show(result.pending?"Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.":"Send scheduled for "+new Date(sendAt*1000).toLocaleString()+".");
+      show.value=false;resetForm();emit("closed");return;
+    }
     const sent = await sendCloudDraft(form.draftId);
     sent.forEach((message) => emailStore.sendScroll?.addItem?.(message));
     emailStore.conversationRevision++;
@@ -803,7 +828,8 @@ async function sendEmail() {
     resetForm();
     emit("sent", sent);
   } catch (error) {
-    sendError.value = `${error.message || "Could not send your message."} Your message is kept here. Check Sent before retrying if the connection failed.`;
+    if(sendAt)sendError.value = (error.message || "Could not confirm the send time.")+" Check Scheduled before trying again.";
+    else sendError.value = `${error.message || "Could not send your message."} Your message is kept here. Check Sent before retrying if the connection failed.`;
   } finally {
     if(form.draftId) {
       const saved=await db.value.draft.get(form.draftId).catch(()=>null);
@@ -884,6 +910,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
+  if(scheduling.value || event.target.closest?.(".schedule-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (
     event.key === "Tab" &&
@@ -1343,4 +1370,8 @@ defineExpose({
     font-size: 10px;
   }
 }
+</style>
+
+<style scoped>
+.split-send{display:inline-flex;align-items:stretch;flex-shrink:0}.split-send :deep(.el-button){border-radius:24px 0 0 24px;margin:0}.split-send :deep(.el-dropdown){display:flex}.send-options{height:100%;min-width:29px;background:var(--el-color-primary);color:var(--mail-surface);border-left:1px solid #ffffff70;border-radius:0 24px 24px 0;display:grid;place-items:center;cursor:pointer}.send-options:hover{background:var(--el-color-primary-dark-2)}
 </style>

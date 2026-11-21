@@ -21,6 +21,9 @@
           <Icon icon="material-symbols:send-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('sent')}}</span>
         </el-menu-item>
+        <el-menu-item @click="router.push('/scheduled')" index="scheduled" aria-label="Scheduled" data-tip="Scheduled" :class="{'choose-item':activeFolder==='scheduled'}">
+          <Icon icon="material-symbols:schedule-send-outline" width="20"/><span class="menu-name folder-name">Scheduled</span>
+        </el-menu-item>
         <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" data-tip="Drafts" v-perm="'email:send'"
                       :class="activeFolder === 'draft' ? 'choose-item' : ''">
           <Icon icon="material-symbols:draft-outline" width="19" height="19" />

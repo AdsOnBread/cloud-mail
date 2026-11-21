@@ -33,6 +33,8 @@ export function startDraftList() {
             row.cloudVersion,
             row.localRevision,
             row.updatedAt,
+            row.pendingSchedule?.sendAt,
+            row.schedulingError,
           ].join("|");
           const cached = cache.get(row.draftId);
           next.set(
@@ -106,6 +108,7 @@ export async function readSavedDraft(draftId) {
   ]);
   if (db.value !== database || !draft || draft.deleted)
     throw new Error("This draft is no longer available.");
+  if(draft.pendingSchedule)throw new Error("Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.");
   return { ...draft, attachments: files?.attachments || [] };
 }
 

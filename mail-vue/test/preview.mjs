@@ -32,7 +32,7 @@ rows.push({...rows[0],emailId:101,type:1,status:2,unread:1,name:'Alex Morgan',se
 rows.push({...rows[0],emailId:102,subject:'Re: A few ideas for the next chapter',text:'Thanks! The first option is my favorite. What do you think?',content:'<p>Thanks! The first option is my favorite. What do you think?</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 for(let i=40;i<75;i++)rows.push({...rows[0],emailId:i,messageId:`<archive-${i}@example.net>`,replyToEmailId:i===40?0:40,subject:'Release planning archive',text:`Planning update ${i-39}`,content:`<p>Planning update ${i-39}</p>`,unread:1});
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
-function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:['sent','deleted'].includes(draft.state)?'delete':'upsert',draft:['sent','deleted'].includes(draft.state)?null:structuredClone(draft)});}
+function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:draft.state!=='draft'?'delete':'upsert',draft:draft.state!=='draft'?null:structuredClone(draft)});}
 function previewSend(form){const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts.find(a=>a.accountId===form.accountId)?.email||accounts[0].email,name:user.name,recipient:JSON.stringify((form.receiveEmail||[]).map(address=>({address}))),cc:JSON.stringify((form.cc||[]).map(address=>({address}))),bcc:JSON.stringify((form.bcc||[]).map(address=>({address}))),listText:form.text||form.content,trashedAt:null};rows.unshift(row);return [row];}
 function grouped(){
  const groups=groupThreads(rows.filter(row=>!row.trashedAt).map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/[A-Z]/g,l=>'_'+l.toLowerCase()),value]))),accounts.map(account=>account.email));
@@ -68,17 +68,30 @@ const api=createHTTPServer(async(req,res)=>{
  }
  if(path==='/v1/connections')data={connections:[]};
  else if(path==='/v1/drafts/changes')data={changes:draftEvents.filter(e=>e.seq>Number(url.searchParams.get('after')||0)).map(e=>{
-   const latest=cloudDrafts.get(e.draftId), draft=latest && !['deleted','sent'].includes(latest.state) ? latest : null;
+   const latest=cloudDrafts.get(e.draftId), draft=latest && latest.state==='draft' ? latest : null;
    return {...e,operation:draft?'upsert':'delete',draft};
  }),cursor:draftEvents.length,hasMore:false};
- else if(path==='/v1/drafts'&&req.method==='POST'){
+ else if(path==='/v1/scheduled'){
+   const scope=Number(url.searchParams.get('accountId'));
+   data=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope)).map(d=>({draftId:d.draftId,version:d.version,state:d.state,subject:d.subject,recipients:d.receiveEmail,preview:d.text,sendAt:d.scheduledAt}));
+ }else if(path.startsWith('/v1/scheduled/')){
+   const draft=cloudDrafts.get(Number(path.split('/')[3]));
+   if(!draft?.scheduledAt){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Scheduled message not found.'}));return;}
+   if(path.endsWith('/cancel')){
+     if(JSON.parse(body).version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+     delete draft.scheduledAt;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
+   }else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
+ }else if(path==='/v1/drafts'&&req.method==='POST'){
    const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);
    if(!draft){draft={...input,draftId:nextDraft++,version:1,state:'draft',createTime:new Date().toISOString(),attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:Buffer.from(f.content.replace(/^data:[^,]*;base64,/,''),'base64').length}))};cloudDrafts.set(draft.draftId,draft);recordDraft(draft);}
    data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/drafts/')){
    const id=Number(path.split('/')[3]),draft=cloudDrafts.get(id),input=body?JSON.parse(body):{};
    if(!draft){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Draft not found.'}));return;}
-   if(path.endsWith('/send')){data=sendAttempts.get(input.idempotencyKey);if(!data){data={state:'sent',attemptId:input.idempotencyKey,messages:previewSend(draft)};sendAttempts.set(input.idempotencyKey,data);draft.state='sent';draft.version++;recordDraft(draft);}}
+   if(path.endsWith('/schedule')){
+     if(input.version!==draft.version || draft.state!=='draft'){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.'}));return;}
+     draft.state='scheduled';draft.scheduledAt=input.sendAt;draft.version++;recordDraft(draft);data={draftId:id,version:draft.version,sendAt:input.sendAt};
+   }else if(path.endsWith('/send')){data=sendAttempts.get(input.idempotencyKey);if(!data){data={state:'sent',attemptId:input.idempotencyKey,messages:previewSend(draft)};sendAttempts.set(input.idempotencyKey,data);draft.state='sent';draft.version++;recordDraft(draft);}}
    else if(req.method==='DELETE'){draft.state='deleted';draft.version++;recordDraft(draft);data={deleted:true};}
    else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};

@@ -1,6 +1,6 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest';
 import {createPinia,setActivePinia} from 'pinia';
-import {saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft} from '../src/services/cloud-drafts';
+import {saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
 import db from '../src/db/db';
 import http from '../src/axios';
 const state=vi.hoisted(()=>({rows:new Map(),files:new Map(),meta:new Map(),remote:new Map(),events:[],next:1,cloudNext:1,attempts:new Map()}));
@@ -41,6 +41,37 @@ describe('Cloud draft synchronization',()=>{
   expect(result.conflicts[row.draftId]).toBeTruthy();expect([...state.rows.values()].map(r=>r.subject).sort()).toEqual(['Edited on iOS','My browser edits']);
   await syncCloudDrafts();expect(state.remote.size).toBe(2);
  });
+ it('keeps one draft through eight autosaves interleaved with background synchronization', async () => {
+  let editor = await saveLocalDraft(input());
+  await syncCloudDrafts();
+  editor = await db.value.draft.get(editor.draftId);
+  for (let revision = 1; revision <= 8; revision++) {
+   editor = await saveLocalDraft({...editor, subject: 'Edit ' + revision});
+   // A mailbox refresh can finish before the composer's own sync callback runs.
+   const result = await syncCloudDrafts();
+   expect(result.conflicts).toEqual({});
+  }
+  expect([...state.remote.values()]).toMatchObject([{subject:'Edit 8', version:9}]);
+  expect([...state.rows.values()]).toMatchObject([{draftId:editor.draftId, dirty:false}]);
+  expect(http.post).toHaveBeenCalledTimes(1);
+ });
+ it('preserves a remote edit pulled while the composer is still open', async () => {
+  const first = await saveLocalDraft(input());
+  await syncCloudDrafts();
+  const editor = await db.value.draft.get(first.draftId);
+  const remote = state.remote.get(editor.cloudDraftId);
+  remote.subject = 'Changed on another device';
+  remote.ui.editToken = 'another-device-edit';
+  remote.version++;
+  event(remote);
+  await syncCloudDrafts();
+  const local = await saveLocalDraft({...editor, subject:'My continued edit'});
+  const {conflicts} = await syncCloudDrafts();
+  expect(conflicts[local.draftId]).toBeTruthy();
+  await saveLocalDraft({...local, subject:'Still typing'});
+  await syncCloudDrafts();
+  expect([...state.remote.values()].map(row => row.subject).sort()).toEqual(['Changed on another device','Still typing']);
+ });
  it('does not mark changes typed during an upload as synchronized',async()=>{
   const row=await saveLocalDraft(input());let release;const original=http.post.getMockImplementation();http.post.mockImplementationOnce(async(...args)=>{await new Promise(resolve=>release=resolve);return original(...args);});
   const syncing=syncCloudDrafts();while(!release)await new Promise(resolve=>setTimeout(resolve,0));
@@ -54,6 +85,36 @@ describe('Cloud draft synchronization',()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const original=http.post.getMockImplementation();http.post.mockImplementationOnce(async(...args)=>{await original(...args);throw new Error('Reply lost');});
   await expect(sendCloudDraft(row.draftId)).rejects.toThrow('Reply lost');expect((await db.value.draft.get(row.draftId)).sendAttemptId).toBeTruthy();
   expect(await sendCloudDraft(row.draftId)).toEqual([{emailId:100,subject:'Draft'}]);expect(state.rows.size).toBe(0);expect(http.post.mock.calls.filter(([path])=>path.endsWith('/send'))).toHaveLength(1);
+ });
+ it('replays a lost scheduling confirmation without uploading or sending a second draft',async()=>{
+   const row=await saveLocalDraft(input());await syncCloudDrafts();
+   const when=Math.floor(Date.now()/1000)+3600,original=http.post.getMockImplementation();let scheduledTimes=0;
+   http.post.mockImplementation(async(path,data,...args)=>{
+     if(!path.endsWith('/schedule'))return original(path,data,...args);
+     const remote=state.remote.get(1);
+     if(remote.state==='scheduled'){
+       expect(data).toEqual({version:1,sendAt:when});
+       return {draftId:1,version:2,sendAt:when};
+     }
+     scheduledTimes++;remote.state='scheduled';remote.version++;remote.scheduledAt=when;
+     state.events.push({seq:state.events.length+1,draftId:1,operation:'delete'});
+     throw new Error('Connection closed before response');
+   });
+   expect(await scheduleCloudDraft(row.draftId,when)).toEqual({pending:true});
+   const pending=await db.value.draft.get(row.draftId);
+   await expect(saveLocalDraft({...pending,subject:'Stale editor'})).rejects.toThrow('changed');
+   await expect(sendCloudDraft(row.draftId)).rejects.toThrow('Scheduled');
+   await syncCloudDrafts();expect(scheduledTimes).toBe(1);expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(1);
+ });
+ it('keeps a delayed scheduling rejection visible on the editable draft',async()=>{
+   const row=await saveLocalDraft(input());await syncCloudDrafts();
+   http.post.mockRejectedValueOnce(new Error('Offline')).mockRejectedValueOnce({code:400,message:'Choose a future send time.'});
+   expect(await scheduleCloudDraft(row.draftId,Math.floor(Date.now()/1000)+20)).toEqual({pending:true});
+   await syncCloudDrafts();
+   const restored=await db.value.draft.get(row.draftId);
+   expect(restored).toMatchObject({pendingSchedule:null,schedulingError:'Choose a future send time.',subject:'Draft'});
+   const {draftSummary}=await import('../src/utils/draft-summary');
+   expect(draftSummary(restored).preview).toMatch(/Scheduling failed/);
  });
  it('preserves newer edits when recovering an earlier successful send',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();const original=http.post.getMockImplementation();http.post.mockImplementationOnce(async(...args)=>{await original(...args);throw new Error('Reply lost');});

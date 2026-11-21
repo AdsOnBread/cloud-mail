@@ -29,7 +29,7 @@ export function draftSummary(draft) {
     emailId: Number(draft.emailId),
     reply: draft.sendType === "reply",
     subject: draft.subject || "",
-    preview: preview(draft),
+    preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : preview(draft),
     lastDate: tzDayjs(draft.updatedAt || draft.createTime).valueOf(),
     recipients: [
       ...addresses(draft.receiveEmail),

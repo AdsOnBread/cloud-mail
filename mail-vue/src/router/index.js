@@ -17,6 +17,7 @@ const routes = [
                 path:'/'+folder, name:folder, component:() => import('@/components/conversation-list/index.vue'),
                 props:{folder}, meta:{title:folder,name:folder,menu:true}
             })),
+            {path:'/scheduled',name:'scheduled',component:()=>import('@/views/scheduled/index.vue'),meta:{title:'Scheduled',name:'scheduled',menu:true}},
             {path:'/trash',name:'trash',component:()=>import('@/views/trash/index.vue'),meta:{title:'Trash',name:'trash',menu:true}},
             {
                 path: '/inbox',
