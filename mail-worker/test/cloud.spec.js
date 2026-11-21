@@ -579,6 +579,11 @@ describe('Scheduled send',()=>{
    await deliverDue(c());
    expect((await drafts.get(c(),1,d.draftId,true)).state).toBe('sent');
    expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries WHERE user_id=1').first('n')).toBe(1);
+   await env.db.prepare("CREATE TRIGGER test_fail_filing BEFORE INSERT ON conversation_filing BEGIN SELECT RAISE(ABORT,'filing temporarily unavailable'); END").run();
+   await expect(conversationList(c(),{folder:'inbox',accountId:1},1)).rejects.toThrow();
+   expect(await env.db.prepare("SELECT count(*) n FROM send_attempts WHERE state='sent'").first('n')).toBe(1);
+   expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(1);
+   await env.db.prepare('DROP TRIGGER test_fail_filing').run();
    const box=await conversationList(c(),{folder:'inbox',accountId:1},1);
    expect(await env.db.prepare('SELECT count(*) n FROM scheduled_inbox_deliveries').first('n')).toBe(0);
    expect(box.threads).toHaveLength(1);
