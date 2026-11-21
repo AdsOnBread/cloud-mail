@@ -1,6 +1,5 @@
 import tlds from 'tlds';
 import {mailboxHref} from '@/utils/mailto';
-import {isEmail} from '@/utils/verify-utils';
 import {diffChars, diffWordsWithSpace} from "diff";
 
 // Domains can be entered as displayed, including international characters and
@@ -10,6 +9,10 @@ const knownSuffixes = new Set(tlds.map(suffix =>
   /^[a-z0-9-]+$/.test(suffix) ? suffix : new URL("https://domain." + suffix).hostname.split(".").at(-1)
 ));
 const bareMailbox = /^[^\s@]+@[^\s@/:?#]+\.[^\s@/:?#]+$/;
+
+// Address links can point to an international domain even when the sending
+// mailbox itself supports only ASCII addresses.
+const selectedMailbox = /^[a-z\d!#$%&'*+/=?^_`{|}~.-]+@(?:[\p{L}\p{M}\p{N}-]+[.。．｡])+[\p{L}][\p{L}\p{M}\p{N}-]+$/iu;
 
 export function normalizeLinkUrl(value) {
   const raw = value?.trim();
@@ -62,12 +65,11 @@ export function selectedLinkUrl(text) {
   if (!href) return "";
   if (href.startsWith("mailto:")) {
     const mailbox = /^mailto:/i.test(text) ? text.slice(7).split("?")[0] : text;
-    return isEmail(mailbox) ? href : "";
+    return selectedMailbox.test(mailbox) ? href : "";
   }
   if (/^https?:\/\//i.test(text)) return href;
   if (!domainLink.test(text)) return "";
-  const {hostname} = new URL(href);
-  return hostname.split(".").length > 2 || /[:/?#]/.test(text) ? href : "";
+  return text.split(/[.。．｡]/).length > 2 || /[:/?#]/.test(text) ? href : "";
 }
 
 // Keep the existing inline elements, including styles on text between separate edits.

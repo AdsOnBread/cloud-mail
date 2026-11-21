@@ -69,10 +69,13 @@ it("links selected mailboxes and qualified web text in place", () => {
     ["notes+tag@example.org", "mailto:notes+tag@example.org"],
     ["mailto:notes@example.org", "mailto:notes@example.org"],
     ["www.example.org", "https://www.example.org/"],
+    ["person@例え.jp", new URL("mailto:person@例え.jp").href],
+    ["settings.local.json", "https://settings.local.json/"],
+    ["1.2.3", "https://1.2.0.3/"],
     ["example.org/path", "https://example.org/path"],
     ["example.org?ref=1", "https://example.org/?ref=1"],
     ["docs.example.org/q?who=notes@example.org", "https://docs.example.org/q?who=notes@example.org"],
   ]) expect(selectedLinkUrl(text)).toBe(href);
-  for (const text of ["example.org", "some words", " notes@example.org", "name@", "tel:+12025550100", "file:///tmp", "javascript:run()"])
+  for (const text of ["example.org", "1.2", "some words", " notes@example.org", "name@", "tel:+12025550100", "file:///tmp", "javascript:run()"])
     expect(selectedLinkUrl(text)).toBe("");
 });
