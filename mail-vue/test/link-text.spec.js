@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { normalizeLinkUrl, selectedWebUrl, renameLink } from "../src/components/tiny-editor/link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "../src/components/tiny-editor/link-text";
 
 it.each([
   ["Read <b>these</b> <i>notes</i>", "Read those notes", "Read <b>those</b> <i>notes</i>"],
@@ -49,4 +49,17 @@ it("accepts display-form international domains and encodes spaces in web paths",
   for (const text of ["two hosts.example.org", "a.example.org:invalid", "javascript:run()", "file:///home/note"]) {
     expect(normalizeLinkUrl(text)).toBe("");
   }
+});
+
+it("edits a simple mailbox without a scheme and preserves compound email destinations", () => {
+  expect(editableLinkUrl("mailto:notes@example.org")).toBe("notes@example.org");
+  for (const href of ["mailto:orders%3Ftag@example.org", "mailto:a@example.org?subject=Hi%20there", "https://example.org/"]) {
+    expect(editableLinkUrl(href)).toBe(href);
+  }
+});
+
+it("shows both ends of long destinations without splitting a Unicode code point", () => {
+  const head = "a".repeat(23) + "🐢", tail = "b".repeat(24);
+  expect(shortenLinkDestination(head + tail)).toBe(head + tail);
+  expect(shortenLinkDestination(head + "x" + tail)).toBe(head + "..." + tail);
 });

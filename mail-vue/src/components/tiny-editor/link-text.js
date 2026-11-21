@@ -34,6 +34,20 @@ export function normalizeLinkUrl(value) {
   }
 }
 
+// A plain mailbox can be edited as typed. Keep an explicit URI when dropping
+// its scheme would change an encoded local part, subject or other parameter.
+export function editableLinkUrl(href) {
+  const address = href.replace(/^mailto:/i, "");
+  return address !== href && normalizeLinkUrl(address) === normalizeLinkUrl(href) ? address : href;
+}
+
+export function shortenLinkDestination(value) {
+  const characters = Array.from(value);
+  return characters.length > 48
+    ? characters.slice(0, 24).join("") + "..." + characters.slice(-24).join("")
+    : value;
+}
+
 export function selectedWebUrl(text) {
   if (!/^https?:\/\//i.test(text) || /\s/.test(text)) return "";
   return normalizeLinkUrl(text);

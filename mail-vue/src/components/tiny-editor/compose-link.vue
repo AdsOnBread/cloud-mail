@@ -3,9 +3,9 @@
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
     @keydown.esc.stop.prevent="close(true)" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
-      <span>Go to link:</span>
-      <a v-if="safeUrl" :href="safeUrl" target="_blank" rel="noopener noreferrer">{{ panel.url }}</a>
-      <span v-else class="address">{{ panel.url }}</span>
+      <span v-if="canVisit">Go to link:</span>
+      <a v-if="canVisit" :href="safeUrl" :aria-label="destination" :title="destination" target="_blank" rel="noopener noreferrer">{{ previewText }}</a>
+      <span v-else class="address" :title="destination">{{ previewText }}</span>
       <span aria-hidden="true">|</span>
       <button type="button" @click="edit">Change</button>
       <span aria-hidden="true">|</span>
@@ -28,13 +28,17 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { Icon } from "@iconify/vue";
-import { normalizeLinkUrl, selectedWebUrl, renameLink } from "./link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
   textField = ref(null), urlField = ref(null);
 let bookmark, anchor, originalText, owner, range, resize, fragment = null;
 const safeUrl = computed(() => normalizeLinkUrl(panel.value?.url));
+const canVisit = computed(() => /^https?:\/\//i.test(safeUrl.value) ||
+  (/^mailto:/i.test(safeUrl.value) && safeUrl.value.includes("?")));
+const destination = computed(() => (panel.value?.url || "").replace(/^mailto:/i, ""));
+const previewText = computed(() => shortenLinkDestination(destination.value));
 function outside(event) {
   if (
     !box.value?.contains(event.target) &&
@@ -130,7 +134,7 @@ async function open(existing = null, preview = false, pointer = null, photoActio
       bookmark = ed.selection.getBookmark(2, true);
     }
   }
-  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, imageLink,
+  panel.value = {text:originalText, url:editableLinkUrl(anchor?.getAttribute("href") || ""), preview, imageLink,
     selectedText:selectedText && !anchor, existing:Boolean(anchor)};
   const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
@@ -215,10 +219,10 @@ defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
   box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
   font:14px/20px Arial,sans-serif;
 }
-form { display:grid; grid-template-columns:minmax(0,1fr) 68px; align-items:center; gap:8px; }
+form { display:grid; grid-template-columns:minmax(0,1fr) 64px; align-items:center; gap:8px 12px; }
 label {
-  display:flex; align-items:center; gap:16px; min-width:0; height:32px;
-  grid-column:1; padding:0 8px; box-sizing:border-box; cursor:text;
+  display:flex; align-items:center; gap:18px; min-width:0; height:32px;
+  grid-column:1; padding:0 15px 0 7px; box-sizing:border-box; cursor:text;
   border:1px solid var(--secondary-text-color); border-radius:4px;
 }
 label:focus-within { border-color:var(--el-color-primary); box-shadow:inset 0 0 0 1px var(--el-color-primary); }
@@ -229,7 +233,7 @@ input {
 }
 button { font:inherit; cursor:pointer; }
 .apply-link {
-  grid-column:2; grid-row:2; padding:6px 14px; border-radius:16px;
+  grid-column:2; grid-row:2; height:32px; padding:0 12px; border-radius:16px;
   font-weight:500; color:var(--el-color-primary);
 }
 .selection-link { width:334px; padding:18px 16px; }
@@ -244,7 +248,12 @@ button { font:inherit; cursor:pointer; }
   padding:5px 10px; font:13px/18px Arial,sans-serif;
 }
 .link-preview span,.link-preview button { flex:none; white-space:nowrap; }
+.link-preview [aria-hidden] {margin-inline:2px;}
 .link-preview a,.link-preview .address { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .link-preview a,.link-preview button { padding:0; color:var(--el-color-primary); text-decoration:none; }
 .link-preview a:hover,.link-preview button:hover { text-decoration:underline; }
+@media (forced-colors:active) {
+  .link-card {outline:1px solid CanvasText;}
+  label:focus-within {outline:2px solid Highlight;}
+}
 </style>
