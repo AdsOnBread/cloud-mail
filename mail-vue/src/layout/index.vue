@@ -15,6 +15,7 @@
 import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
 import QuickSettings from "@/components/quick-settings/index.vue";
+import {useMailLabels} from "@/store/mail-labels";
 import LabelEditor from "@/components/mail-labels/editor.vue";
 import MailFeedback from '@/components/mail-feedback/index.vue';
 import MailTooltip from '@/components/mail-tooltip/index.vue';
@@ -34,15 +35,16 @@ const shellStyle=computed(()=>{
     '--mail-canvas':!['light','dark'].includes(active.id) && !uiStore.dark ? active.color : undefined,
     '--theme-image': active.image?'url("'+active.image+'")':undefined};
 });
+const labels=useMailLabels();
 const pointerInRail=ref(false),keyboardInRail=ref(false);
-const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value));
+const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));
 let railTimer;
 function enterRail(e){
   clearTimeout(railTimer);
   if(e.pointerType==='mouse' && !isMobile.value && !uiStore.asideShow)railTimer=setTimeout(()=>{pointerInRail.value=true;},150);
 }
 function leaveRail(){clearTimeout(railTimer);pointerInRail.value=false;}
-function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible');}
+function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.label-options');}
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();

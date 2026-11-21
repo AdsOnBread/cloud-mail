@@ -50,6 +50,7 @@ function grouped(){
 }
 function threadFor(id){return [...grouped().values()].find(thread=>thread.some(row=>row.emailId===Number(id)))||[];}
 const labels = new Map(), membership = new Map();
+let recentColors=[];
 let nextLabel = 1;
 function threadLabels(members) {
  return [...new Set(members.flatMap(row=>[...(membership.get(row.emailId)||[])]))];
@@ -149,13 +150,21 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
    data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId})));
- }else if(path==='/email/conversation/labels' && req.method==='GET')data=[...labels.values()];
+ }else if(path==='/email/conversation/label-colors')data=recentColors;
+ else if(path==='/email/conversation/labels' && req.method==='GET')data=[...labels.values()];
  else if(path==='/email/conversation/labels' && req.method==='POST'){
    data={id:nextLabel++,name:JSON.parse(body).name};labels.set(data.id,data);
+ }else if(path.startsWith('/email/conversation/labels/') && path.endsWith('/color')){
+   const id=Number(path.split('/').at(-2)), colors=JSON.parse(body);
+   const {background,foreground,custom}=colors;
+   const label=labels.get(id);
+   if(!label){res.writeHead(404,{'Content-Type':'application/json'});res.end(JSON.stringify({code:404,message:'Label not found.'}));return;}
+   Object.assign(label,{background,foreground});data={id,background,foreground};
+   if(custom)recentColors=[{background,foreground},...recentColors.filter(p=>p.background!==background || p.foreground!==foreground)].slice(0,6);
  }else if(path.startsWith('/email/conversation/labels/')){
    const id=Number(path.split('/').at(-1));
    if(req.method==='DELETE'){labels.delete(id);for(const set of membership.values()) set.delete(id);}
-   else {data={id,name:JSON.parse(body).name};labels.set(id,data);}
+   else {data={...labels.get(id),id,name:JSON.parse(body).name};labels.set(id,data);}
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
    if(operation==='importance'){const revision=++importanceRevision;for(const id of ids)importanceChoices.set(id,{revision,important:p.important});}

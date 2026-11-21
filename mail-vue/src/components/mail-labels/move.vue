@@ -37,9 +37,10 @@
         @click="choose(item.id)"
       >
         <Icon
+          :style="{color:item.background}"
           :icon="
             item.id
-              ? 'material-symbols:label-outline'
+              ? (item.background ? 'material-symbols:label' : 'material-symbols:label-outline')
               : 'material-symbols:inbox-outline'
           "
           width="18"

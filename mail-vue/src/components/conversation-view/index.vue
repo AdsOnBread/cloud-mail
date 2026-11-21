@@ -37,7 +37,7 @@
       <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
     <div ref="scroll" class="conversation-body">
-      <h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
+      <h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
       </p>
@@ -121,6 +121,7 @@ import {
 } from "vue-router";
 import { Icon } from "@iconify/vue";
 
+import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
 import ConversationMessage from "@/components/conversation-message/index.vue";
 import MessageComposer from "@/components/message-composer/index.vue";

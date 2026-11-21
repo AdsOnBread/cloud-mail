@@ -44,7 +44,7 @@
         <span v-if="count > 1" class="thread-count">{{ count }}</span>
       </span>
       <span class="summary"
-        ><span v-for="label in labels" :key="label" class="row-label">{{ label }}</span><span class="subject">{{ subject || "(no subject)" }}</span
+        ><span v-for="label in labels" :key="label.id" class="row-label" :style="labelStyle(label)">{{ label.name }}</span><span class="subject">{{ subject || "(no subject)" }}</span
         ><span v-if="preview" class="preview"
           ><span class="separator"> - </span>{{ preview }}</span
         ></span
@@ -59,6 +59,7 @@
 </template>
 <script setup>
 import { Icon } from "@iconify/vue";
+import {labelStyle} from "@/components/mail-labels/colors";
 import MailImportance from "@/components/mail-importance.vue";
 defineProps({
   showImportance: Boolean,

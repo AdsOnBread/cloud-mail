@@ -165,7 +165,7 @@
           :participants="row.participants"
           :count="row.messageCount"
           :subject="row.subject"
-          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId).map(label=>label.name)"
+          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId)"
           :preview="replies(row)[0]?.preview || row.preview"
           :draft-count="replies(row).length"
           :date="mailboxDate(rowDate(row))"

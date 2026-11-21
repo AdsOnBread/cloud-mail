@@ -52,12 +52,9 @@
         <div class="label-heading"><span class="menu-name">Labels</span><button class="mail-icon" aria-label="Create new label" data-tip="Create new label" @click="labels.edit={}"><Icon icon="material-symbols:add" width="20" /></button></div>
         <div v-for="label in labels.items" :key="label.id" class="label-row" :class="{'selected-label':activeLabel===label.id}">
           <router-link :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name">
-            <Icon icon="material-symbols:label-outline" width="20" /><span class="menu-name">{{ label.name }}</span>
+            <Icon :icon="label.background ? 'material-symbols:label' : 'material-symbols:label-outline'" :style="{color:label.background}" width="20" /><span class="menu-name">{{ label.name }}</span>
           </router-link>
-          <el-dropdown trigger="click" popper-class="mail-action-menu" :show-arrow="false" @command="cmd=>labels.edit={...label,remove:cmd==='remove'}">
-            <button class="mail-icon label-options" :aria-label="'Options for '+label.name"><Icon icon="material-symbols:more-vert" width="18" /></button>
-            <template #dropdown><el-dropdown-menu><el-dropdown-item command="edit">Edit</el-dropdown-item><el-dropdown-item command="remove">Remove label</el-dropdown-item></el-dropdown-menu></template>
-          </el-dropdown>
+          <LabelOptions :key="labels.owner+'-'+label.id" :label="label" />
         </div>
         <button v-if="labels.error" class="labels-error" @click="labels.load()">Retry loading labels</button>
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
@@ -116,6 +113,7 @@ import { hasPerm } from '@/perm/perm.js';
 import router from "@/router/index.js";
 import { useRoute } from 'vue-router';
 import { computed, ref, watch } from 'vue';
+import LabelOptions from "@/components/mail-labels/options.vue";
 import { useMailLabels } from '@/store/mail-labels';
 import { useUserStore } from '@/store/user';
 import { useMailSearchStore } from '@/store/mail-search.js';
@@ -166,9 +164,10 @@ const uiStore = useUiStore();
 .label-row a { display:flex; align-items:center; gap:16px; padding-left:24px; min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
 .label-row a svg { flex-shrink:0; }
 .label-row a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.label-options { opacity:0; }
-.label-row:hover .label-options,.label-row:focus-within .label-options { opacity:1; }
-:global(.mail-layout.nav-compact) .label-row .el-dropdown { display:none; }
+.label-row :deep(.label-options) { opacity:0; }
+.label-row:hover :deep(.label-options),.label-row:focus-within :deep(.label-options),.label-row :deep(.label-options[aria-expanded=true]) { opacity:1; }
+@media (hover:none) { .label-row :deep(.label-options) { opacity:1; } }
+:global(.mail-layout.nav-compact .label-row .label-options) { display:none; }
 .labels-error { margin:8px 24px; color:var(--el-color-primary); }
 .scroll { height:100%; }
 .mailbox-selector { padding:12px 12px 8px; }
