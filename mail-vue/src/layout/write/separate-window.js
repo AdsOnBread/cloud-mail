@@ -35,7 +35,7 @@ function findDraft(id) {
   for (const [child, entry] of children) {
     if (child.closed) { forget(child,entry.id); continue; }
     if (!isComposer(child,entry.id)) continue;
-    entry.check();
+    try { entry.check(); } catch { forget(child,entry.id); continue; }
     if (windowState(entry.id, child).draftId === id) return child;
   }
 }

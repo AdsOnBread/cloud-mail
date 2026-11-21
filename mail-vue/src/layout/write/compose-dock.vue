@@ -75,6 +75,7 @@ const feedback = useMailFeedback(),
   user = useUserStore();
 const editors = new Map();
 const menuVersion = ref(0);
+const mailboxTitle = document.title;
 let serial = 0,
   usage = 0;
 function empty() {
@@ -134,7 +135,7 @@ function remove(item) {
     notifyWindowDraft(props.separateWindow);
     // Keep action feedback and Undo available in this window after sending,
     // scheduling or discarding. A plain save-and-close closes the window.
-    if (feedback.notice) router.replace("/inbox");
+    if (feedback.notice) { document.title = mailboxTitle; router.replace("/inbox"); }
     else window.close();
   }
   const owned = editors.get(item.key)?.ownsFocus();

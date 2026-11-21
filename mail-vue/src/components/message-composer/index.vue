@@ -1122,6 +1122,7 @@ const pendingRecipients = computed(() => {
   for (const [key,field] of [["receiveEmail",toField],["cc",ccField],["bcc",bccField]]) {
     const change = field.value?.pendingChange();
     if (!change) continue;
+    patch.replyRecipientNames = names;
     if (!change.nameEdit) {
       const values = [...form[key]];
       values.splice(change.source ?? values.length,change.source === null ? 0 : 1,...change.people.map(p => p.address));
@@ -1133,8 +1134,6 @@ const pendingRecipients = computed(() => {
       else if (change.nameEdit) delete names[address.toLowerCase()];
     }
   }
-  if (Object.keys(patch).length || Object.keys(names).some(key=>names[key]!==form.replyRecipientNames?.[key]) ||
-      Object.keys(form.replyRecipientNames || {}).length !== Object.keys(names).length) patch.replyRecipientNames = names;
   return patch;
 });
 function snapshot() {
@@ -1172,11 +1171,13 @@ async function removeSavedDraft() {
   if(form.draftId)await removeLocalDraft(form.draftId);
 }
 let cloudSaveTimer;
-watch([()=>draftFingerprint(props.separateWindow ? {...form,...pendingRecipients.value} : form), ()=>JSON.stringify(draftFilingFingerprint(form)),
+const autosaveForm = computed(() => props.separateWindow ? {...form,...pendingRecipients.value} : form);
+watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingFingerprint(form)),
   ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
   if(preparing.value || sending.value || !show.value) return;
   const changedFiling = form.draftId && (filing!==previousFiling || revision!==previousRevision);
-  if (!changedFiling && (!(props.separateWindow && form.draftId) && !hasDraftContent(props.separateWindow ? snapshot() : form) || fingerprint===automaticBaseline ||
+  const empty = !(props.separateWindow && form.draftId) && !hasDraftContent(autosaveForm.value);
+  if (!changedFiling && (empty || fingerprint===automaticBaseline ||
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
