@@ -22,7 +22,7 @@
         <Icon icon="material-symbols:dark-mode-outline" width="22"/>
       </button>
       <button type="button" class="icon-button notice" aria-label="Announcements" data-tip="Announcements" @click="openNotice"><Icon icon="material-symbols:campaign-outline" width="22" /></button>
-      <button type="button" class="icon-button" aria-label="Settings" data-tip="Settings" @click="router.push('/settings')"><Icon icon="material-symbols:settings-outline" width="24" /></button>
+      <button type="button" class="icon-button" id="mail-settings-trigger" aria-label="Settings" data-tip="Settings" :aria-expanded="uiStore.quickSettings" @click="uiStore.quickSettings=!uiStore.quickSettings"><Icon icon="material-symbols:settings-outline" width="24" /></button>
       <el-dropdown trigger="click" placement="bottom-end" :show-arrow="false" :teleported="false" popper-class="detail-dropdown">
         <button type="button" class="avatar" aria-label="Your account" data-tip="Your account" >
           <div class="avatar-text">
@@ -195,12 +195,7 @@ function openNotice() {
   uiStore.showNotice()
 }
 
-function openDark() {
-  const dark = !uiStore.dark;
-  document.documentElement.classList.toggle("dark", dark);
-  document.getElementById("theme-color-meta")?.setAttribute("content", dark ? "#1b1b1f" : "#f6f8fc");
-  uiStore.dark = dark;
-}
+function openDark() { uiStore.setDark(!uiStore.dark); }
 
 function changeAside() {
   uiStore.asideShow = !uiStore.asideShow

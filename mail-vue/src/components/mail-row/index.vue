@@ -82,7 +82,7 @@ defineEmits(["select", "star", "open"]);
 .conversation-row {
   --row-fill: var(--mail-read);
   position: relative;
-  height: 40px;
+  height: var(--mail-row-height,40px);
   display: flex;
   align-items: center;
   padding: 0 12px 0 8px;

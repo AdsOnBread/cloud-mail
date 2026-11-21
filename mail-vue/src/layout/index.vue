@@ -1,5 +1,5 @@
 <template>
-  <div class="mail-layout" :class="{ 'nav-expanded': uiStore.asideShow }">
+  <div class="mail-layout" :style="{'--mail-row-height':uiStore.rowHeight+'px'}" :class="{ 'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings }">
     <header class="mail-header"><Header /></header>
     <aside class="mail-sidebar" aria-label="Mail navigation" :inert="isMobile && !uiStore.asideShow" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="uiStore.asideShow && isMobile" class="nav-overlay" aria-label="Close navigation" @click="uiStore.asideShow = false" />
@@ -7,13 +7,14 @@
     <writer ref="writerRef" />
     <MailTooltip />
     <MailFeedback />
-    <LabelEditor />
+    <LabelEditor /><QuickSettings />
     <button v-if="route.name !== 'content'" v-perm="'email:send'" class="mobile-compose" aria-label="Compose message" @click="uiStore.writerRef.open()"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
   </div>
 </template>
 <script setup>
 import { startDraftList } from '@/services/draft-list';
 import { startDraftSync } from '@/services/cloud-drafts';
+import QuickSettings from "@/components/quick-settings/index.vue";
 import LabelEditor from "@/components/mail-labels/editor.vue";
 import MailFeedback from '@/components/mail-feedback/index.vue';
 import MailTooltip from '@/components/mail-tooltip/index.vue';
@@ -57,4 +58,5 @@ onBeforeUnmount(() => { stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef 
 }
 @media (min-width:768px) and (prefers-reduced-motion:no-preference) { .mail-layout { transition:grid-template-columns .16s cubic-bezier(.2,0,0,1); } }
 @media (prefers-reduced-motion:reduce) { .mail-sidebar { transition:none; } }
+@media(min-width:900px){.settings-open .mail-main{padding-right:344px}}
 </style>

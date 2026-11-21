@@ -4,6 +4,8 @@ export const useUiStore = defineStore('ui', {
     state: () => ({
         asideShow: window.innerWidth >= 1024,
         accountShow: false,
+        quickSettings:false,
+        density:"default",
         backgroundLoading: true,
         changeNotice: 0,
         writerRef: null,
@@ -18,7 +20,15 @@ export const useUiStore = defineStore('ui', {
             sysEmail: 0
         }
     }),
+    getters: {
+        rowHeight:state=>({default:40,comfortable:36,compact:32}[state.density] || 40),
+    },
     actions: {
+        setDark(dark) {
+            document.documentElement.classList.toggle("dark",dark);
+            document.getElementById("theme-color-meta")?.setAttribute("content",dark?"#1b1b1f":"#f6f8fc");
+            this.dark=dark;
+        },
         showNotice() {
             this.changeNotice ++
         },
@@ -28,6 +38,6 @@ export const useUiStore = defineStore('ui', {
         }
     },
     persist: {
-        pick: ['dark','composeFormatting'],
+        pick: ['dark','composeFormatting','density'],
     },
 })

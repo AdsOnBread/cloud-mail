@@ -371,13 +371,15 @@ const rows = ref([]),
   hasMore = ref(false),
   context = ref(0),
   contextDropdown = ref();
+import {useUiStore} from "@/store/ui";
+const uiPreferences=useUiStore();
 const { width } = useWindowSize();
 const {
   list: virtualRows,
   containerProps,
   wrapperProps,
 } = useVirtualList(rows, {
-  itemHeight: () => (width.value < 768 ? 84 : 40),
+  itemHeight: () => (width.value < 768 ? 84 : uiPreferences.rowHeight),
   overscan: 12,
 });
 let generation = 0,
