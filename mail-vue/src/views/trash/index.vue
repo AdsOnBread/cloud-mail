@@ -536,7 +536,6 @@ async function emptyTrash() {
 }
 async function act(action, ids, destination) {
   if (busy.value || !canDelete.value) return;
-  if (responses.value && !await responses.value.save()) return;
   busy.value = true;
   error.value = "";
   let changed = 0;
@@ -548,6 +547,8 @@ async function act(action, ids, destination) {
   const stillCurrent = () => !disposed && request === revision && token === user.authenticatedToken && token === localStorage.getItem("token");
   const selectedIndex = ids?.length ? messages.value.findIndex(message=>ids.includes(message.emailId)) : 0;
   try {
+    if (responses.value && !await responses.value.save()) return;
+    if (!stillCurrent()) return;
     if (!ids) {
       ids = [];
       let cursor;
