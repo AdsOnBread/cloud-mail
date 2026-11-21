@@ -7,7 +7,7 @@
       </button>
       <div :id="part.quote ? id+'-'+index : undefined" :hidden="part.quote && !open.has(index)">
         <template v-if="!part.quote || seen.has(index)">
-          <ShadowHtml v-if="part.html" :html="part.html" natural-flow :file-key="fileKey" :resolve-file-url="resolveFileUrl"/>
+          <ShadowHtml v-if="part.html" :html="part.html" natural-flow :citation="Boolean(part.quote)" :file-key="fileKey" :resolve-file-url="resolveFileUrl"/>
           <pre v-else class="mail-plain"><MessageText :text="part.text"/></pre>
         </template>
       </div>

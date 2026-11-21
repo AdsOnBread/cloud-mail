@@ -13,7 +13,7 @@ import {naturalFlow} from './natural-flow';
 import { ref, shallowRef, watch, onUnmounted } from 'vue'
 import { useUiStore } from '@/store/ui.js'
 import { privateImageURL, storedKey } from '@/utils/private-files'
-const props = defineProps({ naturalFlow: Boolean, html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateImageURL }, fileKey: { type: Function, default: storedKey } })
+const props = defineProps({ naturalFlow: Boolean, citation: Boolean, html: { type: String, required: true }, resolveFileUrl: { type: Function, default: privateImageURL }, fileKey: { type: Function, default: storedKey } })
 const remote = ref(false)
 const hasRemoteImages = ref(false)
 const uiStore = useUiStore()
@@ -36,13 +36,13 @@ watch(() => [props.html,props.fileKey,props.resolveFileUrl],()=>{
   images=new Map()
   remote.value=false
 },{flush:'sync'})
-watch(() => [props.html, props.naturalFlow, props.fileKey, props.resolveFileUrl, remote.value, uiStore.dark], async () => {
+watch(() => [props.html, props.naturalFlow, props.citation, props.fileKey, props.resolveFileUrl, remote.value, uiStore.dark], async () => {
   const current = ++generation
   const files = images
   const doc = new DOMParser().parseFromString(props.html, 'text/html')
   const plain=plainParagraphs(doc);
   if (!plain) detectDocumentLinks(doc);
-  const safeFlow=props.naturalFlow && !plain ? naturalFlow(doc) : null;
+  const safeFlow=props.naturalFlow && !plain ? naturalFlow(doc,props.citation) : null;
   doc.querySelectorAll('script,iframe,object,embed,form,meta,base,link,svg,math').forEach(e => e.remove())
   doc.querySelectorAll('*').forEach(e => Array.from(e.attributes).forEach(a => {
     if (/^on/i.test(a.name) || ['srcdoc','srcset','ping'].includes(a.name) || (/^(href|src|action)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value))) e.removeAttribute(a.name)

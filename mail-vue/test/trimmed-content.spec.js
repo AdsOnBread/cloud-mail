@@ -80,3 +80,11 @@ it('recognizes a wrapped reply header after the time or the sender address',()=>
    expect(parts).toEqual([{text:'Answer\n'},{text:header+'\n> Question',quote:true}]);
  }
 });
+
+it('preserves the original layout of a standalone authored quotation',async()=>{
+ const wrapper=mount(MessageContent,{props:{html:'<p>A passage:</p><blockquote style="margin:0">Original excerpt</blockquote>'}});
+ await flushPromises();
+ expect(wrapper.find('.natural-flow blockquote').exists()).toBe(false);
+ expect(wrapper.get('iframe').attributes('srcdoc')).toContain('<blockquote style="margin:0">Original excerpt</blockquote>');
+ wrapper.unmount();
+});

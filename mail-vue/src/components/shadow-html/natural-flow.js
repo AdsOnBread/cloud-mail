@@ -41,8 +41,9 @@ function flowNode(node,depth) {
   return h(node.localName,props,children);
 }
 
-export function naturalFlow(doc) {
-  if (doc.head.children.length) return null;
+export function naturalFlow(doc,citation) {
+  // The conversation's quote bar applies only to disclosed reply history.
+  if (doc.head.children.length || (!citation && doc.querySelector('blockquote'))) return null;
   const props={};
   for (const element of [doc.documentElement,doc.body]) {
     for (const {name,value} of element.attributes) {
