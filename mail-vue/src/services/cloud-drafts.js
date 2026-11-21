@@ -43,7 +43,7 @@ function savedFingerprint(row) {
   return fingerprint({...row, content:template.innerHTML, attachments});
 }
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
-const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','restoredFromDiscard','hasFiles','attachments'])delete copy[key];return copy;};
+const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
   const {attachments:ignored,...metadata}=row;
@@ -95,7 +95,8 @@ export async function saveLocalDraft(input, {requireCurrent = false, session} = 
     // A different edit token means the editor must keep its own base version for conflict detection.
     const sameEdit = current && input.editToken && input.editToken === current.editToken;
     return writeDraft(database, {
-      ...input, restoredFromDiscard:current?.restoredFromDiscard, updatedAt:new Date().toISOString(), dirty:true, editToken:crypto.randomUUID(),
+      ...input, ...(current?.detachedReply ? {detachedReply:true, emailId:0, sendType:'', inlineReply:false} : {}),
+      restoredFromDiscard:current?.restoredFromDiscard, updatedAt:new Date().toISOString(), dirty:true, editToken:crypto.randomUUID(),
       clientId:current?.clientId || input.clientId || crypto.randomUUID(),
       cloudVersion:sameEdit ? current.cloudVersion : input.cloudVersion ?? current?.cloudVersion,
       cloudDraftId:sameEdit ? current.cloudDraftId : input.cloudDraftId ?? current?.cloudDraftId,
@@ -151,7 +152,9 @@ async function push(database,row,api) {
       const independent = await database.transaction('rw', database.draft, async () => {
         const latest = await database.draft.get(row.draftId);
         if (!latest || latest.deleted || latest.editToken !== row.editToken) return;
-        const next = {...latest, emailId:0, sendType:'', inlineReply:false, editToken:crypto.randomUUID()};
+        // The missing source was rejected before a cloud write. Keep the edit token
+        // so the already-open editor can adopt the successful independent upload.
+        const next = {...latest, detachedReply:true, emailId:0, sendType:'', inlineReply:false};
         await database.draft.put(next);
         return next;
       });

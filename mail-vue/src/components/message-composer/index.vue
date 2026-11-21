@@ -823,6 +823,7 @@ async function persistDraftNow(options) {
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
   const saved=await saveLocalDraft({...data,draftId,attachments}, options);
   Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
+  if (saved.detachedReply) Object.assign(form, {emailId:0, sendType:"", inlineReply:false});
   return saved;
 }
 async function removeSavedDraft() {

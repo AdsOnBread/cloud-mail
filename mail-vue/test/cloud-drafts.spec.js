@@ -235,9 +235,14 @@ describe('Cloud draft synchronization',()=>{
  it('restores an independent editable draft when the reply source has since been removed',async()=>{
    const row=await saveLocalDraft(input({sendType:'reply',emailId:17,inlineReply:true}));await syncCloudDrafts();
    const operation=await discardDrafts([row.draftId]);await syncCloudDrafts();
-   http.post.mockRejectedValueOnce({code:404,message:'Original message not found.'});
+   Object.defineProperty(navigator,'onLine',{value:false});
    const [id]=await operation.restore();await syncCloudDrafts();
+   const openEditor=await db.value.draft.get(id);
+   Object.defineProperty(navigator,'onLine',{value:true});
+   http.post.mockRejectedValueOnce({code:404,message:'Original message not found.'});await syncCloudDrafts();
    expect(await db.value.draft.get(id)).toMatchObject({dirty:false,sendType:'',emailId:0,content:'<p>Hello</p>'});
+   await saveLocalDraft({...openEditor,subject:'Typed after Undo',attachments:[]});await syncCloudDrafts();
+   expect([...state.remote.values()]).toMatchObject([{subject:'Typed after Undo',sendType:'',emailId:0}]);
  });
  it('propagates discard tombstones and never recreates a remotely removed clean draft',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();await removeLocalDraft(row.draftId);await syncCloudDrafts();expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);
