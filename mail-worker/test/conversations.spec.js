@@ -543,6 +543,14 @@ it('finds compose correspondents only in the sending mailbox and omits received 
  expect(await cloudMail.searchPeople(context(),1,{folder:'compose',field:'any',accountId:'2',q:'arden'})).toEqual([]);
 });
 
+it('uses indexed headers to suggest older correspondents beyond recent messages',async()=>{
+ await insert({name:'Juniper Rivera',send_email:'juniper@example.net'});
+ await env.db.prepare(`WITH RECURSIVE fill(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM fill WHERE n<110)
+   INSERT INTO email(user_id,account_id,send_email,name,is_del,status,type) SELECT 1,1,'other@example.net','Other',0,0,0 FROM fill`).run();
+ const options=await cloudMail.searchPeople(context(),1,{field:'any',folder:'compose',accountId:'1',q:'Juniper Ri'});
+ expect(options).toEqual([{name:'Juniper Rivera',email:'juniper@example.net'}]);
+});
+
 it('suggests scoped senders and recipients and matches either selected person in Trash', async()=>{
  const a=await insert({name:'Élodie Chen',send_email:'ann@example.net',recipient:'[{"name":"Robin","address":"robin@example.net"}]',bcc:'[{"address":"hidden@example.net"}]'});
  const b=await insert({name:'Lee',send_email:'lee@example.net',type:1,status:2,bcc:'[{"address":"blind@example.net"}]'});

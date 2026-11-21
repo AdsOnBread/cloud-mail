@@ -23,15 +23,22 @@ export async function searchPeople(c,userId,params) {
   if (folder==='compose' && field==='any') {
     const term=params.q?.trim().slice(0,maxPersonTerm), mailbox=positive(accountId);
     if (!term) return [];
-    const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
-    const conditions=[], values=[];
-    addPeopleFilter({from:term},'from',['e.send_email','e.name'],conditions,values,true);
-    addPeopleFilter({to:term},'to',to,conditions,values,true);
-    const {results}=await c.env.db.prepare(`SELECT e.name,e.send_email sendEmail,e.type,e.recipient,e.cc,${to[2]} bcc
-      FROM email e JOIN account a ON a.account_id=e.account_id
-      WHERE ${visibleMail(c)} AND e.account_id=? AND e.trashed_at IS NULL AND (${conditions.join(' OR ')})
-      ORDER BY e.email_id DESC LIMIT 80`).bind(userId,mailbox,...values).all();
-    return peopleSuggestions(results,'any',term,8+maxPeople);
+    const projection=`SELECT e.email_id,e.name,e.send_email sendEmail,e.type,e.recipient,e.cc,
+      CASE WHEN e.type=1 THEN e.bcc ELSE '' END bcc
+      FROM candidates c JOIN email e ON e.email_id=c.id JOIN account a ON a.account_id=e.account_id
+      WHERE ${visibleMail(c)} AND e.account_id=? AND e.trashed_at IS NULL ORDER BY e.email_id DESC`;
+    const read=async (ids,args)=>(await c.env.db.prepare(`WITH candidates(id) AS MATERIALIZED (${ids}) ${projection}`)
+      .bind(...args,userId,mailbox).all()).results;
+    const recent=await read('SELECT email_id FROM email WHERE user_id=? AND account_id=? ORDER BY email_id DESC LIMIT 96',[userId,mailbox]);
+    const limit=8+maxPeople, matches=peopleSuggestions(recent,'any',term,limit);
+    const tokens=term.match(/[\p{L}\p{M}\p{N}]+/gu);
+    if (matches.length>=limit || !tokens || term.length<2) return matches;
+    // Search older indexed headers. Subject-only matches are rejected by peopleSuggestions.
+    // Bound the FTS hits before reading addresses, including for common prefixes.
+    const prefix='headers : "'+tokens.join(' ')+'"*';
+    const older=await read('SELECT rowid FROM mail_word_index WHERE mail_word_index MATCH ? AND rowid<? ORDER BY rowid DESC LIMIT 192',
+      [prefix,recent.at(-1)?.email_id ?? Number.MAX_SAFE_INTEGER]);
+    return peopleSuggestions([...recent,...older],'any',term,limit);
   }
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
   const filters=[visibleMail(c)], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';
