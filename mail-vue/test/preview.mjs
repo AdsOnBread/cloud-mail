@@ -185,7 +185,14 @@ const api=createHTTPServer(async(req,res)=>{
      });
    data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,8+maxPeople);
  }
- else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages/trash-labels'){
+   const {emailIds,add,remove}=JSON.parse(body);
+   for(const row of rows.filter(r=>r.trashedAt&&emailIds.includes(r.emailId))){
+     const applied=membership.get(row.emailId)||new Set();add.forEach(id=>applied.add(id));remove.forEach(id=>applied.delete(id));membership.set(row.emailId,applied);
+   }
+   data={messageCount:emailIds.length};
+ }
  else if(path==='/v1/messages/trash-read'){
    const {emailIds,read}=JSON.parse(body);rows.filter(row=>emailIds.includes(row.emailId)&&row.trashedAt).forEach(row=>row.unread=Number(read));
    data={messageCount:emailIds.length};
@@ -197,7 +204,7 @@ const api=createHTTPServer(async(req,res)=>{
    data={messageCount:emailIds.length};
  }
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
- else if(path.startsWith('/v1/messages/'))data=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));
+ else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
  else if(path==='/my/loginUserInfo')data=user;
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;

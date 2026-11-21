@@ -98,13 +98,13 @@ export const useMailLabels = defineStore("mail-labels", {
         else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId},labelAPI(this));
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {
+        const trash=Boolean(this.edit?.trash);
         this.edit = { ...this.edit, id: label.id, name: label.name };
-        await conversationAction("label", anchors, {
-          add: [label.id],
-          remove: [],
-        },labelAPI(this));
+        const ops={add:[label.id],remove:[]};
+        if (trash) await labelAPI(this).post("/v1/messages/trash-labels",{emailIds:anchors,...ops});
+        else await conversationAction("label",anchors,ops,labelAPI(this));
         if (this.owner === owner)
-          this.applied = { anchors: [...anchors], labelId: label.id };
+          this.applied = { anchors: [...anchors], labelId: label.id, ...(trash ? {trash:true} : {}) };
       }
       if (owner !== this.owner) return;
       if (creation === this.edit) creation?.onCreated?.(label.id);

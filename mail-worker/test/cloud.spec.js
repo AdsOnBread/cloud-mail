@@ -132,6 +132,24 @@ describe('Recoverable Trash',()=>{
    await mail.trash(c(),1,[original.email_id],'restore');expect((await mobile.bootstrap(env.db,1)).unreadTotal).toBe(1);
    await expect(mail.trash(c(),1,[original.email_id],'purge')).rejects.toMatchObject({code:400});
  });
+ it('applies labels to the selected Trash messages without restoring them or changing siblings',async()=>{
+   const {setTrashLabels}=await import('../src/cloud/trash-actions');
+   const a=await message(), b=await message({message_id:'<b@local>',in_reply_to:'<original@example.net>'});
+   const label=(await env.db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Retain') RETURNING label_id").first()).label_id;
+   const ids=[a.email_id,b.email_id];
+   await mail.trash(c(),1,ids);
+   await setTrashLabels(env.db,1,[a.email_id],[label],[]);
+   expect((await mail.detail(c(),1,a.email_id)).labelIds).toEqual([label]);
+   expect((await mail.detail(c(),1,b.email_id)).labelIds).toEqual([]);
+   expect((await mail.list(c(),1,{folder:'trash'})).messages.map(m=>m.labelIds)).toEqual([[],[label]]);
+   await expect(setTrashLabels(env.db,2,ids,[label],[])).rejects.toMatchObject({code:409});
+   await expect(setTrashLabels(env.db,1,ids,[9999],[label])).rejects.toMatchObject({code:404});
+   await mail.trash(c(),1,[b.email_id],'restore');
+   await expect(setTrashLabels(env.db,1,ids,[],[label])).rejects.toMatchObject({code:409});
+   expect((await mail.detail(c(),1,a.email_id)).labelIds).toEqual([label]);
+   await setTrashLabels(env.db,1,[a.email_id],[],[label]);
+   expect((await mail.list(c(),1,{folder:'trash'})).messages[0].labelIds).toEqual([]);
+ });
  it('files recovered mail atomically and preserves the folder of a surviving sibling',async()=>{
    const {moveFromTrash,setTrashRead}=await import('../src/cloud/trash-actions');
    const first=await message(), second=await message({message_id:'<reply@local>',in_reply_to:'<original@example.net>'});

@@ -39,9 +39,10 @@
           <Icon :icon="readIcon(targetUnread)" width="20"/>
         </button>
         <MovePicker trash v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
-        <el-dropdown v-if="canDelete || !messageId" :class="{'compact-trash-more':!canDelete}" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
-          <button class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
+        <el-dropdown trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
+          <button ref="moreButton" class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
           <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item @click="trashPicker?.show()">Label as</el-dropdown-item>
             <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">Restore to previous location</el-dropdown-item>
             <template v-if="!messageId">
               <el-dropdown-item class="compact-trash-pager" :disabled="!history.length || busy || loading" @click="previous">Previous page</el-dropdown-item>
@@ -49,6 +50,8 @@
             </template>
           </el-dropdown-menu></template>
         </el-dropdown>
+        <LabelPicker v-if="moreButton" ref="trashPicker" trash external :reference="moreButton" :rows="labelRows"
+          :disabled="busy || loading" @apply="setLabels"/>
       </template>
       <button
         v-else-if="!messageId"
@@ -99,7 +102,7 @@
     </p>
     <div v-if="messageId" class="trash-detail">
       <article v-if="detail">
-        <h1>{{ detail.subject || "(no subject)" }}</h1>
+        <h1>{{ detail.subject || "(no subject)" }} <span v-for="label in rowLabels(detail,true)" :key="label.id" class="trash-label" :style="labelStyle(label)">{{label.name}}</span></h1>
         <div class="sender">
           <span class="initial">{{
             (detail.name || detail.sendEmail || "?")[0].toUpperCase()
@@ -155,6 +158,7 @@
         trash
         :participants="message.name || message.sendEmail"
         :subject="message.subject"
+        :labels="rowLabels(message)"
         :attachments="message.attachments" :attachment-count="message.attachmentCount"
         :preview="message.preview"
         :unread="message.unread === 0"
@@ -213,6 +217,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
+import LabelPicker from "@/components/mail-labels/picker.vue";
+import {labelStyle} from "@/components/mail-labels/colors";
 import MovePicker from "@/components/mail-labels/move.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import FolderFilters from "@/components/mail-folder-filters.vue";
@@ -256,6 +262,34 @@ const targets = computed(() =>
       : []
     : selected.value,
 );
+const moreButton=ref(),trashPicker=ref();
+const labelRows=computed(()=>(messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(m=>selected.value.includes(m.emailId)))
+  .map(m=>({lastEmailId:m.emailId,labelIds:m.labelIds})));
+function rowLabels(message,reader=false) {
+  return labels.items.filter(label=>message.labelIds?.includes(label.id) && (reader || label.messages!=="hide"));
+}
+function updateLabels(ids,{add,remove}) {
+  for (const message of [...messages.value, detail.value]) {
+    if (message && ids.includes(message.emailId)) {
+      message.labelIds=[...new Set([...(message.labelIds || []).filter(id=>!remove.includes(id)),...add])];
+    }
+  }
+}
+async function setLabels(ops,ids) {
+  if (busy.value || loading.value || !ids.length) return;
+  busy.value=true;
+  const request=revision;
+  try {
+    await http.post("/v1/messages/trash-labels",{emailIds:ids,...ops});
+    mail.conversationRevision++;
+    if (!disposed && revision===request) { updateLabels(ids,ops); notify("Labels updated."); }
+  } catch(e) {
+    if (!disposed && revision===request) error.value=e.message || "Could not update labels.";
+  } finally { busy.value=false; }
+}
+watch(()=>labels.applied, change=>{
+  if (change?.trash) updateLabels(change.anchors,{add:[change.labelId],remove:[]});
+});
 const targetUnread=computed(()=>messageId.value ? detail.value?.unread===0 : messages.value.some(m=>selected.value.includes(m.emailId) && m.unread===0));
 const readIcon=unread=>unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
 const readLabel=unread=>unread ? 'Mark as read' : 'Mark as unread';
@@ -514,7 +548,7 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-primary);
 }
 :global(.mail-action-menu .compact-trash-pager) { display:none; }
-@media (min-width:601px) { .compact-trash-more { display:none; } }
+.trash-label { display:inline-block; max-width:100%; padding:1px 5px; border-radius:4px; background:var(--mail-hover); font:500 12px/18px Arial,sans-serif; vertical-align:middle; overflow-wrap:anywhere; }
 @media (max-width:600px) {
   :global(.mail-action-menu .compact-trash-pager) { display:flex; }
   .has-selection .pager,.has-selection .total { display:none; }
