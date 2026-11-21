@@ -1,10 +1,9 @@
 <template>
-  <SearchDateChip v-if="chips && field === 'days'" />
-  <el-popover v-else
+  <el-popover
     v-model:visible="open"
     trigger="click"
     :placement="chips ? 'bottom-start' : 'bottom-end'"
-    :width="chips && field ? 240 : 440"
+    :width="440"
     :show-arrow="false"
     popper-class="mail-search-options"
     @before-enter="reset"
@@ -25,15 +24,9 @@
         ref="trigger"
         v-else
         type="button"
-        class="filter-chip"
-        :class="{ applied: field && store.filters[field], advanced: !field }"
-        :aria-pressed="field ? Boolean(store.filters[field]) : undefined"
+        class="filter-chip advanced"
         :aria-expanded="open"
-      >
-        <Icon v-if="field && store.filters[field]" icon="material-symbols:check" width="16" />
-        {{ caption }}
-        <Icon v-if="field" icon="material-symbols:arrow-drop-down" width="16" />
-      </button>
+      >Advanced search</button>
     </template>
     <form
       ref="panel"
@@ -49,6 +42,10 @@
             {{ text }}
           </option>
         </select>
+        <span v-else-if="key==='from' || key==='to'" class="people-terms">
+          <input v-for="(_,i) in form[key]" :key="i" v-model="form[key][i]"
+            :aria-label="i ? names[key]+' '+(i+1) : names[key]" maxlength="200" type="text"/>
+        </span>
         <input
           v-else
           v-model="form[key]"
@@ -57,7 +54,6 @@
           type="text"
         />
       </label>
-      <template v-if="!field">
         <label class="check"
           ><input v-model="form.hasAttachment" type="checkbox" /> Has
           attachment</label
@@ -65,7 +61,6 @@
         <label v-if="store.folder!=='scheduled'" class="check"
           ><input v-model="form.isUnread" type="checkbox" /> Is unread</label
         >
-      </template>
       <div class="option-actions">
         <button type="button" @click="clear">Clear</button
         ><button type="submit">Search</button>
@@ -76,10 +71,10 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
-import SearchDateChip from "./mail-date-time/search-chip.vue";
+import {peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {olderChoices,recentChoices,timeCaption,withoutTime} from "./mail-date-time/search-range";
 import { useMailSearchStore } from "@/store/mail-search";
-const props = defineProps({ chips: Boolean, field: String, queryText: String });
+const props = defineProps({ chips: Boolean, queryText: String });
 const trigger = ref(),
   panel = ref();
 function focusForm() {
@@ -102,19 +97,12 @@ const names = {
 };
 const times = [["","Any time"],...recentChoices,...olderChoices];
 const customRange = computed(() => store.filters.dateAfter!=null || store.filters.dateBefore!=null);
-const fields = computed(() =>
-  props.field ? [props.field] : ["from", "to", "subject", "q", "days"],
-);
-const caption = computed(() =>
-  props.field === "days"
-    ? times.find(([v]) => v === (store.filters.days || ""))?.[1]
-    : props.field
-      ? store.filters[props.field] || names[props.field]
-      : "Advanced search",
-);
+const fields = ["from", "to", "subject", "q", "days"];
 function reset() {
   form.value = {
     ...store.filters,
+    from:store.filters.from ? peopleTerms(store.filters,'from') : [''],
+    to:store.filters.to ? peopleTerms(store.filters,'to') : [''],
     q: props.queryText ?? store.query,
     days: store.filters.olderThan || (customRange.value ? "custom" : store.filters.days || ""),
     hasAttachment: Boolean(store.filters.hasAttachment),
@@ -123,7 +111,11 @@ function reset() {
 }
 function apply() {
   let next = { ...store.filters };
-  for (const key of fields.value) {
+  for (const key of fields) {
+    if (key==='from' || key==='to') {
+      setPeopleTerms(next,key,form.value[key] || []);
+      continue;
+    }
     const value = String(form.value[key] || "").trim();
     if (key === "days") {
       if (value === "custom") continue;
@@ -134,8 +126,7 @@ function apply() {
     else if (value) next[key] = value;
     else delete next[key];
   }
-  if (!props.field)
-    for (const key of ["hasAttachment", "isUnread"]) {
+  for (const key of ["hasAttachment", "isUnread"]) {
       if (form.value[key]) next[key] = 1;
       else delete next[key];
     }
@@ -144,8 +135,7 @@ function apply() {
   emit("applied", store.query);
 }
 function clear() {
-  if (props.field) form.value[props.field] = "";
-  else form.value = {};
+  form.value = {};
   apply();
 }
 </script>
@@ -178,6 +168,7 @@ function clear() {
   outline: none;
   border-bottom: 2px solid var(--el-color-primary);
 }
+.people-terms {display:grid;gap:4px;min-width:0;}
 .options-form label.check {
   display: flex;
 }

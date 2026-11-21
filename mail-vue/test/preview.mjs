@@ -161,7 +161,11 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
  else if(path==='/v1/search/people'){
    const p=Object.fromEntries(url.searchParams), scoped=rows.filter(r=>!p.accountId||r.accountId===Number(p.accountId));
-   const initial=p.folder==='trash'?scoped.filter(r=>r.trashedAt):[];
+   const initial=p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]
+     .filter(d=>d.scheduledAt && (!p.accountId || d.accountId===Number(p.accountId))).map(d=>{
+       const sender=accounts.find(a=>a.accountId===d.accountId);
+       return {draftId:d.draftId,senderEmail:sender?.email,senderName:d.name||sender?.name,recipients:d.receiveEmail,cc:d.cc,bcc:d.bcc};
+     });
    data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q);
  }
  else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}

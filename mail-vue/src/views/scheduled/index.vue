@@ -1,6 +1,6 @@
 <template>
   <section class="scheduled-view" aria-label="Scheduled messages">
-    <FolderFilters v-if="!messageId" folder="scheduled" />
+    <FolderFilters v-if="!messageId" folder="scheduled" :account-id="scope" />
     <div class="mail-toolbar">
       <button
         v-if="messageId"

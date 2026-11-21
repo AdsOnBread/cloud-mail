@@ -22,9 +22,20 @@ export async function searchPeople(c,userId,params) {
   const projection=field==='from' ? 'e.name,e.send_email sendEmail' : `e.type,e.recipient,e.cc,${to[2]} bcc`;
   const query=`SELECT ${projection} FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${filters.join(' AND ')}`;
   const read=async condition=>(await c.env.db.prepare(query+condition+' ORDER BY e.email_id DESC LIMIT 80').bind(...args).all()).results;
-  const recent=await read(folder==='trash' ? ' AND e.trashed_at IS NOT NULL' : ' AND e.trashed_at IS NULL');
+  let recent;
+  if (folder==='scheduled') {
+    const sender="COALESCE(NULLIF(json_extract(d.data,'$.name'),''),NULLIF(a.name,''),a.email)";
+    const draftColumns=field==='from' ? [sender,'a.email'] : ['receiveEmail','cc','bcc'].map(key=>`json_extract(d.data,'$.${key}')`);
+    const project=field==='from' ? `${sender} senderName,a.email senderEmail` :
+      `d.draft_id draftId,${draftColumns[0]} recipients,${draftColumns[1]} cc,${draftColumns[2]} bcc`;
+    const conditions=["d.user_id=?", "json_extract(d.data,'$.scheduledAt') IS NOT NULL"], values=[userId];
+    if (accountId) {conditions.push('d.account_id=?');values.push(positive(accountId));}
+    addPeopleFilter({[field]:term},field,draftColumns,conditions,values);
+    recent=(await c.env.db.prepare(`SELECT ${project} FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
+      WHERE ${conditions.join(' AND ')} ORDER BY d.updated_at DESC,d.draft_id LIMIT 100`).bind(...values).all()).results;
+  } else recent=await read(' AND e.trashed_at IS NOT NULL');
   let suggestions=peopleSuggestions(recent,field,term);
-  if (folder==='trash' && suggestions.length<8) {
+  if (suggestions.length<8) {
     const other=await read(' AND e.trashed_at IS NULL');
     suggestions=peopleSuggestions([...recent,...other],field,term);
   }

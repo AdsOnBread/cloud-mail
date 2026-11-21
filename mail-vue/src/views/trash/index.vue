@@ -1,6 +1,6 @@
 <template>
   <section ref="root" class="trash-view" aria-label="Trash">
-    <FolderFilters v-if="!messageId" folder="trash" />
+    <FolderFilters v-if="!messageId" folder="trash" :account-id="mailbox" />
     <div class="mail-toolbar" :class="{'has-selection':selected.length && !messageId}">
       <button
         v-if="messageId"

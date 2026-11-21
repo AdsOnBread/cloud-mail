@@ -4,7 +4,8 @@
       <button v-if="flags[key]" type="button" class="filter-chip" :aria-pressed="active(key)" @click="toggle(key)">
         <Icon v-if="active(key)" icon="material-symbols:check" width="16" />{{ flags[key] }}
       </button>
-      <SearchOptions v-else chips :field="key" />
+      <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" />
+      <SearchDateChip v-else />
     </template>
     <SearchOptions chips />
   </div>
@@ -14,10 +15,12 @@
 import {computed,onBeforeUpdate,onUpdated,ref} from 'vue';
 import {Icon} from '@iconify/vue';
 import {useMailSearchStore} from '@/store/mail-search';
+import PeopleFilter from './mail-people-filter.vue';
+import SearchDateChip from './mail-date-time/search-chip.vue';
 import SearchOptions from './mail-search-options.vue';
 import {timeCaption} from './mail-date-time/search-range';
 
-const props=defineProps({folder:{type:String,required:true}});
+const props=defineProps({folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore();
 const row=ref();
 const flags={hasAttachment:'Has attachment',isUnread:'Is unread'};
