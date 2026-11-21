@@ -240,7 +240,13 @@ function observeFileTransfers(ed) {
       if (text) doc.execCommand("insertText", false, text);
       return;
     }
-    if (!hasFiles(transfer)) return;
+    if (!hasFiles(transfer)) {
+      if (props.plainText && event.type === "drop") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
     if (event.type === "paste" && hasRichSelection(transfer)) return;
     if (event.type === "dragleave") {
       if (!doc.body.contains(event.relatedTarget)) emit("file-leave");
