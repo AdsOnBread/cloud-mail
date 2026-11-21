@@ -13,7 +13,7 @@ export async function prepare(c,userId,input,mode) {
   await mailbox(c,userId,value.accountId);
   if(mode==='reply'||mode==='forward') {
     const source=await mail.detail(c,userId,positive(input.emailId));
-    if(source.trashedAt)throw new BizError('Restore the original message before replying or forwarding.',400);
+    if(source.scheduledDraftId)throw new BizError('Restore this unsent message to Drafts to edit it.',400);
     value.emailId=source.emailId;value.sendType=mode;
     value.subject=input.subject??`${mode==='reply'?'Re:':'Fwd:'} ${source.subject||''}`;
     const defaultRecipients = input.receiveEmail === undefined &&

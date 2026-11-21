@@ -1,5 +1,6 @@
 import {extractDraftImages} from '../../../shared/draft-inline-images';
 import { parseHTML } from 'linkedom';
+import {replySource} from '../service/reply-source';
 import BizError from '../error/biz-error';
 import { mailbox,positive,pageSize,conflict } from './auth';
 import { normalizeAttachment,MAX_MESSAGE_BYTES } from '../service/email-sender';
@@ -101,7 +102,7 @@ export async function save(c,userId,input,id) {
   } else if (old?.mailboxStarred != null) data.mailboxStarred = old.mailboxStarred;
   if (old?.mailboxImportant != null) data.mailboxImportant = old.mailboxImportant;
   if(data.emailId) {
-    const source=await c.env.db.prepare('SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.email_id=? AND e.user_id=? AND a.user_id=e.user_id AND e.is_del=0 AND a.is_del=0 AND e.trashed_at IS NULL').bind(positive(data.emailId),userId).first();
+    const source=await replySource(c.env.db,userId,positive(data.emailId));
     if(!source && (!old || data.emailId!==old.emailId)) throw new BizError('Original message not found.',404);
   }
   const clientId=old?.clientId||input.clientId||crypto.randomUUID();

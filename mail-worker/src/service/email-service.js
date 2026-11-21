@@ -1,4 +1,5 @@
 import {recipientName} from '../../../shared/recipient-names';
+import {replySource} from './reply-source';
 import orm from '../entity/orm';
 import email from '../entity/email';
 import { emailListColumns, emailBriefColumns, EMAIL_LIST_TEXT_LEN } from '../lib/email-list-columns';
@@ -353,9 +354,9 @@ const emailService = {
 		//Load the original message when replying
 		if (sendType === 'reply') {
 
-			emailRow = await this.detail(c, emailId, userId);
+			emailRow = await replySource(c.env.db, userId, emailId);
 
-			if (!emailRow || emailRow.userId !== userId) {
+			if (!emailRow) {
 				throw new BizError(t('notExistEmailReply'));
 			}
 

@@ -244,6 +244,19 @@ describe('Send attempts',()=>{
  });
 });
 describe('Recoverable Trash',()=>{
+ it('saves and delivers an owned reply without restoring the original and preserves its references', async()=>{
+   const original=await message();
+   await mail.trash(c(),1,[original.email_id]);
+   const input={accountId:1,emailId:original.email_id,receiveEmail:['person@example.com'],text:'A reply from Trash'};
+   const reply=await prepare(c(),1,input,'reply');
+   const saved=await drafts.save(c(),1,reply);
+   const receipt=await send(c(),1,{version:saved.version,idempotencyKey:'trash-reply-send'},{draftId:saved.draftId});
+   expect(receipt.state).toBe('sent');
+   expect(await mail.detail(c(),1,receipt.messages[0].emailId)).toMatchObject({inReplyTo:original.message_id,replyToEmailId:original.email_id});
+   expect((await mail.detail(c(),1,original.email_id)).trashedAt).toBeTruthy();
+   await expect(drafts.save(c(),2,{...reply,accountId:2})).rejects.toMatchObject({code:404});
+   await expect(prepare(c(),2,{...input,accountId:2},'forward')).rejects.toMatchObject({code:404});
+ });
  it('excludes Trash from active lists, counts and sync, but permits owned reading and restore',async()=>{
    const original=await message();const boot=await mobile.bootstrap(env.db,1);
    await mail.trash(c(),1,[original.email_id]);
