@@ -96,6 +96,9 @@ importers:
       vite-plugin-pwa:
         specifier: ^1.0.3
         version: 1.0.3(vite@7.1.5(less@4.4.1)(sass@1.91.0)(terser@5.43.1))(workbox-build@7.3.0)(workbox-window@7.3.0)
+      vite-plugin-static-copy:
+        specifier: ^3.4.0
+        version: 3.4.0(vite@7.1.5(less@4.4.1)(sass@1.91.0)(terser@5.43.1))
       vitest:
         specifier: ~3.2.7
         version: 3.2.7(jsdom@26.1.0)(less@4.4.1)(sass@1.91.0)(terser@5.43.1)
@@ -2235,6 +2238,10 @@ packages:
     resolution: {integrity: sha512-qFOyK5PjiWZd+QQIh+1jhdb9LpxTF0qs7Pm8o5QHYZ0M3vKqSqzsZaEB6oWlxZ+q2sJBMI/Ktgd2N5ZwQoRHfg==}
     engines: {node: '>= 0.4'}
 
+  p-map@7.1.1:
+    resolution: {integrity: sha512-6Lh3jQPLthYujSrlw6ccWXBGZTkoTCz27Hd92g79LH/kjAbgoEu0t442cCCNbegPSJsA0lwDX8z0bcKtkpA32g==}
+    engines: {node: '>=18'}
+
   parse-node-version@1.0.1:
     resolution: {integrity: sha512-3YHlOa/JgH6Mnpr05jP9eDG254US9ek25LyIxZlDItp2iJtwyaXQb57lBYLdT3MowkUFYEV2XXNAYIPlESvJlA==}
     engines: {node: '>= 0.10'}
@@ -2752,6 +2759,12 @@ packages:
     peerDependenciesMeta:
       '@vite-pwa/assets-generator':
         optional: true
+
+  vite-plugin-static-copy@3.4.0:
+    resolution: {integrity: sha512-ekryzCw0ouAOE8tw4RvVL/dfqguXzumsV3FBKoKso4MQ1MUUrUXtl5RI4KpJQUNGqFEsg9kxl4EvDl02YtA9VQ==}
+    engines: {node: ^18.0.0 || >=20.0.0}
+    peerDependencies:
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
 
   vite@7.1.5:
     resolution: {integrity: sha512-4cKBO9wR75r0BeIWWWId9XK9Lj6La5X846Zw9dFfzMRw38IlTk2iCcUt6hsyiDRcPidc55ZParFYDXi0nXOeLQ==}
@@ -5245,6 +5258,8 @@ snapshots:
       object-keys: 1.1.1
       safe-push-apply: 1.0.0
 
+  p-map@7.1.1: {}
+
   parse-node-version@1.0.1: {}
 
   parse5@7.3.0:
@@ -5841,6 +5856,14 @@ snapshots:
       workbox-window: 7.3.0
     transitivePeerDependencies:
       - supports-color
+
+  vite-plugin-static-copy@3.4.0(vite@7.1.5(less@4.4.1)(sass@1.91.0)(terser@5.43.1)):
+    dependencies:
+      chokidar: 3.6.0
+      p-map: 7.1.1
+      picocolors: 1.1.1
+      tinyglobby: 0.2.15
+      vite: 7.1.5(less@4.4.1)(sass@1.91.0)(terser@5.43.1)
 
   vite@7.1.5(less@4.4.1)(sass@1.91.0)(terser@5.43.1):
     dependencies:

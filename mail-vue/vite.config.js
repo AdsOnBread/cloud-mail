@@ -4,6 +4,8 @@ import path from 'path'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import {ElementPlusResolver} from 'unplugin-vue-components/resolvers'
+import {viteStaticCopy} from 'vite-plugin-static-copy';
+import pdfPackage from 'pdfjs-dist/package.json';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
@@ -16,6 +18,12 @@ export default defineConfig(({mode}) => {
         },
         base: env.VITE_STATIC_URL || '/',
         plugins: [vue(),
+            viteStaticCopy({
+                targets: ['wasm', 'cmaps', 'standard_fonts', 'iccs', 'LICENSE'].map(name => ({
+                    src: path.resolve(__dirname, 'node_modules/pdfjs-dist', name),
+                    dest: 'pdf/' + pdfPackage.version,
+                })),
+            }),
             VitePWA({
                 injectRegister: 'script-defer',
                 manifest: {
