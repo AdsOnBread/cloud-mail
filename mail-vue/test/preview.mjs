@@ -93,7 +93,7 @@ let nextLabel = 1;
 function threadLabels(members) {
  return [...new Set(members.flatMap(row=>[...(membership.get(row.emailId)||[])]))];
 }
-const filing = new Map();
+const filing = new Map(), moveUndos = new Map();
 function filingAnchor(members) {
  const received=members.filter(row=>row.type===0 && row.status===0);
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
@@ -397,13 +397,34 @@ const api=createHTTPServer(async(req,res)=>{
    const id=Number(path.split('/').at(-1));
    if(req.method==='DELETE'){labels.delete(id);for(const set of membership.values()) set.delete(id);}
 
+ }else if(path==='/email/conversation/undo-move'){
+   const move=moveUndos.get(JSON.parse(body).token);
+   if(!move){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({code:409,message:'This move can no longer be undone.'}));return;}
+   for(const [id,prior] of move.members){
+     if(prior.wakeAt===undefined)filing.delete(id);else filing.set(id,prior.wakeAt);
+     const set=membership.get(id)||new Set();
+     if(prior.source)set.add(move.source);
+     if(!prior.destination)set.delete(move.destination);
+     membership.set(id,set);
+   }
+   move.members.clear(); data={restored:true};
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
+   for(const [token,move] of moveUndos){
+     const touchesLabel=operation==='label' && [...p.add,...p.remove].some(id=>id===move.source || id===move.destination);
+     if((touchesLabel || ['move','inbox','archive','snooze','delete'].includes(operation)) && [...ids].some(id=>move.members.has(id)))moveUndos.delete(token);
+   }
    if(operation==='importance'){const revision=++importanceRevision;for(const id of ids)importanceChoices.set(id,{revision,important:p.important});}
    else if(operation==='category'){for(const [threadId,members] of grouped())if(members.some(r=>ids.has(r.emailId)))filedCategory.set(threadId,p.category);}
    else if(['archive','snooze','inbox'].includes(operation))for(const id of ids)filing.set(id,operation==='archive'?null:operation==='inbox'?0:p.wakeAt);
-   else if(operation==='move')for(const id of ids){
-     const set=membership.get(id)||new Set();set.delete(p.fromLabelId);if(p.labelId)set.add(p.labelId);membership.set(id,set);filing.set(id,p.labelId?null:0);
+   else if(operation==='move'){
+     const members=new Map();
+     for(const id of ids){
+       const set=membership.get(id)||new Set();
+       members.set(id,{wakeAt:filing.get(id),source:set.has(p.fromLabelId),destination:set.has(p.labelId)});
+       set.delete(p.fromLabelId);if(p.labelId)set.add(p.labelId);membership.set(id,set);filing.set(id,p.labelId?null:0);
+     }
+     if(p.undoable){const token=crypto.randomUUID();moveUndos.set(token,{members,source:p.fromLabelId,destination:p.labelId});data={undoToken:token};}
    }
    else if(operation==='label')for(const id of ids){
      const set=membership.get(id)||new Set();for(const lid of p.add)set.add(lid);for(const lid of p.remove)set.delete(lid);membership.set(id,set);
