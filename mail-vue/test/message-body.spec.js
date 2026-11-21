@@ -33,9 +33,9 @@ describe('isolated message rendering',()=>{
 });
 
 it('renders simple paragraphs at their natural height as escaped text and keeps rich mail isolated',async()=>{
- const wrapper=mount(MessageBody,{props:{html:'<p>Hi,<br>See &lt;b&gt;the notes&lt;/b&gt;.</p>'}});
+ const wrapper=mount(MessageBody,{props:{html:'<p>Hi,<br>See &lt;b&gt;the&nbsp;notes&lt;/b&gt;.</p>'}});
  await flushPromises();
- expect(wrapper.get('.plain-paragraphs p').text()).toBe('Hi,\nSee <b>the notes</b>.');
+ expect(wrapper.get('.plain-paragraphs p').element.textContent).toBe('Hi,\nSee <b>the\u00a0notes</b>.');
  expect(wrapper.find('b').exists()).toBe(false);
  await wrapper.setProps({html:'<p style="font-size:20px">Styled paragraph</p>'});
  await flushPromises();

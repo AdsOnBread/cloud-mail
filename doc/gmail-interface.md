@@ -1,6 +1,6 @@
 # Cloudmail component comparison
 
-The reference is Gmail on the web with its default light theme. Check dark mode, narrow windows, keyboard focus, and mouse hover separately. Use a fictional mailbox for edits, sends, Trash, and Undo.
+Compared the signed-in Gmail web interface in Chrome on November 20, 2026. The reference account had a photo theme. Cloudmail uses its light and dark palettes. Browser interaction checks use a fictional mailbox.
 
 | Component | Compare in the rendered interface |
 | --- | --- |
@@ -16,3 +16,15 @@ The reference is Gmail on the web with its default light theme. Check dark mode,
 | Motion and responsive layout | Panel transitions, reduced motion, touch targets, focus visibility and overflow at narrow widths |
 
 References include [Gmail formatting and links](https://support.google.com/mail/answer/8260), [deleting and recovering messages](https://support.google.com/mail/answer/7401), and [organizing mail with labels](https://support.google.com/mail/answer/118708).
+
+## Verification notes
+
+| Area | What was checked |
+| --- | --- |
+| Trash | Compared the live filter order, toolbar, retention notice, sender icon, spacing and page controls. Tested sender and attachment filters, search, hover actions, tooltips, mobile layout and permanent-delete cancellation. |
+| Drafts and reading | Opened a marked inbox thread containing two cloud replies. Switched between them, refreshed, edited and reopened an attached draft. Confirmed that viewing it alone made no draft changes. |
+| Writing | Compared the live docked composer and its bottom formatting strip. Checked font, size, text color, selection, formatted links, keyboard link insertion, removing a link, an inline image and reopening a saved draft. |
+| Filing | Tested moving mail to Trash and undoing it from a message, conversation, row and bulk selection. Created and applied a label from a selection and from an open thread. |
+| Keyboard and search | Checked focus entering and leaving the search and label popovers, the effect of typing before opening search options, and keyboard access to row actions. |
+
+The Gmail account’s photo background, inbox category tabs and Google Workspace side panel are visible differences. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.

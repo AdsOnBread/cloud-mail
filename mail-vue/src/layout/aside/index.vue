@@ -129,6 +129,10 @@ watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();
 const unread=ref(0);
+watch(()=>emailStore.inboxUnread, snapshot=>{
+  if(snapshot?.accountId===accountStore.currentAccountId && snapshot.allReceive===Boolean(accountStore.currentAccount.allReceive))
+    unread.value=snapshot.count;
+});
 watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),()=>emailStore.conversationRevision],
   ([owner,accountId,allReceive],previous,onCleanup)=>{
     let current=true;

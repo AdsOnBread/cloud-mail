@@ -19,11 +19,11 @@ const paragraphs = ref(null)
 // Short, plain paragraphs can flow with the conversation using Vue's text escaping.
 // Everything with formatting, attributes, links or media uses the isolated document.
 function plainParagraphs(doc) {
-  if (doc.head.children.length || doc.body.attributes.length) return null
+  if (doc.head.children.length || doc.body.attributes.length || doc.documentElement.attributes.length) return null
   const nodes = [...doc.body.childNodes].filter(node=>node.nodeType!==3 || node.textContent.trim())
   if (!nodes.length || !nodes.every(node=>node.nodeName==='P' && !node.attributes.length &&
     [...node.childNodes].every(child=>child.nodeType===3 || (child.nodeName==='BR' && !child.attributes.length)))) return null
-  return nodes.map(node=>[...node.childNodes].map(child=>child.nodeName==='BR'?'\n':child.textContent.replace(/\s+/g,' ')).join(''))
+  return nodes.map(node=>[...node.childNodes].map(child=>child.nodeName==='BR'?'\n':child.textContent.replace(/[\t\n\f\r ]+/g,' ')).join(''))
 }
 const error = ref('')
 let urls = []
@@ -49,7 +49,11 @@ watch(() => [props.html, remote.value, uiStore.dark], async () => {
   paragraphs.value=plain
   urls.forEach(URL.revokeObjectURL);urls=created
   const sources=remote.value ? 'https: http:' : ''
-  documentHTML.value=`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:#007aff}</style></head><body>${doc.body.innerHTML}</body></html>`
+  const dir=(doc.body.dir || doc.documentElement.dir).toLowerCase()
+  const lang=doc.body.lang || doc.documentElement.lang
+  const direction=['rtl','ltr','auto'].includes(dir) ? ` dir="${dir}"` : ''
+  const language=/^[a-z0-9-]{1,63}$/i.test(lang) ? ` lang="${lang}"` : ''
+  documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:#007aff}</style></head><body>${doc.body.innerHTML}</body></html>`
 }, {immediate:true})
 onUnmounted(() => { generation++;urls.forEach(URL.revokeObjectURL) })
 </script>

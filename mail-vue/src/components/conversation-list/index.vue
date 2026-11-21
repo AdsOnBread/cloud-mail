@@ -524,6 +524,8 @@ async function load(
       containerProps.ref.value?.scrollTo?.(0, 0);
     rows.value = data.threads;
     total.value = data.total;
+    if(props.folder==="inbox" && !search.query && !Object.keys(search.filters).length)
+      emailStore.inboxUnread={accountId:account.currentAccountId,allReceive:Boolean(account.currentAccount.allReceive),count:data.unreadThreads};
     clearTimeout(wakeTimer);
     if (data.nextWakeAt && ["inbox", "snoozed"].includes(props.folder)) {
       const delay = Math.min(
