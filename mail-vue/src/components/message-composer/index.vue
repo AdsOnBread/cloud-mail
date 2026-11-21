@@ -317,6 +317,12 @@
       </div>
     </div>
     <SignatureManager v-if="managerMounted" v-model="managingSignatures" :account-id="form.accountId" @closed="signatureButton?.focus()"/>
+    <dialog ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
+      :aria-describedby="recipientNoticeId" @close="focusRecipients('receiveEmail')">
+      <h2>Error</h2>
+      <p :id="recipientNoticeId">Please specify at least one recipient.</p>
+      <form method="dialog"><button type="submit" autofocus>OK</button></form>
+    </dialog>
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
     <el-dialog
       v-model="showContacts"
@@ -370,6 +376,7 @@ import RecipientField from "@/components/recipient-field/index.vue";
 import {
   nextTick,
   onMounted,
+  useId,
   onUnmounted,
   reactive,
   ref,
@@ -404,6 +411,8 @@ import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
 const props = defineProps({ inline: Boolean });
 const emit = defineEmits(["sent", "closed"]);
 const composeRoot = ref();
+const recipientDialog = ref();
+const recipientNoticeId = useId();
 const desktop = ref(window.innerWidth >= 768);
 const modal = computed(
   () =>
@@ -1000,8 +1009,10 @@ function validForSend() {
   commitRecipients();
   const recipients = normalizeRecipients(form);
   recipientErrors.value = recipients.errors;
-  if (!recipients.receiveEmail.length)
-    recipientErrors.value.receiveEmail = "Enter at least one To recipient.";
+  if (recipientFields.every(field => recipients[field].length === 0)) {
+    if (!recipientDialog.value.open) recipientDialog.value.showModal();
+    return false;
+  }
   if (Object.keys(recipientErrors.value).length) {
     focusRecipients(recipientFields.find(field => recipientErrors.value[field]));
     return false;
@@ -1009,18 +1020,17 @@ function validForSend() {
   recipientFields.forEach((field) => {
     form[field] = recipients[field];
   });
-  if (!form.subject.trim()) {
-    sendError.value = "Enter a subject.";
-    return false;
-  }
-  if (!(form.plainText ? form.text : form.content).trim()) {
-    sendError.value = "Enter a message body.";
-    return false;
-  }
   return true;
 }
+function isEmptyMessage() {
+  if (form.subject.trim() || form.attachments.length) return false;
+  if (form.plainText) return !form.text.trim();
+  const body = new DOMParser().parseFromString(form.content, "text/html").body;
+  return !body.textContent.trim() && !body.querySelector("img,hr,table");
+}
 async function sendEmail(sendAt=null) {
-  if(!validForSend())return;
+  if (!validForSend()) return;
+  if (isEmptyMessage() && !window.confirm("Send this message without a subject or text in the body?")) return;
   clearTimeout(cloudSaveTimer);
   sending.value = true;
   sendError.value = "";
@@ -1142,7 +1152,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
-  if(managingSignatures.value || scheduling.value || event.target.closest?.(".schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
+  if(managingSignatures.value || scheduling.value || event.target.closest?.(".recipient-dialog,.schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
   if (
@@ -1239,6 +1249,22 @@ defineExpose({
 });
 </script>
 <style scoped>
+.recipient-dialog {
+  box-sizing: border-box;
+  width: min(280px, calc(100% - 32px));
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  background: var(--mail-surface, var(--el-bg-color));
+  color: var(--el-text-color-primary);
+}
+.recipient-dialog::backdrop { background: rgb(0 0 0 / 32%); }
+.recipient-dialog h2 { margin: 0; padding: 24px 24px 16px; font-size: 24px; line-height: 32px; font-weight: 400; }
+.recipient-dialog p { margin: 0; padding: 0 24px; font-size: 14px; line-height: 20px; }
+.recipient-dialog form { display: flex; justify-content: flex-end; padding: 24px 16px; }
+.recipient-dialog button { min-width: 64px; height: 40px; border-radius: 20px; color: var(--mail-blue, #0b57d0); font-weight: 500; cursor: pointer; }
+.recipient-dialog button:hover { background: var(--base-fill); }
 .compose-backdrop {
   position: fixed;
   inset: 0;

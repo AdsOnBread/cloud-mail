@@ -14,7 +14,7 @@ export async function prepare(c,userId,input,mode) {
     const source=await mail.detail(c,userId,positive(input.emailId));
     if(source.trashedAt)throw new BizError('Restore the original message before replying or forwarding.',400);
     value.emailId=source.emailId;value.sendType=mode;
-    value.subject=input.subject||`${mode==='reply'?'Re:':'Fwd:'} ${source.subject||''}`;
+    value.subject=input.subject??`${mode==='reply'?'Re:':'Fwd:'} ${source.subject||''}`;
     if(mode==='reply' && !input.receiveEmail) {
       const own=new Set((await c.env.db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId).all()).results.map(r=>r.email.toLowerCase()));
       const seen=new Set();const unique=list=>list.filter(a=>{const k=a.toLowerCase();if(own.has(k)||seen.has(k))return false;seen.add(k);return true;});

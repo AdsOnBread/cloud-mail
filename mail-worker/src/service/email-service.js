@@ -9,7 +9,7 @@ import settingService from './setting-service';
 import accountService from './account-service';
 import BizError from '../error/biz-error';
 import emailUtils from '../utils/email-utils';
-import { buildMessage, sendMessage, normalizeAttachment, normalizeRecipients, validateAttachmentCount } from './email-sender';
+import { buildMessage, sendMessage, normalizeAttachment, normalizeRecipients, validateSubject, validateAttachmentCount } from './email-sender';
 import { referenceIds } from '../mobile/threads';
 import attService from './att-service';
 import { parseHTML } from 'linkedom';
@@ -270,11 +270,9 @@ const emailService = {
 		const plainText = params.plainText === true;
 		if (plainText && Array.isArray(attachments)) attachments = attachments.filter(file => !file?.contentId);
 		validateAttachmentCount(attachments);
-		if (typeof subject !== 'string' || !subject.trim() || subject.length > 998 || /[\r\n]/.test(subject)) {
-			throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
-		}
+		validateSubject(subject);
 		const body = plainText ? text : content;
-		if (typeof body !== 'string' || !body.trim()) throw new BizError('Enter a message body.', 400);
+		if (typeof body !== 'string') throw new BizError('Message body must be a string.', 400);
 		if (text !== undefined && typeof text !== 'string') throw new BizError('Message text must be a string.', 400);
 
 

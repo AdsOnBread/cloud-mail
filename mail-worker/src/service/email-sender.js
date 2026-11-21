@@ -17,7 +17,6 @@ export function validateRecipients(recipients) {
 
 export function normalizeRecipients(to, cc = [], bcc = []) {
 	if (![to,cc,bcc].every(Array.isArray)) throw new BizError('Recipients must be arrays.',400);
-	validateRecipients(to);
 	validateRecipients([...to,...cc,...bcc]);
 	const seen = new Set();
 	const unique = list => list.map(a => a.trim().toLowerCase()).filter(a => { if(seen.has(a)) return false; seen.add(a); return true; });
@@ -100,23 +99,27 @@ export function validateMessageSize(message) {
 	}
 }
 
+export function validateSubject(subject) {
+	if (typeof subject !== 'string' || subject.length > 998 || /[\r\n]/.test(subject)) {
+		throw new BizError('The subject must be at most 998 characters without line breaks.', 400);
+	}
+}
+
 export async function buildMessage(params) {
 	const recipients = normalizeRecipients(params.receiveEmail,params.cc,params.bcc);
-	if (typeof params.subject !== 'string' || !params.subject.trim() || params.subject.length > 998 || /[\r\n]/.test(params.subject)) {
-		throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
-	}
-	if (!params.text && !params.html) throw new BizError('Enter a message body.', 400);
+	validateSubject(params.subject);
 	const attachments = params.attachments || [];
 	if (!Array.isArray(attachments)) throw new BizError('Attachments must be an array.', 400);
 	validateAttachmentCount(attachments.filter(item => !item?.contentId));
 	validateAttachmentCount(attachments.filter(item => item?.contentId), true);
 	const message = {
 		from: { email: params.accountEmail, name: params.name },
-		to: recipients.to,
 		subject: params.subject,
-		text: params.text || '',
+		// The transport needs a nonempty MIME part even for a deliberately blank message.
+		text: params.text || (params.html ? '' : '\r\n'),
 		attachments: await Promise.all(attachments.map(normalizeAttachment))
 	};
+	if (recipients.to.length) message.to = recipients.to;
 	if (params.html) message.html = params.html;
 	if (recipients.cc.length) message.cc = recipients.cc;
 	if (recipients.bcc.length) message.bcc = recipients.bcc;
