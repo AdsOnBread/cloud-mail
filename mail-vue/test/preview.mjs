@@ -128,7 +128,7 @@ const api=createHTTPServer(async(req,res)=>{
    if(req.method==='PUT'){
      const {signatures:edited,...update}=JSON.parse(body);
      if(update.version!==generalSettings.version || (edited && edited.version!==signatures.version)){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Settings changed elsewhere.'}));return;}
-     generalSettings={...update,version:update.version+1};
+     generalSettings={...generalSettings,...update,version:update.version+1};
      if(edited)signatures={...edited,version:edited.version+1};
      data=edited ? {...generalSettings,signatures} : generalSettings;
    }else data=generalSettings;

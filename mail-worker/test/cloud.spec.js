@@ -107,6 +107,17 @@ describe('Incoming mail filters',()=>{
  });
 });
 describe('General mail settings',()=>{
+ it('enables hover actions on upgrade without changing an existing preference revision',async()=>{
+   const {ensureGeneralPreferenceColumns}=await import('../src/cloud/schema');
+   const {readGeneralSettings}=await import('../src/cloud/general-settings');
+   await env.db.prepare('ALTER TABLE mail_general_settings DROP COLUMN hover_actions').run();
+   await env.db.prepare('INSERT INTO mail_general_settings(user_id,version,undo_seconds,reply_all,keyboard_shortcuts) VALUES(1,4,30,1,1)').run();
+   const columns=async()=>(await env.db.prepare('PRAGMA table_info(mail_general_settings)').all()).results;
+   const execute=sql=>env.db.prepare(sql).run();
+   await ensureGeneralPreferenceColumns(columns,execute);
+   await ensureGeneralPreferenceColumns(columns,execute);
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:4,undoSeconds:30,replyAll:true,keyboardShortcuts:true,hoverActions:true});
+ });
  it('commits both forms together and preserves both when either revision is stale',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const {saveSignatures,readSignatures}=await import('../src/cloud/signatures');
