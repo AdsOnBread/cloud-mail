@@ -51,10 +51,11 @@ import {computed,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
 import {Icon} from '@iconify/vue';
 import {useMailSearchStore} from '@/store/mail-search';
 import {calendarDate,calendarWeeks,moveMonth} from './dates';
-import {midnight,olderChoices,parseRangeInput,rangeDates,rangeInput,timeCaption,withoutTime} from './search-range';
+import {midnight,olderChoices,recentChoices,parseRangeInput,rangeDates,rangeInput,timeCaption,withoutTime} from './search-range';
 
 const store=useMailSearchStore(), id=useId(), trigger=ref(), panel=ref(), calendar=ref(), fields=[];
-const choices=[['','Any time'],...olderChoices,['custom','Custom range…']];
+const activeRecent=computed(()=>recentChoices.find(([key])=>key===String(store.filters.days)));
+const choices=computed(()=>[['','Any time'],...(activeRecent.value ? [activeRecent.value] : []),...olderChoices,['custom','Custom range…']]);
 const weekdays=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const open=ref(false), custom=ref(false), active=ref(null), texts=ref(['','']), today=ref(new Date()), cursor=ref(new Date());
 const panelStyle=ref({}), calendarStyle=ref({});
@@ -68,7 +69,7 @@ const same=(a,b)=>b && a.toDateString()===b.toDateString();
 function checked(key) {
   if (!key) return !applied.value;
   if (key==='custom') return store.filters.dateAfter!=null || store.filters.dateBefore!=null;
-  return store.filters.olderThan===key;
+  return store.filters.olderThan===key || activeRecent.value?.[0]===key;
 }
 function position(element,anchor,width,avoid) {
   const view=window.visualViewport;
@@ -106,7 +107,10 @@ function choose(key) {
     nextTick(()=>{place();panel.value?.focus({preventScroll:true})});
     return;
   }
-  store.filters={...withoutTime(store.filters),...(key ? {olderThan:key} : {})};close();
+  const next=withoutTime(store.filters);
+  if (activeRecent.value && key===activeRecent.value[0]) next.days=key;
+  else if (key) next.olderThan=key;
+  store.filters=next;close();
 }
 function applyRange() {
   if (!valid.value) return;

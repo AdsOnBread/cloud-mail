@@ -1,12 +1,6 @@
 <template>
   <section ref="root" class="trash-view" aria-label="Trash">
-    <div v-if="!messageId" class="filter-row" aria-label="Filter Trash">
-      <SearchOptions chips field="from" /><SearchOptions chips field="days" />
-      <button class="filter-chip" :aria-pressed="Boolean(search.filters.hasAttachment)" @click="toggleFilter('hasAttachment')">Has attachment</button>
-      <SearchOptions chips field="to" />
-      <button class="filter-chip" :aria-pressed="Boolean(search.filters.isUnread)" @click="toggleFilter('isUnread')">Is unread</button>
-      <SearchOptions chips />
-    </div>
+    <FolderFilters v-if="!messageId" folder="trash" />
     <div class="mail-toolbar" :class="{'has-selection':selected.length && !messageId}">
       <button
         v-if="messageId"
@@ -221,7 +215,7 @@ import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
 import MovePicker from "@/components/mail-labels/move.vue";
 import {useMailLabels} from "@/store/mail-labels";
-import SearchOptions from "@/components/mail-search-options.vue";
+import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import {downloadablePart} from "@/utils/private-files";
 import ShadowHtml from "@/components/shadow-html/index.vue";
@@ -298,11 +292,6 @@ function moveTo({labelId},ids) {
   if (name) return act('move-from-trash',ids,{labelId,name});
 }
 const filtered=computed(()=>Object.keys(search.filters).length>0);
-function toggleFilter(key) {
-  const next={...search.filters};
-  if(next[key])delete next[key]; else next[key]=1;
-  search.filters=next;
-}
 function selectGroup(option) {
   if (busy.value || loading.value) return;
   selected.value=messages.value.filter(m=>option==='All' || (option==='Read' && m.unread!==0) || (option==='Unread' && m.unread===0)).map(m=>m.emailId);

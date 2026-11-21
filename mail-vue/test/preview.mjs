@@ -72,7 +72,8 @@ function filingAnchor(members) {
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
 }
 function matchesDate(created,p) {
- return withinDateBounds(Date.parse(created),searchDateBounds(p));
+ const utc = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(created);
+ return withinDateBounds(Date.parse(utc ? utc[1]+'T'+utc[2]+'Z' : created),searchDateBounds(p));
 }
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));

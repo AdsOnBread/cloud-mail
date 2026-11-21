@@ -1,16 +1,6 @@
 <template>
   <section class="scheduled-view" aria-label="Scheduled messages">
-    <div v-if="!messageId" class="filter-row" aria-label="Filter Scheduled">
-      <SearchOptions chips field="from" /><SearchOptions chips field="days" />
-      <button
-        class="filter-chip"
-        :aria-pressed="Boolean(search.filters.hasAttachment)"
-        @click="toggleFiles"
-      >
-        Has attachment
-      </button>
-      <SearchOptions chips field="to" /><SearchOptions chips />
-    </div>
+    <FolderFilters v-if="!messageId" folder="scheduled" />
     <div class="mail-toolbar">
       <button
         v-if="messageId"
@@ -229,7 +219,7 @@ import { syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
-import SearchOptions from "@/components/mail-search-options.vue";
+import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import ScheduledMessage from "./message.vue";
 
@@ -420,12 +410,6 @@ function toggle(id) {
     selected.value = selected.value.includes(id)
       ? selected.value.filter((key) => key !== id)
       : [...selected.value, id];
-}
-function toggleFiles() {
-  const filters = { ...search.filters };
-  if (filters.hasAttachment) delete filters.hasAttachment;
-  else filters.hasAttachment = 1;
-  search.filters = filters;
 }
 async function mark(row, field, value) {
   if (busy.value || !canCancel(row)) return;

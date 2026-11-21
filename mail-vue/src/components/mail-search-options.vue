@@ -30,6 +30,7 @@
         :aria-pressed="field ? Boolean(store.filters[field]) : undefined"
         :aria-expanded="open"
       >
+        <Icon v-if="field && store.filters[field]" icon="material-symbols:check" width="16" />
         {{ caption }}
         <Icon v-if="field" icon="material-symbols:arrow-drop-down" width="16" />
       </button>
