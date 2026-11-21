@@ -36,8 +36,13 @@ export async function searchPeople(c,userId,params) {
     // Search older indexed headers. Subject-only matches are rejected by peopleSuggestions.
     // Bound the FTS hits before reading addresses, including for common prefixes.
     const prefix='headers : "'+tokens.join(' ')+'"*';
-    const older=await read('SELECT rowid FROM mail_word_index WHERE mail_word_index MATCH ? AND rowid<? ORDER BY rowid DESC LIMIT 192',
-      [prefix,recent.at(-1)?.email_id ?? Number.MAX_SAFE_INTEGER]);
+    const older=await read(`SELECT mail_word_index.rowid FROM mail_word_index
+      CROSS JOIN email hit ON hit.email_id=mail_word_index.rowid
+      WHERE mail_word_index MATCH ? AND mail_word_index.rowid<? AND mail_word_index.rowid>=
+        (SELECT MIN(email_id) FROM email WHERE user_id=? AND account_id=?)
+      AND hit.user_id=? AND hit.account_id=? AND hit.is_del=0 AND hit.status NOT IN (6,7) AND hit.trashed_at IS NULL
+      ORDER BY mail_word_index.rowid DESC LIMIT 192`,
+      [prefix,recent.at(-1)?.email_id ?? Number.MAX_SAFE_INTEGER,userId,mailbox,userId,mailbox]);
     return peopleSuggestions([...recent,...older],'any',term,limit);
   }
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);

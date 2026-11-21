@@ -545,6 +545,8 @@ it('finds compose correspondents only in the sending mailbox and omits received 
 
 it('uses indexed headers to suggest older correspondents beyond recent messages',async()=>{
  await insert({name:'Juniper Rivera',send_email:'juniper@example.net'});
+ await env.db.prepare(`WITH RECURSIVE fill(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM fill WHERE n<200)
+   INSERT INTO email(user_id,account_id,send_email,name,is_del,status,type) SELECT 2,2,'juniper@elsewhere.net','Juniper Rivera',0,0,0 FROM fill`).run();
  await env.db.prepare(`WITH RECURSIVE fill(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM fill WHERE n<110)
    INSERT INTO email(user_id,account_id,send_email,name,is_del,status,type) SELECT 1,1,'other@example.net','Other',0,0,0 FROM fill`).run();
  const options=await cloudMail.searchPeople(context(),1,{field:'any',folder:'compose',accountId:'1',q:'Juniper Ri'});
