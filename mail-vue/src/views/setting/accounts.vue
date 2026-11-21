@@ -1,7 +1,7 @@
 <template>
   <div class="box">
     <SettingsTabs/>
-    <main class="account-content">
+    <div class="account-content">
     <div class="container">
       <div class="title">{{$t('profile')}}</div>
       <div class="item">
@@ -42,7 +42,7 @@
         <el-button type="primary" @click="deleteConfirm">{{$t('deleteUserBtn')}}</el-button>
       </div>
     </div>
-    </main>
+    </div>
     <el-dialog v-model="pwdShow" :title="$t('changePassword')" width="340">
       <div class="update-pwd">
         <el-input type="password" :placeholder="$t('newPassword')" v-model="form.password" autocomplete="off" @keyup.enter="submitPwd"/>
@@ -190,6 +190,8 @@ function submitPwd() {
 </script>
 <style scoped lang="scss">
 .box {
+  height:100%;
+  overflow:auto;
   .account-content { padding: 24px; }
 
   @media (max-width: 767px) {
