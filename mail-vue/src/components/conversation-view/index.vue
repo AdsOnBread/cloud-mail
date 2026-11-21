@@ -562,7 +562,7 @@ async function mutate(action, extra = {}) {
   busy.value = true;
   try {
     if ((!["label", "importance"].includes(action) && !(await save())) || epoch!==viewEpoch) return;
-    const result = await conversationAction(action, [anchor], extra);
+    const result = action === "move" ? await labels.moveConversations([anchor],extra) : await conversationAction(action, [anchor], extra);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;

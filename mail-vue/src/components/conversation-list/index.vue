@@ -698,10 +698,8 @@ async function mutate(action, extra = {}, ids = selected.value) {
   const sameSession = () => owner.authenticatedToken === token && localStorage.getItem("token") === token;
   busy.value = true;
   try {
-    const destination = action === "move" && (labels.items.find(label => label.id === extra.labelId)?.name || "Inbox");
     const result = action === "move" ? await labels.moveConversations(ids, extra) : await conversationAction(action, ids, extra);
     if (!sameSession()) return;
-    if (destination) feedback.show((ids.length === 1 ? "Conversation" : ids.length + " conversations") + " moved to " + destination + ".");
     if (action === "delete") feedback.trashed(result?.emailIds || [], ids.length);
     emailStore.conversationRevision++;
     if (!active || path !== route.fullPath || view !== key.value) return;

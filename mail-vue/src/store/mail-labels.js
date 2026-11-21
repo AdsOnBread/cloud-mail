@@ -1,5 +1,7 @@
 import { defineStore } from "pinia";
 import http from "@/axios";
+import { useMailFeedback } from "./mail-feedback";
+import { useEmailStore } from "./email";
 import { userDraftStore } from "./draft";
 import { conversationAction } from "@/request/conversation";
 const path = "/email/conversation/labels";
@@ -37,8 +39,25 @@ export const useMailLabels = defineStore("mail-labels", {
     request: 0,
   }),
   actions: {
-    moveConversations(ids, destination) {
-      return conversationAction('move', ids, destination, labelAPI(this));
+    async moveConversations(ids, destination) {
+      const client=labelAPI(this);
+      const name=destination.labelId ? this.items.find(label=>label.id===destination.labelId)?.name : 'Inbox';
+      const result=await conversationAction('move', ids, {...destination,undoable:true}, client);
+      const feedback=useMailFeedback();
+      feedback.show((ids.length===1 ? 'Conversation' : ids.length+' conversations')+' moved'+(name?' to '+name:'')+'.');
+      if (result?.undoToken) {
+        const notice=feedback.notice;
+        notice.undoFiling=async()=>{
+          try {
+            await client.post('/email/conversation/undo-move',{token:result.undoToken});
+            useEmailStore().conversationRevision++;
+          } catch (error) {
+            if (error.code===409 || error.response?.status===409) delete notice.undoFiling;
+            throw error;
+          }
+        };
+      }
+      return result;
     },
     bindSession(owner,token) {
       if (this.owner===owner && this.sessionToken===token)return;
@@ -107,7 +126,7 @@ export const useMailLabels = defineStore("mail-labels", {
         // The label can outlive a failed move. Keep its ID for a retry.
         this.edit = {...this.edit,destination:label,name:label.name,move};
         if (move.trash) await labelAPI(this).post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id,clientId:move.clientId});
-        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId},labelAPI(this));
+        else await this.moveConversations(move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId});
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {
         const trash=Boolean(this.edit?.trash), scheduled=Boolean(this.edit?.scheduled);
