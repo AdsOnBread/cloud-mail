@@ -1,3 +1,4 @@
+import emailUtils from '../utils/email-utils';
 import BizError from '../error/biz-error';
 import { permission, positive, conflict } from './auth';
 import * as drafts from './drafts';
@@ -54,11 +55,15 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     to: ['receiveEmail', 'cc', 'bcc'].map(key => `json_extract(d.data,'$.${key}')`),
     subject: ["json_extract(d.data,'$.subject')"],
   };
-  columns.q = [...columns.from, ...columns.to, ...columns.subject, "json_extract(d.data,'$.text')", "json_extract(d.data,'$.content')"];
+  const text = "json_extract(d.data,'$.text')";
+  columns.q = [...columns.from, ...columns.to, ...columns.subject, text];
   for (const [field, choices] of Object.entries(columns)) {
     const term = filters[field]?.trim().slice(0, 200);
     if (!term) continue;
-    conditions.push('(' + choices.map(column => `instr(lower(${column}),lower(?))>0`).join(' OR ') + ')');
+    const matches = choices.map(column => `instr(lower(${column}),lower(?))>0`);
+    // HTML-only drafts need their visible text extracted before a body search.
+    if (field==='q') matches.push(`COALESCE(trim(${text}),'')=''`);
+    conditions.push('(' + matches.join(' OR ') + ')');
     args.push(...choices.map(() => term));
   }
   if (filters.hasAttachment === '1') conditions.push(fileCount + '>0');
@@ -75,7 +80,22 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     substr(json_extract(d.data,'$.text'),1,180) AS preview,json_extract(d.data,'$.scheduledAt') AS sendAt,
     ${fileCount} attachmentCount,${fileNames} AS attachments,json_extract(d.data,'$.scheduleError') AS error
     ${from} WHERE ${conditions.join(' AND ')} ORDER BY sendAt,d.draft_id`).bind(...args).all();
-  return results.map(row => ({ ...row, attachments:JSON.parse(row.attachments), recipients:JSON.parse(row.recipients || '[]'), cc:JSON.parse(row.cc || '[]'), bcc:JSON.parse(row.bcc || '[]') }));
+  const messages=results.map(row=>({...row,attachments:JSON.parse(row.attachments),recipients:JSON.parse(row.recipients || '[]'),cc:JSON.parse(row.cc || '[]'),bcc:JSON.parse(row.bcc || '[]')}));
+  const term=filters.q?.trim().slice(0,200).toLowerCase();
+  if(!term)return messages;
+  const included=[];
+  for(const row of messages){
+    if(row.preview?.trim() || [row.senderName,row.senderEmail,row.subject,...row.recipients,...row.cc,...row.bcc].some(value=>value?.toLowerCase().includes(term))){
+      included.push(row);
+      continue;
+    }
+    // Read one body at a time to bound memory if a mailbox has large HTML-only messages.
+    const body=await c.env.db.prepare(`SELECT json_extract(data,'$.content') AS html FROM cloud_drafts
+      WHERE user_id=? AND draft_id=? AND version=? AND json_extract(data,'$.scheduledAt') IS NOT NULL`).bind(userId,row.draftId,row.version).first();
+    const visible=emailUtils.htmlToText(body?.html).replace(/\s+/g,' ').trim();
+    if(visible.toLowerCase().includes(term))included.push({...row,preview:visible.slice(0,180)});
+  }
+  return included;
 }
 
 export async function cancel(c, userId, id, version) {

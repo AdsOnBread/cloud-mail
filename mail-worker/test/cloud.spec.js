@@ -354,6 +354,23 @@ describe('Scheduled send',()=>{
    expect((await drafts.get(c(),1,d.draftId))).toMatchObject({state:'draft',content:d.content});
    expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('upsert');
  });
+ it('finds scheduled mail by body, hidden recipients and downloadable files while keeping the folder count unfiltered',async()=>{
+   const {schedule,scheduledList}=await import('../src/cloud/scheduled');
+   const when=Math.floor(Date.now()/1000)+3600;
+   const attached=await draft({subject:'Notes',bcc:['finance@example.net'],content:'<p style="color:tomato">Quarterly <b>statement</b></p>',text:'',
+     attachments:[{filename:'ledger.txt',content:'c2FtcGxl',contentType:'text/plain'}]});
+   const inline=await draft({subject:'Photo',content:'<img src="data:image/png;base64,AAECAw==">'});
+   for(const row of [attached,inline])await schedule(c(),1,row.draftId,{version:row.version,sendAt:when});
+   for(const filter of [{to:'FINANCE@'},{q:'Quarterly statement'},{hasAttachment:'1'}]){
+     const found=await scheduledList(c(),1,1,filter);
+     expect(found.map(m=>m.draftId)).toEqual([attached.draftId]);
+     expect(found[0]).toMatchObject({attachmentCount:1,attachments:[{filename:'ledger.txt'}]});
+     expect(found[0].attachments[0]).not.toHaveProperty('content');
+   }
+   expect(await scheduledList(c(),1,1,{q:'tomato'})).toEqual([]);
+   expect(await scheduledList(c(),1,1,{countOnly:'1',subject:'Notes'})).toEqual({count:2});
+   expect(await scheduledList(c(),1,2,{countOnly:'1'})).toEqual({count:0});
+ });
  it('dispatches a due internal message only once even when two ticks overlap',async()=>{
    const {schedule,deliverDue,scheduledList}=await import('../src/cloud/scheduled');
    const d=await draft();
