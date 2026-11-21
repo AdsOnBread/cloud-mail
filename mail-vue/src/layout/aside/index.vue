@@ -125,7 +125,15 @@ const drafts = userDraftStore();
 const settingStore = useSettingStore();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
-const activeFolder = computed(() => route.name === 'content' ? mailSearch.folder : route.meta.name);
+const activeFolder = computed(() => {
+  if (route.name==='content') return mailSearch.folder;
+  if (route.name==='scheduled' && route.query.message) {
+    const folders={inbox:'email',starred:'star',important:'important'};
+    if (Object.hasOwn(folders,route.query.from)) return folders[route.query.from];
+    if (route.query.from==='label' && /^\d+$/.test(route.query.labelId || '')) return 'label';
+  }
+  return route.meta.name;
+});
 const labels = useMailLabels(), user=useUserStore();
 const more=ref(false);
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);

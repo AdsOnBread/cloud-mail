@@ -409,7 +409,7 @@ async function archiveQueued(message,button) {
       scheduledMatches.value=scheduledMatches.value.filter(row=>row.draftId!==message.draftId);
       await nextTick();
       if (document.activeElement===document.body)
-        list.querySelector('.filed-queue-row a,.conversation-open')?.focus();
+        (list.querySelector('.filed-queue-row a,.conversation-open') || list.querySelector('.select-options'))?.focus();
     }
   } catch(e) {
     if (key.value===ownerKey && route.fullPath===path && list.isConnected)
