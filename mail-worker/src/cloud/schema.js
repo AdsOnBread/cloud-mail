@@ -1,7 +1,10 @@
+import {signatureSchema} from './signatures';
+
 export async function migrateCloud(db) {
   const columns = (await db.prepare('PRAGMA table_info(email)').all()).results;
   if (!columns.some(c => c.name === 'trashed_at')) await db.prepare('ALTER TABLE email ADD COLUMN trashed_at TEXT').run();
   await db.batch([
+    db.prepare(signatureSchema),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_email_trash ON email(user_id,trashed_at,email_id)'),
     db.prepare(`CREATE TABLE IF NOT EXISTS cloud_drafts (
       draft_id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,client_id TEXT NOT NULL,

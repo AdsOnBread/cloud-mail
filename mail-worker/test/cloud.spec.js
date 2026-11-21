@@ -444,3 +444,18 @@ describe('Scheduled send',()=>{
    if(state==='dispatching')expect((await scheduledList(c(),1))[0].state).toBe('uncertain');
  });
 });
+
+describe('signature settings',()=>{
+ it('isolates owners, keeps supported formatting and prevents a stale editor overwriting changes',async()=>{
+   const {readSignatures,saveSignatures}=await import('../src/cloud/signatures');
+   const initial=await readSignatures(env.db,1);
+   const incoming={...initial,items:[{id:'work',name:'Work',html:'<b style="color:#123456" id="editor-only">Team</b> <a href="https://example.org/">Website</a>'}],
+     defaults:{1:{newMail:'work',reply:null}},beforeQuote:true};
+   const saved=await saveSignatures(env.db,1,incoming);
+   expect(saved.items[0].html).toContain('color:#123456');expect(saved.items[0].html).not.toContain('editor-only');
+   expect(await readSignatures(env.db,1)).toEqual(saved);expect(await readSignatures(env.db,2)).toEqual(initial);
+   await expect(saveSignatures(env.db,1,incoming)).rejects.toMatchObject({code:409});
+   await expect(saveSignatures(env.db,1,{...saved,items:[]})).rejects.toMatchObject({code:400});
+   expect((await saveSignatures(env.db,1,{...saved,items:[],defaults:{}})).version).toBe(2);
+ });
+});
