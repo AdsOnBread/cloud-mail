@@ -1,5 +1,6 @@
 <template>
   <div class="box">
+    <SettingsTabs/>
     <div class="container">
       <div class="title">{{$t('profile')}}</div>
       <div class="item">
@@ -56,6 +57,7 @@
   </div>
 </template>
 <script setup>
+import SettingsTabs from "./tabs.vue";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import ConnectedApps from "@/components/connected-apps/index.vue";
 import {reactive, ref, defineOptions} from 'vue'

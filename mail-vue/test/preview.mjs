@@ -57,6 +57,7 @@ function grouped(){
  return groups.reduce((map,member)=>{const thread=map.get(member.threadId)||[];thread.push(rows.find(row=>row.emailId===member.emailId));map.set(member.threadId,thread);return map;},new Map());
 }
 function threadFor(id){return [...grouped().values()].find(thread=>thread.some(row=>row.emailId===Number(id)))||[];}
+const systemLabels={};
 const labels = new Map(), membership = new Map();
 let recentColors=[];
 let nextLabel = 1;
@@ -91,7 +92,10 @@ const api=createHTTPServer(async(req,res)=>{
    if(!file){res.writeHead(404);res.end();return;}
    res.setHeader('Content-Type',file.mimeType||'application/octet-stream');res.end(Buffer.from(file.content.replace(/^data:[^,]*;base64,/,''),'base64'));return;
  }
- if(path==='/v1/signatures'){
+ if(path==='/v1/system-labels')data=systemLabels;
+ else if(path.startsWith('/v1/system-labels/') && req.method==='PUT'){
+   const folder=path.split('/').at(-1),{mode}=JSON.parse(body);systemLabels[folder]=mode;data={folder,mode};
+ }else if(path==='/v1/signatures'){
    if(req.method==='PUT'){
      const update=JSON.parse(body);
      if(update.version!==signatures.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Signatures changed elsewhere.'}));return;}

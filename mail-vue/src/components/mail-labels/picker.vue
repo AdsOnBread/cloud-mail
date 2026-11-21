@@ -40,6 +40,7 @@
       >
         Create new
       </button>
+      <button class="picker-option" @click="dismiss();router.push({name:'label-settings'})">Manage labels</button>
       <button
         class="picker-option apply"
         :disabled="!Object.keys(changes).length"
@@ -52,6 +53,7 @@
 </template>
 <script setup>
 import { ref, watch } from "vue";
+import {useRouter} from "vue-router";
 import { Icon } from "@iconify/vue";
 import { useMailLabels } from "@/store/mail-labels";
 const props = defineProps({
@@ -59,6 +61,7 @@ const props = defineProps({
   disabled: Boolean,
 });
 const emit = defineEmits(["apply"]);
+const router=useRouter();
 const labels = useMailLabels(),
   open = ref(false),
   changes = ref({});

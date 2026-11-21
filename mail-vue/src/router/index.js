@@ -39,6 +39,7 @@ const routes = [
                     menu: false
                 }
             },
+            {path:'/settings/labels',name:'label-settings',component:()=>import('@/views/setting/labels.vue'),meta:{title:'Labels',name:'setting',menu:true}},
             {
                 path: '/settings',
                 name: 'setting',

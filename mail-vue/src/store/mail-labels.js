@@ -6,6 +6,7 @@ const path = "/email/conversation/labels";
 export const useMailLabels = defineStore("mail-labels", {
   state: () => ({
     items: [],
+    system: {}, systemRequest:0, systemError:"", moved:null,
     recentColors: [],
     optionsAnchor: null,
     colorRequest: 0,
@@ -21,6 +22,7 @@ export const useMailLabels = defineStore("mail-labels", {
     async load(owner = this.owner) {
       if (this.owner !== owner) {
         this.items = [];
+        this.system = {}; this.systemRequest++; this.systemError=""; this.moved=null;
         this.optionsAnchor = null;
         this.recentColors = [];
         this.colorRequest++;
@@ -41,18 +43,39 @@ export const useMailLabels = defineStore("mail-labels", {
           this.error = e.message || "Could not load labels.";
       }
     },
-    async save(id, name, anchors = [], parentId = null) {
+    async loadSystem(owner=this.owner) {
+      const request=++this.systemRequest;
+      if (!owner) return;
+      try {
+        const choices=await http.get('/v1/system-labels',{noMsg:true});
+        if (request===this.systemRequest && owner===this.owner) {this.system=choices;this.systemError="";}
+      } catch(e) {
+        if (request===this.systemRequest && owner===this.owner) this.systemError=e.message || "Could not load folder settings.";
+      }
+    },
+    async setSystem(folder,mode) {
+      const owner=this.owner;
+      await http.put('/v1/system-labels/'+folder,{mode},{noMsg:true});
+      if (owner===this.owner) {++this.systemRequest;this.system={...this.system,[folder]:mode};}
+    },
+    async save(id, name, anchors = [], parentId = null, move = null) {
       const owner = this.owner;
-      const label = id
+      const label = move && this.edit?.destination || (id
         ? await http.put(path + "/" + id, { name, parentId }, { noMsg: true })
-        : await http.post(path, { name, parentId }, { noMsg: true });
+        : await http.post(path, { name, parentId }, { noMsg: true }));
       if (owner !== this.owner) return;
       ++this.request;
       this.items = [
         ...this.items.filter((item) => item.id !== id && item.id !== label.id),
         { ...this.items.find(item => item.id === label.id), ...label },
       ].sort((a, b) => a.name.localeCompare(b.name));
-      if (anchors.length) {
+      if (move) {
+        // The label can outlive a failed move. Keep its ID for a retry.
+        this.edit = {...this.edit,destination:label,name:label.name,move};
+        if (move.trash) await http.post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id},{noMsg:true});
+        else await conversationAction('move',move.ids,{labelId:label.id,fromLabelId:move.fromLabelId});
+        if (this.owner===owner) this.moved={...move,labelId:label.id};
+      } else if (anchors.length) {
         this.edit = { ...this.edit, id: label.id, name: label.name };
         await conversationAction("label", anchors, {
           add: [label.id],

@@ -52,18 +52,23 @@
         <span>Categories</span>
         <button v-for="item in categoryOptions" :key="item.id" @click="chooseCategory(item.id)"><Icon :icon="'material-symbols:'+item.icon" width="18"/>{{item.name}}</button>
       </div>
-      <span v-if="!destinations.length && !categoryOptions.length">No matching labels</span>
+      <div class="move-management">
+        <button @click="createLabel">{{ query.trim() ? 'Create new “'+query.trim()+'”' : 'Create new' }}</button>
+        <button @click="manageLabels">Manage labels</button>
+      </div>
     </div>
   </el-popover>
 </template>
 <script setup>
 import { ref, computed, watch } from "vue";
+import {useRoute,useRouter} from "vue-router";
 import { Icon } from "@iconify/vue";
 import {inboxCategories} from "@/utils/inbox-categories";
 import { useMailLabels } from "@/store/mail-labels";
 const props = defineProps({
   ids: { type: Array, required: true },
   fromLabelId: Number,
+  trash:Boolean,
   showCategories:Boolean,
   disabled: Boolean,
 });
@@ -74,6 +79,7 @@ const labels = useMailLabels(),
   input = ref(),
   menu = ref(),
   trigger = ref();
+const route=useRoute(),router=useRouter();
 let anchors = [];
 const destinations = computed(() =>
   [{ id: 0, name: "Inbox" }, ...labels.items].filter(
@@ -94,6 +100,12 @@ watch(open, (value) => {
     anchors = [...props.ids];
   }
 });
+function createLabel(){
+  const move={ids:[...anchors],fromLabelId:props.fromLabelId || 0,trash:props.trash,path:route.fullPath};
+  dismiss();
+  labels.edit={name:query.value.trim(),move};
+}
+function manageLabels(){dismiss();router.push({name:'label-settings'});}
 function navigate(event) {
   if (event.isComposing || event.keyCode===229) return;
   if (event.key==='ArrowDown' || event.key==='ArrowUp') step(event.key==='ArrowDown' ? 1 : -1);
@@ -122,6 +134,7 @@ function choose(id) {
 }
 </script>
 <style scoped>
+.move-management{border-top:1px solid var(--light-border-color);margin-top:4px;padding-top:4px}
 .category-destinations{border-top:1px solid var(--light-border-color);margin-top:4px}.category-destinations span{font-size:12px;color:var(--secondary-text-color)}
 .move-picker {
   max-height: 320px;

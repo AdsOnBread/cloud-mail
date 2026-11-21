@@ -139,6 +139,9 @@ import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useUiStore } from "@/store/ui";
 const labels=useMailLabels(), ui=useUiStore(), labelIds=ref([]);
+watch(()=>labels.moved,change=>{
+  if(change && !change.trash && change.path===route.fullPath && change.ids.includes(Number(route.query.emailId)))back();
+});
 watch(()=>labels.applied,change=>{
   if(change?.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
 });

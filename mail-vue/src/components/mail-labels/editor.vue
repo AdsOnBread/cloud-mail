@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="Boolean(labels.edit)"
     :title="
-      labels.edit?.remove
+      labels.edit?.destination ? 'Move to label' : labels.edit?.remove
         ? 'Remove label'
         : labels.edit?.id
           ? 'Edit label'
@@ -23,6 +23,7 @@
         stay in their folders.
         <span v-if="hasChildren">Sublabels keep their current names.</span>
       </p>
+      <p v-else-if="labels.edit?.destination">Move the selected mail to “{{labels.edit.destination.name}}”.</p>
       <template v-else
         ><label
           >Please enter a {{ labels.edit?.id ? "" : "new " }}label name<input
@@ -55,11 +56,11 @@
           :disabled="
             saving ||
             !name.trim() ||
-            (nested && !parentId && !labels.edit?.remove)
+            (nested && !parentId && !labels.edit?.remove && !labels.edit?.destination)
           "
         >
           {{
-            labels.edit?.remove ? "Remove" : labels.edit?.id ? "Save" : "Create"
+            labels.edit?.destination ? "Move" : labels.edit?.remove ? "Remove" : labels.edit?.id ? "Save" : "Create"
           }}
         </button>
       </div>
@@ -102,10 +103,10 @@ watch(
 );
 async function submit() {
   if (!labels.edit || saving.value || !name.value.trim()) return;
-  const { id, remove, anchors } = labels.edit;
+  const { id, remove, anchors, move } = labels.edit;
   saving.value = true;
   try {
-    if (!remove && nested.value && !parentId.value) return;
+    if (!remove && !labels.edit.destination && nested.value && !parentId.value) return;
     if (remove) {
       await labels.remove(id);
       if (route.name === "label" && Number(route.params.labelId) === id)
@@ -116,6 +117,7 @@ async function submit() {
         name.value.trim(),
         anchors,
         nested.value ? parentId.value : null,
+        move,
       );
     mail.conversationRevision++;
   } catch (e) {

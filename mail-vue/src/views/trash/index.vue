@@ -44,7 +44,7 @@
           @click="setRead(targets,targetUnread)">
           <Icon :icon="readIcon(targetUnread)" width="20"/>
         </button>
-        <MovePicker v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
+        <MovePicker trash v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
         <el-dropdown v-if="canDelete || !messageId" :class="{'compact-trash-more':!canDelete}" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
           <button class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
           <template #dropdown><el-dropdown-menu>
@@ -393,6 +393,11 @@ async function loadDetail(id) {
 function reload() {
   return messageId.value ? loadDetail(messageId.value) : load();
 }
+watch(()=>labels.moved,change=>{
+  if(!change?.trash || change.path!==route.fullPath)return;
+  if(messageId.value && change.ids.includes(messageId.value))back();
+  else if(!messageId.value)reloadAfterRemoval(messages.value.findIndex(m=>change.ids.includes(m.emailId)));
+});
 watch(() => useMailFeedback().restored, reload);
 watch(messageId, reload, { immediate: true });
 watch([() => search.query, () => search.filters, mailbox], () => {

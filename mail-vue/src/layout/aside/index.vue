@@ -8,41 +8,20 @@
           <Icon icon="material-symbols:inbox-outline" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('inbox')}}</span><span v-if="unread" class="menu-name draft-count">{{ unread }}</span>
         </el-menu-item>
-        <el-menu-item @click="router.push({name: 'star'})" index="star" aria-label="Starred" data-tip="Starred"
-                      :class="activeFolder === 'star' ? 'choose-item' : ''">
-          <Icon icon="material-symbols:star-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('starred')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name:'snoozed'})" index="snoozed" aria-label="Snoozed" data-tip="Snoozed" :class="{'choose-item':activeFolder==='snoozed'}">
-          <Icon icon="material-symbols:schedule-outline" width="20"/><span class="menu-name" style="margin-left:16px">Snoozed</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'send'})" index="send" aria-label="Sent" data-tip="Sent" v-perm="'email:send'"
-                      :class="activeFolder === 'send' ? 'choose-item' : ''">
-          <Icon icon="material-symbols:send-outline" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 16px">{{$t('sent')}}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push('/scheduled')" index="scheduled" aria-label="Scheduled" data-tip="Scheduled" :class="{'choose-item':activeFolder==='scheduled'}">
-          <Icon icon="material-symbols:schedule-send-outline" width="20"/><span class="menu-name folder-name">Scheduled</span><span v-if="scheduledCount" class="menu-name draft-count">{{ scheduledCount }}</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name: 'draft'})" index="draft" aria-label="Drafts" data-tip="Drafts" v-perm="'email:send'"
-                      :class="activeFolder === 'draft' ? 'choose-item' : ''">
-          <Icon icon="material-symbols:draft-outline" width="19" height="19" />
-          <span class="menu-name" style="margin-left: 17px">{{$t('drafts')}}</span><span v-if="drafts.items.length" class="menu-name draft-count">{{ drafts.items.length }}</span>
-        </el-menu-item>
-        <el-menu-item index="more" :aria-expanded="more" :aria-label="more ? 'Less' : 'More'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
-          <Icon :icon="more ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20" /><span class="menu-name folder-name">{{ more ? 'Less' : 'More' }}</span>
-        </el-menu-item>
+        <template v-for="hidden in [false,true]" :key="String(hidden)">
+          <el-menu-item v-if="hidden" index="more" :aria-expanded="more" :aria-label="more ? 'Less' : 'More'" :data-tip="more ? 'Less' : 'More'" @click="more=!more">
+            <Icon :icon="more ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20"/><span class="menu-name folder-name">{{ more ? 'Less' : 'More' }}</span>
+          </el-menu-item>
+          <template v-if="!hidden || more">
+            <el-menu-item v-for="folder in folderGroups[Number(hidden)]" :key="folder.id" :index="folder.id" :aria-label="folder.name" :data-tip="folder.name"
+              :class="{'choose-item':activeFolder===folder.id}" @click="router.push({name:folder.id})">
+              <Icon :icon="'material-symbols:'+folder.icon" width="20" height="20"/>
+              <span class="menu-name folder-name">{{ folder.translation ? $t(folder.translation) : folder.name }}</span>
+              <span v-if="folderCounts[folder.id]" class="menu-name draft-count">{{ folderCounts[folder.id] }}</span>
+            </el-menu-item>
+          </template>
+        </template>
         <template v-if="more">
-          <el-menu-item index="important" aria-label="Important" data-tip="Important" :class="{'choose-item':activeFolder==='important'}" @click="router.push('/important')">
-            <Icon icon="material-symbols:label-important-outline" width="20" /><span class="menu-name folder-name">Important</span>
-          </el-menu-item>
-          <el-menu-item index="all" aria-label="All Mail" data-tip="All Mail" :class="{'choose-item':activeFolder==='all'}" @click="router.push('/all')">
-            <Icon icon="material-symbols:all-inbox-outline" width="20" /><span class="menu-name folder-name">All Mail</span>
-          </el-menu-item>
-        <el-menu-item @click="router.push({name:'archived'})" index="archived" aria-label="Archived" data-tip="Archived" :class="{'choose-item':activeFolder==='archived'}">
-          <Icon icon="material-symbols:archive-outline" width="20"/><span class="menu-name" style="margin-left:16px">Archived</span>
-        </el-menu-item>
-        <el-menu-item @click="router.push({name:'trash'})" index="trash" aria-label="Trash" data-tip="Trash" :class="activeFolder==='trash'?'choose-item':''"><Icon icon="material-symbols:delete-outline" width="20"/><span class="menu-name" style="margin-left:16px">Trash</span></el-menu-item>
         <el-menu-item @click="router.push({name: 'setting'})" aria-label="Settings" data-tip="Settings" index="setting"
                       :class="activeFolder === 'setting' ? 'choose-item' : ''">
           <Icon icon="fluent:settings-48-regular" width="20" height="20" />
@@ -121,6 +100,7 @@
 </template>
 
 <script setup>
+import {systemFolders,folderMode} from "@/components/mail-labels/system-folders";
 import http from '@/axios';
 import {conversationList,labelUnreadCounts} from '@/request/conversation';
 import { useEmailStore } from '@/store/email';
@@ -148,8 +128,7 @@ const activeFolder = computed(() => route.name === 'content' ? mailSearch.folder
 const labels = useMailLabels(), user=useUserStore();
 const more=ref(false);
 const activeLabel=computed(()=>activeFolder.value==="label"?Number(route.params.labelId || route.query.labelId):0);
-watch(activeFolder,folder=>{if(["archived","important","trash","all","setting"].includes(folder))more.value=true;},{immediate:true});
-watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
+watch(()=>user.user.email,email=>{labels.load(email);labels.loadSystem(email);},{immediate:true});
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();
 const unread=ref(0);
@@ -238,6 +217,21 @@ watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(account
     cleanup(()=>{current=false;clearTimeout(timer);});
   },{immediate:true});
 const scheduledCount=ref(0);
+const folderCounts=computed(()=>({draft:drafts.items.length,scheduled:scheduledCount.value}));
+const folderGroups=computed(()=>{
+  const groups=[[],[]];
+  for(const folder of systemFolders){
+    if(folder.permission && !hasPerm(folder.permission))continue;
+    const mode=folderMode(folder,labels.system);
+    const hidden=mode==='hide' || (mode==='unread' && !folderCounts.value[folder.id]);
+    groups[Number(hidden)].push(folder);
+  }
+  return groups;
+});
+watch([activeFolder,()=>folderGroups.value[1].some(f=>f.id===activeFolder.value)],([folder,hidden])=>{
+  if(hidden || folder==='setting')more.value=true;
+},{immediate:true});
+
 let countRequest=0;
 async function refreshScheduledCount(){
   const request=++countRequest;

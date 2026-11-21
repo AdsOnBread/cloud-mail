@@ -16,6 +16,7 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |
 | Importance | Outline and filled markers, reason on hover, keyboard toggle, selection menu and Important folder |
 | Nested labels | Add sublabel, Nest label under, branch disclosure controls, full paths in filing menus, inbox chips and the reader |
+| Label settings | Compared Gmail’s Settings → Labels system and custom label tables. System folder visibility is saved per owner. Custom labels can be created, renamed, nested, removed or hidden from either the sidebar or message list. Category and IMAP visibility controls remain differences. |
 | Label visibility | Independent sidebar and message-list settings, Show if unread, unread conversation badges and the separate More control for labels |
 | Label colors | Sidebar options, six-column palette, custom background and text, recent pairs and removing a color |
 | Filing and feedback | Move to Trash from each entry point, Undo, retained permanent-delete confirmation, archive and snooze |
@@ -37,7 +38,7 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Nested labels | Compared the New label dialog and preselected parent with Gmail. Checked a three-level branch, moving and renaming its parent, keyboard expansion, collapse after reload, and independent message assignments. Removing a parent in Cloudmail keeps its descendants and their message assignments. |
 | Label visibility | Compared the order and wording of both groups against signed-in Gmail. Checked read and unread transitions, alias switching, refresh after a change from another session, focus after hiding a label, and the full menu at 667 × 375. |
 | Label colors | Compared the 24 Gmail presets in order and the custom color dialog. Checked hover, keyboard selection, compact navigation, mobile touch targets, rename, reload, recent colors and the same color on the inbox chip and conversation heading. |
-| Trash recovery | Compared Gmail’s selected-message toolbar and searchable Move to menu. Cloudmail offers Inbox and user labels, read and unread actions, and Restore to previous location. Gmail also offers Spam and label management inside its move menu. |
+| Trash recovery | Compared Gmail’s selected-message toolbar and searchable Move to menu. Cloudmail offers Inbox and user labels, read and unread actions, and Restore to previous location. Create new and Manage labels are available inside the move menu. Gmail also offers Spam. |
 | Filing | Tested moving mail to Trash and undoing it from a message, conversation, row and bulk selection. Created and applied a label from a selection and from an open thread. |
 | Keyboard and search | Checked focus entering and leaving the search and label popovers, the effect of typing before opening search options, and keyboard access to row actions. |
 | Quick settings and themes | Compared Gmail’s View all gallery, color and photo tiles, My photos, Cancel and Save. On Cloudmail, tested an included photo, a custom photo saved on this device, color choices, cancellation, reload and stacked mobile dialogs. |
