@@ -26,7 +26,7 @@
         :aria-activedescendant="options[active] ? listId+'-'+active : undefined"
         :style="{order:editing ?? modelValue.length}" :aria-label="editingName ? 'Name for '+modelValue[editing] : label+' recipients'"
         :aria-invalid="!!error" :aria-describedby="error ? `${inputId}-error` : undefined"
-        autocomplete="off" autocapitalize="off" spellcheck="false" @input="typing=!editingName" @keydown="keydown" @blur="commit" @paste="paste" />
+        autocomplete="off" autocapitalize="off" spellcheck="false" @input="typing=!editingName" @keydown="keydown" @blur="blurEntry" @paste="paste" />
     </div>
     <slot />
     <p v-if="error" :id="`${inputId}-error`" class="recipient-error" role="alert">{{ error }}</p>
@@ -109,6 +109,12 @@ const dragField={
   focus:index=>nextTick(()=>focusAt(index)),
 };
 const dropIndex=computed(()=>recipientDrop.value?.field===dragField ? recipientDrop.value.index : null);
+function blurEntry(event) {
+  // A mouse drag needs the browser’s default pointerdown. Let the chip click
+  // or drop resolve the edit before changing the index underneath the pointer.
+  if (event.relatedTarget?.closest?.(".chip-address") && entry.value?.contains(event.relatedTarget)) return;
+  commit();
+}
 function chipPointerDown(event) {
   touchActivated=false;
   mouseChip.value=event.pointerType!=="touch";
@@ -120,16 +126,29 @@ function startDrag(event,index) {
 }
 function insertion(event) {
   const address=event.target.closest?.(".recipient-chip")?.querySelector(".chip-address");
-  if (!address) return props.modelValue.length;
-  const rect=address.closest(".recipient-chip").getBoundingClientRect();
-  return Number(address.dataset.index)+(event.clientX>=rect.left+rect.width/2 ? 1 : 0);
+  const after=(rect)=>event.clientX>=rect.left+rect.width/2;
+  if (address) return Number(address.dataset.index)+Number(after(address.closest(".recipient-chip").getBoundingClientRect()));
+  if (event.target===input.value) return editing.value ?? props.modelValue.length;
+  // Gaps between wrapped chips belong to the closest line, then the closest
+  // chip on that line. Leave clicks on the label and trailing space usable.
+  let index=props.modelValue.length, lineDistance=Infinity, edgeDistance=Infinity;
+  for (const chip of entry.value.querySelectorAll(".chip-address")) {
+    const rect=chip.closest(".recipient-chip").getBoundingClientRect();
+    const dy=Math.max(0,rect.top-event.clientY,event.clientY-rect.bottom);
+    const dx=Math.max(0,rect.left-event.clientX,event.clientX-rect.right);
+    if (dy<lineDistance || (dy===lineDistance && dx<edgeDistance)) {
+      lineDistance=dy;edgeDistance=dx;index=Number(chip.dataset.index)+Number(after(rect));
+    }
+  }
+  return index;
 }
 function overChip(event) {
-  if (!event.target.closest?.(".reveal-recipient")) hoverRecipient(event,dragField,insertion(event));
+  if (!event.target.closest?.(".reveal-recipient")) hoverRecipient(event,dragField,insertion);
 }
 function dropChip(event) {
-  if (!event.target.closest?.(".reveal-recipient")) dropRecipient(event,dragField,insertion(event));
+  if (!event.target.closest?.(".reveal-recipient")) dropRecipient(event,dragField,insertion);
 }
+watch([()=>props.modelValue.slice(),()=>props.owner,()=>props.accountId,()=>session?.()],()=>endRecipientDrag(dragField),{flush:"sync"});
 onBeforeUnmount(()=>endRecipientDrag(dragField));
 function showCard(index,focus=false) {
   const address=props.modelValue[index], trigger=chip(index);
@@ -386,8 +405,8 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .remove { flex:none; justify-content:center; width:22px; height:24px; border-radius:50%; }
 .remove svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; }
 .recipient-chip { position:relative; }
-.recipient-chip.drop-before::before,.drop-at-end .recipient-entry input { border-inline-start:2px solid var(--el-color-primary); }
-.recipient-chip.drop-before::before { content:""; position:absolute; inset-block:1px; inset-inline-start:-4px; }
+.drop-at-end .recipient-entry input { box-shadow:inset 2px 0 var(--el-color-primary); }
+.recipient-chip.drop-before::before { content:""; position:absolute; inset-block:1px; inset-inline-start:-4px; border-inline-start:2px solid var(--el-color-primary); }
 .recipient-chip:hover { background:var(--base-fill); }
 .recipient-chip:focus-within,.recipient-chip.chosen { background:#c2e7ff; color:#001d35; box-shadow:none; }
 .recipient-chip.invalid { box-shadow:inset 0 0 0 1px var(--el-color-danger); }
