@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 
 export const useWriterStore = defineStore('writer', {
     state: () => ({
+        contactRevision: 0,
         mailboxRecents: {},
         removedSuggestions: {}
     }),

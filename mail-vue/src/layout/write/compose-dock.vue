@@ -124,7 +124,7 @@ function update(item, state) {
     const saved = windowState(props.separateWindow);
     if (saved.owner === user.user.email && saved.draftId !== state.draftId) {
       notifyWindowDraft(props.separateWindow);
-      saveWindowState(props.separateWindow, {...saved, draftId:state.draftId || null});
+      saveWindowState(props.separateWindow, {...saved, person:null, draftId:state.draftId || null});
       notifyWindowDraft(props.separateWindow);
     }
   }
@@ -144,7 +144,7 @@ function remove(item) {
       document.title = mailboxTitle;
       separateIdle.value = true;
       const state = windowState(props.separateWindow);
-      saveWindowState(props.separateWindow,{...state,draftId:null,idle:true});
+      saveWindowState(props.separateWindow,{...state,person:null,draftId:null,idle:true});
     }
     else window.close();
   }

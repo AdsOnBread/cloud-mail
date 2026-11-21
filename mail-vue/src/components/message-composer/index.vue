@@ -113,6 +113,7 @@
               :recent="mailboxRecents"
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
+              @compose-contact="writeToContact"
               :names="form.replyRecipientNames"
               :error="recipientNotice ? undefined : recipientErrors.receiveEmail"
               @contacts="openContacts('receiveEmail')"
@@ -147,6 +148,7 @@
               :recent="mailboxRecents"
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
+              @compose-contact="writeToContact"
               :names="form.replyRecipientNames"
               :error="recipientNotice ? undefined : recipientErrors.cc"
               @contacts="openContacts('cc')"
@@ -162,6 +164,7 @@
               :recent="mailboxRecents"
               :removed="removedSuggestions"
               @choose-person="rememberPerson"
+              @compose-contact="writeToContact"
               :names="form.replyRecipientNames"
               :error="recipientNotice ? undefined : recipientErrors.bcc"
               @contacts="openContacts('bcc')"
@@ -589,7 +592,7 @@ async function moveWindow() {
   }
   try {
     if (props.separateWindow) {
-      saveWindowState(props.separateWindow, {...windowState(props.separateWindow), ...await saveForMove()});
+      saveWindowState(props.separateWindow, {...windowState(props.separateWindow), person:null, ...await saveForMove()});
       await returnComposeWindow(props.separateWindow);
       window.close();
     } else {
@@ -1264,6 +1267,8 @@ function persistDraft(options) {
 async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
   const draft = snapshot();
   if (autosave && props.separateWindow && !hasDraftContent(draft)) {
+    const state=windowState(props.separateWindow);
+    if (state.person) saveWindowState(props.separateWindow,{...state,person:null});
     if (!draft.draftId) return;
     const recovery = await discardDrafts([draft.draftId], draft);
     // The empty document remains editable. Later typing starts a fresh draft
@@ -1573,6 +1578,14 @@ function chooseFile() {
   input.onchange = () => addFiles(Array.from(input.files), "attachments");
   input.click();
 }
+async function writeToContact(person) {
+  if (!show.value || person.accountId!==form.accountId || userStore.user.email!==form.ownerEmail) return;
+  try {
+    const session=draftSession();
+    const sender={accountId:form.accountId,email:form.sendEmail,name:form.name};
+    await openSeparateWindow(()=>({owner:session.owner,sender,person}),session);
+  } catch(error) { sendError.value=error.message || "Could not open a new message."; }
+}
 function openContacts(field) {
   commitRecipients();
   contactField.value = field;
@@ -1705,7 +1718,7 @@ defineExpose({
   openDraft,
   restoreWindow: async (state,draft) => {
     if (draft) await openDraft(draft);
-    else open(null,state.sender);
+    else open(state.person,state.sender);
     if (typeof state.formatting === "boolean") showFormatting.value = state.formatting;
     if (!draft && typeof state.plainText === "boolean") form.plainText = state.plainText;
     if (!show.value) throw new Error("Could not open the composer.");

@@ -6,9 +6,10 @@
       <template v-for="(address, index) in modelValue" :key="index">
         <span v-if="editing !== index" class="recipient-chip" :style="{order:index}"
           :class="{ invalid: !isEmail(address), chosen: menuIndex === index }">
-          <button type="button" class="chip-address" :data-index="index" :title="address" :aria-label="address"
+          <button type="button" class="chip-address" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
-            @pointerdown.prevent @click="openMenu(index)" @contextmenu.prevent="openMenu(index)"
+            @pointerdown.prevent @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
+            @pointerenter="hoverChip($event,index)" @pointerleave="leaveCard"
             @keydown="chipKey($event,index)" @copy="clipboardEvent($event,index)" @cut="clipboardEvent($event,index)">
             <span class="avatar" aria-hidden="true">{{ display(address).charAt(0).toUpperCase() }}</span>
             <span class="chip-text">{{ display(address) }}</span>
@@ -39,21 +40,25 @@
           </span>
         </div>
       </div>
+      <ContactCard v-if="cardIndex!==null && chip(cardIndex)" :key="cardAddress" ref="contactCard"
+        :email="cardAddress" :name="display(cardAddress)" :owner="owner" :account-id="accountId"
+        :anchor="chip(cardIndex)" :focused="pinned" @hold="holdCard" @leave="leaveCard" @close="closeCard" @send="composeContact"/>
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
         class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @copy="clipboardEvent($event,menuIndex)" @cut="clipboardEvent($event,menuIndex)" @mousedown.prevent @focusout="leaveMenu">
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'copy')">Copy <kbd>{{ modifier }}C</kbd></button>
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'address')"><span>Copy “{{ modelValue[menuIndex] }}”</span><kbd>{{ alt }}C</kbd></button>
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'cut')">Cut <kbd>{{ modifier }}X</kbd></button>
-        <hr />
         <button v-if="isEmail(modelValue[menuIndex])" type="button" role="menuitem" @click="edit(menuIndex,true)">Change name <kbd>{{ shift }}E</kbd></button>
         <button type="button" role="menuitem" @click="edit(menuIndex)">Change email address <kbd>{{ shift }}F</kbd></button>
+        <button v-if="isEmail(modelValue[menuIndex])" type="button" role="menuitem" @click="showCard(menuIndex,true)">More info <kbd>{{ alt }}→</kbd></button>
         <span v-if="clipboardError" class="clipboard-error" role="status">{{ clipboardError }}</span>
       </div>
     </Teleport>
   </div>
 </template>
 <script setup>
-import { nextTick, ref, useId, watch } from 'vue';
+import ContactCard from './contact-card.vue';
+import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import {useRecipientSuggestions} from './suggestions';
 import {cleanRecipientName} from '../../../../shared/recipient-names';
 import { formatRecipient, parseRecipientList, splitRecipients } from '@/utils/recipients.js';
@@ -61,7 +66,7 @@ import { isEmail } from '@/utils/verify-utils.js';
 import { positionMailboxPopup } from '../mail-popup-position.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
   names: Object, removed: {type:Array,default:()=>[]}, recent: {type:Array,default:()=>[]}, otherRecipients: {type:Array,default:()=>[]}, accountId: Number, owner: String, error: String });
-const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson']);
+const emit = defineEmits(['update:modelValue', 'contacts', 'choosePerson','composeContact']);
 const input = ref(), entry = ref(), labelButton = ref(), menu = ref(), menuStyle = ref({});
 const pending = ref(''), editing = ref(null), menuIndex = ref(null);
 const editingName=ref(false), clipboardError=ref('');
@@ -82,7 +87,48 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
     commit();
     input.value?.focus();
   });
+const cardIndex=ref(null),cardAddress=ref(""),contactCard=ref(),pinned=ref(false);
+let cardTimer;
+function holdCard(){clearTimeout(cardTimer);}
+function closeCard(restore=false){
+  holdCard();
+  const index=cardIndex.value;
+  cardIndex.value=null;cardAddress.value="";pinned.value=false;
+  if (restore && index!==null) focusAt(index);
+}
+async function showCard(index,focus=false) {
+  const address=props.modelValue[index];
+  if (!props.owner || !isEmail(address) || !chip(index)?.getClientRects().length) return;
+  holdCard();
+  if (menuIndex.value!==null) closeMenu(false);
+  cardIndex.value=index;cardAddress.value=address;pinned.value=focus;
+  if (focus) {await nextTick();contactCard.value?.focus();}
+}
+function hoverChip(event,index) {
+  if (event.pointerType!=="mouse" || pinned.value || menuIndex.value!==null) return;
+  holdCard();cardTimer=setTimeout(()=>showCard(index),500);
+}
+function leaveCard() {
+  holdCard();
+  if (!pinned.value) cardTimer=setTimeout(()=>{
+    if (!document.activeElement?.closest(".person-card")) closeCard();
+  },180);
+}
+function selectChip(event,index) {
+  closeCard();closeMenu(false);
+  if (event.pointerType==="touch") return openMenu(index);
+  const resolved=resolveInput(index);
+  if (resolved.changed) emit("update:modelValue",resolved.updated);
+  nextTick(()=>focusAt(resolved.index));
+}
+function composeContact(person){closeCard(true);emit("composeContact",person);}
+watch([()=>props.owner,()=>props.accountId],()=>closeCard(),{flush:"sync"});
+watch(()=>props.modelValue[cardIndex.value],value=>{
+  if (cardIndex.value!==null && value!==cardAddress.value) closeCard();
+});
+onBeforeUnmount(holdCard);
 function clear() {
+  closeCard();
   hideSuggestions();
   clipboardVersion++;
   clipboardError.value='';
@@ -166,7 +212,13 @@ function keydown(event) {
   }
   if (event.key === 'Tab') commit();
 }
+function moreInfoShortcut(event,index) {
+  if (event.key!=="ArrowRight" || !event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || !isEmail(props.modelValue[index])) return false;
+  event.preventDefault();event.stopPropagation();showCard(index,true);return true;
+}
 function chipKey(event,index) {
+  if (moreInfoShortcut(event,index)) return;
+  if (event.key==="Escape" && cardIndex.value!==null) {event.preventDefault();event.stopPropagation();closeCard(true);return;}
   if (clipboardShortcut(event,index)) return;
   if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
   switch (event.key) {
@@ -227,9 +279,13 @@ async function clipboardAction(index,action) {
 }
 function reposition() {
   const anchor = chip(menuIndex.value);
-  if (menu.value && anchor) menuStyle.value = positionMailboxPopup(menu.value,anchor,Math.max(252,Math.min(480,menu.value.scrollWidth)));
+  if (menu.value && anchor) {
+    const width=Math.max(252,Math.min(540,menu.value.scrollWidth));
+    menuStyle.value=positionMailboxPopup(menu.value,anchor,width,undefined,false,0);
+  }
 }
 async function openMenu(targetIndex) {
+  closeCard();
   clipboardVersion++;clipboardError.value='';
   menuStyle.value={};
   const {updated,index,changed} = resolveInput(targetIndex);
@@ -249,6 +305,7 @@ function leaveMenu(event) {
   if (!menu.value?.contains(event.relatedTarget)) closeMenu(false);
 }
 function menuKey(event) {
+  if (moreInfoShortcut(event,menuIndex.value)) return;
   if (clipboardShortcut(event,menuIndex.value)) return;
   const items = [...menu.value.querySelectorAll('button')];
   const index = items.indexOf(document.activeElement);
@@ -301,9 +358,8 @@ input { appearance:none; border:0; border-radius:0; outline:none; background:tra
 .field-label:hover { text-decoration:underline; }
 .remove:hover { background:rgba(68,71,70,.12); }
 .recipient-error { width:100%; font-size:12px; color:var(--el-color-danger); padding-left:40px; }
-.recipient-menu { position:fixed; z-index:10000; box-sizing:border-box; padding:8px 0; overflow:auto; border-radius:8px; background:var(--el-bg-color,#fff); color:var(--regular-text-color); box-shadow:0 2px 8px #0003,0 1px 3px #0002; }
-.recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 16px; height:34px; cursor:pointer; text-align:left; color:inherit; font:400 14px/20px Roboto,Arial,sans-serif; }
-.recipient-menu hr { margin:4px 0; border:0; border-top:1px solid var(--compose-divider,var(--light-border-color)); }
+.recipient-menu { position:fixed; z-index:10000; box-sizing:border-box; padding:8px 0; overflow:auto; border-radius:4px; background:var(--mail-surface,#fff); color:var(--regular-text-color); box-shadow:0 8px 10px 1px #00000024,0 3px 14px 2px #0000001f,0 5px 5px -3px #0003; }
+.recipient-menu button { display:flex; align-items:center; justify-content:space-between; width:100%; padding:0 16px; height:32px; cursor:pointer; text-align:left; color:inherit; font:400 14px/20px Roboto,Arial,sans-serif; }
 .recipient-menu button { gap:16px; }
 .recipient-menu button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .recipient-menu kbd { flex:none; }

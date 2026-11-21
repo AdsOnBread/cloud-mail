@@ -1,3 +1,4 @@
+import {useWriterStore} from "@/store/writer";
 import { ref, watch } from "vue";
 import http from "@/axios";
 
@@ -8,8 +9,9 @@ export function useMailboxPeople(query, account, token, current) {
     loading = ref(false),
     failed = ref(false),
     retry = ref(0);
+  const writer=useWriterStore();
   watch(
-    [() => query.value.trim(), retry],
+    [() => query.value.trim(), retry, () => writer.contactRevision],
     ([term], _, cleanup) => {
       remote.value = [];
       failed.value = false;

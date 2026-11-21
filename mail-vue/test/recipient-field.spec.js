@@ -35,11 +35,11 @@ describe('recipient entry', () => {
     await input.trigger('keydown',{key:'Enter'});
     input.element.focus();
     await input.trigger('keydown',{key:'Backspace'});
-    expect(document.activeElement.title).toBe('last@example.com');
+    expect(document.activeElement.getAttribute('aria-label')).toBe('last@example.com');
     expect(wrapper.vm.recipients).toHaveLength(3);
-    await wrapper.get('[title="last@example.com"]').trigger('keydown',{key:'ArrowLeft'});
-    expect(document.activeElement.title).toBe('middle@example.com');
-    await wrapper.get('[title="middle@example.com"]').trigger('keydown',{key:'F',shiftKey:true});
+    await wrapper.get('[aria-label="last@example.com"]').trigger('keydown',{key:'ArrowLeft'});
+    expect(document.activeElement.getAttribute('aria-label')).toBe('middle@example.com');
+    await wrapper.get('[aria-label="middle@example.com"]').trigger('keydown',{key:'F',shiftKey:true});
     expect(input.element.value).toBe('middle@example.com');
     await input.setValue('replacement@example.com');
     wrapper.vm.entry.commit();
@@ -69,7 +69,7 @@ describe('recipient entry', () => {
     await wrapper.get('.chip-address').trigger('keydown',{key:'F',shiftKey:true});
     await input.setValue('unfinished'); await input.trigger('keydown',{key:'Escape'});
     expect(wrapper.vm.recipients).toEqual(['blind@example.com']);
-    expect(document.activeElement.title).toBe('blind@example.com');
+    expect(document.activeElement.getAttribute('aria-label')).toBe('blind@example.com');
     const clipboard={};
     await wrapper.get('.chip-address').trigger('cut',{clipboardData:{setData:(format,value)=>clipboard[format]=value}});
     expect(clipboard['text/plain']).toBe('blind@example.com'); expect(wrapper.vm.recipients).toEqual([]);
