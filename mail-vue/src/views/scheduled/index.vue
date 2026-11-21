@@ -226,6 +226,7 @@ import { useUserStore } from "@/store/user";
 import { userDraftStore } from "@/store/draft";
 import { useMailFeedback } from "@/store/mail-feedback";
 import { useMailSearchStore } from "@/store/mail-search";
+import {pendingScheduledReads} from "@/services/scheduled-read";
 import { syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
@@ -286,7 +287,7 @@ const targets = computed(() =>
 const readTargets = computed(()=>messageId.value ? (item.value ? [item.value] : []) : targets.value);
 const readAction = computed(()=>readTargets.value.some(row=>row.unread) ? 'Mark as read' : 'Mark as unread');
 const readIcon = unread => unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
-const reading = ref(new Map());
+const reading = computed(()=>pendingScheduledReads(db.value,user.authenticatedToken));
 const selectionOptions = ['All','None','Read','Unread','Starred','Unstarred'];
 const filtered = computed(() =>
   Boolean(search.query || Object.keys(search.filters).length),
@@ -439,7 +440,8 @@ function select(option) {
   if (match) selected.value=page.value.filter(match).map(row=>row.draftId);
 }
 async function setRead(batch,unread,leaveReader=false) {
-  if (!batch.length || batch.some(row=>!canCancel(row) || reading.value.has(row.draftId))) return;
+  const operations=reading.value;
+  if (!batch.length || batch.some(row=>!canCancel(row) || operations.has(row.draftId))) return;
   const owner=identity.value, email=user.user.email, session=localStorage.getItem("token"), origin=route.fullPath;
   const sameSession=()=>user.user.email===email && localStorage.getItem("token")===session;
   const current=()=>!disposed && identity.value===owner && sameSession();
@@ -447,7 +449,7 @@ async function setRead(batch,unread,leaveReader=false) {
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   let finish;
   const pending=new Promise(resolve=>{finish=resolve});
-  for (const {draftId} of messages) reading.value.set(draftId,pending);
+  for (const {draftId} of messages) operations.set(draftId,pending);
   try {
     await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true});
     // The user may already be back in a filtered Starred, Important or label list.
@@ -467,7 +469,7 @@ async function setRead(batch,unread,leaveReader=false) {
       if (current()) error.value=e.message || 'Could not update read status.';
     }
   } finally {
-    for (const {draftId} of messages) reading.value.delete(draftId);
+    for (const {draftId} of messages) operations.delete(draftId);
     finish();
   }
 }
