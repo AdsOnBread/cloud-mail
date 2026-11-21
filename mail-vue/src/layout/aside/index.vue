@@ -213,8 +213,9 @@ watch([activeLabel,activeLabelMode,()=>Boolean(labelUnread.value[activeLabel.val
     const explicitlyChanged=prev && prev[0]===id && prev[1] && mode!==prev[1] && prev[3]===accountId && prev[4]===combined;
     if(!explicitlyChanged && (mode==='hide' || (mode==='unread' && ready && !hasUnread)))showHiddenLabels.value=true;
   },{immediate:true,flush:'post'});
+const labelCountPoll=ref(0);
 watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),
-  ()=>labels.items.length,()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh,()=>drafts.scheduledRevision],
+  ()=>labels.items.length,labelCountPoll,()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh,()=>drafts.scheduledRevision],
   ([owner,accountId,allReceive,size],prev,cleanup)=>{
     let current=true;
     if(!prev || owner!==prev[0] || accountId!==prev[1] || allReceive!==prev[2]){
@@ -278,7 +279,11 @@ watch([()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentA
   refreshScheduledCount();
 },{immediate:true,flush:'sync'});
 watch(()=>drafts.scheduledRevision,refreshScheduledCount);
-const refreshIfVisible=()=>{if(!document.hidden)refreshScheduledCount();};
+const refreshIfVisible=()=>{
+  if(document.hidden)return;
+  refreshScheduledCount();
+  labelCountPoll.value++;
+};
 const scheduledTimer=setInterval(refreshIfVisible,60000);
 document.addEventListener('visibilitychange',refreshIfVisible);
 onBeforeUnmount(()=>{countRequest++;clearInterval(scheduledTimer);document.removeEventListener('visibilitychange',refreshIfVisible);});
