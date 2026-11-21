@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@farscrl/hunspell-wasm':
+        specifier: 1.0.1
+        version: 1.0.1
       '@iconify/vue':
         specifier: ^4.3.0
         version: 4.3.0(vue@3.5.20)
@@ -32,6 +35,96 @@ importers:
       dexie:
         specifier: ^4.0.11
         version: 4.2.0
+      dictionary-bg:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-ca:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-cs:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-da:
+        specifier: 6.0.0
+        version: 6.0.0
+      dictionary-de:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-el:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-en:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-en-gb:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-es:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-et:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-fa:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-fr:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-he:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-hr:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-hu:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-is:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-it:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-lt:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-nb:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-nl:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-pl:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-pt:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-pt-pt:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-ro:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-ru:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-sk:
+        specifier: 2.0.0
+        version: 2.0.0
+      dictionary-sl:
+        specifier: 3.0.0
+        version: 3.0.0
+      dictionary-sv:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-uk:
+        specifier: 4.0.0
+        version: 4.0.0
+      dictionary-vi:
+        specifier: 3.0.0
+        version: 3.0.0
       diff:
         specifier: 8.0.4
         version: 8.0.4
@@ -44,6 +137,9 @@ importers:
       emojibase-data:
         specifier: 17.0.0
         version: 17.0.0(emojibase@18.0.0)
+      franc:
+        specifier: 6.2.0
+        version: 6.2.0
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
@@ -812,6 +908,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@farscrl/hunspell-wasm@1.0.1':
+    resolution: {integrity: sha512-tLhy/UvXTDqbHx+F/9+L48USQK7qyujxlUd0LuASLmxRS7r1lGaud9tSeq9nJT9oaFl9PAgORFuJh8OSwiT1fw==}
+    engines: {node: '>=24'}
+
   '@floating-ui/core@1.7.3':
     resolution: {integrity: sha512-sGnvb5dmrJaKEZ+LDIpguvdX3bDlEllmv4/ClQ9awcmCZrlx5jQyyMWFM5kBI+EyNOCDDiKk8il0zeuX3Zlg/w==}
 
@@ -1495,6 +1595,9 @@ packages:
     resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
     engines: {node: '>= 14.16.0'}
 
+  collapse-white-space@2.1.0:
+    resolution: {integrity: sha512-loKTxY1zCOuG4j9f6EPnuyyYkf58RnhhWTvRoZEokgB+WbdXehfjFviyOVYkqzEWz1Q5kRiZdBYS5SwxbQYwzw==}
+
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
@@ -1622,6 +1725,96 @@ packages:
 
   dexie@4.2.0:
     resolution: {integrity: sha512-OSeyyWOUetDy9oFWeddJgi83OnRA3hSFh3RrbltmPgqHszE9f24eUCVLI4mPg0ifsWk0lQTdnS+jyGNrPMvhDA==}
+
+  dictionary-bg@2.0.0:
+    resolution: {integrity: sha512-70UDaLQbCThnaA1w14bmh8d6icEKyz2H6ud8edsa8GPVGD6tQ/vWu2JgrWG6EnbYDWvExGu+rQf3S1Z2BEngtQ==}
+
+  dictionary-ca@3.0.0:
+    resolution: {integrity: sha512-h+crBYqX/X7cEU3cFAEgwIojOZTAw1wW4ybYN5Aum9f1oZ+8ULO/GGglLs8m8UBBGtSVLyoYf0CdvX8WKt8VDg==}
+
+  dictionary-cs@4.0.0:
+    resolution: {integrity: sha512-foYC1H71sxEx2QwppL4liEFAD+O5wlyJeZkTFqwz7ux85dI8kQFc8sDmWeObPEXsTtksiuwv+OOdfS2mFY1YVA==}
+
+  dictionary-da@6.0.0:
+    resolution: {integrity: sha512-gn0IPPVzFljxOOewzLPIEFQKdsPrtgGHEGCWjJeZArl7tZJpGwjXdbvOpteq1GK6YBl66Ljn91EtuGMlV7+itA==}
+
+  dictionary-de@3.0.0:
+    resolution: {integrity: sha512-0Xbq+YpWTscAL1e18aPPaqfG4goC2o9T595L/54v2OvOPC0/TJFFlclYanxuUoK73wutM5f9EgSuWGkvQXlOXw==}
+
+  dictionary-el@4.0.0:
+    resolution: {integrity: sha512-m8dWp+AIeGnUGBOBH7gx9YeQunMYdoKXKFvdSqzKPuJjz2Tb/pdW7oxG8lIKtASLHTCsf7RZoiuQbVRHJsSNCw==}
+
+  dictionary-en-gb@3.0.0:
+    resolution: {integrity: sha512-gU/dwC9xGYPh/0CCcmGNXO8OwSgOySAqevcSXxADCsgUD+tr6OJ52u7XaC7No7dNssvdUSfVjkzcqLrRZq3kPA==}
+
+  dictionary-en@4.0.0:
+    resolution: {integrity: sha512-3NHnE1uq33ZE/CIwaZ6gqxa4BnglHnxeAcTM0GJ7cmtRGcvX9InMK/IqLtYcUMFCUpUNgybH+DzkqdgAo3F1zg==}
+
+  dictionary-es@4.0.0:
+    resolution: {integrity: sha512-8J3IYdaHYmkojxqhB+DneQpek6N/s3MwbVk3bPNGQSTBT5kxJtmbuiT0LSDP0Al6K9Vevo1sjspG8AGP9Yvxiw==}
+
+  dictionary-et@2.0.0:
+    resolution: {integrity: sha512-MxyW1AvySPuXTrKikX9gXGj4R039kYd33xuJw4Pk5TllKitfZYp+rSiOVYI9azDW5foAXBYclPdkVglA5iNKQw==}
+
+  dictionary-fa@2.0.0:
+    resolution: {integrity: sha512-FEvC923119V9sJ5MKbXOssauLTHJ4zxwUhFLGaC1sETJASWF01Xcank24achQtm1f2eDzZgyWphzbjy3M5u2Lw==}
+
+  dictionary-fr@3.0.0:
+    resolution: {integrity: sha512-fhDRX1cRyHPA69GJg8R4XgNYgSQvbNHj3kr5UqvEG1OS5pJqH6P3GbO7wpTCwvr5KMQ0NxGIsXps9P5NyXRVEg==}
+
+  dictionary-he@2.0.0:
+    resolution: {integrity: sha512-lHtYauHajRL+gnS1iI50RANqn+ce1NnQwbxim2WD6PtX4NXME0vFiqkW/BFAae0kaT1+/86Ze15GAnwsTBBNGA==}
+
+  dictionary-hr@2.0.0:
+    resolution: {integrity: sha512-kQoiUkcZAbubqpLSh54cpMWJ8hWJI7UObCwrCzTbrulxdFseSmANPYnxH9CJ/Rz/WhMkNP6JW+Di/BnEN+LKGw==}
+
+  dictionary-hu@3.0.0:
+    resolution: {integrity: sha512-yTOarR7/KU/E1VbqzCru8hX0TMtQGWo6JF5CBBBbsqodzBhPxO+rHrmRSrXUMlcsPieqm3wWQtXuO/3OjQ95gw==}
+
+  dictionary-is@2.0.0:
+    resolution: {integrity: sha512-XsZP6pjiWL+VQk8O6BblwCmQGw5vQcLTIgMw2q1EVQ7hlJi0Y+hg0vvvsn4YY5qvfXBltnY2j22tkGezG494rg==}
+
+  dictionary-it@2.0.0:
+    resolution: {integrity: sha512-klTygBjKRYKEeDmqLfDpI9eDCj334TQhbq2zExKREV4CMPiUsnXnO/0CGMTiRTRL+Wk+qXd0fKfEZbgw+gnjHw==}
+
+  dictionary-lt@2.0.0:
+    resolution: {integrity: sha512-NPuz8zyQn92yX1tc/W7yADmHuTpPQ6rNY+LWiWyWFJvqV6jQgg/Ag7jsY9LfVFIiv2uQ/LgrIHC5/XlhHcgs4Q==}
+
+  dictionary-nb@3.0.0:
+    resolution: {integrity: sha512-YemD394r1z5BrC1HUsV7iF6zLIalFBbcDfMCn4OV+KP3fRqC5VBLuohGBGmKnCmwwXSJmhOjmzaQY2cbK61iFw==}
+
+  dictionary-nl@2.0.0:
+    resolution: {integrity: sha512-BJRu3jT52mEjDunbpC9Y1UiQJy22VUuA/N6s2Oc5KuN+hHS3MDCoTQiyjifePd2rlHtZSy0fGZaB0qXiCGh7Vw==}
+
+  dictionary-pl@2.0.0:
+    resolution: {integrity: sha512-jg1j4DM12i6oyp34Re5UeVYZAh2u4Y0Qi8zUfLVQjRmUQA8PsHO41ShoZLDwcQm7mWfeTeZjDPLv9wygPdqj3Q==}
+
+  dictionary-pt-pt@2.0.0:
+    resolution: {integrity: sha512-N44fxg2uDhF71Ql20zpe6BpdMlVkOT7oyjltuOhRwb2mx2SX3CJ/lqUE6+/HKZdqaxggqNbM/qv02a+Sa1XQiA==}
+
+  dictionary-pt@4.0.0:
+    resolution: {integrity: sha512-ryJRhAtsaunBWw9grYXmVFftfab8+BCQ5wwh7fUzWO0oYEeMuR1lW2ubu1AHdvxOL32XP+u5wW/XhbFuoFuq8Q==}
+
+  dictionary-ro@3.0.0:
+    resolution: {integrity: sha512-kcR0BSFq16g1jCKpn15jpyio3ztMMS+O3PK4TE8ird8XjBgSAr2RRH0VoLG4uzMG1CFQNix/cHLne1wBu3CcTg==}
+
+  dictionary-ru@3.0.0:
+    resolution: {integrity: sha512-tigem0CDnNpxEciW6ktwVH3wWB4FYpuvpwA6IR6UlF7bVu2kez6vOejVNyZgBX1TJIjuYTCTuLxzg/YOls2mRQ==}
+
+  dictionary-sk@2.0.0:
+    resolution: {integrity: sha512-rC+CQwuwURS7Cd2MWa5KXoFTdfZ7bAzgaCUM/4nGZxe1ySDksoYppGzX1vcYObqTCiQwKmsP4GwwGk+Ygsrzkg==}
+
+  dictionary-sl@3.0.0:
+    resolution: {integrity: sha512-+i2WB6ZFOiejKS0XCo24OMG2aM2mqZfEX7zF98H1lFhllxb+EyQvFgQo92nCEA0gwRpfyVWRyQPMJBVIZU10iw==}
+
+  dictionary-sv@4.0.0:
+    resolution: {integrity: sha512-GJM7IHfEHmSUecp9EbwX5efQe6CVdytFy5vDIJTT4dEDtwuEMyJGs7nqGuuK44Dtic36p4f0duWW5WogK9yzBw==}
+
+  dictionary-uk@4.0.0:
+    resolution: {integrity: sha512-AgeLt1iIi3lvUQ8DpEvqhikPvnwF+ffYLdjP0lrh+iOhCwTMhmDRvczyPqIksmHAWxRkFfgDcn7Qw/23GJ/GvA==}
+
+  dictionary-vi@3.0.0:
+    resolution: {integrity: sha512-r7QNGoJvKsLbxc4/59QP2pvJd7X08/8OWtZxiTfQGLwtl7nLw9F/IveWiUR46HBzSjws0L33fKf9UtlSrcYbRA==}
 
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
@@ -1774,6 +1967,9 @@ packages:
   form-data@4.0.5:
     resolution: {integrity: sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==}
     engines: {node: '>= 6'}
+
+  franc@6.2.0:
+    resolution: {integrity: sha512-rcAewP7PSHvjq7Kgd7dhj82zE071kX5B4W1M4ewYMf/P+i6YsDQmj62Xz3VQm9zyUzUXwhIde/wHLGCMrM+yGg==}
 
   fs-extra@9.1.0:
     resolution: {integrity: sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ==}
@@ -2200,6 +2396,9 @@ packages:
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
+
+  n-gram@2.0.2:
+    resolution: {integrity: sha512-S24aGsn+HLBxUGVAUFOwGpKs7LBcG4RudKU//eWzt/mQ97/NMKQxDWHyHx63UNWk/OOdihgmzoETn1tf5nQDzQ==}
 
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
@@ -2654,6 +2853,9 @@ packages:
   tr46@5.1.1:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
     engines: {node: '>=18'}
+
+  trigram-utils@2.0.1:
+    resolution: {integrity: sha512-nfWIXHEaB+HdyslAfMxSqWKDdmqY9I32jS7GnqpdWQnLH89r6A5sdk3fDVYqGAZ0CrT8ovAFSAo6HRiWcWNIGQ==}
 
   tslib@2.3.0:
     resolution: {integrity: sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==}
@@ -3795,6 +3997,8 @@ snapshots:
   '@esbuild/win32-x64@0.25.9':
     optional: true
 
+  '@farscrl/hunspell-wasm@1.0.1': {}
+
   '@floating-ui/core@1.7.3':
     dependencies:
       '@floating-ui/utils': 0.2.10
@@ -4454,6 +4658,8 @@ snapshots:
     dependencies:
       readdirp: 4.1.2
 
+  collapse-white-space@2.1.0: {}
+
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
@@ -4566,6 +4772,66 @@ snapshots:
     optional: true
 
   dexie@4.2.0: {}
+
+  dictionary-bg@2.0.0: {}
+
+  dictionary-ca@3.0.0: {}
+
+  dictionary-cs@4.0.0: {}
+
+  dictionary-da@6.0.0: {}
+
+  dictionary-de@3.0.0: {}
+
+  dictionary-el@4.0.0: {}
+
+  dictionary-en-gb@3.0.0: {}
+
+  dictionary-en@4.0.0: {}
+
+  dictionary-es@4.0.0: {}
+
+  dictionary-et@2.0.0: {}
+
+  dictionary-fa@2.0.0: {}
+
+  dictionary-fr@3.0.0: {}
+
+  dictionary-he@2.0.0: {}
+
+  dictionary-hr@2.0.0: {}
+
+  dictionary-hu@3.0.0: {}
+
+  dictionary-is@2.0.0: {}
+
+  dictionary-it@2.0.0: {}
+
+  dictionary-lt@2.0.0: {}
+
+  dictionary-nb@3.0.0: {}
+
+  dictionary-nl@2.0.0: {}
+
+  dictionary-pl@2.0.0: {}
+
+  dictionary-pt-pt@2.0.0: {}
+
+  dictionary-pt@4.0.0: {}
+
+  dictionary-ro@3.0.0: {}
+
+  dictionary-ru@3.0.0: {}
+
+  dictionary-sk@2.0.0: {}
+
+  dictionary-sl@3.0.0: {}
+
+  dictionary-sv@4.0.0: {}
+
+  dictionary-uk@4.0.0: {}
+
+  dictionary-vi@3.0.0: {}
 
   diff@8.0.4: {}
 
@@ -4788,6 +5054,10 @@ snapshots:
       es-set-tostringtag: 2.1.0
       hasown: 2.0.2
       mime-types: 2.1.35
+
+  franc@6.2.0:
+    dependencies:
+      trigram-utils: 2.0.1
 
   fs-extra@9.1.0:
     dependencies:
@@ -5233,6 +5503,8 @@ snapshots:
       ufo: 1.6.1
 
   ms@2.1.3: {}
+
+  n-gram@2.0.2: {}
 
   nanoid@3.3.11: {}
 
@@ -5718,6 +5990,11 @@ snapshots:
   tr46@5.1.1:
     dependencies:
       punycode: 2.3.1
+
+  trigram-utils@2.0.1:
+    dependencies:
+      collapse-white-space: 2.1.0
+      n-gram: 2.0.2
 
   tslib@2.3.0: {}
 
