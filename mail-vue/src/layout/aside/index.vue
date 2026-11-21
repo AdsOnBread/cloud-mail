@@ -36,7 +36,7 @@
             <Icon icon="material-symbols:add" width="20"/><span class="menu-name folder-name">Create new label</span>
           </button>
           <router-link class="folder-row" :to="{name:'setting'}" aria-label="Settings" data-tip="Settings"
-            :class="{'choose-item':route.name==='setting'}">
+            :class="{'choose-item':activeFolder==='setting' && route.name!=='label-settings'}">
             <Icon icon="fluent:settings-48-regular" width="20"/><span class="menu-name folder-name">{{$t('settings')}}</span>
           </router-link>
         </template>
@@ -71,32 +71,32 @@
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
-        <router-link class="folder-row" :to="{name:'analysis'}" aria-label="Analytics" data-tip="Analytics" v-perm="'analysis:query'"
+        <router-link class="folder-row" :to="{name:'analysis'}" aria-label="Analytics" data-tip="Analytics" v-if="hasPerm('analysis:query')"
                       :class="activeFolder === 'analysis' ? 'choose-item' : ''">
           <Icon icon="fluent:data-pie-20-regular" width="24" height="24" />
           <span class="menu-name" style="margin-left: 13px">{{$t('analytics')}}</span>
         </router-link>
-        <router-link class="folder-row" :to="{name:'user'}" aria-label="All users" data-tip="All users" v-perm="'user:query'"
+        <router-link class="folder-row" :to="{name:'user'}" aria-label="All users" data-tip="All users" v-if="hasPerm('user:query')"
                       :class="activeFolder === 'user' ? 'choose-item' : ''">
           <Icon icon="si:user-alt-2-line" width="20" height="20" />
           <span class="menu-name" style="margin-left: 16px">{{$t('allUsers')}}</span>
         </router-link>
-        <router-link class="folder-row" :to="{name:'all-email'}" aria-label="Manage all mail" data-tip="Manage all mail" v-perm="'all-email:query'"
+        <router-link class="folder-row" :to="{name:'all-email'}" aria-label="Manage all mail" data-tip="Manage all mail" v-if="hasPerm('all-email:query')"
                       :class="activeFolder === 'all-email' ? 'choose-item' : ''">
           <Icon icon="fluent:mail-list-28-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">Manage all mail</span>
         </router-link>
-        <router-link class="folder-row" :to="{name:'role'}" aria-label="Permissions" data-tip="Permissions" v-perm="'role:query'"
+        <router-link class="folder-row" :to="{name:'role'}" aria-label="Permissions" data-tip="Permissions" v-if="hasPerm('role:query')"
                       :class="activeFolder === 'role' ? 'choose-item' : ''">
           <Icon icon="fluent:lock-closed-16-regular" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('permissions')}}</span>
         </router-link>
-        <router-link class="folder-row" :to="{name:'reg-key'}" aria-label="Invite codes" data-tip="Invite codes" v-perm="'reg-key:query'"
+        <router-link class="folder-row" :to="{name:'reg-key'}" aria-label="Invite codes" data-tip="Invite codes" v-if="hasPerm('reg-key:query')"
                       :class="activeFolder === 'reg-key' ? 'choose-item' : ''">
           <Icon icon="fluent:fingerprint-20-filled" width="22" height="22" />
           <span class="menu-name" style="margin-left: 15px">{{$t('inviteCode')}}</span>
         </router-link>
-        <router-link class="folder-row" :to="{name:'sys-setting'}" aria-label="System settings" data-tip="System settings" v-perm="'setting:query'"
+        <router-link class="folder-row" :to="{name:'sys-setting'}" aria-label="System settings" data-tip="System settings" v-if="hasPerm('setting:query')"
                       :class="activeFolder === 'sys-setting' ? 'choose-item' : ''">
           <Icon icon="eos-icons:system-ok-outlined" width="18" height="18" style="margin-left: 2px" />
           <span class="menu-name" style="margin-left: 17px">{{$t('SystemSettings')}}</span>
@@ -154,7 +154,7 @@ const labels = useMailLabels(), user=useUserStore();
 const more=ref(false), moreFolders=ref([]);
 const categoryIds=new Set(categoryFolders.map(folder=>folder.id));
 function focusCategoryOptions(event) {
-  const button=event.currentTarget.nextElementSibling?.querySelector('.category-trigger');
+  const button=event.currentTarget.parentElement.querySelector('.category-trigger');
   if(button){event.preventDefault();button.focus();}
 }
 async function restoreCategoryFocus(id) {

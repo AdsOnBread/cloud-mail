@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import {computed,ref,watch} from 'vue';
+import {computed,onBeforeUnmount,ref,watch} from 'vue';
 import {Icon} from '@iconify/vue';
 import {useMailLabels} from '@/store/mail-labels';
 import {categoryMessageKey} from '@/utils/inbox-categories';
@@ -45,11 +45,19 @@ const groups=computed(()=>{
   }
   return result;
 });
+const anchorId=Symbol('category menu');
+function releaseAnchor(){
+  if(labels.optionsAnchor===anchorId)labels.optionsAnchor=null;
+}
+onBeforeUnmount(releaseAnchor);
 watch(open,visible=>{
+  if(visible)labels.optionsAnchor=anchorId;
+  else releaseAnchor();
   if(visible){error.value='';if(!ready.value)labels.loadSystem();}
 });
 function focusFirst(){
-  if(open.value)menu.value?.querySelector('button')?.focus();
+  const focused=document.activeElement;
+  if(open.value && (focused===trigger.value || focused===document.body))menu.value?.querySelector('button')?.focus();
 }
 function dismiss(){
   open.value=false;
@@ -89,7 +97,7 @@ async function choose(group,mode){
 
 <style scoped>
 .category-actions { position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%); }
-.category-trigger { width:20px; height:20px; opacity:0; pointer-events:none; color:inherit; }
+.category-trigger { width:20px; height:20px; opacity:0; color:inherit; }
 :global(.folder-line:hover .category-trigger),:global(.folder-line:focus-within .category-trigger),.category-trigger[aria-expanded=true] { opacity:1; pointer-events:auto; }
 :global(.mail-layout.nav-compact .category-actions) { display:none; }
 @media (hover:none) { .category-actions { inset-inline-end:0; } .category-trigger { width:32px; height:32px; opacity:1; pointer-events:auto; } }

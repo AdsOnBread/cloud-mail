@@ -73,7 +73,7 @@ function enterRail(e){
   if(e.pointerType==='mouse' && !isMobile.value && !uiStore.asideShow)railTimer=setTimeout(()=>{pointerInRail.value=true;},150);
 }
 function leaveRail(){clearTimeout(railTimer);pointerInRail.value=false;}
-function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.label-options');}
+function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.label-options,.category-trigger');}
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
@@ -136,7 +136,7 @@ onBeforeUnmount(() => { clearTimeout(railTimer);stopContacts?.();stopDraftList?.
 .photo-theme .mail-header :deep(.header-brand),.photo-theme .mail-header :deep(.toolbar > .icon-button){--regular-text-color:white;--mail-hover:#ffffff26}
 .photo-theme .mail-header :deep(.page-title){color:white}
 @media(min-width:768px){.photo-theme .mail-sidebar{--regular-text-color:white;--el-text-color-primary:white;--mail-hover:#ffffff29;--mail-selected:#ffffff3b;color:white}
-.photo-theme .mail-sidebar :deep(.mail-icon){color:white}.photo-theme .mail-sidebar :deep(.el-menu){--el-menu-text-color:white}
+.photo-theme .mail-sidebar :deep(.mail-icon){color:white}
 .nav-peek .mail-sidebar{width:256px;position:relative;z-index:105;background:var(--mail-canvas);box-shadow:4px 4px 12px #0003;border-radius:0 16px 16px 0}
 .photo-theme.nav-peek .mail-sidebar{background:#242830}
 }
