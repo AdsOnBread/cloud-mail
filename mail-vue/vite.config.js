@@ -1,7 +1,6 @@
 import {defineConfig, loadEnv} from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
-import {existsSync} from 'node:fs'
 import {languages as spellingLanguages} from './src/components/tiny-editor/spelling/languages.js'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -28,9 +27,10 @@ export default defineConfig(({mode}) => {
                     dest: 'pdf/' + pdfPackage.version,
                 })).concat({ src: path.resolve(__dirname, 'node_modules/emojibase-data/LICENSE'), dest: 'licenses/emojibase-data' }).concat(
                     {src:path.resolve(__dirname,'node_modules/@farscrl/hunspell-wasm/LICENSE'), dest:'licenses/hunspell-wasm'},
-                    spellingLanguages.flatMap(([id]) => ['index.aff','index.dic','license','readme.md','package.json'].map(file => ({
+                    spellingLanguages.flatMap(([id]) => ['index.aff','index.dic','readme.md','package.json',
+                        ...(id === 'et' ? [] : ['license'])].map(file => ({
                         src:path.resolve(__dirname, 'node_modules/dictionary-' + id, file), dest:'spelling/' + id,
-                    })).filter(target => existsSync(target.src))),
+                    }))),
                 ),
             }),
             VitePWA({

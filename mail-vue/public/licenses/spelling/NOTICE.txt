@@ -1,0 +1,173 @@
+Cloudmail compose spelling
+
+The Hunspell engine is distributed under its upstream GNU/LGPL/MPL terms.
+See hunspell-COPYING.txt for the upstream notice and MPL-1.1.txt for the MPL
+license option. The MIT wrapper notice is in ../hunspell-wasm/LICENSE.
+The corresponding engine source and wrapper/build scripts for the shipped
+WebAssembly binary are included in this directory as hunspell-source.tar.gz
+and hunspell-wrapper-source.tar.gz. Extract the engine at native/vendor/hunspell
+inside the wrapper checkout to reproduce its documented build. The build uses
+Emscripten 6.0.6. Its third-party notices are in emscripten-LICENSE.txt.
+
+Wrapper source https://github.com/farscrl/hunspell-wasm/tree/63f4605a9185b9fa211910eea68510dea8095d4c
+Engine source https://github.com/hunspell/hunspell/tree/c5f98152a274e25b5107101104bef632b83a0cc9
+
+Language detection uses franc 6.2.0, trigram-utils 2.0.1, n-gram 2.0.2 and
+collapse-white-space 2.1.0. Their MIT notices are provided alongside this file.
+
+Dictionary data is distributed unmodified as editable .aff and .dic files.
+The exact shipped input data, upstream project descriptions and attribution are
+available under /spelling/<dictionary identifier>/. The versioned package URLs
+below also provide the original distribution. Each dictionary retains its own
+license. The wooorm/dictionaries packaging code uses the MIT license.
+Full GNU license texts and other applicable licenses accompany this notice.
+
+dictionary-bg 2.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-bg/-/dictionary-bg-2.0.0.tgz
+  Dictionary project: http://bgoffice.sourceforge.net
+
+dictionary-ca 3.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1)
+  Package source: https://registry.npmjs.org/dictionary-ca/-/dictionary-ca-3.0.0.tgz
+  Dictionary project: https://github.com/Softcatala/catalan-dict-tools
+
+dictionary-cs 4.0.0
+  Terms: GPL-2.0
+  Package source: https://registry.npmjs.org/dictionary-cs/-/dictionary-cs-4.0.0.tgz
+  Dictionary project: http://www.translatoblog.cz/hunspell/
+
+dictionary-da 6.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-da/-/dictionary-da-6.0.0.tgz
+  Dictionary project: https://stavekontrolden.dk
+
+dictionary-de 3.0.0
+  Terms: (GPL-2.0 OR GPL-3.0)
+  Package source: https://registry.npmjs.org/dictionary-de/-/dictionary-de-3.0.0.tgz
+  Dictionary project: https://www.j3e.de/ispell/igerman98/index_en.html
+
+dictionary-el 4.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-el/-/dictionary-el-4.0.0.tgz
+  Dictionary project: https://github.com/stevestavropoulos/elspell
+
+dictionary-en 4.0.0
+  Terms: (MIT AND BSD)
+  Package source: https://registry.npmjs.org/dictionary-en/-/dictionary-en-4.0.0.tgz
+  Dictionary project: http://wordlist.aspell.net/dicts/
+
+dictionary-en-gb 3.0.0
+  Terms: (MIT AND BSD)
+  Package source: https://registry.npmjs.org/dictionary-en-gb/-/dictionary-en-gb-3.0.0.tgz
+  Dictionary project: http://wordlist.aspell.net/dicts/
+
+dictionary-es 4.0.0
+  Terms: (GPL-3.0 OR LGPL-3.0 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-es/-/dictionary-es-4.0.0.tgz
+  Dictionary project: https://github.com/sbosio/rla-es
+
+dictionary-et 2.0.0
+  Terms: LGPL-2.1
+  Package source: https://registry.npmjs.org/dictionary-et/-/dictionary-et-2.0.0.tgz
+  Dictionary project: http://www.meso.ee/~jjpp/speller
+
+dictionary-fa 2.0.0
+  Terms: Apache-2.0
+  Package source: https://registry.npmjs.org/dictionary-fa/-/dictionary-fa-2.0.0.tgz
+  Dictionary project: https://github.com/b00f/lilak
+
+dictionary-fr 3.0.0
+  Terms: MPL-2.0
+  Package source: https://registry.npmjs.org/dictionary-fr/-/dictionary-fr-3.0.0.tgz
+  Dictionary project: https://grammalecte.net
+
+dictionary-he 2.0.0
+  Terms: AGPL-3.0
+  Package source: https://registry.npmjs.org/dictionary-he/-/dictionary-he-2.0.0.tgz
+  Dictionary project: http://hspell.ivrix.org.il
+
+dictionary-hr 2.0.0
+  Terms: (LGPL-2.1 OR SISSL)
+  Package source: https://registry.npmjs.org/dictionary-hr/-/dictionary-hr-2.0.0.tgz
+  Dictionary project: https://github.com/krunose/hunspell-hr
+
+dictionary-hu 3.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-hu/-/dictionary-hu-3.0.0.tgz
+  Dictionary project: https://github.com/laszlonemeth/magyarispell
+
+dictionary-is 2.0.0
+  Terms: CC-BY-SA-3.0
+  Package source: https://registry.npmjs.org/dictionary-is/-/dictionary-is-2.0.0.tgz
+  Dictionary project: https://github.com/LibreOffice/dictionaries
+
+dictionary-it 2.0.0
+  Terms: GPL-3.0
+  Package source: https://registry.npmjs.org/dictionary-it/-/dictionary-it-2.0.0.tgz
+  Dictionary project: http://www.plio.it
+
+dictionary-lt 2.0.0
+  Terms: BSD-3-Clause
+  Package source: https://registry.npmjs.org/dictionary-lt/-/dictionary-lt-2.0.0.tgz
+  Dictionary project: https://github.com/ispell-lt/ispell-lt
+
+dictionary-nb 3.0.0
+  Terms: GPL-2.0
+  Package source: https://registry.npmjs.org/dictionary-nb/-/dictionary-nb-3.0.0.tgz
+  Dictionary project: http://no.speling.org
+
+dictionary-nl 2.0.0
+  Terms: (BSD-3-Clause OR CC-BY-3.0)
+  Package source: https://registry.npmjs.org/dictionary-nl/-/dictionary-nl-2.0.0.tgz
+  Dictionary project: https://github.com/OpenTaal/opentaal-hunspell
+
+dictionary-pl 2.0.0
+  Terms: (GPL-3.0 OR LGPL-3.0 OR MPL-2.0)
+  Package source: https://registry.npmjs.org/dictionary-pl/-/dictionary-pl-2.0.0.tgz
+  Dictionary project: http://extensions.openoffice.org/en/project/polish-dictionary-pack
+
+dictionary-pt 4.0.0
+  Terms: (LGPL-3.0 OR MPL-2.0)
+  Package source: https://registry.npmjs.org/dictionary-pt/-/dictionary-pt-4.0.0.tgz
+  Dictionary project: https://github.com/LibreOffice/dictionaries
+
+dictionary-pt-pt 2.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-pt-pt/-/dictionary-pt-pt-2.0.0.tgz
+  Dictionary project: https://natura.di.uminho.pt
+
+dictionary-ro 3.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-ro/-/dictionary-ro-3.0.0.tgz
+  Dictionary project: https://rospell.wordpress.com
+
+dictionary-ru 3.0.0
+  Terms: BSD-3-Clause
+  Package source: https://registry.npmjs.org/dictionary-ru/-/dictionary-ru-3.0.0.tgz
+  Dictionary project: https://github.com/LibreOffice/dictionaries
+
+dictionary-sk 2.0.0
+  Terms: (GPL-2.0 OR LGPL-2.1 OR MPL-1.1)
+  Package source: https://registry.npmjs.org/dictionary-sk/-/dictionary-sk-2.0.0.tgz
+  Dictionary project: http://www.sk-spell.sk.cx
+
+dictionary-sl 3.0.0
+  Terms: (GPL-3.0 OR LGPL-2.1)
+  Package source: https://registry.npmjs.org/dictionary-sl/-/dictionary-sl-3.0.0.tgz
+  Dictionary project: https://extensions.libreoffice.org/extensions/slovenian-dictionary-pack/
+
+dictionary-sv 4.0.0
+  Terms: LGPL-3.0
+  Package source: https://registry.npmjs.org/dictionary-sv/-/dictionary-sv-4.0.0.tgz
+  Dictionary project: https://extensions.libreoffice.org/extensions/swedish-spelling-dictionary-den-stora-svenska-ordlistan
+
+dictionary-uk 4.0.0
+  Terms: GPL-3.0
+  Package source: https://registry.npmjs.org/dictionary-uk/-/dictionary-uk-4.0.0.tgz
+  Dictionary project: https://github.com/brown-uk/dict_uk
+
+dictionary-vi 3.0.0
+  Terms: GPL-2.0
+  Package source: https://registry.npmjs.org/dictionary-vi/-/dictionary-vi-3.0.0.tgz
+  Dictionary project: https://github.com/1ec5/hunspell-vi
