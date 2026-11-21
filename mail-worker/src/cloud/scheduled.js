@@ -93,10 +93,13 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   // Bound peak memory when several HTML-only messages on the same page have large bodies.
   for(let i=0;i<missingText.length;i+=4){
     const batch=missingText.slice(i,i+4);
-    const bodies=await c.env.db.batch(batch.map(row=>c.env.db.prepare(`SELECT json_extract(data,'$.content') AS html FROM cloud_drafts
-      WHERE user_id=? AND draft_id=? AND version=? AND json_extract(data,'$.scheduledAt') IS NOT NULL`).bind(userId,row.draftId,row.version)));
-    batch.forEach((row,index)=>{
-      const visible=emailUtils.htmlToText(bodies[index].results[0]?.html).replace(/\s+/g,' ').trim();
+    const {results:bodies}=await c.env.db.prepare(`SELECT d.draft_id,d.version,json_extract(d.data,'$.content') AS html
+      FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
+      WHERE d.user_id=? AND d.draft_id IN (${batch.map(()=>'?').join(',')}) AND json_extract(d.data,'$.scheduledAt') IS NOT NULL`)
+      .bind(userId,...batch.map(row=>row.draftId)).all();
+    batch.forEach(row=>{
+      const body=bodies.find(body=>body.draft_id===row.draftId && body.version===row.version);
+      const visible=emailUtils.htmlToText(body?.html).replace(/\s+/g,' ').trim();
       if(visible.toLowerCase().includes(term))row.preview=visible.slice(0,180);
       else excluded.add(row.draftId);
     });
