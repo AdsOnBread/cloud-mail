@@ -9,7 +9,9 @@
           : 'New label'
     "
     class="mail-dialog label-dialog"
-    width="360px"
+    :class="{ 'label-name-dialog': !labels.edit?.remove && !labels.edit?.destination }"
+    :width="labels.edit?.remove || labels.edit?.destination ? '360px' : 'min(498px, calc(100vw - 32px))'"
+    align-center
     append-to-body
     :show-close="false"
     :close-on-click-modal="!saving"
@@ -27,26 +29,32 @@
       <p v-else-if="labels.edit?.destination">Move the selected mail to “{{labels.edit.destination.name}}”.</p>
       <template v-else
         ><label
-          >Please enter a {{ labels.edit?.id ? "" : "new " }}label name<input
+          class="name-label">Please enter a {{ labels.edit?.id ? "" : "new " }}label name:<input
             ref="input"
             v-model="name"
             :maxlength="Math.max(100, node?.text.length || 0)"
             :disabled="saving"
         /></label>
-        <label class="nest-option"
-          ><input v-model="nested" type="checkbox" :disabled="saving" />Nest
-          label under</label
-        >
-        <select
+        <label class="nest-option">
+          <span class="check-area"><input v-model="nested" type="checkbox" :disabled="saving" @change="parentId = null" /></span>
+          Nest label under:
+        </label>
+        <el-select
           v-model="parentId"
-          :disabled="!nested || saving"
-          aria-label="Parent label"
+          class="parent-picker"
+          aria-label="Nest label under:"
+          placeholder=" "
+          popper-class="label-parent-options"
+          fit-input-width
+          :teleported="false"
+          :show-arrow="false"
+          :offset="0"
+          :disabled="saving"
+          @change="nested = true"
         >
-          <option :value="null" disabled>Please select a parent…</option>
-          <option v-for="parent in parents" :key="parent.id" :value="parent.id">
-            {{ parent.name }}
-          </option>
-        </select>
+          <el-option label="Please select a parent..." value="" disabled />
+          <el-option v-for="parent in parents" :key="parent.id" :value="parent.id" :label="parent.name" />
+        </el-select>
       </template>
       <p v-if="error" role="alert">{{ error }}</p>
       <div class="dialog-actions">
@@ -132,38 +140,74 @@ async function submit() {
   }
 }
 </script>
-<style scoped>
-label {
-  display: block;
-  color: var(--regular-text-color);
-  font-size: 14px;
+<style>
+.label-name-dialog.el-dialog {
+  padding: 24px;
+  border-radius: 28px;
+  box-shadow: none;
 }
-.nest-option {
+.label-name-dialog .el-dialog__header { padding: 0 0 16px; }
+.label-name-dialog .el-dialog__title { font-size: 24px; line-height: 32px; }
+.label-name-dialog .el-dialog__body { line-height: 20px; color: var(--regular-text-color); }
+.label-name-dialog .name-label { display: block; font-size: 14px; }
+.label-name-dialog .name-label input,
+.label-name-dialog .el-select__wrapper {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--el-text-color-primary);
+  box-shadow: inset 0 0 0 1px var(--secondary-text-color);
+  font: 16px/24px Arial,sans-serif;
+}
+.label-name-dialog .name-label input { margin: 8px 0; }
+.label-name-dialog .name-label input:hover,
+.label-name-dialog .el-select__wrapper.is-hovering { box-shadow: inset 0 0 0 1px currentColor; }
+.label-name-dialog .name-label input:focus,
+.label-name-dialog .el-select__wrapper.is-focused {
+  outline: 0;
+  box-shadow: inset 0 0 0 3px var(--mail-blue,var(--el-color-primary));
+}
+.label-name-dialog .nest-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 16px 0 4px;
+  height: 48px;
+  width: fit-content;
+  font-size: 14px;
+  cursor: pointer;
 }
-.nest-option input {
-  accent-color: var(--el-color-primary);
+.label-name-dialog .check-area {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 4px 0 -12px;
+  border-radius: 50%;
+}
+.label-name-dialog .nest-option:hover .check-area,
+.label-name-dialog .check-area:focus-within { background: var(--mail-hover); }
+.label-name-dialog .check-area input {
   margin: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--mail-blue,var(--el-color-primary));
+  cursor: pointer;
 }
-select:disabled {
-  opacity: 0.55;
+.label-name-dialog .parent-picker { width: 100%; margin-top: 4px; }
+.label-name-dialog .dialog-actions button { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.label-name-dialog .dialog-actions button.primary { padding: 0 24px; min-width: 92px; }
+.label-name-dialog .dialog-actions button.primary:disabled {
+  cursor: default;
+  color: color-mix(in srgb,var(--el-text-color-primary) 38%,transparent);
+  background: var(--base-fill);
 }
-input:not([type="checkbox"]),
-select {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 9px 10px;
-  margin-top: 8px;
-  border: 1px solid var(--secondary-text-color);
-  border-radius: 4px;
-  background: var(--mail-surface);
-  color: inherit;
-  font: inherit;
-}
-[role="alert"] {
-  color: var(--mail-draft);
-}
+.label-parent-options.el-popper { border: 0; border-radius: 4px; }
+.label-parent-options .el-select-dropdown__list { padding: 8px 0; }
+.label-parent-options .el-select-dropdown__wrap { max-height: min(352px, 42vh); }
+.label-parent-options .el-select-dropdown__item { height: 48px; line-height: 48px; padding: 0 16px; }
+.label-dialog [role="alert"] { color: var(--mail-draft); }
 </style>

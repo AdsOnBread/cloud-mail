@@ -267,11 +267,11 @@ function back() {
 }
 function addSublabel() {
   open.value=false;
-  labels.edit={parentId:props.label.id};
+  labels.edit={parentId:props.label.id,restoreFocus};
 }
 function edit(remove) {
   open.value = false;
-  labels.edit = { ...props.label, remove };
+  labels.edit = { ...props.label, remove, restoreFocus };
 }
 function customize() {
   open.value = false;
