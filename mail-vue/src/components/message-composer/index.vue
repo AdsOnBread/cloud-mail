@@ -982,9 +982,13 @@ async function moreCommand(command) {
     if (desktop.value && !props.inline) expanded.value = fullScreen;
     return;
   }
-  await pendingDefault;
-  await editor.value?.ready();
-  if (!current()) return;
+  // An editor command already has a live selection. Switch immediately so a
+  // pending signature request cannot move subsequent typing ahead of that selection.
+  if (command !== "enable-rich") {
+    await pendingDefault;
+    await editor.value?.ready();
+    if (!current()) return;
+  }
   if (command === "print") {
     commitRecipients();
     printDraft({...form, content:editor.value.getContent()});
