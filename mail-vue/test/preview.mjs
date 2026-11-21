@@ -1,3 +1,4 @@
+import {searchDateBounds} from '../../shared/mail-search-date.js';
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
 import { inLabelBranch } from '../src/components/mail-labels/tree.js';
 import { groupThreads } from '../../mail-worker/src/mobile/threads.js';
@@ -70,11 +71,16 @@ function filingAnchor(members) {
  const received=members.filter(row=>row.type===0 && row.status===0);
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
 }
+function matchesDate(created,p) {
+ const {after,before}=searchDateBounds(p), time=Date.parse(created)/1000;
+ return (after==null || time>=after) && (before==null || time<before) &&
+   (!p.days || time>=Date.now()/1000-Number(p.days)*86400);
+}
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
  return matches([row.name,row.sendEmail],p.from) && matches([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])],p.to) &&
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
-    (!p.days || new Date(row.createTime).getTime()>=Date.now()-Number(p.days)*86400000);
+    matchesDate(row.createTime,p);
 }
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
@@ -113,7 +119,7 @@ const api=createHTTPServer(async(req,res)=>{
    const p=Object.fromEntries(url.searchParams),scope=Number(p.accountId);
    const queued=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope));
    if(p.countOnly==='1')data={count:queued.length};
-   else data=queued.map(d=>{
+   else data=queued.filter(d=>matchesDate(d.createTime,p)).map(d=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],

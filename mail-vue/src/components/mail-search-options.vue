@@ -1,5 +1,6 @@
 <template>
-  <el-popover
+  <SearchDateChip v-if="chips && field === 'days'" />
+  <el-popover v-else
     v-model:visible="open"
     trigger="click"
     :placement="chips ? 'bottom-start' : 'bottom-end'"
@@ -26,6 +27,7 @@
         type="button"
         class="filter-chip"
         :class="{ applied: field && store.filters[field], advanced: !field }"
+        :aria-pressed="field ? Boolean(store.filters[field]) : undefined"
         :aria-expanded="open"
       >
         {{ caption }}
@@ -41,6 +43,7 @@
       <label v-for="key in fields" :key="key"
         >{{ names[key] }}
         <select v-if="key === 'days'" v-model="form.days">
+          <option v-if="customRange" value="custom">{{ timeCaption(store.filters) }}</option>
           <option v-for="[value, text] in times" :value="value" :key="value">
             {{ text }}
           </option>
@@ -72,6 +75,8 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
+import SearchDateChip from "./mail-date-time/search-chip.vue";
+import {olderChoices,recentChoices,timeCaption,withoutTime} from "./mail-date-time/search-range";
 import { useMailSearchStore } from "@/store/mail-search";
 const props = defineProps({ chips: Boolean, field: String, queryText: String });
 const trigger = ref(),
@@ -94,13 +99,8 @@ const names = {
   q: "Has the words",
   days: "Any time",
 };
-const times = [
-  ["", "Any time"],
-  ["1", "Past day"],
-  ["7", "Past week"],
-  ["30", "Past month"],
-  ["365", "Past year"],
-];
+const times = [["","Any time"],...recentChoices,...olderChoices];
+const customRange = computed(() => store.filters.dateAfter!=null || store.filters.dateBefore!=null);
 const fields = computed(() =>
   props.field ? [props.field] : ["from", "to", "subject", "q", "days"],
 );
@@ -115,16 +115,21 @@ function reset() {
   form.value = {
     ...store.filters,
     q: props.queryText ?? store.query,
-    days: store.filters.days || "",
+    days: store.filters.olderThan || (customRange.value ? "custom" : store.filters.days || ""),
     hasAttachment: Boolean(store.filters.hasAttachment),
     isUnread: Boolean(store.filters.isUnread),
   };
 }
 function apply() {
-  const next = { ...store.filters };
+  let next = { ...store.filters };
   for (const key of fields.value) {
     const value = String(form.value[key] || "").trim();
-    if (key === "q") store.query = value;
+    if (key === "days") {
+      if (value === "custom") continue;
+      next = withoutTime(next);
+      if (olderChoices.some(([id])=>id===value)) next.olderThan = value;
+      else if (value) next.days = value;
+    } else if (key === "q") store.query = value;
     else if (value) next[key] = value;
     else delete next[key];
   }
