@@ -246,6 +246,7 @@ import { useUserStore } from "@/store/user";
 import { userDraftStore } from "@/store/draft";
 import { useMailFeedback } from "@/store/mail-feedback";
 import { useMailSearchStore } from "@/store/mail-search";
+import {deleteScheduled} from '@/services/scheduled-trash';
 import {fileScheduledMessages} from "@/services/scheduled-filing";
 import {pendingScheduledReads} from "@/services/scheduled-read";
 import { syncCloudDrafts } from "@/services/cloud-drafts";
@@ -547,29 +548,7 @@ async function trash(batch) {
   busy.value=true;
   error.value='';
   try {
-    const messages=batch.map(({draftId,version})=>({draftId,version}));
-    const payload={messages,edit:crypto.randomUUID()};
-    let receipt;
-    try { receipt=await http.post('/v1/scheduled/trash',payload,{noMsg:true}); }
-    catch(e) {
-      if (!sameSession() || !(e.request && !e.response || Number(e.response?.status || e.code)>=500)) throw e;
-      receipt=await http.post('/v1/scheduled/trash',payload,{noMsg:true});
-    }
-    if (!sameSession()) return;
-    feedback.trashed([],receipt.count,'message');
-    feedback.restored++;
-    feedback.notice.undoFiling=async()=>{
-      if (!sameSession()) throw new Error('Your mailbox changed. Reopen Trash.');
-      const result=await http.post('/v1/scheduled/undo-trash',receipt,{noMsg:true});
-      if (!sameSession()) return;
-      drafts.scheduledRevision++;
-      feedback.restored++;
-      if (result.drafts) {
-        syncCloudDrafts().catch(()=>{});
-        return result.scheduled ? result.scheduled+' scheduled again. '+result.drafts+' returned to Drafts.' :
-          result.drafts===1 ? 'Message returned to Drafts.' : result.drafts+' messages returned to Drafts.';
-      }
-    };
+    if (!await deleteScheduled(batch)) return;
     if (current()) {
       rows.value=rows.value.filter(row=>!removed.has(row.draftId));
       selected.value=selected.value.filter(id=>!removed.has(id));

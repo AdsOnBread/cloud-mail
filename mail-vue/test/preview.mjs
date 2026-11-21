@@ -56,6 +56,7 @@ function importanceReason(members) {
 }
 const fixtureCategory = new Map([['Oliver at Figma','promotions'],['Fieldwork Shop','updates'],['GitHub','updates'],['Linear','updates'],['The Browser','forums'],['Taylor Brooks','social']]);
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
+const trashOperations=new Map();
 function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:draft.state!=='draft'?'delete':'upsert',draft:draft.state!=='draft'?null:structuredClone(draft)});}
 function previewSend(form){const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts.find(a=>a.accountId===form.accountId)?.email||accounts[0].email,name:user.name,recipient:JSON.stringify((form.receiveEmail||[]).map(address=>({address}))),cc:JSON.stringify((form.cc||[]).map(address=>({address}))),bcc:JSON.stringify((form.bcc||[]).map(address=>({address}))),listText:form.text||form.content,trashedAt:null};rows.unshift(row);return [row];}
 function grouped(){
@@ -142,7 +143,9 @@ const api=createHTTPServer(async(req,res)=>{
        !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>(p.mark==='snoozed' ? a.wakeAt-b.wakeAt : a.sendAt-b.sendAt)||a.draftId-b.draftId);
  }else if(path==='/v1/scheduled/trash'){
-   const {messages}=JSON.parse(body),edit=crypto.randomUUID();
+   const {messages,edit}=JSON.parse(body);
+   const previous=trashOperations.get(edit);
+   if(previous && previous.intent===JSON.stringify(messages)){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({code:200,data:{edit,count:messages.length}}));return;}
    const selected=messages.map(m=>cloudDrafts.get(m.draftId));
    if(selected.some((d,i)=>!d?.scheduledAt || d.version!==messages[i].version)){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
    for(const d of selected){
@@ -154,9 +157,11 @@ const api=createHTTPServer(async(req,res)=>{
      rows.unshift(row);membership.set(row.emailId,new Set(d.labelIds||[]));
      d.trashEdit=edit;d.trashSendAt=d.scheduledAt;delete d.scheduledAt;d.state='trashed';d.version++;recordDraft(d);
    }
-   data={edit,count:selected.length};
+   trashOperations.set(edit,{intent:JSON.stringify(messages)});data={edit,count:selected.length};
  }else if(path==='/v1/scheduled/undo-trash'){
    const {edit,count}=JSON.parse(body);
+   const previous=trashOperations.get(edit);
+   if(previous?.undo){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({code:200,data:previous.undo}));return;}
    const selected=[...cloudDrafts.values()].filter(d=>d.state==='trashed' && d.trashEdit===edit);
    if(selected.length!==count){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
    let scheduled=0;
@@ -166,7 +171,7 @@ const api=createHTTPServer(async(req,res)=>{
      d.labelIds=[...(membership.get(rows[i].emailId)||[])];rows.splice(i,1);
      delete d.trashEdit;delete d.trashSendAt;d.state=d.scheduledAt?'scheduled':'draft';d.version++;recordDraft(d);
    }
-   data={scheduled,drafts:count-scheduled};
+   data={scheduled,drafts:count-scheduled};if(previous)previous.undo=data;
  }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/snooze','/v1/scheduled/labels'].includes(path) && req.method==='POST'){
    const {messages,unread,inbox,wakeAt,previousEdit,add,remove}=JSON.parse(body);
    if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version && (!previousEdit || d.scheduledInboxEdit===previousEdit);})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
