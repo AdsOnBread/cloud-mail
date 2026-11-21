@@ -35,7 +35,7 @@
 import {nextTick, onBeforeUnmount, onMounted, ref, shallowRef} from 'vue';
 import {Icon} from '@iconify/vue';
 import {languages} from './languages';
-import {collectWords} from './words';
+import {collectWords, liveWords, replaceWord} from './words';
 
 const props = defineProps({editor:{type:Object, required:true}});
 const emit = defineEmits(['close']);
@@ -44,7 +44,7 @@ const choices = [['auto','','Auto'], ...languages];
 const root = ref(), bar = ref(), menu = ref();
 const busy = ref(false), error = ref(false), status = ref('');
 const boxes = shallowRef([]), suggestions = ref([]), popup = ref(''), menuStyle = ref({});
-let issues = [], selected, opener, worker, pending, revision = 0, frame, observer, destroyed = false;
+let issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
 const ed = props.editor;
 
 function finish() {
@@ -78,6 +78,10 @@ function valid(issue) {
 function draw() {
   frame = undefined;
   if (destroyed) return;
+  if (textChanged) {
+    if (issues.length) issues = liveWords(ed.getBody(), issues);
+    textChanged = false;
+  }
   const area = root.value.getBoundingClientRect();
   const viewport = ed.iframeElement.getBoundingClientRect();
   const marks = [];
@@ -167,7 +171,7 @@ function scan() {
       words:Array.from(new Set(words.map(item => item.word))),
       base:new URL(import.meta.env.BASE_URL, document.baseURI).href}, ({wrong}) => {
       const invalid = new Set(wrong);
-      issues = words.filter(item => invalid.has(item.word) && valid(item));
+      issues = liveWords(ed.getBody(), words.filter(item => invalid.has(item.word)));
       issues.forEach((issue, index) => { issue.index = index; });
       busy.value = false;
       status.value = 'Spell checking completed';
@@ -176,7 +180,7 @@ function scan() {
   } catch { failed(); }
 }
 function correct(issue, trigger) {
-  if (busy.value || !valid(issue)) return;
+  if (busy.value || !liveWords(ed.getBody(), [issue]).length) return;
   dismiss();
   selected = issue;
   ask({type:'suggest', word:issue.word}, data => {
@@ -193,15 +197,16 @@ function ignore() {
 }
 function replace(value) {
   const issue = selected;
-  if (!issue || !valid(issue)) { dismiss(); return; }
+  if (!issue || !liveWords(ed.getBody(), [issue]).length) { dismiss(); return; }
   ed.focus();
   ed.selection.setRng(issue.range);
-  ed.undoManager.transact(() => { ed.insertContent(ed.dom.encode(value)); });
+  ed.undoManager.transact(() => ed.selection.setRng(replaceWord(issue.range, value)));
   ed.nodeChanged();
   ed.dispatch('change');
   ignore();
 }
 function edited() {
+  textChanged = true;
   if (selected && !valid(selected)) dismiss();
   redraw();
 }
@@ -209,7 +214,7 @@ onMounted(() => {
   observer = new ResizeObserver(redraw);
   observer.observe(root.value);
   observer.observe(ed.iframeElement);
-  ed.on('input change undo redo SetContent NodeChange', edited);
+  ed.on('input change undo redo SetContent', edited);
   ed.getWin().addEventListener('scroll', redraw);
   ed.getDoc().addEventListener('pointerdown', outside, true);
   document.addEventListener('pointerdown', outside, true);
@@ -223,7 +228,7 @@ onBeforeUnmount(() => {
   worker?.terminate();
   observer?.disconnect();
   cancelAnimationFrame(frame);
-  ed.off('input change undo redo SetContent NodeChange', edited);
+  ed.off('input change undo redo SetContent', edited);
   ed.getWin()?.removeEventListener('scroll', redraw);
   ed.getDoc()?.removeEventListener('pointerdown', outside, true);
   document.removeEventListener('pointerdown', outside, true);

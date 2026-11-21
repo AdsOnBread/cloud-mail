@@ -1,3 +1,5 @@
+import {rewriteTextRuns} from "../link-text";
+
 const boundary = 'address,article,blockquote,br,div,h1,h2,h3,h4,h5,h6,li,p,pre,td,th';
 const skip = 'a[href],code,pre,script,style,[contenteditable=false],[data-mce-bogus],.cloudmail-reply-quote';
 const tokens = /(?:https?:\/\/|www\.)[^\s<>]+|[\p{L}\d._%+-]+@[\p{L}\d.\-]+\.[\p{L}]{2,}|[\p{L}\p{M}\d]+(?:['’\u200c][\p{L}\p{M}\d]+)*/giu;
@@ -38,4 +40,42 @@ export function collectWords(body) {
   visit(body);
   flush();
   return results;
+}
+
+export function liveWords(body, issues) {
+  const byStart = new Map();
+  for (const item of collectWords(body)) {
+    const {startContainer, startOffset} = item.range;
+    if (!byStart.has(startContainer)) byStart.set(startContainer, new Map());
+    byStart.get(startContainer).set(startOffset, item);
+  }
+  return issues.filter(({range, word}) => {
+    const live = byStart.get(range.startContainer)?.get(range.startOffset);
+    return live?.word === word && live.range.endContainer === range.endContainer && live.range.endOffset === range.endOffset;
+  });
+}
+
+// Change only characters inside the checked token. Preserve surrounding text
+// and the existing style runs, including runs that begin midway through a word.
+export function replaceWord(range, value) {
+  const {startContainer:first, endContainer:last, startOffset:start, endOffset:end} = range;
+  const original = range.toString();
+  const caret = first.ownerDocument.createRange();
+  if (first === last) {
+    first.replaceData(start, end - start, value);
+    caret.setStart(first, start + value.length);
+  } else {
+    const walker = first.ownerDocument.createTreeWalker(range.commonAncestorContainer, 4);
+    walker.currentNode = first;
+    const runs = [first];
+    while (walker.currentNode !== last && walker.nextNode()) {
+      if (walker.currentNode.length) runs.push(walker.currentNode);
+    }
+    if (end < last.length) last.splitText(end);
+    if (start) runs[0] = first.splitText(start);
+    rewriteTextRuns(runs, original, value);
+    caret.setStart(last, last.length);
+  }
+  caret.collapse(true);
+  return caret;
 }

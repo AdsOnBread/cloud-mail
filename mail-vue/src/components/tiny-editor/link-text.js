@@ -13,6 +13,10 @@ export function renameLink(link, label) {
     link.textContent = label;
     return;
   }
+  rewriteTextRuns(runs, original, label);
+}
+
+export function rewriteTextRuns(runs, original, label) {
   if (runs.length === 1) {
     runs[0].data = label;
     return;
