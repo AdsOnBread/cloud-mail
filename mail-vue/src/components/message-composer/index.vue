@@ -119,6 +119,7 @@
               v-model="form.receiveEmail"
               label="To"
               :contacts="writerStore.sendRecipientRecord"
+              :names="form.replyRecipientNames"
               :error="recipientErrors.receiveEmail"
               @contacts="openContacts('receiveEmail')"
             >
@@ -147,6 +148,7 @@
               v-model="form.cc"
               label="Cc"
               :contacts="writerStore.sendRecipientRecord"
+              :names="form.replyRecipientNames"
               :error="recipientErrors.cc"
               @contacts="openContacts('cc')"
             />
@@ -156,6 +158,7 @@
               v-model="form.bcc"
               label="Bcc"
               :contacts="writerStore.sendRecipientRecord"
+              :names="form.replyRecipientNames"
               :error="recipientErrors.bcc"
               @contacts="openContacts('bcc')"
             />

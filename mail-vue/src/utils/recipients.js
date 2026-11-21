@@ -2,7 +2,23 @@ import { isEmail } from './verify-utils.js';
 
 export const recipientFields = ['receiveEmail', 'cc', 'bcc'];
 export function splitRecipients(value = '') {
-  return String(value).split(/[,，;\n\r]+/).map(address => address.trim()).filter(Boolean);
+  const tokens = [];
+  let token = '', quoted = false, escaped = false;
+  function finish() {
+    const text = token.trim();
+    const named = text.match(/^[^<>]*<([^<>]+)>$/);
+    if (text) tokens.push(named && isEmail(named[1].trim()) ? named[1].trim() : text);
+    token = '';
+  }
+  for (const character of String(value)) {
+    if (!quoted && /[,，;\r\n]/.test(character)) { finish(); continue; }
+    token += character;
+    if (escaped) escaped = false;
+    else if (quoted && character === '\\') escaped = true;
+    else if (character === '"') quoted = !quoted;
+  }
+  finish();
+  return tokens;
 }
 
 export function addresses(value) {
