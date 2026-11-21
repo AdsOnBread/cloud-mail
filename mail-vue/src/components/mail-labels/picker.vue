@@ -44,7 +44,7 @@ function restoreFocus() { (props.reference || trigger.value)?.focus(); }
 function dismiss() { open.value=false; restoreFocus(); }
 function createLabel() {
   dismiss();
-  labels.edit={name:query.value.trim(),anchors:[...anchors],trash:props.trash,restoreFocus};
+  labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,restoreFocus};
 }
 function manageLabels() { dismiss(); router.push({name:'label-settings'}); }
 function currentState(id) {

@@ -21,6 +21,18 @@ describe('Label settings session',()=>{
     finish([{id:7,name:'Project'}]);
     await saving;
   });
+  it('reuses a label creation after a lost response and applies it only to the selected Trash messages',async()=>{
+    const labels=useMailLabels();
+    localStorage.setItem('token','test-token');labels.bindSession('person@example.com','test-token');
+    labels.edit={clientId:'same-intent',anchors:[11,22],trash:true};
+    http.post.mockRejectedValueOnce(new Error('Response lost')).mockResolvedValueOnce({id:4,name:'Receipts'}).mockResolvedValueOnce({});
+    http.get.mockResolvedValueOnce([{id:4,name:'Receipts'}]);
+    await expect(labels.save(null,'Receipts',[11,22])).rejects.toThrow('Response lost');
+    await labels.save(null,'Receipts',[11,22]);
+    expect(http.post.mock.calls.slice(0,2).map(call=>call[1].clientId)).toEqual(['same-intent','same-intent']);
+    expect(http.post.mock.calls[2].slice(0,2)).toEqual(['/v1/messages/trash-labels',{emailIds:[11,22],add:[4],remove:[]}]);
+    expect(labels.applied).toEqual({anchors:[11,22],labelId:4,trash:true});
+  });
   it('closes the edit dialog and refreshes the list after removing a label',async()=>{
     const labels=useMailLabels();
     localStorage.setItem('token','test-token');labels.bindSession('person@example.com','test-token');

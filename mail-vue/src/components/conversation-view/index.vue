@@ -144,7 +144,7 @@ watch(()=>labels.moved,change=>{
   if(change && !change.trash && change.path===route.fullPath && change.ids.includes(Number(route.query.emailId)))back();
 });
 watch(()=>labels.applied,change=>{
-  if(change?.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
+  if(change && !change.trash && change.anchors.includes(Number(route.query.emailId))) labelIds.value=[...new Set([...labelIds.value,change.labelId])];
 });
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
 const importanceReason = ref(null);

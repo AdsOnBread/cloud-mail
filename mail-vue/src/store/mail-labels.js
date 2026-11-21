@@ -76,7 +76,7 @@ export const useMailLabels = defineStore("mail-labels", {
     async save(id, name, anchors = [], parentId = null, move = null) {
       const owner = this.owner;
       const destination=move && this.edit?.destination;
-      const creation=move || (this.edit?.onCreated ? this.edit : null);
+      const creation=move || (!id && this.edit?.clientId ? this.edit : null);
       if (creation && !destination) {
         const intent=JSON.stringify([name,parentId]);
         if (creation.intent && creation.intent!==intent) creation.clientId=crypto.randomUUID();
