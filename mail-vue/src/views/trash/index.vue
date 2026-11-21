@@ -122,13 +122,8 @@
           <time>{{formatDetailDate(detail.createTime)}}</time>
         </div>
         <div class="message-body">
-          <ShadowHtml
-            v-if="detail.content"
-            :key="detail.emailId"
-            :html="detail.content"
-            :resolve-file-url="inlineFileURL"
-          />
-          <pre v-else>{{ detail.text }}</pre>
+          <MessageContent :key="detail.emailId" :html="detail.content" :text="detail.text" :subject="detail.subject"
+            :reply="!!(detail.inReplyTo || detail.replyToEmailId)" :resolve-file-url="inlineFileURL"/>
           <AttachmentTiles :key="detail.emailId" :files="(detail.attList || []).filter(downloadablePart)" @error="error=$event"/>
         </div>
       </article>
@@ -223,7 +218,7 @@ import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import {downloadablePart} from "@/utils/private-files";
-import ShadowHtml from "@/components/shadow-html/index.vue";
+import MessageContent from "@/components/shadow-html/message-content.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MessageRecipients from "@/components/message-recipients.vue";
 import { hasPerm } from "@/perm/perm";

@@ -67,8 +67,7 @@
               : "Delivery delayed"
         }}
       </div>
-      <ShadowHtml class="message-html" v-if="email.content" :html="email.content" />
-      <pre v-else class="message-text">{{ email.text }}</pre>
+      <MessageContent class="message-html" :key="email.emailId" :html="email.content" :text="email.text" :subject="email.subject" :reply="!!(email.inReplyTo || email.replyToEmailId)"/>
       <AttachmentTiles class="attachments" :files="attachedFiles" @error="showFileError"/>
     </template>
     <slot />
@@ -81,7 +80,7 @@ import { ref, computed, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
-import ShadowHtml from "@/components/shadow-html/index.vue";
+import MessageContent from "@/components/shadow-html/message-content.vue";
 import { useEmailStore } from "@/store/email";
 import {hasReplyAll} from '@/utils/recipients';
 import {useAccountStore} from '@/store/account';

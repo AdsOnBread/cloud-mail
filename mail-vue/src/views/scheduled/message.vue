@@ -57,14 +57,8 @@
       </div>
       <p v-if="row.error" role="alert">{{ row.error }}</p>
       <template v-if="detail">
-        <ShadowHtml
-          v-if="detail.content && !detail.plainText"
-          :key="detail.draftId"
-          :html="detail.content"
-          :file-key="inlineKey"
-          :resolve-file-url="fileURL"
-        />
-        <pre v-else>{{ detail.text || row.preview }}</pre>
+        <MessageContent :key="detail.draftId" :html="detail.plainText ? '' : detail.content" :text="detail.text || row.preview"
+          :subject="detail.subject" :reply="detail.sendType==='reply'" :file-key="inlineKey" :resolve-file-url="fileURL"/>
         <AttachmentTiles :key="detail.draftId" :files="files" @error="$emit('error',$event)"/>
       </template>
     </div>
@@ -77,7 +71,7 @@ import { computed } from "vue";
 import { Icon } from "@iconify/vue";
 import http from "@/axios";
 import MailImportance from "@/components/mail-importance.vue";
-import ShadowHtml from "@/components/shadow-html/index.vue";
+import MessageContent from "@/components/shadow-html/message-content.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 const props = defineProps({
   row: Object,

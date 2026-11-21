@@ -36,8 +36,8 @@
           <div v-if="detailLoading" class="detail-status" role="status">Loading message…</div>
           <div v-if="detailError && !email.content && !email.text" class="detail-status" role="alert">{{ detailError }} <button type="button" @click="loadDetail">Retry</button></div>
           <el-scrollbar class="htm-scrollbar" :class="!email.attList?.length ? 'bottom-distance' : ''">
-            <ShadowHtml class="shadow-html" :html="formatImage(email.content)" v-if="email.content" />
-            <pre v-else class="email-text" >{{email.text}}</pre>
+            <MessageContent class="shadow-html" :key="email.emailId" :html="email.content ? formatImage(email.content) : ''"
+              :text="email.text" :subject="email.subject" :reply="!!(email.inReplyTo || email.replyToEmailId)"/>
           </el-scrollbar>
           <div class="att" v-if="email.attList?.length > 0">
             <div class="att-title">
@@ -85,7 +85,7 @@ const feedback = useMailFeedback();
 import { useUserStore } from '@/store/user.js';
 import { addresses } from '@/utils/recipients.js';
 import { privateFileURL } from '@/utils/private-files';
-import ShadowHtml from '@/components/shadow-html/index.vue'
+import MessageContent from '@/components/shadow-html/message-content.vue'
 import {computed, reactive, ref, watch, onMounted, onUnmounted} from "vue";
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
