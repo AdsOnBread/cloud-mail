@@ -37,6 +37,9 @@ it('keeps saved contacts with the sending mailbox and includes their names in au
   await setContact(c(),1,{...person,saved:false});
   expect(await readContact(c(),1,person)).toBeNull();
   expect(await mail.searchPeople(c(),1,search)).toEqual([]);
+  await setContact(c(),1,person);
+  await drafts.deleteUserData(c(),[1]);
+  expect(await readContact(c(),1,person)).toBeNull();
 });
 describe('Incoming mail filters',()=>{
  const db=env.db;

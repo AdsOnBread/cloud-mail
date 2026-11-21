@@ -8,7 +8,7 @@
           :class="{ invalid: !isEmail(address), chosen: menuIndex === index }">
           <button type="button" class="chip-address" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
-            @pointerdown.prevent @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
+            @pointerdown.prevent="touchActivated=false" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
             @pointerenter="hoverChip($event,index)" @pointerleave="leaveCard"
             @keydown="chipKey($event,index)" @copy="clipboardEvent($event,index)" @cut="clipboardEvent($event,index)">
             <span class="avatar" aria-hidden="true">{{ display(address).charAt(0).toUpperCase() }}</span>
@@ -56,6 +56,10 @@
     </Teleport>
   </div>
 </template>
+<script>
+// Each document has one contact card, including when several drafts are open.
+let activeContactCard=null;
+</script>
 <script setup>
 import ContactCard from './contact-card.vue';
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
@@ -88,17 +92,24 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
     input.value?.focus();
   });
 const cardIndex=ref(null),cardAddress=ref(""),contactCard=ref(),pinned=ref(false);
-let cardTimer;
+let cardTimer,touchActivated=false;
 function holdCard(){clearTimeout(cardTimer);}
 function closeCard(restore=false){
   holdCard();
   const index=cardIndex.value;
+  if (activeContactCard?.close===closeCard) activeContactCard=null;
   cardIndex.value=null;cardAddress.value="";pinned.value=false;
   if (restore && index!==null) focusAt(index);
 }
 async function showCard(index,focus=false) {
   const address=props.modelValue[index];
   if (!props.owner || !isEmail(address) || !chip(index)?.getClientRects().length) return;
+  if (!focus && document.querySelector(".recipient-menu")) return;
+  if (activeContactCard && activeContactCard.close!==closeCard) {
+    if (!focus && activeContactCard.pinned()) return;
+    activeContactCard.close();
+  }
+  activeContactCard={close:closeCard,pinned:()=>pinned.value};
   holdCard();
   if (menuIndex.value!==null) closeMenu(false);
   cardIndex.value=index;cardAddress.value=address;pinned.value=focus;
@@ -114,7 +125,13 @@ function leaveCard() {
     if (!document.activeElement?.closest(".person-card")) closeCard();
   },180);
 }
+function touchChip(event,index) {
+  if (event.pointerType!=="touch") return;
+  touchActivated=true;
+  openMenu(index);
+}
 function selectChip(event,index) {
+  if (touchActivated && event.detail) {touchActivated=false;return;}
   closeCard();closeMenu(false);
   if (event.pointerType==="touch") return openMenu(index);
   const resolved=resolveInput(index);
@@ -126,7 +143,7 @@ watch([()=>props.owner,()=>props.accountId],()=>closeCard(),{flush:"sync"});
 watch(()=>props.modelValue[cardIndex.value],value=>{
   if (cardIndex.value!==null && value!==cardAddress.value) closeCard();
 });
-onBeforeUnmount(holdCard);
+onBeforeUnmount(()=>closeCard());
 function clear() {
   closeCard();
   hideSuggestions();
@@ -285,6 +302,7 @@ function reposition() {
   }
 }
 async function openMenu(targetIndex) {
+  activeContactCard?.close();
   closeCard();
   clipboardVersion++;clipboardError.value='';
   menuStyle.value={};
