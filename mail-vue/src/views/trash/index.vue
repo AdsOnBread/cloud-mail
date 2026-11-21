@@ -524,7 +524,8 @@ async function act(action, ids, destination) {
   const scopeLabel = scope
     ? (scope === account.currentAccountId ? account.currentAccount.email : account.accounts.find(a => a.accountId === scope)?.email || "this mailbox")
     : "all your mailboxes";
-  const request = revision;
+  const request = revision, token = user.authenticatedToken;
+  const stillCurrent = () => !disposed && request === revision && token === user.authenticatedToken && token === localStorage.getItem("token");
   const selectedIndex = ids?.length ? messages.value.findIndex(message=>ids.includes(message.emailId)) : 0;
   try {
     if (!ids) {
@@ -532,7 +533,7 @@ async function act(action, ids, destination) {
       let cursor;
       do {
         const page = await list(cursor, "", scope, {});
-        if (request !== revision) return;
+        if (!stillCurrent()) return;
         ids.push(...page.messages.map((m) => m.emailId));
         cursor = page.nextCursor;
       } while (cursor && !disposed);
@@ -557,10 +558,11 @@ async function act(action, ids, destination) {
           autofocus: false,
         },
       );
-    if (disposed || request !== revision) return;
+    if (!stillCurrent()) return;
     for (let i = 0; i < ids.length; i += 50) {
+      if (!stillCurrent()) return;
       const batch = ids.slice(i, i + 50);
-      await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) });
+      await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) }, {headers:{Authorization:token}});
       changed += batch.length;
     }
     if (unsent) import('@/services/cloud-drafts').then(({syncCloudDrafts})=>syncCloudDrafts()).catch(()=>{});

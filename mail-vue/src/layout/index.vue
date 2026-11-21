@@ -1,5 +1,5 @@
 <template>
-  <div class="mail-layout" :style="shellStyle" :class="{ 'conversation-window': conversationWindow,'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings,'photo-theme':!!theme.active.image,'nav-compact':!uiStore.asideShow && !peek,'nav-peek':peek && !uiStore.asideShow && !isMobile }">
+  <div v-if="!sessionEnded" class="mail-layout" :style="shellStyle" :class="{ 'conversation-window': conversationWindow,'nav-expanded': uiStore.asideShow, 'settings-open':uiStore.quickSettings,'photo-theme':!!theme.active.image,'nav-compact':!uiStore.asideShow && !peek,'nav-peek':peek && !uiStore.asideShow && !isMobile }">
     <header :inert="composeModal" v-show="!conversationWindow" class="mail-header"><Header /></header>
     <aside v-show="!conversationWindow" @pointerenter="enterRail" @pointerleave="leaveRail" @focusin="focusRail" @focusout="blurRail" class="mail-sidebar" aria-label="Mail navigation" :inert="composeModal || (isMobile && !uiStore.asideShow)" :aria-hidden="isMobile && !uiStore.asideShow ? true : undefined"><Aside /></aside>
     <button v-if="!conversationWindow && uiStore.asideShow && isMobile" class="nav-overlay" :inert="composeModal" aria-label="Close navigation" @click="uiStore.asideShow = false" />
@@ -53,6 +53,24 @@ function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRai
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
 const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
+const sessionEnded = ref(false);
+function checkReaderSession(event) {
+  if (!conversationWindow.value || sessionEnded.value) return;
+  if (event?.type === "storage" && (event.storageArea !== localStorage || (event.key !== null && event.key !== "token"))) return;
+  if (user.authenticatedToken && user.authenticatedToken === localStorage.getItem("token")) return;
+  event?.preventDefault();
+  event?.stopImmediatePropagation();
+  sessionEnded.value = true;
+  window.location.replace("/");
+}
+const sessionEvents = ["storage", "pageshow", "focus", "click", "keydown"];
+onMounted(() => {
+  for (const event of sessionEvents) window.addEventListener(event, checkReaderSession, true);
+  checkReaderSession();
+});
+onBeforeUnmount(() => {
+  for (const event of sessionEvents) window.removeEventListener(event, checkReaderSession, true);
+});
 const writerRef = ref();
 const composeModal=computed(()=>Boolean(writerRef.value?.modalOpen));
 const isMobile = ref(window.innerWidth < 768);
