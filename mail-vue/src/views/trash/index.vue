@@ -108,7 +108,7 @@
           <h1>{{detail.subject || "(no subject)"}}</h1>
           <span class="trash-folder-chip">
             <button type="button" aria-label="Show all messages in Trash" data-tip="Show all messages in Trash" @click="showTrash">Trash</button>
-            <button v-if="canDelete" type="button" aria-label="Remove Trash label" data-tip="Remove label Trash from this conversation"
+            <button v-if="canDelete" type="button" aria-label="Remove Trash label" data-tip="Remove label Trash from this message"
               :disabled="busy || loading" @click="act('restore',[detail.emailId])">×</button>
           </span>
           <span v-for="label in rowLabels(detail,true)" :key="label.id" class="trash-label" :style="labelStyle(label)">{{label.name}}</span>
