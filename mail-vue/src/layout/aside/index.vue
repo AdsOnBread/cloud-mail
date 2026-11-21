@@ -262,20 +262,23 @@ watch([activeFolder,()=>folderGroups.value[1].some(f=>f.id===activeFolder.value)
   if(hidden || folder==='setting')more.value=true;
 },{immediate:true});
 
-let countRequest=0;
+let countRequest=0, wakeTimer;
 async function refreshScheduledCount(){
   const request=++countRequest;
   if(!user.user.email || !accountStore.currentAccountId)return;
   try {
-    const result=await http.get('/v1/scheduled',{params:{countOnly:1,includeInboxUnread:1,accountId:accountStore.currentAccount.allReceive?undefined:accountStore.currentAccountId},noMsg:true});
+    const result=await http.get('/v1/scheduled',{params:{countOnly:1,includeInboxUnread:1,includeNextWake:1,accountId:accountStore.currentAccount.allReceive?undefined:accountStore.currentAccountId},noMsg:true});
     if(request===countRequest){
       scheduledCount.value=result.count;
       drafts.scheduledInboxUnread=result.inboxUnread || 0;
+      clearTimeout(wakeTimer);
+      if(result.nextWakeAt)wakeTimer=setTimeout(()=>{drafts.scheduledRevision++;},
+        Math.max(500,Math.min(2147483647,result.nextWakeAt*1000-Date.now()+250)));
     }
   }catch{/* Retain this mailbox's last successful count while offline. */}
 }
 watch([()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentAccountId,()=>accountStore.currentAccount.allReceive],()=>{
-  scheduledCount.value=0;drafts.scheduledInboxUnread=0;
+  clearTimeout(wakeTimer);scheduledCount.value=0;drafts.scheduledInboxUnread=0;
   refreshScheduledCount();
 },{immediate:true,flush:'sync'});
 watch(()=>drafts.scheduledRevision,refreshScheduledCount);
@@ -286,7 +289,7 @@ const refreshIfVisible=()=>{
 };
 const scheduledTimer=setInterval(refreshIfVisible,60000);
 document.addEventListener('visibilitychange',refreshIfVisible);
-onBeforeUnmount(()=>{countRequest++;clearInterval(scheduledTimer);document.removeEventListener('visibilitychange',refreshIfVisible);});
+onBeforeUnmount(()=>{countRequest++;clearTimeout(wakeTimer);clearInterval(scheduledTimer);document.removeEventListener('visibilitychange',refreshIfVisible);});
 watch(()=>emailStore.inboxUnread, snapshot=>{
   if(snapshot?.accountId===accountStore.currentAccountId && snapshot.allReceive===Boolean(accountStore.currentAccount.allReceive))
     unread.value=snapshot.count;

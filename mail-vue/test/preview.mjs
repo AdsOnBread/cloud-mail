@@ -126,33 +126,36 @@ const api=createHTTPServer(async(req,res)=>{
  }),cursor:draftEvents.length,hasMore:false};
  else if(path==='/v1/scheduled'){
    const p=Object.fromEntries(url.searchParams),scope=Number(p.accountId);
+   const now=Math.floor(Date.now()/1000);
    const queued=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope));
-   if(p.countOnly==='1')data={count:queued.length,...(p.includeInboxUnread==='1'?{inboxUnread:queued.filter(d=>d.scheduledUnread && d.scheduledInbox).length}:{})};
+   if(p.countOnly==='1')data={count:queued.length,...(p.includeInboxUnread==='1'?{inboxUnread:queued.filter(d=>d.scheduledUnread && d.scheduledInbox && !(d.scheduledWakeAt>now)).length}:{}),...(p.includeNextWake==='1'?{nextWakeAt:Math.min(...queued.map(d=>d.scheduledWakeAt).filter(t=>t>now)) || null}:{})};
    else data=queued.filter(d=>(!Number(p.isUnread) || d.scheduledUnread) && matchesDate(d.createTime,p) && matchesRowSize(d,p,d.attachments)).map(d=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,labelIds:d.labelIds || [],subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
-       inbox:d.scheduledInbox||0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
+       inbox:Number(Boolean(d.scheduledInbox && !(d.scheduledWakeAt>now))),wakeAt:d.scheduledWakeAt || 0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
        senderEmail:sender.email,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return (!p.labelId || row.labelIds.includes(Number(p.labelId))) && (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
+     return (!p.labelId || row.labelIds.includes(Number(p.labelId))) && (p.mark!=='inbox'||row.inbox) && (p.mark!=='snoozed'||row.wakeAt>now) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
- }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/labels'].includes(path) && req.method==='POST'){
-   const {messages,unread,inbox,previousEdit,add,remove}=JSON.parse(body);
+ }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/snooze','/v1/scheduled/labels'].includes(path) && req.method==='POST'){
+   const {messages,unread,inbox,wakeAt,previousEdit,add,remove}=JSON.parse(body);
    if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version && (!previousEdit || d.scheduledInboxEdit===previousEdit);})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
    const edit=crypto.randomUUID(),changed=[];
    for(const m of messages){
      const d=cloudDrafts.get(m.draftId);
      if(path.endsWith('/labels')) d.labelIds=[...new Set([...(d.labelIds || []).filter(id=>!remove.includes(id)),...add])];
-     else if(path.endsWith('/inbox')){
-       if(Boolean(d.scheduledInbox)!==inbox)changed.push(m.draftId);
-       d.scheduledInbox=Number(inbox);d.scheduledInboxEdit=edit;
+     else if(path.endsWith('/inbox') || path.endsWith('/snooze')){
+       const old=d.scheduledInbox ? (d.scheduledWakeAt>Date.now()/1000 ? d.scheduledWakeAt : 0) : -1;
+       const next=previousEdit ? d.scheduledPreviousPlacement : wakeAt || (inbox ? 0 : -1);
+       if(old!==next)changed.push(m.draftId);
+       d.scheduledPreviousPlacement=old;d.scheduledInbox=Number(next>=0);d.scheduledWakeAt=Math.max(0,next);d.scheduledInboxEdit=edit;
      }else d.scheduledUnread=Number(unread);
    }
-   data={updated:messages.length,...(path.endsWith('/inbox')?{edit,changed}:{})};
+   data={updated:messages.length,...((path.endsWith('/inbox') || path.endsWith('/snooze'))?{edit,changed}:{})};
  }else if(path.startsWith('/v1/scheduled/')){
    const draft=cloudDrafts.get(Number(path.split('/')[3]));
    if(!draft?.scheduledAt){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Scheduled message not found.'}));return;}
@@ -163,7 +166,7 @@ const api=createHTTPServer(async(req,res)=>{
      data={draftId:draft.draftId,field,value};
    }else if(path.endsWith('/cancel')){
      if(JSON.parse(body).version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
-     delete draft.scheduledAt;delete draft.scheduledUnread;delete draft.scheduledInbox;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
+     delete draft.scheduledAt;delete draft.scheduledUnread;delete draft.scheduledInbox;delete draft.scheduledWakeAt;delete draft.scheduledInboxEdit;delete draft.scheduledPreviousPlacement;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
    }else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path==='/v1/drafts'&&req.method==='POST'){
    const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);

@@ -154,7 +154,8 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   if (filters.mark==='important') conditions.push('('+reason+') IS NOT NULL');
   if (filters.countOnly === '1') {
     const extra=filters.includeInboxUnread==='1' ? `,COUNT(CASE WHEN ${inbox}=1 AND ${unread}=1 THEN 1 END) inboxUnread` : '';
-    return c.env.db.prepare(`SELECT COUNT(*) count ${extra} ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
+    const next=filters.includeNextWake==='1' ? `,min(CASE WHEN ${wake}>unixepoch() THEN ${wake} END) nextWakeAt` : '';
+    return c.env.db.prepare(`SELECT COUNT(*) count ${extra} ${next} ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
   }
   if (String(filters.isUnread)==='1') conditions.push(unread+'=1');
   const fileCount = "(SELECT COUNT(*) FROM draft_files f WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='')";
