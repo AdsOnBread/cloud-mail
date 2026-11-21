@@ -619,6 +619,7 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     if (attempt.state === 'uncertain') throw new Error(attempt.message || 'Delivery is uncertain. Check Sent before sending another copy.');
     if (['holding','sending'].includes(attempt.state)) return heldDelivery(attempt,database,api,id);
     if (['failed','canceled'].includes(attempt.state)) {
+      await database.meta.delete(receiptKey(before.sendAttemptId));
       const latest = await updateSendAttempt(database, id, before.sendAttemptId, attempt.state);
       if (!latest || latest.editToken !== editToken) throw new Error('Reopen the current draft before sending.');
     }
@@ -654,8 +655,10 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
     }
     if (!result && [400,403,404,409,413].includes(Number(apiError(raw).code))) {
       const receipt = await api.get('/v1/send-attempts/' + sendAttemptId, {noMsg:true});
-      if (['failed','not_started'].includes(receipt.state))
-        await updateSendAttempt(database, id, sendAttemptId, receipt.state);
+      if (['failed','not_started'].includes(receipt.state)) {
+        await updateSendAttempt(database,id,sendAttemptId,receipt.state);
+        await database.meta.delete(receiptKey(sendAttemptId));
+      }
     }
     if(!result) throw raw;
   }
@@ -675,16 +678,20 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
 export function startDraftSync(follow) {
   const checking=new Set();
   let retry,stopped=false;
-  const sync=()=>{
-    if(document.visibilityState==='hidden') return;
-    syncCloudDrafts().catch(()=>{});
+  const recover=()=>{
+    if(document.visibilityState==='hidden' || stopped) return;
     const identity=useUserStore().authenticatedToken;
     if (identity && !checking.has(identity) && follow) {
       checking.add(identity);
       recoverDeliveries(db.value,follow).then(pending=>{
-        if (pending && !stopped) {clearTimeout(retry);retry=setTimeout(sync,500);}
+        if (pending && !stopped) {clearTimeout(retry);retry=setTimeout(recover,500);}
       }).catch(()=>{}).finally(()=>checking.delete(identity));
     }
+  };
+  const sync=()=>{
+    if(document.visibilityState==='hidden') return;
+    syncCloudDrafts().catch(()=>{});
+    recover();
   };
   const stop=watch([db,()=>useUserStore().authenticatedToken],sync);
   sync();const timer=setInterval(sync,60000);window.addEventListener('online',sync);document.addEventListener('visibilitychange',sync);
