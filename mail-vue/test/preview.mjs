@@ -58,7 +58,18 @@ const fixtureCategory = new Map([['Oliver at Figma','promotions'],['Fieldwork Sh
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
 const trashOperations=new Map();
 function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:draft.state!=='draft'?'delete':'upsert',draft:draft.state!=='draft'?null:structuredClone(draft)});}
-function previewSend(form){const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts.find(a=>a.accountId===form.accountId)?.email||accounts[0].email,name:user.name,recipient:JSON.stringify((form.receiveEmail||[]).map(address=>({address}))),cc:JSON.stringify((form.cc||[]).map(address=>({address}))),bcc:JSON.stringify((form.bcc||[]).map(address=>({address}))),listText:form.text||form.content,trashedAt:null};rows.unshift(row);return [row];}
+function previewSend(form) {
+ const sender=accounts.find(a=>a.accountId===form.accountId) || accounts[0];
+ const source=form.sendType==='reply' ? rows.find(r=>r.emailId===form.emailId) : null;
+ const recipients=values=>JSON.stringify((values || []).map(address=>({address})));
+ const row={...form,emailId:Math.max(0,...rows.map(r=>r.emailId))+1,messageId:'<'+crypto.randomUUID()+'@example.test>',
+   replyToEmailId:source?.emailId || 0,inReplyTo:source?.messageId || '',type:1,status:2,userId:user.userId,
+   accountId:sender.accountId,sendEmail:sender.email,name:form.name || sender.name,
+   recipient:recipients(form.receiveEmail),cc:recipients(form.cc),bcc:recipients(form.bcc),
+   createTime:new Date().toISOString(),unread:1,isStar:Number(!!form.mailboxStarred),listText:form.text||form.content,trashedAt:null,attList:[]};
+ rows.unshift(row);
+ return [row];
+}
 function grouped(){
  const groups=groupThreads(rows.filter(row=>!row.trashedAt).map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key.replace(/[A-Z]/g,l=>'_'+l.toLowerCase()),value]))),accounts.map(account=>account.email));
  return groups.reduce((map,member)=>{const thread=map.get(member.threadId)||[];thread.push(rows.find(row=>row.emailId===member.emailId));map.set(member.threadId,thread);return map;},new Map());
@@ -360,7 +371,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path==='/email/detail')data={...rows.find(row=>row.emailId===Number(url.searchParams.get('emailId'))),mailboxEmail:'alex@example.com',mailboxName:'Alex Morgan'};
  else if(path==='/email/latest')data=[];
  else if(path==='/email/send'){
-   const form=JSON.parse(body);const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts[0].email,name:user.name,recipient:JSON.stringify(form.receiveEmail.map(address=>({address}))),cc:JSON.stringify(form.cc.map(address=>({address}))),bcc:JSON.stringify(form.bcc.map(address=>({address}))),listText:form.text||form.content};rows.unshift(row);data=[row];
+   data=previewSend(JSON.parse(body));
  }else if(path==='/email/read'){const ids=JSON.parse(body).emailIds;rows.filter(row=>ids.includes(row.emailId)).forEach(row=>row.unread=JSON.parse(body).unread??1);}
  else if(path==='/email/delete'){const ids=(url.searchParams.get('emailIds')||'').split(',').map(Number);for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId))rows[i].trashedAt=new Date().toISOString();}
  else if(path==='/star/add'){rows.find(row=>row.emailId===JSON.parse(body).emailId).isStar=1;}
