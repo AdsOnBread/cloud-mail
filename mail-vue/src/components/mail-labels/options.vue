@@ -432,14 +432,11 @@ h3 {font:400 14px/20px Arial,sans-serif; margin:0;}
 :global(.color-dialog .el-dialog__header) {padding:0 0 16px;}
 :global(.color-dialog .el-dialog__title) {font:400 24px/32px Arial,sans-serif;}
 .color-dialog .dialog-actions button {height:40px; padding:0 12px;}
-.color-dialog .dialog-actions .primary {min-width:86px; color:var(--mail-on-primary,white); background:var(--mail-blue,var(--el-color-primary));}
+.color-dialog .dialog-actions .primary {min-width:86px; color:var(--send-ink); background:var(--send-blue);}
 @media (pointer:coarse), (max-width:420px) {
-  .custom-palettes {grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;}
+  .custom-palettes {grid-template-columns:minmax(0,1fr); gap:12px;}
   .custom-palettes :deep(.color-grid button) {height:24px;}
   .custom-palettes :deep(.color-grid button:nth-child(-n+16)) {height:24px; margin-bottom:6px;}
-}
-@media (max-width:380px) {
-  .custom-palettes {grid-template-columns:minmax(0,1fr);}
 }
 @media (forced-colors:active) {
   :global(.el-popper.label-options-popover), :global(.color-dialog.el-dialog) {outline:1px solid CanvasText;}

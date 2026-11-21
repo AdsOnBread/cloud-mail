@@ -98,7 +98,7 @@ strong {display:block; padding:6px 16px; font:500 14px/20px Arial,sans-serif; co
 .label-palette > button:first-of-type {margin-top:4px;}
 @media (forced-colors:active) {
   .recent button {forced-color-adjust:none;}
-  .label-palette button:focus-visible {outline:2px solid Highlight; outline-offset:-2px;}
+  .label-palette button:focus-visible, .color-grid :deep(button:focus-visible) {outline:2px solid Highlight; outline-offset:-2px;}
 }
 .label-palette > button:is(:hover, :focus-visible) {
   background: var(--mail-hover);
