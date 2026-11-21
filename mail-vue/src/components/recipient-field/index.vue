@@ -270,7 +270,12 @@ watch(menuIndex,(index,_,onCleanup) => {
     window.removeEventListener('scroll',reposition,true);
   });
 });
-defineExpose({ commit, focus: () => input.value?.focus(), clear });
+function focusAddress(address) {
+  const index=props.modelValue.indexOf(address);
+  if(index>=0) return edit(index);
+  input.value?.focus();
+}
+defineExpose({ commit, focus: () => input.value?.focus(), focusAddress, clear });
 </script>
 <style scoped>
 .recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:36px; box-sizing:border-box; border-bottom:1px solid var(--compose-divider, var(--light-border-color)); padding:3px 0; }

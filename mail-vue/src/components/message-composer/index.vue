@@ -333,10 +333,10 @@
       </div>
     </div>
     <SignatureManager v-if="managerMounted" v-model="managingSignatures" :account-id="form.accountId" @closed="signatureButton?.focus()"/>
-    <dialog v-if="missingRecipient" ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
-      :aria-describedby="recipientNoticeId" @close="dismissRecipientError">
+    <dialog v-if="recipientNotice" ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
+      :aria-describedby="recipientNoticeId" @keydown.esc.stop @close="dismissRecipientError">
       <h2>Error</h2>
-      <p :id="recipientNoticeId">Please specify at least one recipient.</p>
+      <p :id="recipientNoticeId">{{ recipientNotice.message }}</p>
       <form method="dialog"><button type="submit" autofocus>OK</button></form>
     </dialog>
     <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="closePhotos" />
@@ -440,7 +440,7 @@ const labelStore=useMailLabels();
 const moreOptions=ref();
 const router=useRouter();
 const recipientDialog = ref();
-const missingRecipient = ref(false);
+const recipientNotice = ref(null);
 const recipientNoticeId = useId();
 const desktop = ref(window.innerWidth >= 768);
 const modal = computed(
@@ -608,13 +608,13 @@ function toggleFullScreen() {
 function collapseAddresses() {
   if (!props.inline) addressExpanded.value = false;
 }
-function focusRecipients(field) {
+function focusRecipients(field,address) {
   if (props.inline) editingRecipients.value = true;
   else addressExpanded.value = true;
   if (field === "cc") showCc.value = true;
   if (field === "bcc") showBcc.value = true;
   const input = {receiveEmail: toField, cc: ccField, bcc: bccField}[field];
-  nextTick(() => input?.value?.focus());
+  nextTick(() => address ? input?.value?.focusAddress(address) : input?.value?.focus());
 }
 const appleKeys=/Mac|iPhone|iPad/.test(navigator.platform);
 const primaryKey=appleKeys ? 'Meta' : 'Control';
@@ -687,7 +687,8 @@ const expanded = ref(false);
 const sending = ref(false);
 const attaching = ref(false);
 const sendError = ref("");
-const recipientErrors = ref({});
+const validateAddresses = ref(false);
+const recipientErrors = computed(()=>validateAddresses.value ? normalizeRecipients(form).errors : {});
 const defValue = ref("");
 const showContacts = ref(false);
 const contactsTabRef = ref();
@@ -790,7 +791,7 @@ function resetForm() {
   photoSelection = undefined;
   dragHint.value = "";
   starChoice.value=null;
-  missingRecipient.value = false;
+  recipientNotice.value = null;
   lastInput = null;
   restoreFocus = null;
   signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
@@ -800,7 +801,7 @@ function resetForm() {
   [toField, ccField, bccField].forEach((field) => field.value?.clear());
   editingRecipients.value = false;
   quoteExpanded.value = false;
-  recipientErrors.value = {};
+  validateAddresses.value = false;
   sendError.value = "";
   showCc.value = false;
   showBcc.value = false;
@@ -1207,25 +1208,30 @@ async function discardEditor(selected,session=draftSession()){
   }finally{unlockDiscard();}
 }
 function dismissRecipientError() {
-  missingRecipient.value = false;
-  focusRecipients("receiveEmail");
+  const notice=recipientNotice.value;
+  recipientNotice.value=null;
+  if (notice && show.value && !props.dockHidden) focusRecipients(notice.field,notice.address);
+}
+function showRecipientError(message,field,address){
+  if (!recipientNotice.value) {
+    recipientNotice.value={message,field,address};
+    nextTick(()=>recipientDialog.value?.showModal());
+  }
+  return false;
 }
 function validForSend() {
-  if (sending.value || attaching.value) return false;
+  if (sending.value || attaching.value || recipientNotice.value) return false;
   commitRecipients();
   const recipients = normalizeRecipients(form);
-  recipientErrors.value = recipients.errors;
-  if (recipientFields.every(field => recipients[field].length === 0)) {
-    if (!missingRecipient.value) {
-      missingRecipient.value = true;
-      nextTick(() => recipientDialog.value?.showModal());
-    }
-    return false;
+  if (recipientFields.every(field => recipients[field].length === 0))
+    return showRecipientError('Please specify at least one recipient.','receiveEmail');
+  validateAddresses.value=true;
+  if (recipients.firstInvalid) {
+    const {field,address}=recipients.firstInvalid;
+    const label={receiveEmail:'To',cc:'Cc',bcc:'Bcc'}[field];
+    return showRecipientError(`The address "${address}" in the "${label}" field was not recognized. Please make sure that all addresses are properly formed.`,field,address);
   }
-  if (Object.keys(recipientErrors.value).length) {
-    focusRecipients(recipientFields.find(field => recipientErrors.value[field]));
-    return false;
-  }
+  if (recipients.errors.receiveEmail) return showRecipientError(recipients.errors.receiveEmail,'receiveEmail');
   recipientFields.forEach((field) => {
     form[field] = recipients[field];
   });
@@ -1539,7 +1545,7 @@ defineExpose({
 }
 .recipient-dialog::backdrop { background: rgb(0 0 0 / 32%); }
 .recipient-dialog h2 { margin: 0; padding: 24px 24px 16px; font-size: 24px; line-height: 32px; font-weight: 400; }
-.recipient-dialog p { margin: 0; padding: 0 24px; font-size: 14px; line-height: 20px; }
+.recipient-dialog p { overflow-wrap:anywhere; margin: 0; padding: 0 24px; font-size: 14px; line-height: 20px; }
 .recipient-dialog form { display: flex; justify-content: flex-end; padding: 24px 16px; }
 .recipient-dialog button { min-width: 64px; height: 40px; border-radius: 20px; color: var(--mail-blue, #0b57d0); font-weight: 500; cursor: pointer; }
 .recipient-dialog button:hover { background: var(--base-fill); }

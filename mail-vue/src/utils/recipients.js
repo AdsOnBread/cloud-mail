@@ -55,7 +55,10 @@ export function normalizeRecipients(form, pending = {}) {
   for (const field of recipientFields) {
     const entered = [...addresses(form[field]), ...splitRecipients(pending[field])];
     const invalid = entered.filter(address => !isEmail(address.trim()));
-    if (invalid.length) result.errors[field] = `Invalid email address: ${invalid.join(', ')}`;
+    if (invalid.length) {
+      result.errors[field] = `Invalid email address: ${invalid.join(', ')}`;
+      result.firstInvalid ??= {field,address:invalid[0]};
+    }
     result[field] = entered.map(address => address.trim().toLowerCase()).filter(address => {
       if (seen.has(address)) return false;
       seen.add(address);
