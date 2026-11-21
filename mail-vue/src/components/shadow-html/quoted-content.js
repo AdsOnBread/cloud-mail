@@ -71,18 +71,27 @@ function htmlParts(html,reply) {
 // Require a calendar date before joining a wrapped line to the sender.
 const month='(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
 const weekday='(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)';
-const datedReply=new RegExp(`^On\\s+(?:${weekday},?\\s+)?(?:\\d{1,2}\\s+${month}\\b|${month}\\s+\\d{1,2}\\b|\\d{1,4}[-/.]\\d{1,2}[-/.]\\d{1,4}\\b)`,'i');
+const date=`(?:\\d{1,2}\\s+${month}(?:\\s+\\d{4})?|${month}\\s+\\d{1,2}(?:,?\\s+\\d{4})?|\\d{1,4}[-/.]\\d{1,2}[-/.]\\d{1,4})`;
+const time='(?:,?\\s+(?:at\\s+)?\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s*[AP]M)?(?:\\s+(?:UTC|GMT|[A-Z]{3,4}|[+-]\\d{2}:?\\d{2}))?)?';
+const dateLine=new RegExp(`^On\\s+(?:${weekday},?\\s+)?${date}${time},?$`,'i');
+
 function attributionStart(lines,end,visible) {
   if (end===visible) return end;
   const last=lines[end-1].trim();
   if (!/\bwrote:$/i.test(last)) return end;
   if (/^On\s/i.test(last) && isAttribution(last)) return end-1;
-  // Wrapped attributions start with a dated line and end with the author's name.
-  for (let i=end-2;i>=Math.max(visible,end-3);i--) {
-    const line=lines[i].trim();
-    if (!line || /[.!?]$/.test(line)) break;
-    if (datedReply.test(line) &&
-      /(?:\d|,|\b[ap]m|<[^<>\s]+@[^<>\s]+>)$/i.test(line) && isAttribution(lines.slice(i,end).map(s=>s.trim()).join(' '))) return i;
+  if (end-visible>=2) {
+    const prefix=lines[end-2].trim();
+    if (dateLine.test(prefix)) return end-2;
+    if (/^wrote:$/i.test(last)) {
+      // When the wrap falls just before "wrote:", the sender follows the date.
+      const tokens=prefix.split(/\s+/);
+      if (/^<[^<>\s]+@[^<>\s]+>,?$/.test(tokens.at(-1))) {
+        for (let name=1;name<=Math.min(7,tokens.length-1);name++) {
+          if (dateLine.test(tokens.slice(0,-name).join(' '))) return end-2;
+        }
+      }
+    }
   }
   return isAttribution(last) ? end-1 : end;
 }
