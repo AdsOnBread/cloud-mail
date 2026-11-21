@@ -24,3 +24,18 @@ it("keeps formatted clipboard text when an application also puts a bitmap on the
   expect(hasRichSelection({getData:()=>"<b>Two words</b>"})).toBe(true);
   expect(hasRichSelection({getData:()=>'<style>img{max-width:100%}</style><img src="file:///image.png">'})).toBe(false);
 });
+
+it('measures local draft size using UTF-8 and one decoded file for repeated inline photos',async()=>{
+ const {draftSearchBytes}=await import('../src/components/message-composer/files');
+ const {sizeCriterion,matchesSize,storedMessageBytes}=await import('../../shared/mail-search-size');
+ const photo='data:image/png;base64,YWJj', cid='0'.repeat(36);
+ const f={subject:'☁',text:'é',content:'<img src="'+photo+'"><img src="'+photo+'">'};
+ const canonical={...f,content:f.content.replaceAll(photo,'cid:'+cid)};
+ const expected=storedMessageBytes(canonical,7);
+ const attachment={filename:'note',content:'YWJjZA=='};
+ expect(draftSearchBytes(f,[attachment])).toBe(expected);
+ expect(draftSearchBytes(f,[attachment,{contentId:cid,content:photo}])).toBe(expected);
+ expect(matchesSize(1048576,sizeCriterion({sizeValue:'1',sizeUnit:'MB'}))).toBe(false);
+ expect(matchesSize(0,sizeCriterion({sizeValue:'0',sizeOperator:'smaller'}))).toBe(false);
+ expect(sizeCriterion({sizeValue:'1.2'})).toBeNull();
+});

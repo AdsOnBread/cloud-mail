@@ -1,3 +1,4 @@
+import {fileContentBytes,matchesSize,sizeCriterion,storedMessageBytes} from '../../shared/mail-search-size.js';
 import {peopleSuggestions} from '../../shared/mail-people-suggestions.js';
 import {maxPeople,peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
 import {searchDateBounds,withinDateBounds} from '../../shared/mail-search-date.js';
@@ -77,11 +78,15 @@ function matchesDate(created,p) {
  const utc = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(created);
  return withinDateBounds(Date.parse(utc ? utc[1]+'T'+utc[2]+'Z' : created),searchDateBounds(p));
 }
+function matchesRowSize(row,p,files) {
+ const criterion=sizeCriterion(p);
+ return !criterion || matchesSize(row.rawSize ?? storedMessageBytes(row,(files || []).reduce((sum,file)=>sum+fileContentBytes(file),0)),criterion);
+}
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
  return matchesPeople([{name:row.name,address:row.sendEmail}],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].flatMap(v=>typeof v==='string'?JSON.parse(v||'[]'):v||[]),peopleTerms(p,'to')) &&
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
-    matchesDate(row.createTime,p);
+    matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
@@ -120,7 +125,7 @@ const api=createHTTPServer(async(req,res)=>{
    const p=Object.fromEntries(url.searchParams),scope=Number(p.accountId);
    const queued=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope));
    if(p.countOnly==='1')data={count:queued.length};
-   else data=queued.filter(d=>matchesDate(d.createTime,p)).map(d=>{
+   else data=queued.filter(d=>matchesDate(d.createTime,p) && matchesRowSize(d,p,d.attachments)).map(d=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],

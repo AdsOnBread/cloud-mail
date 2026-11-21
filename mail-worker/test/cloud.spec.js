@@ -563,6 +563,16 @@ describe('Scheduled send',()=>{
    expect(await scheduledList(c(),1,1,{countOnly:'1',subject:'Notes'})).toEqual({count:2});
    expect(await scheduledList(c(),1,2,{countOnly:'1'})).toEqual({count:0});
  });
+ it('filters queued drafts by UTF-8 subject, both body parts, and decoded files',async()=>{
+   const {schedule,scheduledList}=await import('../src/cloud/scheduled');
+   const d=await draft({subject:'☁',text:'é',content:'x',attachments:[{filename:'data.txt',content:'YWJj',contentType:'text/plain'}]});
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+3600});
+   const search=(sizeOperator,sizeValue)=>scheduledList(c(),1,1,{sizeUnit:'Bytes',sizeOperator,sizeValue});
+   expect(await search('larger','8')).toHaveLength(1);
+   expect(await search('larger','9')).toEqual([]);
+   expect(await search('smaller','9')).toEqual([]);
+   expect(await search('smaller','10')).toHaveLength(1);
+ });
  it('delivers a scheduled plain-text draft literally with its ordinary attachment', async () => {
    const {schedule,deliverDue}=await import('../src/cloud/scheduled');
    const text='A <literal> message\nNext line';

@@ -558,3 +558,29 @@ it('suggests scoped senders and recipients and matches either selected person in
  expect((await cloudMail.list(context(),1,p)).messages.map(r=>r.emailId)).toEqual([b.email_id,a.email_id]);
  expect((await cloudMail.list(context(),1,{...p,to:'hidden',toAny:'["ROBIN"]'})).messages.map(r=>r.emailId)).toEqual([a.email_id]);
 });
+
+it('compares raw message bytes strictly, before paging, and estimates old messages using their own files',async()=>{
+ const exact=await insert({raw_size:1024,subject:'Exact'}), larger=await insert({raw_size:1025,subject:'Larger'});
+ const old=await insert({subject:'☁',text:'é',content:'x'});
+ const file=(user,account,size)=>env.db.prepare("INSERT INTO attachments(user_id,account_id,email_id,key,size,type) VALUES(?,?,?,'sample',?,1)")
+   .bind(user,account,old.email_id,size).run();
+ await file(1,1,1019);await file(2,2,15000);
+ const params={sizeValue:'1',sizeUnit:'KB',sizeOperator:'larger'};
+ expect((await list({...params,folder:'all'})).total).toBe(2);
+ await cloudMail.trash(context(),1,[exact,larger,old].map(row=>row.email_id));
+ const trash=async filters=>(await cloudMail.list(context(),1,{folder:'trash',...filters})).messages.map(r=>r.emailId);
+ expect(await trash({...params,limit:1})).toEqual([old.email_id]);
+ expect(await trash({...params,sizeOperator:'smaller'})).toEqual([]);
+ expect(await trash({sizeValue:'1026',sizeUnit:'Bytes',sizeOperator:'smaller'})).toHaveLength(3);
+ expect(await trash({sizeValue:'1025',sizeUnit:'Bytes'})).toEqual([]);
+});
+
+it('records received MIME bytes including headers across split UTF-8 chunks',async()=>{
+ const {email:receive}=await import('../src/email/email');
+ const raw=new TextEncoder().encode('From: Sender <pat@example.net>\r\nTo: admin@example.com\r\nSubject: Counts original bytes\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nCafé ☁');
+ const split=raw.length-2;
+ await receive({to:'admin@example.com',from:'pat@example.net',raw:new ReadableStream({start(c){c.enqueue(raw.slice(0,split));c.enqueue(raw.slice(split));c.close();}}),
+   setReject(reason){throw new Error(reason)}}, {...env,admin:'admin@example.com'},{});
+ const saved=await env.db.prepare("SELECT raw_size,text FROM email WHERE subject='Counts original bytes'").first();
+ expect(saved.raw_size).toBe(raw.byteLength);expect(saved.text).toContain('Café ☁');
+});
