@@ -460,6 +460,48 @@ describe('Recoverable Trash',()=>{
    expect(await move()).toEqual({messageCount:1});expect(await move()).toEqual({messageCount:1});
    await expect(moveFromTrash(env.db,1,[row.email_id+1],label.id,token)).rejects.toMatchObject({code:409});
  });
+ it('undoes only the original members and restores mixed labels and snooze state exactly once',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {conversationAction}=await import('../src/service/conversation-service');
+   const {undoConversationMove}=await import('../src/service/conversation-move-undo');
+   const source=(await saveLabel(env.db,1,'Source')).id, destination=(await saveLabel(env.db,1,'Destination')).id;
+   const first=(await message()).email_id;
+   const second=(await message({message_id:'<second@example.net>',in_reply_to:'<original@example.net>'})).email_id;
+   const sql=(q,...params)=>env.db.prepare(q).bind(...params);
+   const future=Math.floor(Date.now()/1000)+3600;
+   await sql('INSERT INTO conversation_filing VALUES (1,?,?,1)',first,future).run();
+   await sql('INSERT INTO mailbox_label_members VALUES(1,?,?),(1,?,?)',source,first,destination,second).run();
+   const move=await conversationAction(c(),{emailIds:[first],labelId:destination,fromLabelId:source,undoable:true},1,'move');
+   expect(move.messageCount).toBe(2);
+   const reply=(await message({message_id:'<new@example.net>',in_reply_to:'<original@example.net>'})).email_id;
+   const unrelated=(await saveLabel(env.db,1,'Keep')).id;
+   await sql('INSERT INTO mailbox_label_members VALUES(1,?,?)',unrelated,first).run();
+   await expect(undoConversationMove(env.db,2,move.undoToken)).rejects.toMatchObject({code:409});
+   const before=await sql('SELECT count(*) AS n FROM mobile_changes WHERE user_id=?',1).first();
+   for(let attempt=0;attempt<2;attempt++) expect(await undoConversationMove(env.db,1,move.undoToken)).toEqual({restored:true});
+   const after=await sql('SELECT count(*) AS n FROM mobile_changes WHERE user_id=?',1).first();
+   expect(after.n-before.n).toBe(2);
+   expect((await sql('SELECT email_id,wake_at,notified FROM conversation_filing WHERE user_id=?',1).all()).results)
+     .toEqual([{email_id:first,wake_at:future,notified:1}]);
+   expect((await sql('SELECT label_id,email_id FROM mailbox_label_members WHERE user_id=? ORDER BY label_id',1).all()).results)
+     .toEqual([{label_id:source,email_id:first},{label_id:destination,email_id:second},{label_id:unrelated,email_id:first}]);
+   expect(await sql('SELECT email_id FROM conversation_filing WHERE email_id=?',reply).first()).toBeNull();
+ });
+ it('rejects undo for the whole selection after another filing or a touched label changes',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {conversationAction}=await import('../src/service/conversation-service');
+   const {undoConversationMove}=await import('../src/service/conversation-move-undo');
+   const label=(await saveLabel(env.db,1,'Filing')).id, first=(await message()).email_id;
+   const second=(await message({message_id:'<other@example.net>',subject:'Unrelated'})).email_id;
+   const move=()=>conversationAction(c(),{emailIds:[first,second],labelId:label,undoable:true},1,'move');
+   let result=await move();
+   await conversationAction(c(),{emailIds:[second]},1,'inbox');
+   await expect(undoConversationMove(env.db,1,result.undoToken)).rejects.toMatchObject({code:409});
+   expect(await env.db.prepare('SELECT wake_at FROM conversation_filing WHERE email_id=?').bind(first).first()).toEqual({wake_at:null});
+   result=await move();
+   await env.db.prepare('DELETE FROM mailbox_label_members WHERE label_id=? AND email_id=?').bind(label,second).run();
+   await expect(undoConversationMove(env.db,1,result.undoToken)).rejects.toMatchObject({code:409});
+ });
  it('replays filing from Inbox without archiving later replies and isolates competing moves',async()=>{
    const {saveLabel}=await import('../src/service/mailbox-labels');
    const {conversationAction}=await import('../src/service/conversation-service');

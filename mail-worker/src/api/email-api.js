@@ -1,3 +1,4 @@
+import {undoConversationMove} from '../service/conversation-move-undo.js';
 import app from '../hono/hono';
 import emailService from '../service/email-service';
 import result from '../model/result';
@@ -68,6 +69,9 @@ app.delete('/email/conversation/labels/:id', async c => {
   await removeLabel(c.env.db,userContext.getUserId(c),c.req.param('id'));
   return c.json(result.ok());
 });
+app.post('/email/conversation/undo-move', async c => c.json(result.ok(
+  await undoConversationMove(c.env.db,userContext.getUserId(c),(await c.req.json())?.token)
+)));
 for (const action of ['read', 'delete', 'star', 'archive', 'snooze', 'inbox', 'label', 'move', 'category','importance']) {
 	app.post(`/email/conversation/${action}`, async c =>
 		c.json(result.ok(await conversationAction(c, await c.req.json(), userContext.getUserId(c), action))));

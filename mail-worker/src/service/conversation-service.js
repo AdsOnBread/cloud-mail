@@ -1,3 +1,4 @@
+import {captureMove} from './conversation-move-undo.js';
 import {conversationSenders} from './conversation-senders';
 import {prepareExcludedSearch} from './mail-word-index';
 import {withLabelMove} from './label-move.js';
@@ -331,6 +332,7 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 		const wakeAt = action === 'move' ? (p.labelId ? null : 0) : action === 'archive' ? null : action === 'inbox' ? 0 : p.wakeAt;
 		// File exactly the members that were resolved, including older anchors that may survive a deletion.
 		const statements = [];
+    const result = {conversationCount:threads.size, messageCount:ids.length};
     if(action==='move'){
       const source=p.fromLabelId??0,destination=p.labelId;
       if(![source,destination].every(id=>Number.isSafeInteger(id) && id>=0) || source>0 && destination===source)
@@ -339,6 +341,10 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
       if(selected.length){
         const {results}=await db.prepare(`SELECT label_id FROM mailbox_labels WHERE user_id=? AND label_id IN (${selected.map(()=>'?')})`).bind(userId,...selected).all();
         if(results.length!==selected.length)throw new BizError('Label not found.',404);
+      }
+      if (p.undoable === true) {
+        result.undoToken = crypto.randomUUID();
+        statements.push(...captureMove(db,userId,result.undoToken,source,destination,ids));
       }
       for(let i=0;i<ids.length;i+=30){
         const members=ids.slice(i,i+30);
@@ -362,8 +368,10 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 			statements.push(
 				db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) VALUES(?,'message',?,'upsert')").bind(userId, id),
 			);
-		if (record) statements.unshift(record({conversationCount:threads.size,messageCount:ids.length}));
+		if (result.undoToken) statements.push(db.prepare("UPDATE conversation_move_undo SET state='ready' WHERE token=?").bind(result.undoToken));
+    if (record) statements.unshift(record(result));
 		await db.batch(statements);
+    return result;
 	} else if (action === 'delete') {
     const statements = [];
     for (let i = 0; i < ids.length; i += 80) {
