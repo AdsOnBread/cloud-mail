@@ -93,17 +93,23 @@ function clear() {
 }
 // A pointer can activate a different chip while the input still holds an edit.
 // Resolve both changes against one version of the list before Vue moves the chips.
+function pendingChange() {
+  if (!pending.value && editing.value === null) return;
+  if (editingName.value) return {nameEdit:true, people:[{address:props.modelValue[editing.value],name:cleanRecipientName(pending.value)}]};
+  return {source:editing.value, people:parseRecipientList(pending.value)};
+}
 function resolveInput(targetIndex) {
   hideSuggestions();
   const updated = [...props.modelValue];
-  if (editingName.value) {
-    emit('choosePerson',{email:props.modelValue[editing.value],name:cleanRecipientName(pending.value)});
+  const change = pendingChange();
+  if (change?.nameEdit) {
+    emit('choosePerson',{email:change.people[0].address,name:change.people[0].name});
     editingName.value=false;
     editing.value=null;
     pending.value='';
     return {updated,index:targetIndex,changed:false};
   }
-  const people = parseRecipientList(pending.value);
+  const people = change?.people || [];
   for (const person of people) if (person.name) emit('choosePerson',{email:person.address,name:person.name});
   const entered = people.map(person=>person.address);
   const source = editing.value;
@@ -275,7 +281,7 @@ function focusAddress(address) {
   if(index>=0) return edit(index);
   input.value?.focus();
 }
-defineExpose({ commit, focus: () => input.value?.focus(), focusAddress, clear });
+defineExpose({ pendingChange, commit, focus: () => input.value?.focus(), focusAddress, clear });
 </script>
 <style scoped>
 .recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:36px; box-sizing:border-box; border-bottom:1px solid var(--compose-divider, var(--light-border-color)); padding:3px 0; }

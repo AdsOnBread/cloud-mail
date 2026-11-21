@@ -1114,12 +1114,42 @@ function change(content, text) {
   form.content = content;
   form.text = text;
 }
+// The browser can close a separate window without blurring its address field.
+// Include unfinished chip edits in autosave without interrupting typing.
+const pendingRecipients = computed(() => {
+  if (!props.separateWindow) return {};
+  const patch = {}, names = {...form.replyRecipientNames};
+  for (const [key,field] of [["receiveEmail",toField],["cc",ccField],["bcc",bccField]]) {
+    const change = field.value?.pendingChange();
+    if (!change) continue;
+    if (!change.nameEdit) {
+      const values = [...form[key]];
+      values.splice(change.source ?? values.length,change.source === null ? 0 : 1,...change.people.map(p => p.address));
+      patch[key] = values;
+    }
+    for (const {address,name} of change.people) {
+      if (!address) continue;
+      if (name) names[address.toLowerCase()] = name;
+      else if (change.nameEdit) delete names[address.toLowerCase()];
+    }
+  }
+  if (Object.keys(patch).length || Object.keys(names).some(key=>names[key]!==form.replyRecipientNames?.[key]) ||
+      Object.keys(form.replyRecipientNames || {}).length !== Object.keys(names).length) patch.replyRecipientNames = names;
+  return patch;
+});
 function snapshot() {
-  return restoreDraft(toRaw(form));
+  return restoreDraft({...toRaw(form), ...pendingRecipients.value});
 }
-let saveQueue=Promise.resolve();
+let saveQueue=Promise.resolve(), pendingWrites=0, saveFailed=false;
+function warnUnsaved(event) {
+  if (!props.separateWindow || !show.value || !(pendingWrites || saveFailed || attaching.value || sending.value)) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
 function persistDraft(options) {
   const operation=saveQueue.catch(()=>{}).then(() => persistDraftNow(options));
+  pendingWrites++;
+  operation.then(() => { pendingWrites--; saveFailed=false; }, () => { pendingWrites--; saveFailed=true; });
   saveQueue=operation;return operation;
 }
 async function persistDraftNow(options) {
@@ -1142,11 +1172,11 @@ async function removeSavedDraft() {
   if(form.draftId)await removeLocalDraft(form.draftId);
 }
 let cloudSaveTimer;
-watch([()=>draftFingerprint(form), ()=>JSON.stringify(draftFilingFingerprint(form)),
+watch([()=>draftFingerprint(props.separateWindow ? {...form,...pendingRecipients.value} : form), ()=>JSON.stringify(draftFilingFingerprint(form)),
   ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
   if(preparing.value || sending.value || !show.value) return;
   const changedFiling = form.draftId && (filing!==previousFiling || revision!==previousRevision);
-  if (!changedFiling && (!hasDraftContent(form) || fingerprint===automaticBaseline ||
+  if (!changedFiling && (!(props.separateWindow && form.draftId) && !hasDraftContent(props.separateWindow ? snapshot() : form) || fingerprint===automaticBaseline ||
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
@@ -1509,12 +1539,14 @@ function starFromList(id, owner, starred) {
   return nextTick().then(()=>saveQueue);
 }
 onMounted(() => {
+  if (props.separateWindow) window.addEventListener("beforeunload",warnUnsaved);
   stopStarActions=watchDraftStars(starFromList);
   window.addEventListener("keydown", keydown);
   window.addEventListener("resize", resize);
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  window.removeEventListener("beforeunload",warnUnsaved);
   sourceController?.abort();
   clearFormatCaption();
   stopStarActions?.();
