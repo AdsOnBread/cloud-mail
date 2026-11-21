@@ -16,8 +16,9 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |
 | Importance | Outline and filled markers, reason on hover, keyboard toggle, selection menu and Important folder |
 | Nested labels | Add sublabel, Nest label under, branch disclosure controls, full paths in filing menus, inbox chips and the reader |
-| Label settings | Compared Gmail’s Settings → Labels system and custom label tables. System folder visibility is saved per owner. Custom labels can be created, renamed, nested, removed or hidden from either the sidebar or message list. Category and IMAP visibility controls remain differences. |
+| Label settings | Compared Gmail’s Settings → Labels system and custom label tables. System folder visibility is saved per owner. Custom labels can be created, renamed, nested, removed or hidden from either the sidebar or message list. Category visibility is covered below. IMAP visibility controls remain a difference. |
 | Label visibility | Independent sidebar and message-list settings, Show if unread, unread conversation badges and the separate More control for labels |
+| Category labels | Compared the Categories table in Gmail Settings → Labels. Purchases has one sidebar control. Social, Updates, Forums and Promotions each have separate sidebar and message-list controls. Hidden folders are available under More. Category folders include archived conversations and work independently of Inbox tabs. |
 | Label colors | Sidebar options, six-column palette, custom background and text, recent pairs and removing a color |
 | Filing and feedback | Move to Trash from each entry point, Undo, retained permanent-delete confirmation, archive and snooze |
 | Menus and dialogs | Anchoring, shadow, typography, hover and selected states, focus return, Escape and outside dismissal |

@@ -342,6 +342,24 @@ it('moves between labels and Inbox atomically while retaining other labels',asyn
   expect((await messages(id)).labelIds).toEqual([src.id]);
 });
 
+it('keeps category folders independent of inbox tabs and counts overlapping purchase threads once',async()=>{
+  const receipt=await insert({send_email:'receipts@store.example',subject:'Your receipt',unread:0,message_id:'<order@store.example>'});
+  const reply=await insert({reply_to_email_id:receipt.email_id,in_reply_to:'<order@store.example>',subject:'A delivery question',type:1,status:2});
+  const promo=await insert({send_email:'offers@shop.example',subject:'November sale',unread:0});
+  await insert({account_id:2,user_id:2,send_email:'receipts@store.example',subject:'Your receipt private'});
+  await insert({send_email:'receipts@store.example',subject:'Your receipt removed',trashed_at:1});
+  await action('archive',[receipt.email_id]);
+  await action('category',[receipt.email_id],{category:'promotions'});
+  expect((await list({category:'promotions'})).threads.map(t=>t.lastEmailId)).toEqual([promo.email_id]);
+  const folder=await list({folder:'promotions',limit:1});
+  expect(folder.total).toBe(2);expect((await list({folder:'promotions',limit:1,cursor:folder.nextCursor})).threads).toHaveLength(1);
+  expect((await list({folder:'promotions',q:'delivery question'})).threads.map(t=>t.lastEmailId)).toEqual([reply.email_id]);
+  expect((await list({folder:'purchases',includeCategory:1})).threads).toMatchObject([{lastEmailId:reply.email_id,category:'promotions'}]);
+  expect((await list({folder:'all',countOnly:1,categoryCounts:1})).categoryUnread).toMatchObject({promotions:2,purchases:1});
+  expect((await list({folder:'archived',includeCategory:1})).threads).toMatchObject([{category:'promotions'}]);
+  await action('read',[receipt.email_id],{unread:1});
+  expect((await list({folder:'all',countOnly:1,categoryCounts:1})).categoryUnread.purchases).toBe(0);
+});
 it('categorizes complete conversations before pagination and retains explicit filing across replies',async()=>{
   const personal=await insert({subject:'Dinner?',message_id:'<dinner@example.com>'});
   const promo=await insert({send_email:'offers@bookshop.example',subject:'New titles',message_id:'<books@example.com>'});

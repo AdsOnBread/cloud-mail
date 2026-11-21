@@ -95,7 +95,9 @@ const route = useRoute();
 const mailSearch = useMailSearchStore();
 const searchText = ref(mailSearch.query);
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name));
+import {categoryFolders} from "@/utils/inbox-categories";
 const searchFolder = computed(() => {
+  if (route.name === "content" && categoryFolders.some(item=>item.id===route.query.folder)) return route.query.folder;
   if (route.name === "scheduled" && route.query.message) {
     if (route.query.from === "starred") return "star";
     if (route.query.from === "important") return "important";

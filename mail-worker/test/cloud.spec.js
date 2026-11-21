@@ -29,6 +29,13 @@ describe('System label visibility',()=>{
    await setSystemLabel(env.db,1,'trash','hide');
    expect(await systemLabels(env.db,1)).toEqual({draft:'unread',trash:'hide'});
    expect(await systemLabels(env.db,2)).toEqual({});
+   await setSystemLabel(env.db,1,'updates','show');
+   await setSystemLabel(env.db,1,'messages-updates','hide');
+   await setSystemLabel(env.db,1,'purchases','hide');
+   expect(await systemLabels(env.db,1)).toMatchObject({updates:'show','messages-updates':'hide',purchases:'hide'});
+   expect(await systemLabels(env.db,2)).toEqual({});
+   await expect(setSystemLabel(env.db,1,'messages-purchases','show')).rejects.toMatchObject({code:400});
+   await expect(setSystemLabel(env.db,1,'social','unread')).rejects.toMatchObject({code:400});
    await drafts.deleteUserData(c(),[1]);expect(await systemLabels(env.db,1)).toEqual({});
    await expect(setSystemLabel(env.db,1,'trash','unread')).rejects.toMatchObject({code:400});
    await expect(setSystemLabel(env.db,1,'email','hide')).rejects.toMatchObject({code:400});
