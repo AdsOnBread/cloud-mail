@@ -27,28 +27,30 @@ describe('General mail settings',()=>{
  it('commits both forms together and preserves both when either revision is stale',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const {saveSignatures,readSignatures}=await import('../src/cloud/signatures');
-   const initial={version:0,undoSeconds:10,replyAll:false,signatures:{
+   const initial={version:0,undoSeconds:10,replyAll:false,keyboardShortcuts:true,signatures:{
      version:0,items:[{id:'work',name:'Work',html:'<b>First</b><script>ignored()</script>'}],defaults:{},beforeQuote:false}};
    const first=await saveGeneralSettings(env.db,1,initial);
    expect(first.signatures).toMatchObject({version:1,items:[{html:'<b>First</b>'}]});
-   const second=await saveGeneralSettings(env.db,1,{...first,replyAll:true});
+   const {keyboardShortcuts,...legacy}=first;
+   expect(keyboardShortcuts).toBe(true);
+   const second=await saveGeneralSettings(env.db,1,{...legacy,replyAll:true});
    expect(second.version).toBe(2);expect(second.signatures.version).toBe(2);
    const newer=await saveSignatures(env.db,1,{...second.signatures,beforeQuote:true});
    await expect(saveGeneralSettings(env.db,1,{...second,undoSeconds:30})).rejects.toMatchObject({code:409});
    await expect(saveGeneralSettings(env.db,1,{...first,signatures:newer})).rejects.toMatchObject({code:409});
-   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:true});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:true,keyboardShortcuts:true});
    expect(await readSignatures(env.db,1)).toEqual(newer);
    expect((await readSignatures(env.db,2)).version).toBe(0);
  });
  it('rejects stale edits, keeps preferences per user, and removes them on deletion',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const input={version:0,undoSeconds:30,replyAll:true};
-   expect(await saveGeneralSettings(env.db,1,input)).toEqual({...input,version:1});
+   expect(await saveGeneralSettings(env.db,1,input)).toEqual({...input,version:1,keyboardShortcuts:false});
    await expect(saveGeneralSettings(env.db,1,input)).rejects.toMatchObject({code:409});
    await expect(saveGeneralSettings(env.db,1,{...input,version:1,undoSeconds:6})).rejects.toMatchObject({code:400});
    const updated=await saveGeneralSettings(env.db,1,{...input,version:1,undoSeconds:20});
    expect(await readGeneralSettings(env.db,1)).toEqual(updated);
-   expect(await readGeneralSettings(env.db,2)).toEqual({version:0,undoSeconds:null,replyAll:false});
+   expect(await readGeneralSettings(env.db,2)).toEqual({version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false});
    const d=await draft({}), req={version:d.version,idempotencyKey:'account-undo-period',undoSeconds:5}, start=Date.now();
    const held=await send(c(),1,req,{draftId:d.draftId});
    expect(held.undoUntil).toBeGreaterThanOrEqual(start+20000);

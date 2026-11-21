@@ -102,7 +102,7 @@ function matchesFilters(row,p) {
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
-let generalSettings={version:0,undoSeconds:null,replyAll:false};
+let generalSettings={version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false};
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');

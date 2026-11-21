@@ -5,7 +5,8 @@ export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_displa
   PRIMARY KEY(user_id,folder))`;
 export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_settings (
   user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1,
-  undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)))`;
+  undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)),
+  keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
@@ -20,17 +21,32 @@ export async function ensureEmailColumn(readColumns,addColumn,name) {
   catch(error) { if (!(await exists())) throw error; }
 }
 
+// Older installations already have the preferences table. Two initializers may race.
+export async function ensureKeyboardShortcuts(readColumns, execute) {
+  const exists = async () => (await readColumns()).some(column => column.name === 'keyboard_shortcuts');
+  if (await exists()) return;
+  try {
+    await execute('ALTER TABLE mail_general_settings ADD COLUMN keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1))');
+  } catch (error) {
+    if (!(await exists())) throw error;
+  }
+}
+
 export async function migrateCloud(db) {
   const readColumns=async()=>(await db.prepare('PRAGMA table_info(email)').all()).results;
   await ensureRawSizeColumn(readColumns,sql=>db.prepare(sql).run());
   await ensureEmailColumn(readColumns,sql=>db.prepare(sql).run(),'scheduled_draft_id');
+  await db.prepare(generalSettingsSchema).run();
+  await ensureKeyboardShortcuts(
+    async () => (await db.prepare('PRAGMA table_info(mail_general_settings)').all()).results,
+    sql => db.prepare(sql).run(),
+  );
   const columns = await readColumns();
   if (!columns.some(c => c.name === 'trashed_at')) await db.prepare('ALTER TABLE email ADD COLUMN trashed_at TEXT').run();
   await db.batch([
     ...scheduledTrashSchema.map(sql=>db.prepare(sql)),
     ...mailWordSchema().map(sql=>db.prepare(sql)),
     db.prepare(signatureSchema),
-    db.prepare(generalSettingsSchema),
     db.prepare(systemLabelSchema),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_email_trash ON email(user_id,trashed_at,email_id)'),
     db.prepare(`CREATE TABLE IF NOT EXISTS cloud_drafts (

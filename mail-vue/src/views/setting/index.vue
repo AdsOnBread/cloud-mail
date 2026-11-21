@@ -17,6 +17,15 @@
           </label>
         </div>
       </div>
+      <div class="setting-row">
+        <strong id="keyboard-shortcuts">Keyboard shortcuts:</strong>
+        <div role="radiogroup" aria-labelledby="keyboard-shortcuts">
+          <label v-for="enabled in [false,true]" :key="String(enabled)" class="radio-choice">
+            <input v-model="form.keyboardShortcuts" type="radio" name="keyboard-shortcuts" :value="enabled" :disabled="!ready || busy">
+            Keyboard shortcuts {{enabled ? 'on' : 'off'}}
+          </label>
+        </div>
+      </div>
       <div class="setting-row signature-row">
         <div class="signature-caption"><strong>Signature:</strong>
           <div>(appended at the end of all outgoing messages)</div>
@@ -49,11 +58,11 @@ import SignatureFields from '@/components/mail-signatures/fields.vue';
 import {useMailSignatures} from '@/store/mail-signatures';
 
 const user=useUserStore(), account=useAccountStore(), router=useRouter();
-const form=reactive({undoSeconds:5,replyAll:false});
+const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false});
 const baseline=ref(null), busy=ref(false), conflict=ref(''), error=ref(''), preferencesError=ref('');
 const signatures=useMailSignatures(), signatureForm=ref(null), signatureRevision=ref(0), savedSignatures=ref(''), signatureError=ref('');
 const ready=computed(()=>Boolean(baseline.value));
-const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll));
+const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts));
 const signaturesChanged=computed(()=>signatureForm.value && JSON.stringify(signatureForm.value)!==savedSignatures.value);
 const dirty=computed(()=>preferencesChanged.value || signaturesChanged.value);
 let generation=0;
@@ -65,8 +74,8 @@ function session() {
 function accept(saved) {
   if ((user.user.generalSettings?.version ?? 0) > saved.version) saved=user.user.generalSettings;
   user.user.generalSettings=saved;
-  baseline.value={...saved,undoSeconds:user.undoSeconds};
-  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll});
+  baseline.value={...saved,undoSeconds:user.undoSeconds,keyboardShortcuts:saved.keyboardShortcuts===true};
+  Object.assign(form,{undoSeconds:user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts});
 }
 function acceptSignatures(data) {
   signatureRevision.value++;
@@ -128,7 +137,7 @@ async function save() {
   } finally { if (request.current()) busy.value=false; }
 }
 function cancel() {
-  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll});
+  if (ready.value) Object.assign(form,{undoSeconds:baseline.value.undoSeconds,replyAll:baseline.value.replyAll,keyboardShortcuts:baseline.value.keyboardShortcuts});
   if (savedSignatures.value) acceptSignatures(JSON.parse(savedSignatures.value));
   router.push('/inbox');
 }
