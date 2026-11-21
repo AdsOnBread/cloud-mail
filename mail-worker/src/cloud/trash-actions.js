@@ -1,7 +1,8 @@
 import BizError from '../error/biz-error';
-import { groupThreads, threadColumns } from '../mobile/threads';
+import { ensureThreads, groupThreads, threadColumns } from '../mobile/threads';
 import { positive } from './auth';
 import { owned } from './mail';
+import { relatedActiveMail } from './trash-threads';
 
 function selectedIds(ids) {
   if (!Array.isArray(ids) || !ids.length || ids.length > 100) throw new BizError('Choose 1 to 100 messages.',400);
@@ -34,16 +35,19 @@ export async function moveFromTrash(db,userId,ids,labelId) {
   const idList=JSON.stringify(selected);
   // Project just the selected messages back into the normal thread grouping. Trash
   // may contain a newer reply, an older anchor, or an entirely deleted conversation.
+  await ensureThreads(db,userId);
   const [mail,accounts,state,destination]=await db.batch([
     db.prepare(`SELECT ${threadColumns},e.trashed_at,e.type,e.status FROM email e JOIN account a ON a.account_id=e.account_id
-      WHERE ${owned} AND (e.trashed_at IS NULL OR e.email_id IN (SELECT value FROM json_each(?)))`).bind(userId,idList),
+      WHERE ${owned} AND e.trashed_at IS NOT NULL AND e.email_id IN (SELECT value FROM json_each(?))`).bind(userId,idList),
     db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId),
-    db.prepare('SELECT revision FROM mobile_thread_state WHERE user_id=?').bind(userId),
+    db.prepare('SELECT revision,indexed_revision FROM mobile_thread_state WHERE user_id=?').bind(userId),
     db.prepare('SELECT label_id FROM mailbox_labels WHERE user_id=? AND label_id=?').bind(userId,labelId)
   ]);
   if (labelId && !destination.results.length) throw new BizError('Label not found.',404);
-  const rows=mail.results;
-  if (rows.filter(row=>row.trashed_at).length!==selected.length) throw new BizError('A selected message is no longer in Trash.',409);
+  if (mail.results.length!==selected.length) throw new BizError('A selected message is no longer in Trash.',409);
+  if (!state.results.length || state.results[0].indexed_revision!==state.results[0].revision) throw new BizError('Trash changed. Refresh and try again.',409);
+  const active=await relatedActiveMail(db,userId,mail.results);
+  const rows=[...mail.results,...active].sort((a,b)=>a.email_id-b.email_id);
   const groups=groupThreads(rows,accounts.results.map(a=>a.email));
   const affected=new Set(groups.filter((_,i)=>rows[i].trashed_at).map(group=>group.threadId));
   const threads=new Map();

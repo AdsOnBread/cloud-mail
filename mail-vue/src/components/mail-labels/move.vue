@@ -24,7 +24,7 @@
           width="20"
         /></button
     ></template>
-    <div ref="menu" class="move-picker" @keydown.esc.stop.prevent="dismiss" @keydown.down.prevent="step(1)" @keydown.up.prevent="step(-1)">
+    <div ref="menu" class="move-picker" @keydown="navigate">
       <strong>Move to</strong
       ><input
         ref="input"
@@ -32,7 +32,6 @@
         type="search"
         aria-label="Find destination"
         placeholder="Find a label"
-        @keydown.enter.prevent="menu?.querySelector('button')?.click()"
       />
       <button
         v-for="item in destinations"
@@ -95,6 +94,15 @@ watch(open, (value) => {
     anchors = [...props.ids];
   }
 });
+function navigate(event) {
+  if (event.isComposing || event.keyCode===229) return;
+  if (event.key==='ArrowDown' || event.key==='ArrowUp') step(event.key==='ArrowDown' ? 1 : -1);
+  else if (event.key==='Escape') dismiss();
+  else if (event.key==='Enter' && event.target===input.value) menu.value.querySelector('button')?.click();
+  else return;
+  event.preventDefault();
+  event.stopPropagation();
+}
 function step(direction) {
   const buttons=Array.from(menu.value?.querySelectorAll('button') || []);
   if (!buttons.length) return;

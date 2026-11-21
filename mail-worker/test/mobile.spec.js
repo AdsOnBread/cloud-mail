@@ -132,6 +132,11 @@ describe('Mobile synchronization',()=>{
 
 describe('Conversation relationships',()=>{
 	const message=(email_id,extra={})=>({email_id,user_id:1,subject:'Status',send_email:'outside@external.com',recipient:'[{"address":"admin@example.com"}]',cc:'[]',create_time:'2026-10-01 12:00:00',...extra});
+	it('orders simultaneous subject matches consistently when their reference chains conflict',()=>{
+		const rows=[message(1,{in_reply_to:'<a@example.com>'}),message(2,{in_reply_to:'<b@example.com>'}),message(3)];
+		const memberships=items=>groupThreads(items,[]).sort((a,b)=>a.emailId-b.emailId);
+		expect(memberships([rows[1],rows[2],rows[0]])).toEqual(memberships(rows));
+	});
 	it('connects late parents and sent replies, without merging users or conflicting references',()=>{
 		const groups=groupThreads([message(1,{in_reply_to:'<late@external.com>'}),message(2,{message_id:'<late@external.com>'}),message(3,{user_id:2,message_id:'<late@external.com>'}),message(4,{reply_to_email_id:1,send_email:'admin@example.com',recipient:'[{"address":"outside@external.com"}]'})],['admin@example.com']);
 		expect(groups.map(g=>g.threadId)).toEqual(['t-1','t-1','t-3','t-1']);

@@ -13,6 +13,7 @@ export function normalizedSubject(value) {
 export function groupThreads(messages, ownAddresses) {
 	const own = new Set(ownAddresses.map(a => a.toLowerCase()));
 	const parent = new Map(messages.map(m => [m.email_id, m.email_id]));
+	const owners = new Map(messages.map(m => [m.email_id,m.user_id]));
 	function find(id) { let root = id; while (parent.get(root) !== root) root = parent.get(root); while (id !== root) { const next = parent.get(id); parent.set(id, root); id = next; } return root; }
 	function union(a, b) { const x = find(a), y = find(b); if (x !== y) parent.set(Math.max(x,y), Math.min(x,y)); }
 	const tokens = new Map();
@@ -21,10 +22,10 @@ export function groupThreads(messages, ownAddresses) {
 			const key = `${m.user_id}:${token}`;
 			if (tokens.has(key)) union(m.email_id, tokens.get(key)); else tokens.set(key, m.email_id);
 		}
-		if (m.reply_to_email_id && parent.has(m.reply_to_email_id) && messages.some(p => p.email_id === m.reply_to_email_id && p.user_id === m.user_id)) union(m.email_id, m.reply_to_email_id);
+		if (m.reply_to_email_id && owners.get(m.reply_to_email_id) === m.user_id) union(m.email_id, m.reply_to_email_id);
 	}
 	const fallback = new Map();
-	for (const m of [...messages].sort((a,b) => a.create_time.localeCompare(b.create_time))) {
+	for (const m of [...messages].sort((a,b) => a.create_time.localeCompare(b.create_time) || a.email_id-b.email_id)) {
 		const subject = normalizedSubject(m.subject);
 		if (!subject) continue;
 		const participants = [...new Set([m.send_email, ...parseAddresses(m.recipient), ...parseAddresses(m.cc)]

@@ -119,6 +119,17 @@ describe('Recoverable Trash',()=>{
    expect((await mail.list(c(),1,{folder:'inbox'})).messages).toHaveLength(0);
    expect((await env.db.prepare('SELECT COUNT(*) n FROM mailbox_label_members WHERE label_id=?').bind(label).first()).n).toBe(2);
  });
+ it('projects matching active threads across Unicode subjects and references without loading unrelated mail',async()=>{
+   const {relatedActiveMail}=await import('../src/cloud/trash-threads');
+   const {ensureThreads}=await import('../src/mobile/threads');
+   const one=await message({subject:'Übersicht',message_id:'<a@local>'});
+   const two=await message({subject:'A different heading',message_id:'<b@local>',in_reply_to:'<a@local>'});
+   const target=await message({subject:'Re: ÜBERSICHT',message_id:'<c@local>'});
+   await message({subject:'Unrelated',message_id:'<d@local>'});
+   await mail.trash(c(),1,[target.email_id]);await ensureThreads(env.db,1);
+   const active=await relatedActiveMail(env.db,1,[target]);
+   expect(active.map(m=>m.email_id).sort()).toEqual([one.email_id,two.email_id].sort());
+ });
  it('purges only after 30 days and age-based cleanup enters Trash first',async()=>{
    const old=await message({create_time:'2020-01-01 00:00:00'});
    await env.db.prepare('UPDATE setting SET auto_clean_days=1').run();await settingService.refresh(c());

@@ -7,7 +7,7 @@
       <button class="filter-chip" :aria-pressed="Boolean(search.filters.isUnread)" @click="toggleFilter('isUnread')">Is unread</button>
       <SearchOptions chips />
     </div>
-    <div class="mail-toolbar">
+    <div class="mail-toolbar" :class="{'has-selection':selected.length && !messageId}">
       <button
         v-if="messageId"
         class="mail-icon"
@@ -45,9 +45,15 @@
           <Icon :icon="readIcon(targetUnread)" width="20"/>
         </button>
         <MovePicker v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
-        <el-dropdown v-if="canDelete" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
+        <el-dropdown v-if="canDelete || !messageId" :class="{'compact-trash-more':!canDelete}" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
           <button class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
-          <template #dropdown><el-dropdown-menu><el-dropdown-item @click="act('restore',targets)">Restore to previous location</el-dropdown-item></el-dropdown-menu></template>
+          <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">Restore to previous location</el-dropdown-item>
+            <template v-if="!messageId">
+              <el-dropdown-item class="compact-trash-pager" :disabled="!history.length || busy || loading" @click="previous">Previous page</el-dropdown-item>
+              <el-dropdown-item class="compact-trash-pager" :disabled="!nextCursor || busy || loading" @click="next">Next page</el-dropdown-item>
+            </template>
+          </el-dropdown-menu></template>
         </el-dropdown>
       </template>
       <button
@@ -75,7 +81,7 @@
             : ""
         }}</span>
         <button
-          class="mail-icon"
+          class="mail-icon pager"
           aria-label="Previous page"
           data-tip="Previous page"
           :disabled="!history.length || busy || loading"
@@ -84,7 +90,7 @@
           <Icon icon="material-symbols:chevron-left" width="20" />
         </button>
         <button
-          class="mail-icon"
+          class="mail-icon pager"
           aria-label="Next page"
           data-tip="Next page"
           :disabled="!nextCursor || busy || loading"
@@ -259,6 +265,17 @@ const targets = computed(() =>
 const targetUnread=computed(()=>messageId.value ? detail.value?.unread===0 : messages.value.some(m=>selected.value.includes(m.emailId) && m.unread===0));
 const readIcon=unread=>unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
 const readLabel=unread=>unread ? 'Mark as read' : 'Mark as unread';
+async function reloadAfterRemoval(index) {
+  const expected=revision+1;
+  await load();
+  await nextTick();
+  if (disposed || expected!==revision || !root.value) return;
+  const active=document.activeElement;
+  if (active && active!==document.body && active.getClientRects().length) return;
+  const buttons=root.value.querySelectorAll('.conversation-open');
+  const next=buttons[Math.min(Math.max(0,index),buttons.length-1)];
+  (next || root.value.querySelector('.select-options'))?.focus();
+}
 async function setRead(ids,read) {
   if (busy.value || loading.value || !ids.length) return;
   busy.value=true;
@@ -270,7 +287,7 @@ async function setRead(ids,read) {
     if (detail.value && ids.includes(detail.value.emailId)) {
       detail.value.unread=Number(read);
       if (!read) back();
-    } else if (search.filters.isUnread && read) await load();
+    } else if (search.filters.isUnread && read) await reloadAfterRemoval(messages.value.findIndex(m=>ids.includes(m.emailId)));
     else for (const message of messages.value) if (ids.includes(message.emailId)) message.unread=Number(read);
   } catch(e) {
     if (!disposed && request===revision) error.value=e.message || 'Could not update read status.';
@@ -459,16 +476,7 @@ async function act(action, ids, destination) {
       if (!disposed && request===revision) {
         const originalError = error.value;
         if (messageId.value) back();
-        else {
-          await load();
-          await nextTick();
-          // The destination menu and selected toolbar disappear with the moved rows.
-          if (root.value && (!document.activeElement || document.activeElement===document.body || !document.activeElement.getClientRects().length)) {
-            const buttons=root.value.querySelectorAll('.conversation-open');
-            const next=buttons[Math.min(Math.max(0,selectedIndex),buttons.length-1)];
-            (next || root.value.querySelector('.select-options'))?.focus();
-          }
-        }
+        else await reloadAfterRemoval(selectedIndex);
         if (originalError) error.value = originalError;
       }
     }
@@ -510,6 +518,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   color: var(--el-text-color-primary);
+}
+:global(.mail-action-menu .compact-trash-pager) { display:none; }
+@media (min-width:601px) { .compact-trash-more { display:none; } }
+@media (max-width:600px) {
+  :global(.mail-action-menu .compact-trash-pager) { display:flex; }
+  .has-selection .pager,.has-selection .total { display:none; }
 }
 .toolbar-divider { height:20px; border-left:1px solid var(--light-border-color); margin:0 6px; }
 .trash-list,
