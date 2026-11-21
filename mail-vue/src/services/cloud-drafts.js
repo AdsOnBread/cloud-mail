@@ -109,7 +109,7 @@ export async function saveLocalDraft(input, {requireCurrent = false, session, st
       // A filing-only edit keeps its content ancestor across tabs and cloud uploads.
       starEditBase:starOnly && current ? current.starEditBase || draftEditBase(current) : undefined,
       ...(preserveStar && current ? {mailboxStarred:Boolean(current.mailboxStarred)} : {}),
-      ...(current?.detachedReply ? {detachedReply:true, emailId:0, sendType:'', inlineReply:false} : {}),
+      ...(current?.detachedReply ? {detachedReply:true, emailId:0, sendType:'', inlineReply:false, trashSource:0} : {}),
       restoredFromDiscard:current?.restoredFromDiscard, updatedAt:new Date().toISOString(), dirty:true, editToken:crypto.randomUUID(),
       clientId:current?.clientId || input.clientId || crypto.randomUUID(),
       cloudVersion:sameEdit ? current.cloudVersion : input.cloudVersion ?? current?.cloudVersion,
@@ -163,13 +163,14 @@ async function push(database,row,api) {
   } catch(raw) {
     const error=apiError(raw);
     if (error.code === 404 && error.message === 'Original message not found.' &&
-        row.restoredFromDiscard && !row.cloudDraftId && row.emailId) {
+        !row.cloudDraftId && row.emailId &&
+        (row.restoredFromDiscard || row.sendType === 'reply' && row.trashSource === row.emailId)) {
       const independent = await database.transaction('rw', database.draft, async () => {
         const latest = await database.draft.get(row.draftId);
         if (!latest || latest.deleted || latest.editToken !== row.editToken) return;
         // The missing source was rejected before a cloud write. Keep the edit token
         // so the already-open editor can adopt the successful independent upload.
-        const next = {...latest, detachedReply:true, emailId:0, sendType:'', inlineReply:false};
+        const next = {...latest, detachedReply:true, emailId:0, sendType:'', inlineReply:false, trashSource:0};
         await database.draft.put(next);
         return next;
       });

@@ -318,6 +318,16 @@ describe('Cloud draft synchronization',()=>{
    await saveLocalDraft({...openEditor,subject:'Typed after Undo',attachments:[]});await syncCloudDrafts();
    expect([...state.remote.values()]).toMatchObject([{subject:'Typed after Undo',sendType:'',emailId:0}]);
  });
+ it('saves an offline Trash reply independently when its original expires before the first upload',async()=>{
+   Object.defineProperty(navigator,'onLine',{value:false});
+   const edit=await saveLocalDraft(input({emailId:21,trashSource:21,sendType:'reply',inlineReply:true}));
+   Object.defineProperty(navigator,'onLine',{value:true});
+   http.post.mockRejectedValueOnce({code:404,message:'Original message not found.'});
+   await syncCloudDrafts();
+   expect(await db.value.draft.get(edit.draftId)).toMatchObject({dirty:false,emailId:0,trashSource:0,sendType:'',content:'<p>Hello</p>'});
+   await saveLocalDraft({...edit,text:'Kept typing'});await syncCloudDrafts();
+   expect([...state.remote.values()]).toMatchObject([{emailId:0,sendType:'',text:'Kept typing'}]);
+ });
  it('propagates discard tombstones and never recreates a remotely removed clean draft',async()=>{
   const row=await saveLocalDraft(input());await syncCloudDrafts();await removeLocalDraft(row.draftId);await syncCloudDrafts();expect(state.rows.size).toBe(0);expect(state.remote.size).toBe(0);
  });

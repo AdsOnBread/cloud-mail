@@ -1,3 +1,4 @@
+import {storedRecipients, mailboxEntries} from '../../../shared/stored-recipients';
 import {cleanRecipientName,recipientName} from '../../../shared/recipient-names';
 import { isEmail } from './verify-utils.js';
 
@@ -41,14 +42,7 @@ export function addresses(value) {
 }
 
 // Incoming address lists can include RFC 5322 groups as well as individual mailboxes.
-export function storedRecipients(value) {
-  try {
-    const entries=typeof value==="string" ? JSON.parse(value || "[]") : value;
-    if (!Array.isArray(entries)) return [];
-    return entries.map(entry=>typeof entry==="string" ? {address:entry} : entry);
-  } catch { return []; }
-}
-
+export {storedRecipients};
 export function recipientEntries(value) {
   return storedRecipients(value).filter(entry=>typeof entry?.address==="string" && entry.address.trim());
 }
@@ -91,8 +85,8 @@ export function normalizeRecipients(form, pending = {}) {
 
 export function replyRecipients(message, ownAddresses, all = false) {
   const sent = message.type === 1;
-  const to = addresses(message.recipient);
-  const cc = addresses(message.cc);
+  const to = mailboxEntries(message.recipient).map(person => person.address);
+  const cc = mailboxEntries(message.cc).map(person => person.address);
   const copyOnly = sent && !to.length;
   const targets = sent ? to : [message.sendEmail, ...(all ? to : [])].filter(Boolean);
   const seen = new Set(all ? ownAddresses.map(address => address.toLowerCase()) : []);
@@ -105,7 +99,7 @@ export function replyRecipients(message, ownAddresses, all = false) {
   return {
     receiveEmail: unique(targets),
     cc: all || copyOnly ? unique(cc) : [],
-    bcc: copyOnly && !cc.length ? unique(addresses(message.bcc)) : [],
+    bcc: copyOnly && !cc.length ? unique(mailboxEntries(message.bcc).map(person => person.address)) : [],
   };
 }
 
@@ -147,7 +141,7 @@ export function draftFingerprint(draft) {
 export function hasReplyAll(message, ownAddresses) {
   if (!message) return false;
   const own=new Set(ownAddresses.map(address=>address.toLowerCase()));
-  const people=[message.sendEmail,...addresses(message.recipient),...addresses(message.cc)]
+  const people=[message.sendEmail,...[...mailboxEntries(message.recipient), ...mailboxEntries(message.cc)].map(person => person.address)]
     .filter(Boolean).map(address=>address.trim().toLowerCase()).filter(address=>!own.has(address));
   return new Set(people).size>1;
 }

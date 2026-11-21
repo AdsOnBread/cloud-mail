@@ -1,49 +1,111 @@
-import {attachmentBlob} from "@/components/mail-attachments/content";
-import {downloadablePart, inlineImageURL, storedKey} from "@/utils/private-files";
-import {headerAddressText, headerRecipients} from "@/utils/recipients";
-import {formatDetailDate} from "@/utils/day";
+import { attachmentBlob } from "@/components/mail-attachments/content";
+import {
+  downloadablePart,
+  inlineImageURL,
+  storedKey,
+} from "@/utils/private-files";
+import { headerAddressText, headerRecipients } from "@/utils/recipients";
+import { formatDetailDate } from "@/utils/day";
 
-const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const escape = (value) =>
+  String(value ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
 
 export async function quotedMessage(message, mode, signal, token) {
   const template = document.createElement("template");
   template.innerHTML = message.content || "";
-  const files = message.attList || [], contents = new Map();
+  const files = message.attList || [],
+    contents = new Map();
   async function fileData(file) {
     signal.throwIfAborted();
     if (!contents.has(file)) {
       const blob = await attachmentBlob(file, signal, false, token);
-      const type=file.mimeType || blob.type || "application/octet-stream";
-      contents.set(file, {content:await inlineImageURL(blob.slice(0,blob.size,type)),size:blob.size,contentType:type});
+      const type = file.mimeType || blob.type || "application/octet-stream";
+      contents.set(file, {
+        content: await inlineImageURL(blob.slice(0, blob.size, type)),
+        size: blob.size,
+        contentType: type,
+      });
     }
     return contents.get(file);
   }
   for (const image of template.content.querySelectorAll("img[src]")) {
-    const src = image.getAttribute("src"), key = storedKey(src);
-    const file = files.find(f => key && key === f.key || src.startsWith("cid:") && src.slice(4) === f.contentId?.replace(/^<|>$/g,""));
+    const src = image.getAttribute("src"),
+      key = storedKey(src);
+    const file = files.find(
+      (f) =>
+        (key && key === f.key) ||
+        (src.startsWith("cid:") &&
+          src.slice(4) === f.contentId?.replace(/^<|>$/g, "")),
+    );
     if (!file && !key && !src.startsWith("cid:")) continue;
     if (file) {
-      try {image.src = (await fileData(file)).content;continue;}
-      catch {signal.throwIfAborted();}
+      try {
+        image.src = (await fileData(file)).content;
+        continue;
+      } catch {
+        signal.throwIfAborted();
+      }
     }
-    image.replaceWith(document.createTextNode(image.alt || "[Inline image unavailable]"));
+    image.replaceWith(
+      document.createTextNode(image.alt || "[Inline image unavailable]"),
+    );
   }
-  const body = template.innerHTML || '<pre style="font-family:inherit;white-space:pre-wrap">' + escape(message.text) + '</pre>';
-  const sender = headerAddressText({address:message.sendEmail, name:message.name});
+  const body =
+    template.innerHTML ||
+    '<pre style="font-family:inherit;white-space:pre-wrap">' +
+      escape(message.text) +
+      "</pre>";
+  const sender = headerAddressText({
+    address: message.sendEmail,
+    name: message.name,
+  });
   const date = message.createTime ? formatDetailDate(message.createTime) : "";
   const attachments = [];
   let quote;
   if (mode === "forward") {
     for (const file of files.filter(downloadablePart)) {
-      attachments.push({filename:file.filename || "Attachment", ...await fileData(file)});
+      attachments.push({
+        filename: file.filename || "Attachment",
+        ...(await fileData(file)),
+      });
     }
-    const headers = [["From",sender], ["Date",date], ["Subject",message.subject],
-      ["To",headerRecipients(message.recipient).map(headerAddressText).join(", ")],
-      ["Cc",headerRecipients(message.cc).map(headerAddressText).join(", ")]];
-    quote = '<div>---------- Forwarded message ---------<br>' +
-      headers.filter(([,value])=>value).map(([label,value])=>label + ": " + escape(value)).join("<br>") + "</div><br>" + body;
+    const headers = [
+      ["From", sender],
+      ["Date", date],
+      ["Subject", message.subject],
+      [
+        "To",
+        headerRecipients(message.recipient).map(headerAddressText).join(", "),
+      ],
+      ["Cc", headerRecipients(message.cc).map(headerAddressText).join(", ")],
+    ];
+    quote =
+      "<div>---------- Forwarded message ---------<br>" +
+      headers
+        .filter(([, value]) => value)
+        .map(([label, value]) => label + ": " + escape(value))
+        .join("<br>") +
+      "</div><br>" +
+      body;
   } else {
-    quote = "<div>" + escape(date) + " " + escape(sender) + ' wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">' + body + "</blockquote>";
+    quote =
+      "<div>" +
+      escape(date) +
+      " " +
+      escape(sender) +
+      ' wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">' +
+      body +
+      "</blockquote>";
   }
-  return {attachments, content:'<div><br></div><div class="cloudmail-reply-quote">' + quote + '</div>'};
+  return {
+    attachments,
+    content:
+      '<div><br></div><div class="cloudmail-reply-quote">' + quote + "</div>",
+  };
 }

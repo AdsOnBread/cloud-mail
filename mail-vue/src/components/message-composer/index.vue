@@ -386,6 +386,7 @@ import { fileToBase64, formatBytes } from "@/utils/file-utils.js";
 import { getIconByName } from "@/utils/icon-utils.js";
 import { formatDetailDate } from "@/utils/day.js";
 import { userDraftStore, watchDraftStars } from "@/store/draft.js";
+import { mailboxEntries } from "../../../../shared/stored-recipients";
 import { useSettingStore } from "@/store/setting.js";
 import { useWriterStore } from "@/store/writer.js";
 import { hasPerm } from "@/perm/perm.js";
@@ -934,16 +935,8 @@ async function prepareMessage(message, mode, all = false) {
       if (props.inline) {
         form.replyRecipientNames = {};
         for (const list of [email.recipient, email.cc]) {
-          try {
-            for (const recipient of typeof list === "string"
-              ? JSON.parse(list || "[]")
-              : list || []) {
-              if (recipient.address && recipient.name)
-                form.replyRecipientNames[recipient.address.toLowerCase()] =
-                  recipient.name;
-            }
-          } catch {
-            /* Legacy messages may not have structured recipient names. */
+          for (const person of mailboxEntries(list)) {
+            if (person.name) form.replyRecipientNames[person.address.toLowerCase()] = person.name;
           }
         }
         if (email.sendEmail && email.name)

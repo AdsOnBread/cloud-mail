@@ -83,5 +83,7 @@ it('offers Reply all only when more than one other visible participant is addres
  const own=['me@example.org','alias@example.org'];
  expect(hasReplyAll(m,own)).toBe(false);
  expect(hasReplyAll({...m,cc:['ALIAS@example.org','sender@example.org']},own)).toBe(false);
- expect(hasReplyAll({...m,cc:['colleague@example.org']},own)).toBe(true);
+ const cc = [{name:'Team',group:['colleague@example.org','me@example.org']},{name:'Empty',group:[]}];
+ expect(hasReplyAll({...m,cc},own)).toBe(true);
+ expect(replyRecipients({...m,cc},own,true)).toEqual({receiveEmail:['sender@example.org'],cc:['colleague@example.org'],bcc:[]});
 });

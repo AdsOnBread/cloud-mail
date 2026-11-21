@@ -237,7 +237,7 @@ describe('Send attempts',()=>{
    }
  });
  it('prepares reply-all without aliases or Bcc and forwards ordinary files independently',async()=>{
-   const original=await message();
+   const original=await message({recipient:JSON.stringify([{name:'Team',group:[{address:'admin@example.com'},{address:'copy@example.net'}]}, {name:'Undisclosed',group:[]}])});
    const reply=await prepare(c(),1,{accountId:1,emailId:original.email_id,text:'Reply',replyAll:true},'reply');
    expect(reply.receiveEmail).toEqual(['outside@example.net','copy@example.net']);expect(reply.cc).toEqual(['cc@example.net']);expect(reply.bcc).toEqual([]);
    const forwarded=await prepare(c(),1,{accountId:1,emailId:original.email_id,text:'Forward'},'forward');expect(forwarded.content).toContain('Original body');

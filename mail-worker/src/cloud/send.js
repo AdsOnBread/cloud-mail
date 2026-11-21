@@ -1,3 +1,4 @@
+import {mailboxEntries} from '../../../shared/stored-recipients';
 import {readGeneralSettings} from './general-settings';
 import BizError from '../error/biz-error';
 import emailService from '../service/email-service';
@@ -7,7 +8,7 @@ import * as drafts from './drafts';
 import * as mail from './mail';
 
 const escape=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const addresses=value=>{try{return JSON.parse(value||'[]').map(v=>v.address||v).filter(Boolean);}catch{return[];}};
+const addresses = value => mailboxEntries(value).map(person => person.address);
 export async function prepare(c,userId,input,mode) {
   const value={...input};
   await mailbox(c,userId,value.accountId);
