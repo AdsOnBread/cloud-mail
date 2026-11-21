@@ -10,6 +10,9 @@ export const labelSchema = [
 	`CREATE TABLE IF NOT EXISTS mailbox_label_colors (
       label_id INTEGER PRIMARY KEY REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
       background TEXT, foreground TEXT)`,
+	`CREATE TABLE IF NOT EXISTS mailbox_custom_colors (
+      change_id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, background TEXT NOT NULL,
+      foreground TEXT NOT NULL, UNIQUE(user_id,background,foreground))`,
 	'CREATE INDEX IF NOT EXISTS idx_labels_for_email ON mailbox_label_members(user_id,email_id,label_id)',
 ];
 export function listLabels(db, userId) {
@@ -40,16 +43,32 @@ export async function saveLabel(db, userId, name, id) {
 		throw error;
 	}
 }
+export async function recentLabelColors(db, userId) {
+	const {results} = await db.prepare('SELECT background,foreground FROM mailbox_custom_colors WHERE user_id=? ORDER BY change_id DESC LIMIT 6').bind(userId).all();
+	return results;
+}
+
 export async function setLabelColor(db, userId, id, colors) {
 	const {background, foreground} = colors || {};
 	const reset = background === null && foreground === null;
 	const valid = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 	if (!reset && !(valid(background) && valid(foreground))) throw new BizError('Choose a background and text color.', 400);
-	const updated = await db.prepare(`INSERT INTO mailbox_label_colors(label_id,background,foreground)
+	const write = db.prepare(`INSERT INTO mailbox_label_colors(label_id,background,foreground)
     SELECT label_id,?,? FROM mailbox_labels WHERE user_id=? AND label_id=?
     ON CONFLICT(label_id) DO UPDATE SET background=excluded.background,foreground=excluded.foreground
     RETURNING label_id AS id,background,foreground`)
-		.bind(background?.toLowerCase() ?? null, foreground?.toLowerCase() ?? null, userId, id).first();
+		.bind(background?.toLowerCase() ?? null, foreground?.toLowerCase() ?? null, userId, id);
+	const statements = [write];
+	if (colors.custom === true && !reset) {
+		statements.push(
+			db.prepare(`INSERT OR REPLACE INTO mailbox_custom_colors(user_id,background,foreground)
+        SELECT user_id,?,? FROM mailbox_labels WHERE user_id=? AND label_id=?`)
+				.bind(background.toLowerCase(),foreground.toLowerCase(),userId,id),
+			db.prepare(`DELETE FROM mailbox_custom_colors WHERE user_id=? AND change_id NOT IN
+        (SELECT change_id FROM mailbox_custom_colors WHERE user_id=? ORDER BY change_id DESC LIMIT 6)`).bind(userId,userId)
+		);
+	}
+	const [{results:[updated]}] = await db.batch(statements);
 	if (!updated) throw new BizError('Label not found.', 404);
 	return updated;
 }

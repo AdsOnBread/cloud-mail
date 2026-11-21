@@ -364,9 +364,9 @@ it('keeps manual importance through replies, filing, and changes to read or star
 });
 
 it('keeps label colors across rename, rejects foreign labels and clears only the colors', async () => {
- const {saveLabel,listLabels,setLabelColor,removeLabel}=await import('../src/service/mailbox-labels');
+ const {saveLabel,listLabels,setLabelColor,removeLabel,recentLabelColors}=await import('../src/service/mailbox-labels');
  const label=await saveLabel(env.db,1,'Palette');
- const colors={background:'#C2185B',foreground:'#FFFFFF'};
+ const colors={background:'#C2185B',foreground:'#FFFFFF',custom:true};
  await expect(setLabelColor(env.db,2,label.id,colors)).rejects.toThrow(/not found/);
  await expect(setLabelColor(env.db,1,label.id,{...colors,background:'red'})).rejects.toThrow(/Choose/);
  await setLabelColor(env.db,1,label.id,colors);
@@ -375,5 +375,16 @@ it('keeps label colors across rename, rejects foreign labels and clears only the
  await setLabelColor(env.db,1,label.id,{background:null,foreground:null});
  expect(await listLabels(env.db,1)).toContainEqual({id:label.id,name:'Renamed palette'});
  await removeLabel(env.db,1,label.id);
+ expect(await recentLabelColors(env.db,1)).toEqual([{background:'#c2185b',foreground:'#ffffff'}]);
+ expect(await recentLabelColors(env.db,2)).toEqual([]);
  expect(await env.db.prepare('SELECT * FROM mailbox_label_colors WHERE label_id=?').bind(label.id).first()).toBeNull();
+});
+
+it('keeps the six most recent distinct custom label pairs in selection order', async () => {
+ const {saveLabel,recentLabelColors,setLabelColor}=await import('../src/service/mailbox-labels');
+ const {id}=await saveLabel(env.db,1,'Review');
+ const backgrounds=Array.from({length:7},(_,i)=>'#00000'+i);
+ for(const background of [...backgrounds,backgrounds[2]])await setLabelColor(env.db,1,id,{background,foreground:'#ffffff',custom:true});
+ expect((await recentLabelColors(env.db,1)).map(pair=>pair.background))
+   .toEqual([2,6,5,4,3,1].map(i=>backgrounds[i]));
 });
