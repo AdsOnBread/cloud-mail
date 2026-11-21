@@ -466,11 +466,11 @@ function pasteFiles(event) {
   try { addFiles(transferFiles(event.clipboardData), "auto"); }
   catch (error) { sendError.value = error.message; }
 }
-let photoSelection, photoTrigger;
+let photoSelection, photoTrigger, returnToBody;
 function closePhotos(inserted) {
   photosOpen.value = false;
   if (!inserted) {
-    const resume = photoSelection, trigger = photoTrigger, generation = fileGeneration;
+    const resume = returnToBody && photoSelection, trigger = photoTrigger, generation = fileGeneration;
     nextTick(() => {
       if (generation !== fileGeneration || !show.value || form.ownerEmail !== userStore.user.email) return;
       if (resume) resume();
@@ -481,6 +481,7 @@ function closePhotos(inserted) {
 }
 function showPhotos(event) {
   if (fileBusy()) return;
+  returnToBody = document.activeElement === composeRoot.value?.querySelector(".compose-editor iframe");
   photoTrigger = event.currentTarget;
   photoSelection = editor.value?.rememberSelection();
   photosOpen.value = true;
