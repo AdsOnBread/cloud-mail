@@ -1242,10 +1242,11 @@ function recordSent(messages) {
 }
 async function followDelivery(delivery, recent, replyTo) {
   const session=draftSession();
+  if (!delivery.begin()) return;
   feedback.show("Sending…");
   const notice=feedback.notice;
   notice.holding=true;
-  attachUndo(delivery.cancel,session);
+  if (delivery.delay>0) attachUndo(delivery.cancel,session);
   try {
     await new Promise(resolve=>setTimeout(resolve,delivery.delay));
     session.check();
@@ -1270,7 +1271,7 @@ async function followDelivery(delivery, recent, replyTo) {
     }
   } catch (error) {
     if (feedback.notice===notice) feedback.show(error.message || "Delivery has not been confirmed. Check Sent.");
-  }
+  } finally { delivery.end(); }
 }
 async function sendEmail(sendAt=null) {
   if (!validForSend()) return;
@@ -1471,6 +1472,7 @@ onUnmounted(() => {
   document.removeEventListener("focusin", containFocus);
 });
 defineExpose({
+  followDelivery,
   discardEditor,
   open,
   openDraft,

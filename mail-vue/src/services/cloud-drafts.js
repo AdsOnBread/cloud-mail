@@ -1,3 +1,4 @@
+import {watch} from 'vue';
 import {draftSearchBytes,referencedAttachments} from "../components/message-composer/files";
 import { draftEditBase, draftFilingFingerprint } from '@/utils/recipients';
 import { draftSummary, newestDraft } from '@/utils/draft-summary';
@@ -148,8 +149,8 @@ async function push(database,row,api) {
       if (!latest || latest.deleted) return;
       const acknowledged = latest.editToken === row.editToken;
       if (!acknowledged && latest.uploadIntent?.id !== uploadId) return;
-      if (remote.state==='trashed' && remote.ui?.editToken!==row.editToken) throw {code:409,current:remote};
-      if (['deleted','sent','trashed'].includes(remote.state)) {
+      if ((remote.state==='trashed' || remote.undoSendKey) && remote.ui?.editToken!==row.editToken) throw {code:409,current:remote};
+      if (remote.undoSendKey || ['deleted','sent','trashed'].includes(remote.state)) {
         if (!acknowledged) throw {code:409, current:remote};
         await database.draft.delete(row.draftId);
         await database.att.delete(row.draftId);
@@ -280,7 +281,7 @@ async function finishDiscard(database, row, api) {
     if (remote.version === 1 && remote.ui?.uploadId === row.uploadIntent.id && remote.state === 'draft') {
       cloudId = remote.draftId;
       version = remote.version;
-    } else if (!['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt) {
+    } else if (!['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt && !remote.undoSendKey) {
       const value = await downloadDraft(remote, api);
       await put(database, {...value, draftId:row.draftId}, value.attachments);
       return;
@@ -291,7 +292,7 @@ async function finishDiscard(database, row, api) {
       await api.delete('/v1/drafts/' + cloudId, {params:{version},noMsg:true});
     } catch (raw) {
       const error = apiError(raw), remote = error.current;
-      if (Number(error.code) === 409 && remote && !['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt) {
+      if (Number(error.code) === 409 && remote && !['sent','deleted','trashed'].includes(remote.state) && !remote.scheduledAt && !remote.undoSendKey) {
         if (remote.state === 'draft' && row.uploadIntent && remote.version === version + 1 && remote.ui?.uploadId === row.uploadIntent.id) {
           await database.draft.put({...row, cloudDraftId:cloudId, cloudVersion:remote.version, uploadIntent:undefined});
           return finishDiscard(database, await database.draft.get(row.draftId), api);
@@ -300,7 +301,7 @@ async function finishDiscard(database, row, api) {
         await put(database, {...value, draftId:row.draftId}, value.attachments);
         return;
       }
-      if (Number(error.code) !== 404 && !(Number(error.code) === 409 && remote && (remote.scheduledAt || ['sent','deleted','trashed'].includes(remote.state)))) throw raw;
+      if (Number(error.code) !== 404 && !(Number(error.code) === 409 && remote && (remote.scheduledAt || remote.undoSendKey || ['sent','deleted','trashed'].includes(remote.state)))) throw raw;
     }
   }
   await database.transaction('rw', database.draft, database.att, async () => {
@@ -520,33 +521,76 @@ async function updateSendAttempt(database, id, attemptId, state, version, basis)
   });
 }
 
+const tracking = new Set();
+const receiptKey = key => 'ordinary-send/' + key;
+async function recoverDeliveries(database, follow) {
+  if (!follow || !navigator.onLine) return;
+  const session=draftSession(database),api=sessionAPI(database);
+  session.check();
+  const entries=await database.meta.where('key').startsWith('ordinary-send/').toArray();
+  for (const entry of entries) {
+    if (tracking.has(entry.attemptId)) continue;
+    const receipt=await api.get('/v1/send-attempts/'+entry.attemptId,{noMsg:true});
+    if (receipt.state==='not_started') {
+      // Never dispatch on startup. The original request could still be in flight.
+      if (Date.now()-entry.createdAt>86400000) await database.meta.delete(entry.key);
+      continue;
+    }
+    if (receipt.state==='canceled') {
+      await updateSendAttempt(database,entry.localId,entry.attemptId,'canceled');
+      await database.meta.delete(entry.key);
+      continue;
+    }
+    session.check();
+    follow(heldDelivery({...receipt,undoUntil:receipt.undoUntil || 0},database,api,entry.localId),[],entry.replyTo);
+  }
+}
+
 function heldDelivery(receipt, database, api, id) {
   const session=draftSession(database);
   const path='/v1/send-attempts/'+encodeURIComponent(receipt.attemptId);
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   return {
-    state:'holding', delay: Math.max(0,receipt.remainingMs ?? receipt.undoUntil-Date.now()),
+    state:'holding', begin:()=>{
+      if(tracking.has(receipt.attemptId)) return false;
+      tracking.add(receipt.attemptId);
+      return true;
+    },end:()=>tracking.delete(receipt.attemptId),delay: Math.max(0,receipt.remainingMs ?? receipt.undoUntil-Date.now()),
     async cancel() {
-      await api.post(path+'/undo',{}, {noMsg:true});
+      try { await api.post(path+'/undo',{}, {noMsg:true}); }
+      catch(error) {
+        const status=await api.get(path,{noMsg:true});
+        if(status.state!=='canceled') throw error;
+      }
+      await database.meta.delete(receiptKey(receipt.attemptId));
       await updateSendAttempt(database,id,receipt.attemptId,'canceled');
       return restoredReceipt(receipt,session);
     },
     async finish() {
       // The server owns dispatch. Polling only updates this mailbox's confirmation.
-      for (let i=0;i<30;i++) {
+      for (;;) {
         session.check();
         const status=await api.post(path+'/finish',{}, {noMsg:true});
-        if (status.state==='sent') return finishSentAttempt(database,id,receipt.attemptId,status.messages);
-        if (status.state==='canceled') return null;
+        if (status.state==='sent') {
+          try { return await finishSentAttempt(database,id,receipt.attemptId,status.messages); }
+          finally { await database.meta.delete(receiptKey(receipt.attemptId)); }
+        }
+        if (status.state==='canceled') {
+          await updateSendAttempt(database,id,receipt.attemptId,'canceled');
+          await database.meta.delete(receiptKey(receipt.attemptId));
+          return null;
+        }
         if (status.state==='failed') {
           await updateSendAttempt(database,id,receipt.attemptId,'failed');
           await syncCloudDrafts();
+          await database.meta.delete(receiptKey(receipt.attemptId));
           throw new Error(status.message || 'Delivery failed. Your message is in Drafts.');
         }
-        if (status.state==='uncertain' && status.message) throw new Error(status.message);
+        if (!['sending','holding'].includes(status.state)) {
+          throw new Error(status.message || 'Delivery has not been confirmed. Check Sent before retrying.');
+        }
         await wait(1000);
       }
-      throw new Error('Delivery has not been confirmed. Check Sent before retrying.');
     },
   };
 }
@@ -570,12 +614,16 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   const synced=await syncForDelivery(database,id,editToken);if(synced?.conflicts?.[id])throw new Error('Both versions were saved in Drafts. Review the saved copy before sending.');const row=await database.draft.get(id);
   if(!row||row.editToken!==editToken||row.deleted||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
   const sendFingerprint = await signature(await withFiles(database, row));
-  const sendAttemptId = await database.transaction('rw', database.draft, async () => {
+  const sendAttemptId = await database.transaction('rw', database.draft, database.meta, async () => {
     const current = await database.draft.get(id);
     if (!current || current.deleted || current.dirty || current.pendingSchedule ||
         current.cloudVersion !== row.cloudVersion || current.editToken !== row.editToken)
       throw new Error('Reopen the current draft before sending.');
     const attempt = current.sendAttemptId || crypto.randomUUID();
+    if (undoSeconds && !await database.meta.get(receiptKey(attempt))) {
+      await database.meta.put({key:receiptKey(attempt), attemptId:attempt, localId:id, createdAt:Date.now(),
+        undoSeconds,replyTo:row.sendType==='reply' ? row.emailId : 0});
+    }
     await database.draft.put({...current, sendAttemptId:attempt, sendFingerprint, syncState:'sending'});
     return attempt;
   });
@@ -583,12 +631,21 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   try {
     result = await api.post(`/v1/drafts/${row.cloudDraftId}/send`, {version:row.cloudVersion,idempotencyKey:sendAttemptId,...(undoSeconds ? {undoSeconds} : {})},{noMsg:true});
   } catch (raw) {
-    if ([400,403,404,409,413].includes(Number(apiError(raw).code))) {
+    if (undoSeconds) {
+      const receipt=await api.get('/v1/send-attempts/'+sendAttemptId,{noMsg:true}).catch(()=>null);
+      if (receipt?.state==='holding') {
+        await updateSendAttempt(database,id,sendAttemptId,'holding');
+        userDraftStore().refreshList++;
+        return heldDelivery(receipt,database,api,id);
+      }
+      if (receipt?.state==='sent') result=receipt;
+    }
+    if (!result && [400,403,404,409,413].includes(Number(apiError(raw).code))) {
       const receipt = await api.get('/v1/send-attempts/' + sendAttemptId, {noMsg:true});
       if (['failed','not_started'].includes(receipt.state))
         await updateSendAttempt(database, id, sendAttemptId, receipt.state);
     }
-    throw raw;
+    if(!result) throw raw;
   }
   if(result.state==='holding') {
     await updateSendAttempt(database,id,sendAttemptId,'holding');
@@ -602,8 +659,17 @@ export async function sendCloudDraft(id, editToken, undoSeconds) {
   }
   return finishSentAttempt(database,id,sendAttemptId,result.messages);
 }
-export function startDraftSync() {
-  const sync=()=>{if(document.visibilityState!=='hidden')syncCloudDrafts().catch(()=>{});};
+export function startDraftSync(follow) {
+  let checking=false;
+  const sync=()=>{
+    if(document.visibilityState==='hidden') return;
+    syncCloudDrafts().catch(()=>{});
+    if (!checking && follow) {
+      checking=true;
+      recoverDeliveries(db.value,follow).catch(()=>{}).finally(()=>{checking=false;});
+    }
+  };
+  const stop=watch([db,()=>useUserStore().authenticatedToken],sync);
   sync();const timer=setInterval(sync,60000);window.addEventListener('online',sync);document.addEventListener('visibilitychange',sync);
-  return ()=>{clearInterval(timer);window.removeEventListener('online',sync);document.removeEventListener('visibilitychange',sync);};
+  return ()=>{stop();clearInterval(timer);window.removeEventListener('online',sync);document.removeEventListener('visibilitychange',sync);};
 }

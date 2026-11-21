@@ -61,7 +61,7 @@ function resize() {
   if (next !== size) { uiStore.asideShow = next === 'desktop'; size = next; }
 }
 watch(() => route.path, () => { if (isMobile.value) uiStore.asideShow = false; });
-onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync(); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
+onMounted(() => { stopDraftList=startDraftList(); stopDraftSync=startDraftSync((...args)=>writerRef.value?.followDelivery(...args)); uiStore.writerRef = writerRef; window.addEventListener('resize', resize); });
 onBeforeUnmount(() => { clearTimeout(railTimer);stopDraftList?.(); stopDraftSync?.(); uiStore.writerRef = null; window.removeEventListener('resize', resize); });
 </script>
 <style scoped>
