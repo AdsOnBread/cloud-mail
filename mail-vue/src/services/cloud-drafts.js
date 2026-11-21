@@ -406,12 +406,25 @@ async function reconcileSchedule(database,api,row) {
   userDraftStore().scheduledRevision++;
   return {pending:false};
 }
-export async function scheduleCloudDraft(id,sendAt) {
+async function syncForDelivery(database, id, editToken) {
+  // A sync already pulling cloud changes has passed its local-upload step.
+  // If we joined that pass, upload the exact revision the sender confirmed.
+  const joined = locks.has(database);
+  const result = await syncCloudDrafts();
+  if (!joined || result.conflicts[id] || db.value !== database) return result;
+  const draft = await database.draft.get(id);
+  if (draft?.dirty && !draft.deleted && draft.editToken === editToken && db.value === database)
+    return syncCloudDrafts();
+  return result;
+}
+
+export async function scheduleCloudDraft(id,sendAt,editToken) {
   const database=db.value,api=sessionAPI(database);
-  const synced=await syncCloudDrafts();
+  editToken ??= (await database.draft.get(id))?.editToken;
+  const synced=await syncForDelivery(database,id,editToken);
   const row=await database.transaction('rw',database.draft,async()=>{
     const current=await database.draft.get(id);
-    if(synced.conflicts[id] || !current || current.deleted || current.dirty || !current.cloudDraftId || current.sendAttemptId || current.pendingSchedule)
+    if(synced.conflicts[id] || !current || current.editToken !== editToken || current.deleted || current.dirty || !current.cloudDraftId || current.sendAttemptId || current.pendingSchedule)
       throw new Error('Open the current saved draft before scheduling this message.');
     const pending={...current,schedulingError:null,pendingSchedule:{version:current.cloudVersion,sendAt},syncState:'scheduling'};
     await database.draft.put(pending);
@@ -421,9 +434,11 @@ export async function scheduleCloudDraft(id,sendAt) {
   if(result.error)throw new Error(result.error);
   return result;
 }
-export async function sendCloudDraft(id) {
+export async function sendCloudDraft(id, editToken) {
   const database=db.value,api=sessionAPI(database);
   const before=await database.draft.get(id);
+  editToken ??= before?.editToken;
+  if (before?.editToken !== editToken) throw new Error('Reopen the current draft before sending.');
   if(before?.pendingSchedule)throw new Error('Check Scheduled before sending this message.');
   if(before?.sendAttemptId) {
     const attempt=await api.get(`/v1/send-attempts/${before.sendAttemptId}`,{noMsg:true});
@@ -439,8 +454,8 @@ export async function sendCloudDraft(id) {
     if(attempt.state==='uncertain')throw new Error(attempt.message||'Delivery is uncertain. Check Sent before sending another copy.');
     if(attempt.state==='failed')await database.draft.put({...before,sendAttemptId:null});
   }
-  const synced=await syncCloudDrafts();if(synced?.conflicts?.[id])throw new Error('Both versions were saved in Drafts. Review the saved copy before sending.');const row=await database.draft.get(id);
-  if(!row||row.deleted||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
+  const synced=await syncForDelivery(database,id,editToken);if(synced?.conflicts?.[id])throw new Error('Both versions were saved in Drafts. Review the saved copy before sending.');const row=await database.draft.get(id);
+  if(!row||row.editToken!==editToken||row.deleted||row.dirty||!row.cloudDraftId)throw new Error('Your edits were preserved in Drafts. Open the saved draft before sending.');
   const sendFingerprint = await signature(await withFiles(database, row));
   const sendAttemptId = await database.transaction('rw', database.draft, async () => {
     const current = await database.draft.get(id);

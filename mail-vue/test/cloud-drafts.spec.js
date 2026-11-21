@@ -42,6 +42,28 @@ beforeEach(()=>{
  http.delete.mockImplementation(async path=>{const id=Number(path.split('/').at(-1));state.remote.delete(id);state.events.push({seq:state.events.length+1,draftId:id,operation:'delete'});return {deleted:true};});
 });
 describe('Cloud draft synchronization',()=>{
+ it.each(['send','schedule'])('uploads a newly saved attachment before %s when an earlier sync is pulling mail', async action => {
+   let release;
+   const pulling = new Promise(resolve => {
+     http.get.mockImplementationOnce(async () => {
+       resolve();
+       await new Promise(done => { release = done; });
+       return {changes:[], cursor:0, hasMore:false};
+     });
+   });
+   const started = syncCloudDrafts();
+   await pulling;
+   const file = {filename:'report.txt',content:'aGVsbG8=',contentType:'text/plain'};
+   const row = await saveLocalDraft(input({attachments:[file]}));
+   const when = Math.floor(Date.now()/1000)+3600;
+   const deliver = action === 'send' ? sendCloudDraft(row.draftId,row.editToken) : scheduleCloudDraft(row.draftId,when,row.editToken);
+   await new Promise(resolve => setTimeout(resolve,0));
+   release();
+   await started;
+   await deliver;
+   expect(http.post.mock.calls.filter(([url]) => url.endsWith('/'+action))).toHaveLength(1);
+   expect(http.post.mock.calls.find(([url]) => url === '/v1/drafts')?.[1].attachments).toEqual([file]);
+ });
  it('saves offline and imports a legacy draft exactly once with its files and Bcc intact',async()=>{
   Object.defineProperty(navigator,'onLine',{value:false});const row=await saveLocalDraft(input({bcc:['hidden@example.net'],attachments:[{filename:'report.txt',content:'aGVsbG8=',contentType:'text/plain'}]}));
   expect((await db.value.draft.get(row.draftId)).syncState).toBe('offline');await syncCloudDrafts();expect(http.post).not.toHaveBeenCalled();

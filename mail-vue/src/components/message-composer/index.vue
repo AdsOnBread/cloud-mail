@@ -1185,13 +1185,13 @@ async function sendEmail(sendAt=null) {
     await editor.value?.ready?.();
     await pendingDefault;
     // Save first so authentication/network failures cannot lose a message or its Bcc recipients.
-    await persistDraft();
+    const saved = await persistDraft();
     if(sendAt){
-      const result=await scheduleCloudDraft(form.draftId,sendAt);
+      const result=await scheduleCloudDraft(saved.draftId,sendAt,saved.editToken);
       feedback.show(result.pending?"Awaiting scheduling confirmation. Check Scheduled or Drafts when connected.":"Send scheduled for "+new Date(sendAt*1000).toLocaleString()+".");
       show.value=false;resetForm();emit("closed");return;
     }
-    const sent = await sendCloudDraft(form.draftId);
+    const sent = await sendCloudDraft(saved.draftId,saved.editToken);
     sent.forEach((message) => emailStore.sendScroll?.addItem?.(message));
     emailStore.conversationRevision++;
     const recent = recipientFields.flatMap((field) => form[field]);
