@@ -315,10 +315,11 @@ function who(row) {
 let generation = 0,
   detailRequest = 0,
   interaction = 0,
+  navigations = 0,
   disposed = false;
 watch(
   () => route.fullPath,
-  () => interaction++,
+  () => { interaction++; navigations++; },
   { flush: "sync" },
 );
 async function load() {
@@ -454,7 +455,7 @@ async function cancel(batch) {
       db.value === database &&
       identity.value === owner &&
       localStorage.getItem("token") === session;
-  let context = interaction;
+  const context = interaction;
   const origin = route.fullPath;
   busy.value = true;
   error.value = "";
@@ -497,27 +498,20 @@ async function cancel(batch) {
           ? "Message returned to Drafts."
           : canceled.length + " messages returned to Drafts.";
       feedback.show(notice);
-      let reopen =
-        batch.length === 1 &&
-        context === interaction &&
-        route.fullPath === origin;
-      if (reopen && canceled.includes(messageId.value)) {
-        await router.replace({ name: "scheduled" });
-        reopen =
-          route.name === "scheduled" &&
-          !messageId.value &&
-          interaction === context + 1;
-        context = interaction;
-      }
       drafts.scheduledRevision++;
       await syncCloudDrafts();
-      if (reopen && context === interaction && sameMailbox()) {
-        const draft = await database.draft
-          .where("cloudDraftId")
-          .equals(canceled[0])
-          .first();
-        if (draft && context === interaction && sameMailbox())
-          await openSavedDraft(draft.draftId, router, "draft");
+      const stillAtOrigin = () => sameMailbox() && interaction === context && route.fullPath === origin;
+      if (batch.length === 1 && stillAtOrigin()) {
+        const draft = await database.draft.where("cloudDraftId").equals(canceled[0]).first();
+        if (!draft || !stillAtOrigin()) return;
+        if (canceled.includes(messageId.value)) {
+          const before = navigations;
+          const failure = await router.replace({name:"scheduled"});
+          // Leaving a filtered reader also resets search. Only a competing navigation
+          // or mailbox switch should interrupt reopening the newly editable draft.
+          if (failure || !sameMailbox() || route.name !== "scheduled" || messageId.value || navigations !== before + 1) return;
+        }
+        await openSavedDraft(draft.draftId, router, "draft");
       }
     } else await load();
   } catch (e) {
