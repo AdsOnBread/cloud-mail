@@ -286,7 +286,7 @@ const targets = computed(() =>
 const readTargets = computed(()=>messageId.value ? (item.value ? [item.value] : []) : targets.value);
 const readAction = computed(()=>readTargets.value.some(row=>row.unread) ? 'Mark as read' : 'Mark as unread');
 const readIcon = unread => unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
-const reading = ref(new Set());
+const reading = ref(new Map());
 const selectionOptions = ['All','None','Read','Unread','Starred','Unstarred'];
 const filtered = computed(() =>
   Boolean(search.query || Object.keys(search.filters).length),
@@ -377,12 +377,20 @@ async function loadDetail() {
   error.value = "";
   detailError.value = false;
   if (!item.value) return;
+  const id=messageId.value, owner=identity.value, session=localStorage.getItem('token');
+  const current=()=>!disposed && request===detailRequest && id===messageId.value &&
+    owner===identity.value && session===localStorage.getItem('token');
   try {
-    const data = await http.get("/v1/scheduled/" + messageId.value, {
+    // A row action can still be writing its unread mark when the reader opens.
+    // Fetch the authoritative state only after that write has finished.
+    const pending=reading.value.get(id);
+    if (pending) await pending;
+    if (!current()) return;
+    const data = await http.get("/v1/scheduled/" + id, {
       noMsg: true,
     });
     if (
-      request === detailRequest &&
+      current() &&
       data.draftId === messageId.value &&
       (scope.value == null || data.accountId === scope.value)
     ) {
@@ -436,7 +444,9 @@ async function setRead(batch,unread,leaveReader=false) {
   const current=()=>!disposed && identity.value===owner && localStorage.getItem("token")===session;
   const focused=document.activeElement;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
-  for (const {draftId} of messages) reading.value.add(draftId);
+  let finish;
+  const pending=new Promise(resolve=>{finish=resolve});
+  for (const {draftId} of messages) reading.value.set(draftId,pending);
   try {
     await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true});
     if (!current()) return;
@@ -456,6 +466,7 @@ async function setRead(batch,unread,leaveReader=false) {
     }
   } finally {
     for (const {draftId} of messages) reading.value.delete(draftId);
+    finish();
   }
 }
 function toggle(id) {
