@@ -1,5 +1,5 @@
 <template>
-  <TransitionGroup name="mail-feedback" tag="div" class="mail-feedback-stack">
+  <TransitionGroup name="mail-feedback" @before-leave="hideActions" tag="div" class="mail-feedback-stack">
     <div v-for="notice in notices" :key="notice.id" class="mail-feedback"
       @mouseenter="pause" @mouseleave="schedule" @focusin="pause" @focusout="schedule">
       <span role="status">{{ notices.length > 1 && notice.holding && notice.subject ? 'Sending “' + notice.subject + '”…' : notice.message }}</span>
@@ -45,6 +45,7 @@ async function openMessage(event,navigate) {
     document.querySelector(scheduled ? '.scheduled-view [data-reader-back]' : '.conversation-view [data-reader-back]')?.focus({preventScroll:true});
   feedback.dismiss();
 }
+function hideActions(element) { element.inert=true; }
 let timer;
 function pause() { clearTimeout(timer); }
 function schedule() {
