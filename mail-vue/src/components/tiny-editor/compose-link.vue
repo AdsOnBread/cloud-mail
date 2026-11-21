@@ -109,10 +109,6 @@ function linkLabel(link) {
   const label = link.textContent;
   return link.getAttribute("data-mce-selected") === "inline-boundary" ? label.replace(/^\uFEFF|\uFEFF$/g, "") : label;
 }
-function selectionKey(event) {
-  return /^(?:Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown)$/.test(event.key) ||
-    ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a");
-}
 function fragmentAt(link, point) {
   return Math.max(0, Array.from(link.getClientRects()).findIndex(rect =>
     point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom));
@@ -149,8 +145,7 @@ function followCaret() {
 }
 function editorKey(event) {
   if (!panel.value?.preview || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (selectionKey(event) || event.isComposing || event.key.length === 1 ||
-      ["Backspace","Delete","Enter","Shift"].includes(event.key)) return;
+  if (event.isComposing || (event.key !== "Tab" && event.key !== "Escape")) return;
   if (event.key === "Tab" && !event.shiftKey) {
     event.preventDefault();
     box.value?.querySelector("a[href],button")?.focus();
@@ -263,18 +258,29 @@ function remove() {
     if (anchor?.isConnected) ed.dom.remove(anchor, true);
   });
 }
-// A native selection moves after keydown. Follow repeated arrows while held,
-// then check the final range on keyup (including a single quick keystroke).
+// Native movement happens after keydown and includes platform editing commands
+// such as macOS Control+E. Ignore shortcuts that leave the selection untouched.
 watch(() => props.editor, (ed, _, cleanup) => {
   if (!ed) return;
-  let navigating = false;
-  const down = event => { navigating = !event.isComposing && selectionKey(event); };
-  const moved = () => { if (navigating) followCaret(); };
-  const stop = () => { navigating = false; };
-  const up = event => {
-    if (navigating && selectionKey(event)) followCaret();
-    stop();
+  let before;
+  const endpoints = () => {
+    const selection = ed.getDoc().getSelection();
+    return [selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset];
   };
+  const down = event => {
+    before = !event.defaultPrevented && !event.isComposing && !["Tab","Escape"].includes(event.key)
+      ? endpoints() : null;
+  };
+  const moved = () => {
+    if (!before) return;
+    const after = endpoints();
+    if (after.some((value, i) => value !== before[i])) {
+      before = after;
+      followCaret();
+    }
+  };
+  const stop = () => { before = null; };
+  const up = () => { moved(); stop(); };
   const input = event => {
     if (!event.isComposing && /^(?:insertText|insertParagraph|insertLineBreak|insertFromPaste|delete)/.test(event.inputType)) followCaret();
   };
