@@ -22,7 +22,7 @@
           width="20"
         /></button
     ></template>
-    <div class="move-picker" @keydown.esc.stop.prevent="dismiss">
+    <div ref="menu" class="move-picker" @keydown.esc.stop.prevent="dismiss" @keydown.down.prevent="step(1)" @keydown.up.prevent="step(-1)">
       <strong>Move to</strong
       ><input
         ref="input"
@@ -30,6 +30,7 @@
         type="search"
         aria-label="Find destination"
         placeholder="Find a label"
+        @keydown.enter.prevent="menu?.querySelector('button')?.click()"
       />
       <button
         v-for="item in destinations"
@@ -70,6 +71,7 @@ const labels = useMailLabels(),
   open = ref(false),
   query = ref(""),
   input = ref(),
+  menu = ref(),
   trigger = ref();
 let anchors = [];
 const destinations = computed(() =>
@@ -91,6 +93,13 @@ watch(open, (value) => {
     anchors = [...props.ids];
   }
 });
+function step(direction) {
+  const buttons=Array.from(menu.value?.querySelectorAll('button') || []);
+  if (!buttons.length) return;
+  const index=buttons.indexOf(document.activeElement);
+  const next=index<0 ? (direction>0 ? 0 : buttons.length-1) : (index+direction+buttons.length)%buttons.length;
+  buttons[next].focus();
+}
 function dismiss() {
   open.value = false;
   trigger.value?.focus();
@@ -135,6 +144,6 @@ function choose(id) {
 }
 .move-picker button:hover,
 .move-picker button:focus-visible {
-  background: var(--mail-read);
+  background: var(--mail-hover);
 }
 </style>

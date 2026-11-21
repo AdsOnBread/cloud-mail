@@ -38,24 +38,17 @@
         <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in ['All','None','Read','Unread']" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
       </el-dropdown>
       <template v-if="targets.length">
-        <button
-          v-if="canDelete"
-          class="mail-icon"
-          data-tip="Restore"
-          aria-label="Restore messages"
-          :disabled="busy"
-          @click="act('restore', targets)"
-        >
-          <Icon icon="material-symbols:restore-from-trash-outline" width="20" />
+        <button v-if="canDelete" class="toolbar-text" :disabled="busy" @click="act('purge', targets)">Delete forever</button>
+        <span v-if="canDelete" class="toolbar-divider" aria-hidden="true"></span>
+        <button class="mail-icon" :data-tip="readLabel(targetUnread)" :aria-label="readLabel(targetUnread)" :disabled="busy || loading"
+          @click="setRead(targets,targetUnread)">
+          <Icon :icon="readIcon(targetUnread)" width="20"/>
         </button>
-        <button
-          v-if="canDelete"
-          class="toolbar-text"
-          :disabled="busy"
-          @click="act('purge', targets)"
-        >
-          Delete forever
-        </button>
+        <MovePicker v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
+        <el-dropdown v-if="canDelete" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
+          <button class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item @click="act('restore',targets)">Restore to previous location</el-dropdown-item></el-dropdown-menu></template>
+        </el-dropdown>
       </template>
       <button
         v-else-if="!messageId"
@@ -172,9 +165,14 @@
         @open="open(message)"
         @select="toggle(message.emailId)"
       >
-        <template v-if="canDelete" #actions>
+        <template #actions>
+          <button class="mail-icon" :data-tip="readLabel(message.unread===0)" :aria-label="readLabel(message.unread===0)" :disabled="busy || loading"
+            @click="setRead([message.emailId],message.unread===0)">
+            <Icon :icon="readIcon(message.unread===0)" width="20"/>
+          </button>
           <button
             class="mail-icon"
+            v-if="canDelete"
             data-tip="Restore"
             aria-label="Restore message"
             :disabled="busy"
@@ -187,6 +185,7 @@
           </button>
           <button
             class="mail-icon"
+            v-if="canDelete"
             data-tip="Delete forever"
             aria-label="Delete forever"
             :disabled="busy"
@@ -214,6 +213,8 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
+import MovePicker from "@/components/mail-labels/move.vue";
+import {useMailLabels} from "@/store/mail-labels";
 import SearchOptions from "@/components/mail-search-options.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import {downloadablePart} from "@/utils/private-files";
@@ -232,6 +233,7 @@ const route = useRoute(),
   search = useMailSearchStore(),
   mail = useEmailStore();
 const account = useAccountStore();
+const labels = useMailLabels();
 const mailbox = computed(() =>
   account.currentAccount.allReceive ? undefined : account.currentAccountId,
 );
@@ -253,6 +255,30 @@ const targets = computed(() =>
       : []
     : selected.value,
 );
+const targetUnread=computed(()=>messageId.value ? detail.value?.unread===0 : messages.value.some(m=>selected.value.includes(m.emailId) && m.unread===0));
+const readIcon=unread=>unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
+const readLabel=unread=>unread ? 'Mark as read' : 'Mark as unread';
+async function setRead(ids,read) {
+  if (busy.value || loading.value || !ids.length) return;
+  busy.value=true;
+  const request=revision;
+  try {
+    await http.post('/v1/messages/trash-read',{emailIds:ids,read});
+    mail.conversationRevision++;
+    if (disposed || request!==revision) return;
+    if (detail.value && ids.includes(detail.value.emailId)) {
+      detail.value.unread=Number(read);
+      if (!read) back();
+    } else if (search.filters.isUnread && read) await load();
+    else for (const message of messages.value) if (ids.includes(message.emailId)) message.unread=Number(read);
+  } catch(e) {
+    if (!disposed && request===revision) error.value=e.message || 'Could not update read status.';
+  } finally {busy.value=false;}
+}
+function moveTo({labelId},ids) {
+  const name=labelId ? labels.items.find(item=>item.id===labelId)?.name : 'Inbox';
+  if (name) return act('move-from-trash',ids,{labelId,name});
+}
 const filtered=computed(()=>Object.keys(search.filters).length>0);
 function toggleFilter(key) {
   const next={...search.filters};
@@ -333,6 +359,11 @@ async function loadDetail(id) {
       )
         throw new Error("This message is no longer in Trash.");
       detail.value = value;
+      if (value.unread===0) {
+        await http.post('/v1/messages/trash-read',{emailIds:[id],read:true});
+        mail.conversationRevision++;
+        if (request===revision) detail.value.unread=1;
+      }
     }
   } catch (e) {
     if (request === revision)
@@ -364,7 +395,7 @@ function notify(message) {
 async function emptyTrash() {
   await act("purge", null);
 }
-async function act(action, ids) {
+async function act(action, ids, destination) {
   if (busy.value || !canDelete.value) return;
   busy.value = true;
   error.value = "";
@@ -407,12 +438,12 @@ async function act(action, ids) {
     if (disposed || request !== revision) return;
     for (let i = 0; i < ids.length; i += 50) {
       const batch = ids.slice(i, i + 50);
-      await http.post("/v1/messages/" + action, { emailIds: batch });
+      await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) });
       changed += batch.length;
     }
-    if (!disposed)
+    if (!disposed && request===revision)
       notify(
-        count + (action === "purge" ? " permanently deleted." : " restored."),
+        count + (destination ? " moved to " + destination.name + "." : action === "purge" ? " permanently deleted." : " restored."),
       );
   } catch (e) {
     if (e !== "cancel" && e !== "close") {
@@ -423,7 +454,7 @@ async function act(action, ids) {
   } finally {
     if (changed) {
       mail.conversationRevision++;
-      if (!disposed) {
+      if (!disposed && request===revision) {
         const originalError = error.value;
         if (messageId.value) back();
         else await load();
@@ -469,6 +500,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   color: var(--el-text-color-primary);
 }
+.toolbar-divider { height:20px; border-left:1px solid var(--light-border-color); margin:0 6px; }
 .trash-list,
 .trash-detail {
   overflow: auto;

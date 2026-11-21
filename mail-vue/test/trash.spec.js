@@ -79,3 +79,15 @@ it("leaves messages in Trash when the mailbox changes while confirmation is open
   expect(http.post).not.toHaveBeenCalled();
   wrapper.unmount();
 });
+
+it("marks a row read without removing it and preserves the selection for another action", async()=>{
+  http.get.mockResolvedValue({messages:[{...message(1),unread:0}],nextCursor:null});
+  const wrapper=await mountTrash();
+  await wrapper.get('.conversation-row input[type=checkbox]').setValue(true);
+  await wrapper.get('.mail-toolbar [aria-label="Mark as read"]').trigger('click');
+  await flushPromises();
+  expect(http.post).toHaveBeenCalledWith('/v1/messages/trash-read',{emailIds:[1],read:true});
+  expect(wrapper.get('.conversation-row').classes()).toContain('selected');
+  expect(wrapper.find('.mail-toolbar [aria-label="Mark as unread"]').exists()).toBe(true);
+  wrapper.unmount();
+});

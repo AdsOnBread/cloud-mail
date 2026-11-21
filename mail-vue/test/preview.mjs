@@ -148,6 +148,16 @@ const api=createHTTPServer(async(req,res)=>{
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
  else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages/trash-read'){
+   const {emailIds,read}=JSON.parse(body);rows.filter(row=>emailIds.includes(row.emailId)&&row.trashedAt).forEach(row=>row.unread=Number(read));
+   data={messageCount:emailIds.length};
+ }else if(path==='/v1/messages/move-from-trash'){
+   const {emailIds,labelId}=JSON.parse(body);
+   for(const id of emailIds){const row=rows.find(m=>m.emailId===id);if(!row?.trashedAt)continue;row.trashedAt=null;
+     if(labelId){const applied=membership.get(id)||new Set();applied.add(labelId);membership.set(id,applied);}
+     filing.set(id,labelId?null:0);}
+   data={messageCount:emailIds.length};
+ }
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/'))data=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));
  else if(path==='/setting/websiteConfig')data=settings;
