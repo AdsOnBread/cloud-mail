@@ -648,7 +648,7 @@ it('bounds search preparation and resumes a scoped historical index without retu
  await env.db.prepare('INSERT INTO account(account_id,email,user_id) VALUES(7,\'other-alias@example.com\',1)').run();
  const other=await insert({account_id:7,subject:'Other alias',text:'',content:'<p>other</p>'});
  // Simulate messages that existed before search was installed.
- await env.db.batch(['mail_words_insert','mail_words_update','mail_words_delete'].map(name=>env.db.prepare('DROP TRIGGER '+name)));
+ await env.db.batch(['mail_words_insert_v2','mail_words_update_v2','mail_words_delete'].map(name=>env.db.prepare('DROP TRIGGER '+name)));
  await env.db.batch(['mail_word_index','mail_word_pending','mail_word_setup'].map(name=>env.db.prepare('DROP TABLE '+name)));
  await env.db.batch(mailWordSchema().map(sql=>env.db.prepare(sql)));
  expect(await list({folder:'all',excluded:'lantern'})).toEqual({preparingSearch:true});
