@@ -238,7 +238,9 @@ watch([open, customMounted], async ([menu, dialog]) => {
 });
 onBeforeUnmount(releaseAnchor);
 function focusMenu() {
-  if (open.value && !palette.value) colorItem.value?.focus();
+  const focused=document.activeElement;
+  if (open.value && !saving.value && !palette.value && (focused===trigger.value || focused===document.body))
+    colorItem.value?.focus();
 }
 function restoreFocus() {
   nextTick(() => trigger.value?.focus());
