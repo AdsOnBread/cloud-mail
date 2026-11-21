@@ -201,7 +201,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    ${wake} AS wakeAt,${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,${blankMailText(text)} AS html_only,
+    ${wake} AS wakeAt,${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${c.mailScopes ? '' : 'a.name AS mailboxName,'}${senderName} AS senderName,${blankMailText(text)} AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.labelIds') AS labelIds,

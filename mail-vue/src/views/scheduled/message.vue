@@ -73,7 +73,7 @@ const files = computed(
   () => props.detail?.attachments?.filter((f) => !f.contentId) || [],
 );
 const senderContact=computed(()=>({address:props.row.senderEmail,name:props.row.senderName,accountId:props.row.accountId,
-  mailboxEmail:props.row.senderEmail,mailboxName:props.row.senderName}));
+  mailboxEmail:props.row.mailboxName===undefined ? undefined : props.row.senderEmail,mailboxName:props.row.mailboxName}));
 const sender = computed(
   () => props.row.senderName || props.row.senderEmail || "me",
 );
