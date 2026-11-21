@@ -8,7 +8,9 @@ export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 			PRIMARY KEY (user_id,email_id))`,
 		'CREATE INDEX IF NOT EXISTS idx_filing_wake ON conversation_filing(user_id,notified,wake_at)'
 	];
-	if (tables.has('cloud_drafts')) statements.push(`CREATE INDEX IF NOT EXISTS idx_reply_draft_activity
+	if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_due_drafts ON cloud_drafts(json_extract(data,'$.scheduledAt'),draft_id) WHERE state='scheduled'");
+    if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_sending_drafts ON cloud_drafts(updated_at) WHERE state='sending'");
+    if (tables.has('cloud_drafts')) statements.push(`CREATE INDEX IF NOT EXISTS idx_reply_draft_activity
 		ON cloud_drafts(user_id,json_extract(data,'$.emailId'),updated_at)
 		WHERE state='draft' AND json_extract(data,'$.sendType')='reply'`);
 	if (tables.has('email')) statements.push(`CREATE TRIGGER IF NOT EXISTS filing_cleanup AFTER DELETE ON email BEGIN

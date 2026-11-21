@@ -49,25 +49,27 @@ export async function prepare(c,userId,input,mode) {
   return value;
 }
 function canonical(value) {if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])]));return value;}
-export async function send(c,userId,input,{draftId,mode}={}) {
+export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
   await permission(c,userId,'email:send');
   const key=input.idempotencyKey;
+  if(!scheduled && typeof key==='string' && key.startsWith('cloudmail.schedule/'))throw new BizError('Choose another idempotency key.',400);
   if(typeof key!=='string'||key.length<8||key.length>128)throw new BizError('Supply an idempotency key of 8 to 128 characters.',400);
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(canonical({draftId: draftId||null,mode:mode||null,input}))))),b=>b.toString(16).padStart(2,'0')).join('');
   const prior=await c.env.db.prepare('SELECT * FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(userId,key).first();
   if(prior) return replay(prior,hash);
+  const sourceState=scheduled?'scheduled':'draft';
   let draft,payload;
   if(draftId) {
-    draft=await drafts.get(c,userId,positive(draftId));
-    if(input.version!==draft.version||draft.state!=='draft')throw conflict(draft);
+    draft=await drafts.get(c,userId,positive(draftId),scheduled);
+    if(input.version!==draft.version||draft.state!==sourceState)throw conflict(draft);
     payload=await drafts.payload(c,userId,draft);
   } else payload=await prepare(c,userId,input,mode);
   // The unique attempt and draft claim are committed together, before any delivery can occur.
   const statements=[c.env.db.prepare(`INSERT OR IGNORE INTO send_attempts(user_id,idempotency_key,request_hash,draft_id,state)
-    SELECT ?,?,?,?,'prepared' ${draft?"WHERE EXISTS(SELECT 1 FROM cloud_drafts WHERE user_id=? AND draft_id=? AND version=? AND state='draft')":''}`)
-    .bind(userId,key,hash,draft?.draftId||null,...(draft?[userId,draft.draftId,draft.version]:[]))];
-  if(draft)statements.push(c.env.db.prepare(`UPDATE cloud_drafts SET state='sending',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=? AND state='draft'
-    AND EXISTS(SELECT 1 FROM send_attempts WHERE user_id=? AND idempotency_key=? AND request_hash=?)`).bind(userId,draft.draftId,draft.version,userId,key,hash));
+    SELECT ?,?,?,?,'prepared' ${draft?"WHERE EXISTS(SELECT 1 FROM cloud_drafts WHERE user_id=? AND draft_id=? AND version=? AND state=?)":''}`)
+    .bind(userId,key,hash,draft?.draftId||null,...(draft?[userId,draft.draftId,draft.version,sourceState]:[]))];
+  if(draft)statements.push(c.env.db.prepare(`UPDATE cloud_drafts SET state='sending',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=? AND state=?
+    AND EXISTS(SELECT 1 FROM send_attempts WHERE user_id=? AND idempotency_key=? AND request_hash=?)`).bind(userId,draft.draftId,draft.version,sourceState,userId,key,hash));
   await c.env.db.batch(statements);
   const attempt=await c.env.db.prepare("UPDATE send_attempts SET state='dispatching' WHERE user_id=? AND idempotency_key=? AND state='prepared' AND request_hash=? RETURNING *").bind(userId,key,hash).first();
   if(!attempt) {
@@ -83,7 +85,7 @@ export async function send(c,userId,input,{draftId,mode}={}) {
       c.env.db.prepare("UPDATE send_attempts SET state='sent',result=? WHERE user_id=? AND idempotency_key=?").bind(JSON.stringify(result),userId,key),
       ...(draft?[c.env.db.prepare("UPDATE cloud_drafts SET state='sent',data='{}',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=?").bind(userId,draft.draftId)]:[])
     ]);
-    if(draft)await drafts.cleanFiles(c,userId,draft.draftId);
+    if(draft)await drafts.cleanFiles(c,userId,draft.draftId).catch(()=>console.warn('sent_draft_cleanup_failed'));
     console.log(JSON.stringify({event:'send_attempt',attemptId:key,userId,state:'sent'}));
     return result;
   } catch(error) {
@@ -93,7 +95,7 @@ export async function send(c,userId,input,{draftId,mode}={}) {
     const result={state,attemptId:key,message:known?error.message:'Delivery may have occurred. Check Sent and provider activity before sending another copy.'};
     await c.env.db.batch([
       c.env.db.prepare('UPDATE send_attempts SET state=?,result=? WHERE user_id=? AND idempotency_key=?').bind(state,JSON.stringify(result),userId,key),
-      ...(draft?[c.env.db.prepare('UPDATE cloud_drafts SET state=?,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=?').bind(known?'draft':'uncertain',userId,draft.draftId)]:[])
+      ...(draft?[c.env.db.prepare(`UPDATE cloud_drafts SET state=?,data=CASE WHEN ? THEN json_set(data,'$.scheduleError',?) ELSE data END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=?`).bind(known?(scheduled?'schedule_failed':'draft'):'uncertain',scheduled?1:0,result.message,userId,draft.draftId)]:[])
     ]);
     console.log(JSON.stringify({event:'send_attempt',attemptId:key,userId,state}));
     return result;

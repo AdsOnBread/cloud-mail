@@ -37,12 +37,12 @@ export async function get(c,userId,id,includeDeleted=false) {
     c.env.db.prepare('SELECT attachment_id,filename,mime_type,size,content_id FROM draft_files WHERE user_id=? AND draft_id=? ORDER BY attachment_id').bind(userId,id)
   ]);
   const row=rows.results[0];
-  if(!row || (!includeDeleted && ['deleted','sent'].includes(row.state))) throw new BizError('Draft not found.',404);
+  if(!row || (!includeDeleted && (['deleted','sent'].includes(row.state) || JSON.parse(row.data).scheduledAt!=null))) throw new BizError('Draft not found.',404);
   return decode(row,attachments.results);
 }
 export async function list(c,userId,p={}) {
   const limit=pageSize(p.limit),cursor=p.cursor?positive(p.cursor):0;
-  const rows=(await c.env.db.prepare(`SELECT d.draft_id FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id WHERE d.user_id=? AND d.state NOT IN ('deleted','sent') AND a.is_del=0 AND d.draft_id>? ORDER BY d.draft_id LIMIT ?`).bind(userId,cursor,limit+1).all()).results;
+  const rows=(await c.env.db.prepare(`SELECT d.draft_id FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id WHERE d.user_id=? AND d.state NOT IN ('deleted','sent') AND json_extract(d.data,'$.scheduledAt') IS NULL AND a.is_del=0 AND d.draft_id>? ORDER BY d.draft_id LIMIT ?`).bind(userId,cursor,limit+1).all()).results;
   return {drafts:await Promise.all(rows.slice(0,limit).map(r=>get(c,userId,r.draft_id))),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].draft_id:null};
 }
 export async function changes(c,userId,p={}) {

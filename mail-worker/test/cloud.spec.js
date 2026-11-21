@@ -331,3 +331,61 @@ describe('Attachment retention',()=>{
    await mail.trash(c(),1,[first.email_id]);await mail.trash(c(),1,[first.email_id],'purge');const retained=await env.r2.get('attachments/shared.txt');expect(await retained.text()).toBe('shared');
  });
 });
+
+describe('Scheduled send',()=>{
+ it('removes queued messages from draft sync, isolates owners, and cancels back to the same editable draft',async()=>{
+   const {schedule,scheduledList,cancel,deliverDue}=await import('../src/cloud/scheduled');
+   const d=await draft(),sendAt=Math.floor(Date.now()/1000)+1800;
+   const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt});
+   expect(await schedule(c(),1,d.draftId,{version:d.version,sendAt})).toEqual(queued);
+   expect((await drafts.list(c(),1)).drafts).toEqual([]);
+   expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('delete');
+   expect((await scheduledList(c(),1))[0]).toMatchObject({draftId:d.draftId,sendAt});
+   expect(await scheduledList(c(),2)).toEqual([]);
+   await expect(cancel(c(),2,d.draftId,queued.version)).rejects.toMatchObject({code:404});
+   await expect(send(c(),1,{version:queued.version,idempotencyKey:'manual-while-scheduled'},{draftId:d.draftId})).rejects.toMatchObject({code:404});
+   await deliverDue(c());
+   await cancel(c(),1,d.draftId,queued.version);
+   expect((await drafts.get(c(),1,d.draftId))).toMatchObject({state:'draft',content:d.content});
+   expect((await drafts.changes(c(),1)).changes.at(-1).operation).toBe('upsert');
+ });
+ it('dispatches a due internal message only once even when two ticks overlap',async()=>{
+   const {schedule,deliverDue,scheduledList}=await import('../src/cloud/scheduled');
+   const d=await draft();
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+120});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await Promise.all([worker.scheduled({cron:'* * * * *'},bindings()),worker.scheduled({cron:'* * * * *'},bindings())]);
+   await deliverDue(c());
+   expect((await drafts.get(c(),1,d.draftId,true)).state).toBe('sent');
+   expect(await scheduledList(c(),1)).toEqual([]);
+   expect((await env.db.prepare("SELECT COUNT(*) n FROM send_attempts WHERE state='sent'").first()).n).toBe(1);
+   expect((await env.db.prepare("SELECT COUNT(*) n FROM email WHERE type=1 AND user_id=1").first()).n).toBe(1);
+ });
+ it('keeps the original draft editable when permission is revoked before delivery',async()=>{
+   const {schedule,deliverDue,scheduledList,cancel}=await import('../src/cloud/scheduled');
+   const d=await draft(), when=Math.floor(Date.now()/1000)+120;
+   await expect(schedule(c(),1,d.draftId,{version:d.version,sendAt:1})).rejects.toMatchObject({code:400});
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:when});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(d.draftId).run();
+   await env.db.prepare("UPDATE user SET status=1 WHERE user_id=1").run();
+   await deliverDue(c());
+   await env.db.prepare("UPDATE user SET status=0 WHERE user_id=1").run();
+   const [failed]=await scheduledList(c(),1);
+   expect(failed).toMatchObject({state:'schedule_failed',draftId:d.draftId});
+   expect((await env.db.prepare('SELECT COUNT(*) n FROM email').first()).n).toBe(0);
+   await cancel(c(),1,d.draftId,failed.version);
+   expect((await drafts.get(c(),1,d.draftId)).content).toBe(d.content);
+ });
+ it.each(['prepared','dispatching'])('reconciles interrupted %s attempts without repeating a possible delivery', async state=>{
+   const {schedule,deliverDue,scheduledList}=await import('../src/cloud/scheduled');
+   const d=await draft();
+   await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+60});
+   const key=(await drafts.get(c(),1,d.draftId,true)).scheduleKey;
+   await env.db.prepare("INSERT INTO send_attempts(user_id,idempotency_key,request_hash,draft_id,state) VALUES(1,?,'interrupted',?,?)").bind(key,d.draftId,state).run();
+   await env.db.prepare("UPDATE cloud_drafts SET state='sending',data=json_set(data,'$.scheduledAt',unixepoch()-3600),updated_at=datetime('now','-30 minutes') WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());await deliverDue(c());
+   const delivered=(await env.db.prepare('SELECT COUNT(*) n FROM email WHERE type=1 AND user_id=1').first()).n;
+   expect(delivered).toBe(state==='prepared'?1:0);
+   if(state==='dispatching')expect((await scheduledList(c(),1))[0].state).toBe('uncertain');
+ });
+});

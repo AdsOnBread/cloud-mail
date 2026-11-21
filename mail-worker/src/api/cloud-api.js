@@ -4,6 +4,7 @@ import userContext from '../security/user-context';
 import { activeUser,permission } from '../cloud/auth';
 import * as drafts from '../cloud/drafts';
 import * as mail from '../cloud/mail';
+import {schedule,scheduledList,cancel} from '../cloud/scheduled';
 import { send } from '../cloud/send';
 const root='/v1';const uid=c=>userContext.getUserId(c);
 app.use(root+'/*',async(c,next)=>{await activeUser(c,uid(c));await next();c.header('Cache-Control','private, no-store');});
@@ -15,6 +16,14 @@ app.post(root+'/drafts',async c=>c.json(result.ok(await drafts.save(c,uid(c),awa
 app.put(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.save(c,uid(c),await c.req.json(),c.req.param('id')))));
 app.delete(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.remove(c,uid(c),c.req.param('id'),Number(c.req.query('version'))))));
 app.post(root+'/drafts/:id/send',async c=>c.json(result.ok(await send(c,uid(c),await c.req.json(),{draftId:c.req.param('id')}))));
+app.post(root+'/drafts/:id/schedule',async c=>c.json(result.ok(await schedule(c,uid(c),c.req.param('id'),await c.req.json()))));
+app.get(root+'/scheduled',async c=>c.json(result.ok(await scheduledList(c,uid(c),c.req.query('accountId')))));
+app.get(root+'/scheduled/:id',async c=>{
+  const row=await drafts.get(c,uid(c),c.req.param('id'),true);
+  if(!row.scheduledAt)return c.json({code:404,message:'Scheduled message not found.'},404);
+  return c.json(result.ok(row));
+});
+app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,uid(c),c.req.param('id'),(await c.req.json()).version))));
 app.get(root+'/messages',async c=>c.json(result.ok(await mail.list(c,uid(c),c.req.query()))));
 app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c),c.req.param('id')))));
 app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
