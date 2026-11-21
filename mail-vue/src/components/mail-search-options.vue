@@ -13,7 +13,7 @@
           <div class="people-terms"><input v-for="(_,i) in form[key]" :id="id+'-'+key+(i || '')" :key="i"
             v-model="form[key][i]" :aria-label="i ? names[key]+' '+(i+1) : names[key]" :maxlength="maxPersonTerm" type="text"/></div>
         </div>
-        <label v-for="key in ['subject','q']" :key="key" class="criterion">{{ names[key] }}
+        <label v-for="key in ['subject','q','excluded']" :key="key" class="criterion">{{ names[key] }}
           <input v-model="form[key]" :aria-label="names[key]" maxlength="200" type="text"/>
         </label>
         <div class="criterion">
@@ -84,6 +84,7 @@ import {hasPerm} from '@/perm/perm';
 import {categoryFolders} from '@/utils/inbox-categories';
 import {systemFolders} from './mail-labels/system-folders';
 import {positionMailboxPopup} from './mail-popup-position';
+import {readSearchBar} from '../../../shared/mail-search-words';
 import {sizeCriterion,sizeUnits} from '../../../shared/mail-search-size';
 import {maxPersonTerm,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {centeredRange,olderChoices,parseRangeInput,rangeInput,recentChoices,timeCaption,withinChoices,withoutTime} from './mail-date-time/search-range';
@@ -99,7 +100,7 @@ const dateInput=ref(),dateEntry=ref(),calendar=ref(),calendarOpen=ref(false),cal
 const parsedDate=computed(()=>parseRangeInput(form.value.date || ''));
 let returning=false;
 const sizeInput=ref(), sizeError=ref('');
-const names={from:'From',to:'To',subject:'Subject',q:'Has the words'};
+const names={from:'From',to:'To',subject:'Subject',q:'Has the words',excluded:"Doesn't have"};
 const relativeChoices=[...recentChoices,...olderChoices];
 const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'},
   ...systemFolders.filter(item=>item.id!=='all' && (!item.permission || hasPerm(item.permission))),...categoryFolders]);
@@ -108,8 +109,9 @@ const supportsUnread=computed(()=>form.value.scope!=='draft');
 const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.dateBefore!=null);
 function reset() {
   const f=store.filters, preset=f.olderThan || f.days;
+  const search=props.queryText == null ? {query:store.query,excluded:f.excluded} : readSearchBar(props.queryText);
   form.value={from:f.from ? peopleTerms(f,'from') : [''],to:f.to ? peopleTerms(f,'to') : [''],
-    subject:f.subject || '',q:props.queryText ?? store.query,
+    subject:f.subject || '',q:search.query,excluded:search.excluded || '',
     scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),
     sizeValue:String(f.sizeValue ?? ''),sizeUnit:f.sizeUnit || 'MB',sizeOperator:f.sizeOperator || 'larger',
     date:f.dateCenter || '',
@@ -183,6 +185,7 @@ function apply() {
   }
   setPeopleTerms(next,'from',f.from);setPeopleTerms(next,'to',f.to);
   if (f.subject.trim()) next.subject=f.subject.trim(); else delete next.subject;
+  if (f.excluded.trim()) next.excluded=f.excluded.trim(); else delete next.excluded;
   if (f.hasAttachment) next.hasAttachment=1; else delete next.hasAttachment;
   if (supportsUnread.value && f.isUnread) next.isUnread=1; else delete next.isUnread;
   dismiss();

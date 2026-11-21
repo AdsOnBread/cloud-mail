@@ -93,7 +93,9 @@ import {useI18n} from "vue-i18n";
 const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
-const searchText = ref(mailSearch.query);
+const appliedText=computed(()=>searchBarText(mailSearch.query,mailSearch.filters.excluded));
+const searchText = ref(appliedText.value);
+import {readSearchBar,searchBarText} from '../../../../shared/mail-search-words';
 import {categoryFolders} from "@/utils/inbox-categories";
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name) || categoryFolders.some(item=>item.id===route.name));
 const searchFolder = computed(() => {
@@ -118,10 +120,14 @@ const searchScope = computed(() => {
   return ["trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
 });
 const searchLabelId=computed(()=>route.params.labelId || (searchFolder.value==="label" ? route.query.labelId : undefined));
-watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = mailSearch.query; }, { immediate:true });
-watch(() => mailSearch.query, query => { searchText.value = query; });
+watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = appliedText.value; }, { immediate:true });
+watch(appliedText, value => { searchText.value = value; });
 function submitSearch() {
-  mailSearch.query = searchText.value.trim();
+  const {query,excluded}=readSearchBar(searchText.value);
+  const filters={...mailSearch.filters};
+  if (excluded) filters.excluded=excluded; else delete filters.excluded;
+  mailSearch.$patch(state=>{state.query=query;state.filters=filters;});
+  searchText.value=appliedText.value;
   returnToResults();
 }
 function returnToResults() {
@@ -139,7 +145,7 @@ async function applyAdvanced({scope,query,filters,stillCurrent,origin}) {
   mailSearch.visit(name,labelId);
   mailSearch.query=query;
   mailSearch.filters=filters;
-  searchText.value=query;
+  searchText.value=appliedText.value;
   await nextTick();
   if (!origin?.isConnected && document.activeElement===document.body) document.querySelector('.mail-search [data-search-options]')?.focus({preventScroll:true});
 }

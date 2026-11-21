@@ -1,3 +1,4 @@
+import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-words';
 import {matchesSize,sizeCriterion,storedMessageBytes} from '../../../shared/mail-search-size';
 import {searchDateBounds,withinDateBounds} from '../../../shared/mail-search-date';
 import {matchesPeople,peopleTerms} from '../../../shared/mail-search-people';
@@ -57,12 +58,14 @@ export function draftSearchMatcher(query, filters, accounts) {
   if (!query && !Object.keys(filters).length) return ()=>true;
   const bounds=searchDateBounds(filters),size=sizeCriterion(filters);
   const from=peopleTerms(filters,'from'), to=peopleTerms(filters,'to');
+  const excluded=excludedPhrases(filters.excluded);
   const words=(query || '').toLowerCase(), subject=(filters.subject || '').toLowerCase();
   return draft=>{
     if (!matchesSize(draft.sizeBytes,size) || filters.isUnread || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
     const account=accounts.find(mailbox=>mailbox.accountId===draft.accountId);
     const sender={address:draft.sender || account?.email,name:draft.senderName || account?.name};
-    return matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) &&
+    const fields=[draft.subject,draft.searchBody,sender.address,sender.name,...(draft.recipients || '').split(', ')];
+    return !containsExcluded(fields,excluded) && matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) &&
       (draft.subject || '').toLowerCase().includes(subject) && (!words ||
         [draft.subject,draft.searchBody,draft.preview,sender.address,sender.name,draft.recipients].some(value=>value?.toLowerCase().includes(words)));
   };
