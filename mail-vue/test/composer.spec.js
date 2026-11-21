@@ -315,6 +315,22 @@ describe("composer persistence and sending", () => {
       confirm.mockRestore();
     }
   });
+  it("asks before sending when a reopened draft only retains a removed inline file", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const wrapper = composer();
+    try {
+      await wrapper.vm.openDraft({ subject:"", content:"", text:"", receiveEmail:["person@example.net"],
+        accountId:1, attachments:[{filename:"removed.png",contentId:"removed-photo"}] });
+      await flushPromises();
+      expect(wrapper.find(".attachment-chip").exists()).toBe(false);
+      await wrapper.findAll("button").find(button => button.text() === "Send").trigger("click");
+      expect(confirm).toHaveBeenCalledWith("Send this message without a subject or text in the body?");
+      expect(emailSend).not.toHaveBeenCalled();
+    } finally {
+      wrapper.unmount();
+      confirm.mockRestore();
+    }
+  });
   it("persists removing the last star from an otherwise empty open draft", async () => {
     const wrapper=composer();
     try {

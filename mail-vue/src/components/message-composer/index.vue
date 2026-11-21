@@ -1141,7 +1141,7 @@ function validForSend() {
   return true;
 }
 function isEmptyMessage() {
-  if (form.subject.trim() || form.attachments.length) return false;
+  if (form.subject.trim() || attachedFiles.value.length) return false;
   if (form.plainText) return !form.text.trim();
   const body = new DOMParser().parseFromString(form.content, "text/html").body;
   return !body.textContent.trim() && !body.querySelector("img,hr,table");

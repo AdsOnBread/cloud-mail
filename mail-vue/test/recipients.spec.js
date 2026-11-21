@@ -29,6 +29,7 @@ describe('recipient and draft behavior', () => {
     expect(hasDraftContent(restoreDraft({bcc:['blind@example.com']}))).toBe(true);
     expect(hasDraftContent(restoreDraft({attachments:[{filename:'a.txt'}]}))).toBe(true);
     expect(hasDraftContent(restoreDraft())).toBe(false);
+    expect(hasDraftContent(restoreDraft({attachments:[{contentId:"removed-photo"}]}))).toBe(false);
   });
   it('copies recipient arrays and attachments and notices Cc/Bcc edits in replies', () => {
     const form = restoreDraft({cc:['one@example.com'], bcc:['private@example.com'],attachments:[{filename:'a'}]});

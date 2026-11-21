@@ -55,7 +55,7 @@ export function restoreDraft(draft = {}) {
 }
 
 export function hasDraftContent(draft) {
-  return !!(draft.labelIds?.length || draft.mailboxStarred || draft.subject || draft.content || draft.attachments?.length ||
+  return !!(draft.labelIds?.length || draft.mailboxStarred || draft.subject || draft.content || draft.attachments?.some(file => !file.contentId) ||
     recipientFields.some(field => draft[field]?.length));
 }
 
