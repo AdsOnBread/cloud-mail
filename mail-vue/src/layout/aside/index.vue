@@ -1,6 +1,6 @@
 <template>
   <el-scrollbar class="scroll">
-    <div @keydown.up="stepFolder($event,-1)" @keydown.down="stepFolder($event,1)">
+    <div @keydown.up.exact="stepFolder($event,-1)" @keydown.down.exact="stepFolder($event,1)">
       <router-link class="mobile-brand" to="/inbox"><MailBrand :title="settingStore.settings.title"/></router-link>
       <button v-perm="'email:send'" type="button" class="compose-button" data-tip="Compose" aria-label="Compose message" @click="uiStore.writerRef.openFromButton($event)"><Icon icon="material-symbols:edit-outline" width="24" /><span>Compose</span></button>
       <nav aria-label="Mail folders">
@@ -19,7 +19,7 @@
               :data-folder="folder.id" :class="{'choose-item': activeFolder===folder.id}">
               <router-link :to="{name:folder.id}" class="folder-row" :aria-label="folder.name" :data-tip="folder.name"
                 :aria-description="folderCounts[folder.id] ? folderCounts[folder.id]+' '+(folder.id==='draft' ? 'drafts' : folder.id==='scheduled' ? 'scheduled' : 'unread') : undefined"
-                @keydown.right="focusCategoryOptions">
+                @keydown.right.exact="focusCategoryOptions">
                 <Icon :icon="'material-symbols:'+folder.icon" width="20" height="20"/>
                 <span class="menu-name folder-name">{{ folder.translation ? $t(folder.translation) : folder.name }}</span>
                 <span v-if="folderCounts[folder.id]" class="menu-name draft-count">{{ folderCounts[folder.id] }}</span>
@@ -154,7 +154,7 @@ const labels = useMailLabels(), user=useUserStore();
 const more=ref(false), moreFolders=ref([]);
 const categoryIds=new Set(categoryFolders.map(folder=>folder.id));
 function stepFolder(event,direction) {
-  if(event.defaultPrevented || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey)return;
+  if(event.defaultPrevented)return;
   const selector='.compose-button,.folder-row,.label-heading button,.label-row a,.more-labels';
   if(!event.target.matches(selector))return;
   const rows=Array.from(event.currentTarget.querySelectorAll(selector)).filter(el=>el.getClientRects().length);
@@ -162,6 +162,7 @@ function stepFolder(event,direction) {
   if(next){event.preventDefault();next.focus();}
 }
 function focusCategoryOptions(event) {
+  if(event.defaultPrevented)return;
   const button=event.currentTarget.parentElement.querySelector('.category-trigger');
   if(button){event.preventDefault();button.focus();}
 }

@@ -5,7 +5,7 @@
       @after-enter="focusFirst">
       <template #reference>
         <button ref="trigger" type="button" class="mail-icon category-trigger" :aria-label="title" data-tip="More options"
-          aria-haspopup="menu" :aria-expanded="open" @keydown.down.prevent="open=true">
+          aria-haspopup="menu" :aria-expanded="open" @keydown.down.exact.prevent="open=true">
           <Icon icon="material-symbols:more-vert" width="20"/>
         </button>
       </template>
