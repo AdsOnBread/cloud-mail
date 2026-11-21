@@ -104,6 +104,11 @@ export async function save(c,userId,input,id) {
   if(data.emailId) {
     const source=await replySource(c.env.db,userId,positive(data.emailId));
     if(!source && (!old || data.emailId!==old.emailId)) throw new BizError('Original message not found.',404);
+    // Keep the verified threading headers with a saved reply so Trash expiry cannot strand a scheduled send.
+    if (data.sendType === 'reply') {
+      if (source) data.replyHeaders = {messageId:source.messageId,relation:source.relation};
+      else if (old?.replyHeaders && old.emailId===data.emailId) data.replyHeaders = old.replyHeaders;
+    }
   }
   const clientId=old?.clientId||input.clientId||crypto.randomUUID();
   if(typeof clientId!=='string'||clientId.length>100||!clientId)throw new BizError('Invalid draft import identifier.',400);

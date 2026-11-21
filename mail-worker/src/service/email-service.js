@@ -355,6 +355,7 @@ const emailService = {
 		if (sendType === 'reply') {
 
 			emailRow = await replySource(c.env.db, userId, emailId);
+			if (!emailRow && hooks.replyHeaders) emailRow = { ...hooks.replyHeaders, emailId:null };
 
 			if (!emailRow) {
 				throw new BizError(t('notExistEmailReply'));

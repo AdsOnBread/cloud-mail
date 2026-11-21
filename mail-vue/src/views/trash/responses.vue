@@ -15,6 +15,7 @@ import {onBeforeRouteLeave,onBeforeRouteUpdate} from "vue-router";
 import {Icon} from "@iconify/vue";
 import {ElMessage} from "element-plus";
 import SavedReplies from "@/components/conversation-view/saved-replies.vue";
+import {addresses} from "@/utils/recipients";
 import {userDraftStore} from "@/store/draft";
 import {useUserStore} from "@/store/user";
 import {useUiStore} from "@/store/ui";
@@ -67,7 +68,7 @@ async function open(command,summary) {
     editorType.value ??= (await import("@/components/message-composer/index.vue")).default;
     if (!current()) return;
     activeCommand=command || (draft.sendType==="forward" ? "openForward" :
-      draft.receiveEmail.length + draft.cc.length > 1 ? "openReplyAll" : "openReply");
+      addresses(draft.receiveEmail).length + addresses(draft.cc).length > 1 ? "openReplyAll" : "openReply");
     activeId.value=draft?.draftId;
     editing.value=true;
     await nextTick();

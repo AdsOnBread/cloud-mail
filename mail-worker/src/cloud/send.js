@@ -103,7 +103,7 @@ async function dispatch(c,userId,key,draft,scheduled,loadPayload,claim) {
   let dispatched=false;
   try {
     const payload = await loadPayload();
-    const messages=await emailService.send(c,payload,userId,{beforeDispatch:async ()=>{
+    const messages=await emailService.send(c,payload,userId,{replyHeaders:draft?.replyHeaders,beforeDispatch:async ()=>{
       if (claim && !await claim()) throw new Error('Another request completed this preparation.');
       dispatched=true;
     }});

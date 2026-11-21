@@ -244,6 +244,20 @@ describe('Send attempts',()=>{
  });
 });
 describe('Recoverable Trash',()=>{
+ it('delivers a queued Trash reply after the original expires, using the verified headers',async()=>{
+   const {schedule,deliverDue}=await import('../src/cloud/scheduled');
+   const original=await message({relation:'<prior@example.net>'});await mail.trash(c(),1,[original.email_id]);
+   const reply=await drafts.save(c(),1,{accountId:1,sendType:'reply',emailId:original.email_id,receiveEmail:['person@example.com'],subject:'After expiry',text:'Follow up',
+     replyHeaders:{messageId:'<unverified@example.net>'}});
+   await mail.trash(c(),1,[original.email_id],'purge');
+   const edited=await drafts.save(c(),1,{version:reply.version,text:'Edited after expiry'},reply.draftId);
+   await schedule(c(),1,reply.draftId,{version:edited.version,sendAt:Math.floor(Date.now()/1000)+120});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',unixepoch()-1) WHERE draft_id=?").bind(reply.draftId).run();
+   await deliverDue(c());
+   expect(await env.db.prepare('SELECT in_reply_to,reply_to_email_id,relation,text FROM email WHERE type=1 AND user_id=1').first()).toEqual({
+     in_reply_to:original.message_id,reply_to_email_id:null,relation:'<prior@example.net> '+original.message_id,text:'Edited after expiry'
+   });
+ });
  it('saves and delivers an owned reply without restoring the original and preserves its references', async()=>{
    const original=await message();
    await mail.trash(c(),1,[original.email_id]);
