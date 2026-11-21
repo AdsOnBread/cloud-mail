@@ -331,10 +331,10 @@
     </div>
     <SignatureManager v-if="managerMounted" v-model="managingSignatures" :account-id="form.accountId" @closed="signatureButton?.focus()"/>
     <dialog v-if="recipientNotice" ref="recipientDialog" class="recipient-dialog" role="alertdialog" aria-label="Error"
-      :aria-describedby="recipientNoticeId" @keydown.esc.stop @close="dismissRecipientError">
+      :aria-describedby="recipientNoticeId" @keydown.esc.stop @cancel.prevent="dismissRecipientError" @close="dismissRecipientError">
       <h2>Error</h2>
       <p :id="recipientNoticeId">{{ recipientNotice.message }}</p>
-      <form method="dialog"><button type="submit" autofocus>OK</button></form>
+      <form method="dialog" @submit.prevent="dismissRecipientError"><button type="submit" autofocus>OK</button></form>
     </dialog>
     <PhotoPicker v-if="photosOpen" :submit="insertPickerPhotos" @close="closePhotos" />
     <SchedulePicker ref="schedulePicker" v-model="scheduling" @schedule="sendEmail"/>
@@ -1271,6 +1271,7 @@ async function discardEditor(selected,session=draftSession()){
 }
 function dismissRecipientError() {
   const notice=recipientNotice.value;
+  if (recipientDialog.value?.open) recipientDialog.value.close?.();
   recipientNotice.value=null;
   if (!notice || !show.value || props.dockHidden) return;
   const trigger = notice.trigger;

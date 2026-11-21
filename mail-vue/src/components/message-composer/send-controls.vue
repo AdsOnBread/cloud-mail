@@ -132,4 +132,8 @@ watch(open, async (visible,_,cleanup) => {
   background:transparent;color:inherit;cursor:pointer;font:400 14px/20px Arial,sans-serif;text-align:left;}
 .send-menu button:hover,.send-menu button:focus {background:#eee;outline:0;}
 html.dark .send-menu button:hover,html.dark .send-menu button:focus {background:#393a3e;}
+@media (forced-colors:active) {
+  .send-primary,.send-options,.send-menu {border:1px solid ButtonText;}
+  .send-menu button:focus {outline:2px solid Highlight;outline-offset:-2px;}
+}
 </style>
