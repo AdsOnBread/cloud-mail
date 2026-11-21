@@ -38,12 +38,14 @@
           @click="setRead(targets,targetUnread)">
           <Icon :icon="readIcon(targetUnread)" width="20"/>
         </button>
-        <MovePicker trash v-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
+        <button v-if="canDelete && hasScheduled" class="mail-icon" :aria-label="restoreLabel" :data-tip="restoreLabel"
+          :disabled="busy || loading" @click="act('restore',targets)"><Icon icon="material-symbols:restore-from-trash-outline" width="20"/></button>
+        <MovePicker trash v-else-if="canDelete" :ids="targets" :disabled="busy || loading" @move="moveTo"/>
         <el-dropdown trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu">
           <button ref="moreButton" class="mail-icon" aria-label="More Trash actions" data-tip="More" :disabled="busy || loading"><Icon icon="material-symbols:more-vert" width="20"/></button>
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item @click="trashPicker?.show()">Label as</el-dropdown-item>
-            <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">Restore to previous location</el-dropdown-item>
+            <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">{{restoreLabel}}</el-dropdown-item>
             <template v-if="!messageId">
               <el-dropdown-item class="compact-trash-pager" :disabled="!history.length || busy || loading" @click="previous">Previous page</el-dropdown-item>
               <el-dropdown-item class="compact-trash-pager" :disabled="!nextCursor || busy || loading" @click="next">Next page</el-dropdown-item>
@@ -123,7 +125,7 @@
         </div>
         <div class="message-body">
           <MessageContent :key="detail.emailId" :html="detail.content" :text="detail.text" :subject="detail.subject"
-            :reply="!!(detail.inReplyTo || detail.replyToEmailId)" :resolve-file-url="inlineFileURL"/>
+            :reply="!!(detail.inReplyTo || detail.replyToEmailId)" :file-key="inlineKey" :resolve-file-url="inlineFileURL"/>
           <AttachmentTiles :key="detail.emailId" :files="(detail.attList || []).filter(downloadablePart)" @error="error=$event"/>
         </div>
       </article>
@@ -169,8 +171,8 @@
           <button
             class="mail-icon"
             v-if="canDelete"
-            data-tip="Restore"
-            aria-label="Restore message"
+            :data-tip="message.scheduledDraftId ? 'Restore to Drafts' : 'Restore'"
+            :aria-label="message.scheduledDraftId ? 'Restore to Drafts' : 'Restore message'"
             :disabled="busy"
             @click="act('restore', [message.emailId])"
           >
@@ -217,7 +219,7 @@ import {useMailLabels} from "@/store/mail-labels";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
-import {downloadablePart,inlineImageURL} from "@/utils/private-files";
+import {downloadablePart,inlineImageURL,storedKey} from "@/utils/private-files";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MessageRecipients from "@/components/message-recipients.vue";
@@ -225,6 +227,7 @@ import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useAccountStore } from "@/store/account";
 import { useMailFeedback } from "@/store/mail-feedback";
+import {syncCloudDrafts} from "@/services/cloud-drafts";
 import { useEmailStore } from "@/store/email";
 import http from "@/axios";
 
@@ -256,8 +259,11 @@ const targets = computed(() =>
       : []
     : selected.value,
 );
+const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(row=>selected.value.includes(row.emailId)));
+const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
+const restoreLabel=computed(()=>hasScheduled.value && selectedRows.value.every(row=>row.scheduledDraftId) ? 'Restore to Drafts' : 'Restore to previous location');
 const moreButton=ref(),trashPicker=ref();
-const labelRows=computed(()=>(messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(m=>selected.value.includes(m.emailId)))
+const labelRows=computed(()=>(selectedRows.value)
   .map(m=>({lastEmailId:m.emailId,labelIds:m.labelIds})));
 function rowLabels(message,reader=false) {
   return labels.items.filter(label=>message.labelIds?.includes(label.id) && (reader || label.messages!=="hide"));
@@ -485,6 +491,7 @@ async function act(action, ids, destination) {
       } while (cursor && !disposed);
     }
     if (!ids.length || disposed) return;
+    const unsent=action==='restore' && [detail.value,...messages.value].some(row=>row?.scheduledDraftId && ids.includes(row.emailId));
     const count = ids.length === 1 ? "1 message" : ids.length + " messages";
     if (action === "purge")
       await ElMessageBox.confirm(
@@ -509,6 +516,7 @@ async function act(action, ids, destination) {
       await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) });
       changed += batch.length;
     }
+    if (unsent) syncCloudDrafts().catch(()=>{});
     if (!disposed && request===revision)
       notify(
         count + (destination ? " moved to " + destination.name + "." : action === "purge" ? " permanently deleted." : " restored."),
@@ -536,6 +544,11 @@ function attachmentBlob(file) {
   return http.get("/v1/attachments/" + file.attId + "/content", {
     responseType: "blob",
   });
+}
+function inlineKey(src) {
+  if (detail.value?.scheduledDraftId && src?.startsWith('cid:'))
+    return detail.value.attList.find(file=>file.contentId?.replace(/^<|>$/g,'')===src.slice(4))?.key;
+  return storedKey(src);
 }
 async function inlineFileURL(key) {
   const file = detail.value?.attList?.find((file) => file.key === key);

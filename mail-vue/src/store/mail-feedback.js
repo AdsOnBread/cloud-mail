@@ -30,8 +30,8 @@ export const useMailFeedback = defineStore("mail-feedback", {
       notice.busy = true;
       try {
         if (notice.undoFiling) {
-          await notice.undoFiling();
-          if (this.notice===notice) this.show('Action undone.');
+          const message=await notice.undoFiling();
+          if (this.notice===notice) this.show(message || 'Action undone.');
           return;
         }
         if (notice.recovery) {

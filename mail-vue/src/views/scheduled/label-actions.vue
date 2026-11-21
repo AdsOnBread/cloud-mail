@@ -14,6 +14,7 @@
         @keydown.right.stop.prevent="show" @click="show">
         Label as <Icon icon="material-symbols:arrow-right" width="18"/>
       </button>
+      <button v-if="canDelete" type="button" role="menuitem" :aria-disabled="filingDisabled" @click="remove">Delete</button>
       <LabelPicker v-if="item" ref="picker" scheduled external submenu :reference="item" :rows="rows"
         :return-focus="focus" :disabled="filingDisabled" @finish="finish" @apply="(...args)=>emit('apply',...args)"/>
     </div>
@@ -23,13 +24,18 @@
 import {ref,watch,onBeforeUnmount} from 'vue';
 import {Icon} from '@iconify/vue';
 import LabelPicker from '@/components/mail-labels/picker.vue';
-const props=defineProps({rows:Array,disabled:Boolean,filingDisabled:Boolean});
-const emit=defineEmits(['apply','snooze']);
+const props=defineProps({rows:Array,disabled:Boolean,filingDisabled:Boolean,canDelete:Boolean});
+const emit=defineEmits(['apply','snooze','trash']);
 const trigger=ref(),panel=ref(),snoozeItem=ref(),item=ref(),picker=ref(),open=ref(false);
 function focus(){trigger.value?.focus();}
 function finish(){open.value=false;focus();}
 function show(){if(!props.filingDisabled) picker.value?.show();}
-function cycle(){(document.activeElement===item.value ? snoozeItem.value : item.value)?.focus();}
+function cycle(event){
+  const items=[...panel.value.querySelectorAll(':scope > [role=menuitem]')];
+  const offset=event.key==='ArrowUp' ? -1 : 1;
+  items[(items.indexOf(document.activeElement)+offset+items.length)%items.length]?.focus();
+}
+function remove(){if(!props.filingDisabled){finish();emit('trash');}}
 function snooze(){
   if(props.filingDisabled)return;
   finish();emit('snooze',trigger.value);

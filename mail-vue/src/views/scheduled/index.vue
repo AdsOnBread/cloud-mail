@@ -99,7 +99,7 @@
         <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
       </button>
       <ScheduledLabelActions v-if="readTargets.length" ref="labelActions" :rows="readTargets" :disabled="busy"
-        :filing-disabled="labelsDisabled" @apply="applyLabels" @snooze="chooseSnooze(readTargets,$event)"/>
+        :can-delete="canDelete" :filing-disabled="labelsDisabled" @trash="trash(readTargets)" @apply="applyLabels" @snooze="chooseSnooze(readTargets,$event)"/>
       <div class="scheduled-pager">
       <span class="total">{{ range }}</span>
       <button
@@ -192,6 +192,9 @@
           <button class="mail-icon" aria-label="Archive" data-tip="Archive" :disabled="busy || !row.inbox" @click="fileInbox([row],false)">
             <Icon icon="material-symbols:archive-outline" width="20"/>
           </button>
+          <button v-if="canDelete" class="mail-icon" aria-label="Delete" data-tip="Delete" :disabled="busy" @click="trash([row])">
+            <Icon icon="material-symbols:delete-outline" width="20"/>
+          </button>
           <button class="mail-icon" :aria-label="row.unread ? 'Mark as read' : 'Mark as unread'"
             :data-tip="row.unread ? 'Mark as read' : 'Mark as unread'" :disabled="busy || reading.has(row.draftId)"
             @click="setRead([row],!row.unread)">
@@ -233,6 +236,7 @@ import {
   onMounted,
   onBeforeUnmount,
 } from "vue";
+import { hasPerm } from "@/perm/perm";
 import { Icon } from "@iconify/vue";
 import { useRouter, useRoute } from "vue-router";
 import http from "@/axios";
@@ -329,6 +333,7 @@ const range = computed(() => {
         ordered.value.length
     : "";
 });
+const canDelete = computed(()=>hasPerm("email:delete"));
 const canCancel = (row) => ["scheduled", "schedule_failed"].includes(row.state);
 const labelActions=ref();
 const labelsDisabled=computed(()=>busy.value || !readTargets.value.length || readTargets.value.some(row=>!canCancel(row)));
@@ -528,6 +533,45 @@ function chooseSnooze(batch,element,rowId=0) {
   snoozePicker.value?.show(element,batch.map(({draftId,version,state})=>({draftId,version,state})),batch.length===1 ? batch[0].wakeAt : 0);
 }
 watch([identity,()=>user.authenticatedToken,()=>route.fullPath,()=>selected.value.join(',')],()=>snoozePicker.value?.close(),{flush:'sync'});
+async function trash(batch) {
+  if (!canDelete.value || busy.value || !batch.length || batch.some(row=>!canCancel(row))) return;
+  const owner=identity.value,token=user.authenticatedToken,navigation=navigations;
+  const sameSession=()=>token && user.authenticatedToken===token && localStorage.getItem('token')===token;
+  const current=()=>sameSession() && !disposed && identity.value===owner && navigations===navigation;
+  busy.value=true;
+  error.value='';
+  try {
+    const messages=batch.map(({draftId,version})=>({draftId,version}));
+    const receipt=await http.post('/v1/scheduled/trash',{messages},{noMsg:true});
+    if (!sameSession()) return;
+    feedback.trashed([],receipt.count,'message');
+    feedback.restored++;
+    feedback.notice.undoFiling=async()=>{
+      if (!sameSession()) throw new Error('Your mailbox changed. Reopen Trash.');
+      const result=await http.post('/v1/scheduled/undo-trash',receipt,{noMsg:true});
+      if (!sameSession()) return;
+      drafts.scheduledRevision++;
+      feedback.restored++;
+      if (result.drafts) {
+        syncCloudDrafts().catch(()=>{});
+        return result.scheduled ? result.scheduled+' scheduled again. '+result.drafts+' returned to Drafts.' :
+          result.drafts===1 ? 'Message returned to Drafts.' : result.drafts+' messages returned to Drafts.';
+      }
+    };
+    if (current()) {
+      const ids=new Set(messages.map(message=>message.draftId));
+      rows.value=rows.value.filter(row=>!ids.has(row.draftId));
+      selected.value=selected.value.filter(id=>!ids.has(id));
+      if (ids.has(messageId.value)) back();
+      else nextTick(()=>focusList(0));
+    }
+  } catch(e) {
+    if (current()) error.value=e.message || 'Could not move the message to Trash.';
+  } finally {
+    if (sameSession()) drafts.scheduledRevision++;
+    busy.value=false;
+  }
+}
 async function fileInbox(batch,inbox,wakeAt=0) {
   if (busy.value || !batch.length || batch.some(row=>!canCancel(row))) return;
   const owner=identity.value, session=localStorage.getItem('token'), navigation=navigations;
