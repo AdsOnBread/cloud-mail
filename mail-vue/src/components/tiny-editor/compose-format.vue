@@ -1,26 +1,7 @@
 <template>
-  <div
-    ref="strip"
-    class="format-strip"
-    data-tip-placement="top"
-    :class="{'with-history':showHistory}"
-    role="toolbar"
-    aria-label="Text formatting"
-    @pointerdown.capture="remember"
-  >
-    <div v-if="showHistory" class="group">
-      <button
-        v-for="a in history"
-        :key="a.command"
-        :aria-label="a.label"
-        :data-tip="tip(a)"
-        :disabled="!active[a.command]"
-        @mousedown.prevent
-        @click="apply(a.command)"
-      >
-        <Icon :icon="icon(a)" width="18" />
-      </button>
-    </div>
+  <div ref="row" class="format-row" data-tip-placement="top" @pointerdown.capture="remember">
+    <div class="format-strip" :class="{spaced: available >= 445}"
+      :style="{width: stripWidth+'px'}" role="toolbar" aria-label="Text formatting">
     <div class="group">
       <FormatPicker
         v-for="picker in selectors"
@@ -139,7 +120,10 @@
         <Icon :icon="icon(a)" width="18" />
       </button>
     </div>
-    <FormatPicker
+    <button v-for="a in extra.slice(0, extraCount)" :key="a.command" class="extra-action"
+      :aria-label="a.label" :data-tip="tip(a)" :aria-pressed="a.toggle ? !!active[a.command] : undefined"
+      @mousedown.prevent @click="apply(a.command)"><Icon :icon="icon(a)" width="20"/></button>
+    <FormatPicker v-if="!complete"
       label="More formatting options"
       :choices="overflowChoices"
       actions
@@ -148,6 +132,17 @@
       @choose="(command) => apply(command)"
       ><Icon icon="material-symbols:more-horiz" width="18"
     /></FormatPicker>
+    </div>
+    <div v-if="showHistory" class="format-history" role="group" aria-label="Editing history">
+      <button v-for="a in history" :key="a.command" :aria-label="a.label" :data-tip="tip(a)"
+        :disabled="!active[a.command]" @mousedown.prevent @click="apply(a.command)">
+        <Icon :icon="icon(a)" width="20"/>
+      </button>
+    </div>
+    <div v-if="complete" class="advanced-format">
+      <FormatPicker label="More formatting options" :choices="overflowChoices" actions icons-only
+        @open="opened(true)" @choose="command=>apply(command)"><Icon icon="material-symbols:more-horiz" width="18"/></FormatPicker>
+    </div>
   </div>
 </template>
 <script setup>
@@ -164,17 +159,26 @@ import {
   sizes,
 } from "./format-options";
 const props = defineProps({ editor: Object, requestFormat: Function });
-const strip = ref(null),
+const row = ref(null),
   palette = ref(null),
   colorOpen = ref(false);
-const { width } = useElementSize(computed(() => strip.value?.parentElement));
-const showLists = computed(() => width.value >= 395),
-  showIndent = computed(() => width.value >= 450),
-  showHistory = computed(() => width.value >= 595);
+const { width } = useElementSize(row);
 const active = ref({}),
   fontName = ref("Sans Serif"),
   sizeIndex = ref(1),
   currentColors = ref({});
+// Reserve history space only while a change can be undone or redone.
+const showHistory = computed(() => width.value >= 395 && (active.value.Undo || active.value.Redo));
+const available = computed(() => Math.max(0,width.value - (showHistory.value ? 76 : 0)));
+const showLists = computed(() => available.value >= 395);
+const showIndent = computed(() => available.value >= 505);
+const complete = computed(() => available.value >= 612);
+const extraCount = computed(() => complete.value ? 3 : available.value >= 568 ? 2 : available.value >= 543 ? 1 : 0);
+const stripWidth = computed(() => {
+  if (complete.value) return 576;
+  const natural = extraCount.value ? 513 + 30 * extraCount.value : showIndent.value ? 513 : 445;
+  return Math.min(natural,available.value);
+});
 const positions = ref({ ForeColor: 0, HiliteColor: 7 });
 let bookmark;
 const selectors = [
@@ -241,9 +245,9 @@ const indents = [
   action("Indent more", "Indent", "format-indent-increase", "]"),
 ];
 const extra = [
+  action("Quote", "mceBlockQuote", "format-quote", "⇧9", true),
+  action("Strikethrough", "Strikethrough", "format-strikethrough", "⇧X", true),
   action("Remove formatting", "RemoveFormat", "format-clear", "\\"),
-  action("Strikethrough", "Strikethrough", "format-strikethrough", "⇧X"),
-  action("Quote", "mceBlockQuote", "format-quote", "⇧9"),
 ];
 const editing = [
   action("Insert table", "mceInsertTableDialog", "table-chart-outline"),
@@ -262,8 +266,8 @@ const visibleParagraph = computed(() =>
 const overflow = computed(() => [
   ...(!showLists.value ? [...alignments, ...lists] : []),
   ...(!showIndent.value ? indents : []),
-  ...extra,
-  ...(!showHistory.value ? history : []),
+  ...extra.slice(extraCount.value),
+  ...(width.value < 395 ? history : []),
   ...editing,
 ]);
 const alignment = computed(
@@ -453,6 +457,12 @@ function navigateColors(event, command) {
 }
 </script>
 <style scoped>
+.format-row { position:relative;display:flex;align-items:center;width:100%;min-width:0;gap:12px;flex:none; }
+.format-history { display:flex;flex:none; }
+.format-history button, .advanced-format :deep(button) { width:32px;height:32px;border-radius:50%;display:inline-grid;place-items:center;cursor:pointer;color:var(--regular-text-color); }
+.format-history button:disabled { opacity:.38;cursor:default; }
+.format-history button:enabled:hover,.advanced-format :deep(button:hover) { background:var(--mail-hover); }
+.advanced-format { margin-left:-8px; }
 .format-strip {
   display: flex;
   align-items: center;
@@ -468,7 +478,21 @@ function navigateColors(event, command) {
   border-radius: 22px;
   background: var(--mail-compose-header);
 }
-.format-strip.with-history { width: min(100%, 595px); }
+/* The standard strip keeps controls in place as the trailing actions change. */
+.spaced.format-strip { padding:0 0 0 11px;gap:0;justify-content:flex-start;min-height:40px;border-radius:24px; }
+.spaced .group { position:relative;gap:10px;padding:0;border:none; }
+.spaced .group:not(:last-child)::after { content:"";position:absolute;right:-6px;top:1px;height:18px;width:1px;background:var(--light-border-color); }
+.spaced .group:nth-child(1) { gap:9px;margin-right:12px; }
+.spaced .group:nth-child(2) { margin-right:9px; }
+.spaced .group:nth-child(3) { margin-right:10px; }
+.spaced.format-strip :deep(button) { box-sizing:border-box;flex:none;width:20px;min-width:0;height:20px;padding:0; }
+.spaced.format-strip :deep(button[aria-haspopup]:not([aria-label="More formatting options"])) { width:40px; }
+.spaced.format-strip :deep(button[aria-label="Font"]) { width:97px; }
+.spaced.format-strip :deep(button[aria-label="Text color"]) { margin-left:-3px; }
+.spaced.format-strip :deep(button[aria-label="Numbered list"]) { margin-left:-3px; }
+.spaced .extra-action + .extra-action { margin-left:15px; }
+.spaced.format-strip :deep(button[aria-label="More formatting options"]) { margin-left:2px; }
+
 .group {
   display: flex;
   align-items: center;
