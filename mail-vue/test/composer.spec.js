@@ -1,6 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
+import http from "../src/axios";
+import {ElMessage} from "element-plus";
 import Composer from "../src/layout/write/index.vue";
 import { useUserStore } from "../src/store/user.js";
 import { useSettingStore } from "../src/store/setting.js";
@@ -499,6 +501,36 @@ describe("shared inline replies", () => {
     createTime: "2026-10-17 10:00:00",
     type: 0,
   };
+  it("saves a forward opened from a mailbox row with its original thread and response controls", async () => {
+    const get=vi.spyOn(http,"get").mockResolvedValue(original), wrapper=composer();
+    try {
+      await wrapper.vm.openRowResponse({emailId:10},{current:()=>true,signal:new AbortController().signal,command:"forward"});
+      expect(wrapper.get('[aria-label="Type of response"]').exists()).toBe(true);
+      expect(wrapper.find('[aria-label="Subject"]').exists()).toBe(false);
+      await wrapper.get('[aria-label="Message body"]').setValue("<p>Forwarding the report</p>");
+      await wrapper.vm.saveAndClose();
+      expect([...state.drafts.values()]).toEqual([expect.objectContaining({
+        sendType:"forward",inlineReply:true,responseSourceId:10,responseView:"pop",accountId:3
+      })]);
+    } finally { wrapper.unmount(); get.mockRestore(); }
+  });
+  it("suppresses a delayed row reply failure after its mailbox closes", async () => {
+    let reject;
+    const get=vi.spyOn(http,"get").mockImplementation(()=>new Promise((_,r)=>{reject=r;}));
+    const wrapper=composer(), controller=new AbortController();
+    ElMessage.error.mockClear();
+    try {
+      const opening=wrapper.vm.openRowResponse({emailId:10},{current:()=>!controller.signal.aborted,signal:controller.signal,command:"reply"});
+      const config=get.mock.calls[0][1];
+      expect(config.noMsg).toBe(true);
+      controller.abort();
+      expect(config.signal.aborted).toBe(true);
+      reject(new Error("Obsolete mailbox"));
+      await opening;
+      expect(ElMessage.error).not.toHaveBeenCalled();
+      expect(wrapper.vm.visible).toBe(false);
+    } finally { wrapper.unmount(); get.mockRestore(); }
+  });
   it("replies from the original mailbox, shares reply headers, and never copies Bcc", async () => {
     vi.spyOn(useEmailStore(), "ensureDetail").mockResolvedValue(original);
     vi.mocked(emailSend).mockResolvedValue([{ emailId: 21 }]);
