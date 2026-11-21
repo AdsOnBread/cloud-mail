@@ -39,7 +39,7 @@
     <div ref="scroll" class="conversation-body">
       <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
         <div v-if="messages.length" class="heading-actions">
-          <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:close-fullscreen' : 'material-symbols:open-in-full'" width="18"/></button>
+          <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" :disabled="loading" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:close-fullscreen' : 'material-symbols:open-in-full'" width="18"/></button>
           <button type="button" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail()"><Icon icon="material-symbols:print-outline" width="20"/></button>
           <a v-if="route.query.window!=='1'" :href="windowHref" target="_blank" rel="noopener noreferrer" aria-label="In new window" data-tip="In new window" @click="openWindow"><Icon icon="material-symbols:open-in-new" width="19"/></a>
         </div>
@@ -51,7 +51,7 @@
       <button
         v-if="hasMore"
         class="older"
-        :disabled="loading"
+        :disabled="loading || expanding"
         @click="load(true)"
       >
         Load older messages
@@ -217,7 +217,7 @@ let viewEpoch = 0,
 const currentComposer = () =>
   Array.isArray(composer.value) ? composer.value[0] : composer.value;
 const user=useUserStore(),printing=ref(false),expanding=ref(false);
-let printRun=0,expandRun=0;
+let printRun=0,expandRun=0,printController;
 const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expanded.value.has(m.emailId)));
 const expansionTitle=computed(()=>allExpanded.value || expanding.value ? 'Collapse all' : 'Expand all');
 const windowHref=computed(()=>{
@@ -247,14 +247,18 @@ async function allRows(current) {
 async function printMail(message) {
   if (printing.value) return;
   const run=++printRun,current=readerCurrent();
+  printController?.abort();
+  const controller=printController=new AbortController();
   printing.value=true;error.value='';
   try {
     const rows=message ? [message] : await allRows(current);
-    if (current()) await printMessages({subject:message?.subject || threadSubject.value,owner:user.user.userId,rows,current,read:row=>emailDetail(row.emailId)});
-  } catch(e) {if(current())error.value=e.message || 'Could not print the message.';}
+    if (current()) await printMessages({subject:message?.subject || threadSubject.value,owner:user.user.userId,rows,current,signal:controller.signal,read:row=>emailDetail(row.emailId,{signal:controller.signal})});
+  } catch(e) {if(!controller.signal.aborted && current())error.value=e.message || 'Could not print the message.';}
   finally {if(run===printRun)printing.value=false;}
 }
+watch([()=>user.user.userId,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>printController?.abort(),{flush:'sync'});
 async function toggleAll() {
+  if (loading.value) return;
   const run=++expandRun,valid=readerCurrent(),current=()=>valid() && run===expandRun;
   if (allExpanded.value || expanding.value) {
     expanding.value=false;
@@ -283,7 +287,8 @@ async function save() {
 onBeforeRouteLeave(async () => await save());
 onBeforeRouteUpdate(async () => await save());
 async function load(older = false) {
-  if (older && loading.value) return;
+  if (older && (loading.value || expanding.value)) return;
+  expandRun++;expanding.value=false;
   const requestedImportanceRevision = importanceRevision;
   const request = ++generation,
     anchor = Number(route.query.emailId);
@@ -348,6 +353,7 @@ async function load(older = false) {
 watch(
   [() => route.query.emailId, () => route.query.draft],
   () => {
+    printController?.abort();
     viewEpoch++;printRun++;expandRun++;printing.value=false;expanding.value=false;
     switching = false;
     handledReply = false;
@@ -562,6 +568,7 @@ onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
+  printController?.abort();
   viewEpoch++;
   generation++;
   window.removeEventListener("keydown", keydown);

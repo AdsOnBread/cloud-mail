@@ -38,29 +38,38 @@ export function copyBody(source, target, doc) {
   }
 }
 
-export function printDocument(render, current=()=>true) {
+export function printDocument(render, current=()=>true,signal) {
   return new Promise((resolve,reject)=>{
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden','true');
-  frame.setAttribute('sandbox','allow-same-origin allow-modals');
-  frame.tabIndex = -1;
-  frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:600px;border:0';
-  frame.onload = async () => {
-    try {
-    if (!current()) {frame.remove();resolve();return;}
-    const doc = frame.contentDocument;
-    await render(doc);
-    await Promise.all(Array.from(doc.images, image => image.decode().catch(() => {})));
-    if (!current()) {frame.remove();resolve();return;}
-    const win = frame.contentWindow;
-    win.addEventListener('afterprint', () => frame.remove(), {once:true});
-    win.print();
-    resolve();
-    } catch (error) {frame.remove();reject(error);}
-  };
-  frame.srcdoc = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>
-    body{font:14px/1.5 Arial,sans-serif;color:#202124;overflow-wrap:anywhere}header{padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid #dadce0}h1{font-size:20px;margin:0 0 12px}pre{white-space:pre-wrap;font:inherit}footer{margin-top:24px;border-top:1px solid #dadce0;padding-top:12px}img{max-width:100%}blockquote{border-left:2px solid #dadce0;padding-left:12px}
-  </style><body></body>`;
-  document.body.append(frame);
+    const frame = document.createElement('iframe');
+    const close=()=>{
+      signal?.removeEventListener('abort',close);
+      window.removeEventListener('pagehide',close);
+      frame.remove();
+      resolve();
+    };
+    if (signal?.aborted) {resolve();return;}
+    signal?.addEventListener('abort',close,{once:true});
+    window.addEventListener('pagehide',close,{once:true});
+    frame.setAttribute('aria-hidden','true');
+    frame.setAttribute('sandbox','allow-same-origin allow-modals');
+    frame.tabIndex = -1;
+    frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:600px;border:0';
+    frame.onload = async () => {
+      try {
+        if (!current() || signal?.aborted) {close();return;}
+        const doc = frame.contentDocument;
+        await render(doc);
+        await Promise.all(Array.from(doc.images, image => image.decode().catch(() => {})));
+        if (!current() || signal?.aborted) {close();return;}
+        const win = frame.contentWindow;
+        win.addEventListener('afterprint', close, {once:true});
+        win.print();
+        resolve();
+      } catch (error) {reject(error);close();}
+    };
+    frame.srcdoc = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>
+      body{font:14px/1.5 Arial,sans-serif;color:#202124;overflow-wrap:anywhere}header{padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid #dadce0}h1{font-size:20px;margin:0 0 12px}pre{white-space:pre-wrap;font:inherit}footer{margin-top:24px;border-top:1px solid #dadce0;padding-top:12px}img{max-width:100%}blockquote{border-left:2px solid #dadce0;padding-left:12px}
+    </style><body></body>`;
+    document.body.append(frame);
   });
 }
