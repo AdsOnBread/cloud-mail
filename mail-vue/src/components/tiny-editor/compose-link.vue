@@ -11,15 +11,16 @@
       <span aria-hidden="true">|</span>
       <button type="button" @click="remove">Remove</button>
     </template>
-    <form v-else @submit.prevent="apply">
-      <label>
+    <form v-else :class="{'image-link':panel.hasImage}" @submit.prevent="apply">
+      <label v-if="!panel.hasImage">
         <Icon icon="material-symbols:short-text" width="18" aria-hidden="true" />
         <input ref="textField" v-model="panel.text" aria-label="Anchor Text" placeholder="Text" autocomplete="off" />
       </label>
       <label>
         <Icon icon="material-symbols:link" width="18" aria-hidden="true" />
-        <input v-model="panel.url" aria-label="Link" placeholder="Type or paste a link" autocomplete="off" />
+        <input ref="urlField" v-model="panel.url" aria-label="Link" placeholder="Type or paste a link" autocomplete="off" />
       </label>
+      <button v-if="panel.hasImage && panel.existing" class="remove-link" type="button" @click="remove">Remove link</button>
       <button type="submit" class="apply-link" :disabled="!safeUrl">Apply</button>
     </form>
   </div>
@@ -31,7 +32,7 @@ import { renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
-  textField = ref(null);
+  textField = ref(null), urlField = ref(null);
 let bookmark, anchor, originalText, owner, range, resize, fragment = null;
 const safeUrl = computed(() => {
   const raw = panel.value?.url.trim();
@@ -121,8 +122,9 @@ async function open(existing = null, preview = false, pointer = null) {
   fragment = anchor && pointer ? Math.max(0, Array.from(anchor.getClientRects()).findIndex(rect =>
     pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom)) : null;
   bookmark = ed.selection.getBookmark(2, true);
-  originalText = anchor?.textContent || ed.selection.getContent({format:"text"});
-  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview};
+  originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
+  const hasImage = Boolean((anchor || range.cloneContents()).querySelector("img"));
+  panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, hasImage, existing:Boolean(anchor)};
   const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown", insideEditor);
@@ -136,13 +138,13 @@ async function open(existing = null, preview = false, pointer = null) {
   resize.observe(box.value);
   resize.observe(box.value.parentElement);
   resize.observe(ed.iframeElement);
-  if (!preview) textField.value?.focus({preventScroll:true});
+  if (!preview) (textField.value || urlField.value)?.focus({preventScroll:true});
 }
 async function edit() {
   panel.value.preview = false;
   await nextTick();
   position();
-  textField.value?.focus({preventScroll:true});
+  (textField.value || urlField.value)?.focus({preventScroll:true});
 }
 function change(fn) {
   if (!owner || owner !== props.editor || owner.removed) {
@@ -164,8 +166,8 @@ function apply() {
   change((ed) => {
     if (anchor?.isConnected) {
       ed.dom.setAttrib(anchor, "href", href);
-      if (text !== originalText) renameLink(anchor, text);
-    } else if (!ed.selection.isCollapsed() && text === originalText) {
+      if (!panel.value.hasImage && text !== originalText) renameLink(anchor, text);
+    } else if (!ed.selection.isCollapsed() && (panel.value.hasImage || text === originalText)) {
       ed.execCommand("mceInsertLink", false, { href });
     } else {
       const link = ed.getDoc().createElement("a");
@@ -222,6 +224,9 @@ button { font:inherit; cursor:pointer; }
   grid-column:2; grid-row:2; padding:6px 14px; border-radius:16px;
   font-weight:500; color:var(--el-color-primary);
 }
+.image-link label { grid-column:1 / -1; }
+.remove-link { grid-row:2;justify-self:start;color:var(--el-color-primary); }
+.remove-link:hover { text-decoration:underline; }
 .apply-link:disabled { color:var(--secondary-text-color); opacity:0.65; cursor:default; }
 .apply-link:hover:enabled { background:var(--mail-hover); }
 .link-preview {
