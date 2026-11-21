@@ -42,11 +42,15 @@ function change(key,value,trigger){
 }
 </script>
 <style scoped>
-.style-toolbar{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;background:var(--mail-hover);border-radius:4px;max-width:100%}
-.style-toolbar :deep(button){display:inline-flex;align-items:center;justify-content:center;height:24px;padding:2px;color:inherit;background:transparent;border:0;border-radius:3px;font:14px/20px Arial,sans-serif;cursor:pointer}
+.style-toolbar{box-sizing:border-box;display:flex;align-items:center;gap:4px;width:397px;max-width:100%;height:40px;padding:0 11px;background:var(--mail-compose-header);border-radius:24px}
+.style-toolbar :deep(button){display:inline-flex;align-items:center;justify-content:center;height:20px;padding:0;color:inherit;background:transparent;border:0;border-radius:2px;font:14px/20px Arial,sans-serif;cursor:pointer}
 .style-toolbar :deep(button:hover),.style-toolbar :deep(button[aria-expanded=true]){background:var(--mail-hover)}
-.font-name{min-width:73px;text-align:start}
-.sample-text{margin-top:8px;font:13px/1.4 Arial,sans-serif;overflow-wrap:anywhere}
+.style-toolbar :deep([aria-label="Font"]){width:97px}
+.style-toolbar :deep([aria-label="Text size"]),.style-toolbar :deep([aria-label="Text color"]){width:40px}
+.style-toolbar :deep([aria-label="Text color"]){margin-inline-start:5px}
+.style-toolbar>button:last-child{width:20px;margin-inline-start:8px}
+.font-name{width:77px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:start}
+.sample-text{margin:4px 4px 0;font:13px/1.4 Arial,sans-serif;overflow-wrap:anywhere}
 .default-style-colors{width:160px;padding:8px;box-sizing:border-box}
 .default-style-colors :deep(.color-grid){gap:0}
 .default-style-colors :deep(button){height:18px;border:0;border-radius:0}
