@@ -20,6 +20,19 @@ function visibleMail(c) {
 // A small address-only projection keeps autocomplete independent of message bodies and attachments.
 export async function searchPeople(c,userId,params) {
   const {field,accountId,folder}=params;
+  if (folder==='compose' && field==='any') {
+    const term=params.q?.trim().slice(0,maxPersonTerm), mailbox=positive(accountId);
+    if (!term) return [];
+    const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
+    const conditions=[], values=[];
+    addPeopleFilter({from:term},'from',['e.send_email','e.name'],conditions,values,true);
+    addPeopleFilter({to:term},'to',to,conditions,values,true);
+    const {results}=await c.env.db.prepare(`SELECT e.name,e.send_email sendEmail,e.type,e.recipient,e.cc,${to[2]} bcc
+      FROM email e JOIN account a ON a.account_id=e.account_id
+      WHERE ${visibleMail(c)} AND e.account_id=? AND e.trashed_at IS NULL AND (${conditions.join(' OR ')})
+      ORDER BY e.email_id DESC LIMIT 80`).bind(userId,mailbox,...values).all();
+    return peopleSuggestions(results,'any',term,8+maxPeople);
+  }
   if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
   const filters=[visibleMail(c)], args=[userId], term=params.q?.trim().slice(0,maxPersonTerm) || '';
   if (accountId) { filters.push('e.account_id=?'); args.push(positive(accountId)); }

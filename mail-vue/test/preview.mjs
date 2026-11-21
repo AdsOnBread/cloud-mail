@@ -256,7 +256,7 @@ const api=createHTTPServer(async(req,res)=>{
  }
  else if(path==='/v1/search/people'){
    const p=Object.fromEntries(url.searchParams), scoped=rows.filter(r=>!p.accountId||r.accountId===Number(p.accountId));
-   const initial=p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]
+   const initial=p.folder==='compose'?[]:p.folder==='trash'?scoped.filter(r=>r.trashedAt):[...cloudDrafts.values()]
      .filter(d=>d.scheduledAt && (!p.accountId || d.accountId===Number(p.accountId))).map(d=>{
        const sender=accounts.find(a=>a.accountId===d.accountId);
        return {draftId:d.draftId,senderEmail:sender?.email,senderName:d.name||sender?.name,recipients:d.receiveEmail,cc:d.cc,bcc:d.bcc};

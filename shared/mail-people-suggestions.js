@@ -17,8 +17,8 @@ export function peopleSuggestions(rows, field, query = '', limit = 8) {
     if (Array.isArray(value)) value.forEach(add);
   }
   for (const row of rows) {
-    if (field === 'from') add({address:row.senderEmail ?? row.sendEmail, name:row.senderName ?? row.name});
-    else {
+    if (field === 'from' || field === 'any') add({address:row.senderEmail ?? row.sendEmail, name:row.senderName ?? row.name});
+    if (field !== 'from') {
       recipients(row.recipients ?? row.recipient);
       recipients(row.cc);
       if (row.type === 1 || row.draftId) recipients(row.bcc);
