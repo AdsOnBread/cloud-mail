@@ -2,7 +2,7 @@ import {withLabelMove} from './label-move.js';
 import { mailboxAttachments } from './mailbox-attachments';
 import { addMailFilters } from '../service/mail-search-filters';
 import { importanceFields, importanceJoin, importanceReason, setImportance } from "./mail-importance";
-import { checkCategory, categoryQuery, fileCategory } from './inbox-categories';
+import { checkCategory, categoryQuery, fileCategory, categoryFolders, purchaseMessage } from './inbox-categories';
 import { changeLabels } from './mailbox-labels';
 import { filedConversations, inboxMember } from './conversation-filing';
 import { ensureThreads } from '../mobile/threads';
@@ -63,11 +63,15 @@ export async function labelUnreadCounts(c, params, userId) {
 export async function conversationList(c, p, userId) {
 	const db = c.env.db;
 	await ensureThreads(db, userId);
-	const category = p.category ? checkCategory(p.category) : null;
-  if(category && p.folder!=='inbox')throw new BizError('Categories are available in Inbox.',400);
+	const tab = p.category ? checkCategory(p.category) : null;
+  const category = categoryFolders.includes(p.folder) ? p.folder : tab;
+  const categoryCounts = p.folder === 'all' && String(p.countOnly) === '1' && String(p.categoryCounts) === '1';
+  const categorize = Boolean(category) || String(p.includeCategory) === '1' || categoryCounts;
+  const purchases = p.folder === 'purchases';
+  if(tab && p.folder!=='inbox')throw new BizError('Categories are available in Inbox.',400);
   const filters = [];
 	const args = [userId];
-	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label','important'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
+	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label','important','purchases', ...categoryFolders].includes(p.folder)) throw new BizError('Invalid folder.', 400);
 	if (p.folder === 'label') {
     if (!validId(p.labelId)) throw new BizError('Invalid label.',400);
     filters.push('EXISTS (SELECT 1 FROM mailbox_label_members lm WHERE lm.user_id=e.user_id AND lm.email_id=e.email_id AND lm.label_id=?)');
@@ -101,27 +105,33 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    summaries AS (SELECT m.thread_id,${importanceFields},${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    summaries AS (SELECT m.thread_id,${importanceFields},${purchases || categoryCounts?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
       JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
       FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       ${importanceJoin}
-      ${category?'LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id':''}
+      ${categorize?'LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id':''}
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id),
     grouped AS (SELECT summary.*, ${importanceReason} AS importance_reason FROM summaries summary
       LEFT JOIN mailbox_importance choice ON choice.change_id=summary.importance_change
-      ${p.folder==='important'?'WHERE ('+importanceReason+') IS NOT NULL':''})${category?categoryQuery:''}`;
+      ${p.folder==='important'?'WHERE ('+importanceReason+') IS NOT NULL':purchases?'WHERE summary.purchase_match=1':''})${categorize?categoryQuery:''}`;
 	const bound = [userId, userId, ...args, userId];
-  const groupSource=category?'categorized':'grouped';
+  const groupSource=categorize?'categorized':'grouped';
+  if (categoryCounts) {
+    const {results} = await db.prepare(`${base} SELECT category,COUNT(*) n,SUM(purchase_match) purchases
+      FROM categorized WHERE unread_count>0 GROUP BY category`).bind(...bound).all();
+    return {categoryUnread:{...Object.fromEntries(results.map(r=>[r.category,r.n])),
+      purchases:results.reduce((n,row)=>n+row.purchases,0)}};
+  }
 	if (String(p.countOnly) === '1') {
     const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM ${groupSource} WHERE unread_count>0 ${category?'AND category=?':''}`).bind(...bound,...(category?[category]:[])).first();
     return {unreadThreads:result.unreadThreads};
   }
   const asc = Number(p.timeSort) === 1;
 	const limit = limitOf(p.limit);
-	const chronological = ['inbox', 'sent', 'starred','all','label','important'].includes(p.folder);
+	const chronological = ['inbox', 'sent', 'starred','all','label','important','purchases',...categoryFolders].includes(p.folder);
 	// Older clients may submit a numeric cursor. The new opaque cursor also carries reminder time.
 	const parts = String(p.cursor || '').split(':');
 	const cursor = Number(parts.at(-1)) || 0;
@@ -156,7 +166,7 @@ export async function conversationList(c, p, userId) {
   const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
-			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, importance_change, replied, ...summary } = row;
+			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
 			return { ...camel(summary), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
 		unreadThreads: totals?.unread_threads||0,

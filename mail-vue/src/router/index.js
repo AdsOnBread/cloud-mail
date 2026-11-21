@@ -4,6 +4,8 @@ import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
 import {cvtR2Url} from "@/utils/convert.js";
 
+import {categoryFolders} from '@/utils/inbox-categories';
+
 const routes = [
     {
         path: '/',
@@ -11,6 +13,10 @@ const routes = [
         redirect: '/inbox',
         component: () => import('@/layout/index.vue'),
         children: [
+            ...categoryFolders.map(({id,name}) => ({
+                path:'/category/'+id, name:id, component:()=>import('@/components/conversation-list/index.vue'),
+                props:{folder:id}, meta:{title:name,name:id,menu:true},
+            })),
             {path:'/all', name:'all', component:()=>import('@/components/conversation-list/index.vue'), props:{folder:'all'}, meta:{title:'All Mail',name:'all',menu:true}},
             {path:'/label/:labelId(\\d+)', name:'label', component:()=>import('@/components/conversation-list/index.vue'), props:route=>({folder:'label',labelId:Number(route.params.labelId)}), meta:{title:'Label',name:'label',menu:true}},
             ...['snoozed','archived','important'].map(folder => ({

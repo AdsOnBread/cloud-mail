@@ -1,6 +1,8 @@
 import BizError from '../error/biz-error';
 
-const folders=new Set(['star','snoozed','important','send','scheduled','draft','all','archived','trash']);
+import {categoryFolders} from '../service/inbox-categories';
+
+const folders=new Set(['star','snoozed','important','send','scheduled','draft','all','archived','trash','purchases',...categoryFolders,...categoryFolders.map(id=>'messages-'+id)]);
 
 export async function systemLabels(db,userId) {
   const {results}=await db.prepare('SELECT folder,mode FROM system_label_display WHERE user_id=?').bind(userId).all();

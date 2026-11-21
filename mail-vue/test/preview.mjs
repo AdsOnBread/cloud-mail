@@ -29,6 +29,7 @@ const rows=[
 ].map(([name,sendEmail,subject,text],index)=>({emailId:100-index,userId:1,accountId:1,name,sendEmail,subject,text,content:`<div style="font:14px/1.7 Arial;color:inherit"><p>Hi Alex,</p><p>${text}</p><p>I’ve added the details below so we can keep everything moving. Let me know what you think when you have a chance.</p><p>Thanks,<br>${name.split(' ')[0]}</p></div>`,listText:text,recipient:JSON.stringify([{address:'alex@example.com'},{address:'sam@example.net'}]),cc:JSON.stringify([{address:'hello@example.com'},{address:'jordan@example.net'}]),bcc:index===15?'[{"address":"private@example.net"}]':'[]',type:index===15?1:0,status:index===15?2:0,isStar:[0,4,6].includes(index)?1:0,unread:index<4?0:1,createTime:`2026-10-17 ${String(15-Math.floor(index/4)).padStart(2,'0')}:${String(45-index*2).padStart(2,'0')}:00`,attList:[]}));
 // Explicit links exercise received messages, sent replies, and an older multi-page conversation.
 rows[0].messageId='<ideas@example.net>';
+rows.push({...rows[0],emailId:38,name:'Fieldwork Shop',sendEmail:'receipts@shop.example',subject:'Your receipt from Fieldwork',messageId:'<receipt@shop.example>',unread:0});
 rows.push({...rows[0],emailId:101,type:1,status:2,unread:1,name:'Alex Morgan',sendEmail:'alex@example.com',recipient:'[{"address":"maya@example.net"}]',subject:'Re: A few ideas for the next chapter',text:'These are great ideas. I added a few notes.',content:'<p>These are great ideas. I added a few notes.</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 rows.push({...rows[0],emailId:102,subject:'Re: A few ideas for the next chapter',text:'Thanks! The first option is my favorite. What do you think?',content:'<p>Thanks! The first option is my favorite. What do you think?</p>',inReplyTo:'<ideas@example.net>',replyToEmailId:100});
 for(let i=40;i<75;i++)rows.push({...rows[0],emailId:i,messageId:`<archive-${i}@example.net>`,replyToEmailId:i===40?0:40,subject:'Release planning archive',text:`Planning update ${i-39}`,content:`<p>Planning update ${i-39}</p>`,unread:1});
@@ -48,7 +49,7 @@ function importanceReason(members) {
   if (latest) return latest.important ? 'user' : null;
   return members.some(row => row.type === 1 && [1,2].includes(row.status) && (row.replyToEmailId || row.inReplyTo)) ? 'reply' : null;
 }
-const fixtureCategory = new Map([['Oliver at Figma','promotions'],['GitHub','updates'],['Linear','updates'],['The Browser','forums'],['Taylor Brooks','social']]);
+const fixtureCategory = new Map([['Oliver at Figma','promotions'],['Fieldwork Shop','updates'],['GitHub','updates'],['Linear','updates'],['The Browser','forums'],['Taylor Brooks','social']]);
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
 function recordDraft(draft){draftEvents.push({seq:draftEvents.length+1,draftId:draft.draftId,operation:draft.state!=='draft'?'delete':'upsert',draft:draft.state!=='draft'?null:structuredClone(draft)});}
 function previewSend(form){const row={...rows[0],...form,replyToEmailId:form.sendType==='reply'?form.emailId:0,emailId:Math.max(...rows.map(row=>row.emailId))+1,type:1,status:2,sendEmail:accounts.find(a=>a.accountId===form.accountId)?.email||accounts[0].email,name:user.name,recipient:JSON.stringify((form.receiveEmail||[]).map(address=>({address}))),cc:JSON.stringify((form.cc||[]).map(address=>({address}))),bcc:JSON.stringify((form.bcc||[]).map(address=>({address}))),listText:form.text||form.content,trashedAt:null};rows.unshift(row);return [row];}
@@ -175,6 +176,7 @@ const api=createHTTPServer(async(req,res)=>{
      const anchor=filingAnchor(members), state=filing.get(anchor);
      if(p.folder==='inbox' && state!==undefined && (state===null || state>now))continue;
      if(p.folder==='important' && !importanceReason(members))continue;
+     if(p.folder==='purchases' && !members.some(row=>row.emailId===38))continue;
      if(p.folder==='archived' && state!==null)continue;
      if(p.folder==='snoozed' && !(state>now))continue;
      const matches=members.some(row=>{
@@ -187,15 +189,17 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
+     threads.push({threadId,purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,subject:sorted[0].subject,
        participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});
    }
    const categoryUnread={};for(const thread of threads)if(thread.unreadCount)categoryUnread[thread.category]=(categoryUnread[thread.category]||0)+1;
-   if(p.category)threads=threads.filter(t=>t.category===p.category);
+   const folderCategory=['social','updates','forums','promotions'].includes(p.folder) ? p.folder : p.category;
+   if(folderCategory)threads=threads.filter(t=>t.category===folderCategory);
+   if(p.categoryCounts==='1')categoryUnread.purchases=threads.filter(t=>t.purchase && t.unreadCount).length;
    const unreadThreads=threads.filter(row=>row.unreadCount>0).length,total=threads.length;threads=threads.filter(row=>!Number(p.cursor)||(asc?row.lastEmailId>Number(p.cursor):row.lastEmailId<Number(p.cursor))).sort((a,b)=>asc?a.lastEmailId-b.lastEmailId:b.lastEmailId-a.lastEmailId);
-   const limit=Number(p.limit)||30;data={threads:threads.slice(0,limit),total,unreadThreads,categoryUnread:p.category?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore:threads.length>limit,nextCursor:threads.length>limit?threads[limit-1].lastEmailId:null};
+   const limit=Number(p.limit)||30;data={threads:threads.slice(0,limit),total,unreadThreads,categoryUnread:p.category || p.categoryCounts?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore:threads.length>limit,nextCursor:threads.length>limit?threads[limit-1].lastEmailId:null};
  }else if(path==='/email/conversation/messages'){
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);

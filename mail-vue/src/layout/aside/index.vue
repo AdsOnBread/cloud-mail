@@ -100,6 +100,7 @@
 </template>
 
 <script setup>
+import {categoryFolders} from "@/utils/inbox-categories";
 import {systemFolders,folderMode} from "@/components/mail-labels/system-folders";
 import http from '@/axios';
 import {conversationList,labelUnreadCounts} from '@/request/conversation';
@@ -221,10 +222,26 @@ watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(account
     cleanup(()=>{current=false;clearTimeout(timer);});
   },{immediate:true});
 const scheduledCount=ref(0);
-const folderCounts=computed(()=>({draft:drafts.items.length,scheduled:scheduledCount.value}));
+const categoryUnread=ref({});
+watch([()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentAccountId,
+  ()=>Boolean(accountStore.currentAccount.allReceive),()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh],
+  ([owner,token,accountId,combined],previous,onCleanup)=>{
+    let current=true;
+    if (!previous || [owner,token,accountId,combined].some((item,i)=>item!==previous[i])) categoryUnread.value={};
+    if (!owner || !accountId || !token) return;
+    const timer=setTimeout(async()=>{
+      if (localStorage.getItem('token')!==token) return;
+      try {
+        const result=await http.get('/email/conversations',{params:{folder:'all',accountId,allReceive:combined?1:0,countOnly:1,categoryCounts:1},headers:{Authorization:token},noMsg:true});
+        if(current && localStorage.getItem('token')===token)categoryUnread.value=result.categoryUnread || {};
+      } catch { /* Retain the last successful counts until the next mailbox refresh. */ }
+    },100);
+    onCleanup(()=>{current=false;clearTimeout(timer);});
+  },{immediate:true});
+const folderCounts=computed(()=>({...categoryUnread.value,draft:drafts.items.length,scheduled:scheduledCount.value}));
 const folderGroups=computed(()=>{
   const groups=[[],[]];
-  for(const folder of systemFolders){
+  for(const folder of [...systemFolders,...categoryFolders]){
     if(folder.permission && !hasPerm(folder.permission))continue;
     const mode=folderMode(folder,labels.system);
     const hidden=mode==='hide' || (mode==='unread' && !folderCounts.value[folder.id]);

@@ -20,7 +20,7 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <MovePicker :show-categories="route.query.folder==='inbox' && ui.inboxTabs" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
+      <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
       <LabelPicker :rows="[{lastEmailId:Number(route.query.emailId),labelIds}]" :disabled="busy || !messages.length" @apply="ops=>mutate('label',ops)" />
       <button
         v-if="threadDrafts.length"
@@ -111,6 +111,7 @@
 </template>
 <script setup>
 import { useMailFeedback } from "@/store/mail-feedback";
+import {categoryFolders} from "@/utils/inbox-categories";
 const feedback = useMailFeedback();
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import {
@@ -407,7 +408,7 @@ function back() {
         archived: "/archived",
         snoozed: "/snoozed",
         important: "/important",
-      }[route.query.folder] || "/inbox",
+      }[route.query.folder] || (categoryFolders.some(item=>item.id===route.query.folder) ? {name:route.query.folder} : "/inbox"),
     );
 }
 async function mutate(action, extra = {}) {

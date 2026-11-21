@@ -117,7 +117,7 @@
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
-        <MovePicker :show-categories="folder==='inbox' && uiPreferences.inboxTabs" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
+        <MovePicker :show-categories="(folder==='inbox' && uiPreferences.inboxTabs) || categoryFolders.some(item=>item.id===folder)" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
         <LabelPicker :rows="selectedRows" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
         <el-dropdown trigger="click" placement="bottom-start" popper-class="mail-action-menu" :show-arrow="false">
           <button class="mail-icon" data-tip="More" aria-label="More actions for selection" :disabled="busy"><Icon icon="material-symbols:more-vert" width="20" /></button>
@@ -179,7 +179,7 @@
           :subject="row.subject"
           :attachments="row.attachments"
           :attachment-count="row.attachmentCount || (replies(row).some(d=>d.hasFiles)?1:0)"
-          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId && label.messages!=='hide')"
+          :labels="rowLabels(row)"
           :preview="replies(row)[0]?.preview || row.preview"
           :draft-count="replies(row).length"
           :date="mailboxDate(rowDate(row))"
@@ -366,7 +366,7 @@ import { useSettingStore } from "@/store/setting";
 import { conversationList, conversationAction } from "@/request/conversation";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import InboxTabs from "@/components/inbox-tabs.vue";
-import {inboxCategories} from "@/utils/inbox-categories";
+import {inboxCategories,categoryFolders,categoryMessageKey} from "@/utils/inbox-categories";
 import MailDateTime from "@/components/mail-date-time/index.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
@@ -418,9 +418,18 @@ let generation = 0,
   active = true,
   timer,
   wakeTimer;
+const categoryChips = computed(() => new Map(categoryFolders
+  .filter(item => item.id !== "purchases" && labels.system[categoryMessageKey(item.id)] === "show")
+  .map(item => [item.id, {id:"category-"+item.id,name:item.name}])));
+const showCategoryChips = computed(() => categoryChips.value.size > 0);
+function rowLabels(row) {
+  const custom = labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==props.labelId && label.messages!=='hide');
+  const chip = row.category !== props.folder && categoryChips.value.get(row.category);
+  return chip ? [chip,...custom] : custom;
+}
 const key = computed(() =>
   [
-    owner.user.email,props.folder, props.labelId, category.value,
+    owner.user.email,props.folder, props.labelId, category.value, showCategoryChips.value,
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
     ascending.value,
@@ -443,6 +452,7 @@ function deliveryState(status) {
 function params() {
   return {
     folder: props.folder,
+    includeCategory:showCategoryChips.value ? 1 : undefined,
     labelId: props.labelId, category:category.value||undefined,
     accountId: account.currentAccountId,
     allReceive: account.currentAccount.allReceive ? 1 : 0,

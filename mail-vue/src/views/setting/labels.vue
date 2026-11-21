@@ -14,6 +14,19 @@
         </tr>
       </tbody>
     </table>
+    <table aria-label="Categories">
+      <thead><tr><th scope="col">Categories</th><th scope="col">Show in label list</th><th scope="col">Show in message list</th></tr></thead>
+      <tbody><tr v-for="item in categoryFolders" :key="item.id">
+        <th scope="row">{{item.name}}</th>
+        <td v-for="column in ['sidebar','messages']" :key="column">
+          <template v-if="column==='sidebar' || item.id!=='purchases'">
+            <button v-for="mode in basic" :key="mode" class="action" :disabled="busy || !labels.systemReady || Boolean(labels.systemError)"
+              :aria-pressed="(column==='sidebar' ? folderMode(item,labels.system) : labels.system[categoryMessageKey(item.id)] || 'hide')===mode"
+              @click="save(()=>labels.setSystem(column==='sidebar' ? item.id : categoryMessageKey(item.id),mode))">{{names[mode]}}</button>
+          </template>
+        </td>
+      </tr></tbody>
+    </table>
     <table aria-label="Custom labels">
       <thead><tr><th scope="col">Labels</th><th scope="col">Show in label list</th><th scope="col">Show in message list</th><th scope="col">Actions</th></tr></thead>
       <tbody>
@@ -36,6 +49,7 @@ import {computed,onMounted,ref} from 'vue';
 import {hasPerm} from '@/perm/perm';
 import {useMailLabels} from '@/store/mail-labels';
 import {systemFolders,folderMode} from '@/components/mail-labels/system-folders';
+import {categoryFolders,categoryMessageKey} from '@/utils/inbox-categories';
 import SettingsTabs from './tabs.vue';
 const labels=useMailLabels(),busy=ref(false),error=ref('');
 const basic=['show','hide'],modes=[...basic,'unread'],names={show:'show',hide:'hide',unread:'show if unread'};

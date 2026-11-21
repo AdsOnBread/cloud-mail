@@ -1,6 +1,14 @@
 import BizError from '../error/biz-error.js';
 
 const categories = new Set(['primary', 'promotions', 'social', 'updates', 'forums']);
+export const categoryFolders = ['social','updates','forums','promotions'];
+// Purchases can overlap an inbox category. Match receipt and fulfillment mail
+// separately so a purchase can still appear in Updates or a manually chosen tab.
+export const purchaseMessage = `e.type=0 AND (
+  e.send_email LIKE 'receipts@%' OR e.send_email LIKE 'receipt@%' OR
+  e.subject LIKE 'your receipt%' OR e.subject LIKE 'receipt for %' OR
+  e.subject LIKE 'order confirmation%' OR e.subject LIKE 'your order confirmation%' OR
+  e.subject LIKE 'your order has shipped%' OR e.subject LIKE 'your order has been delivered%')`;
 export function checkCategory(value) {
 	if (!categories.has(value)) throw new BizError('Choose an inbox category.', 400);
 	return value;
