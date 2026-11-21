@@ -1274,10 +1274,10 @@ function persistDraft(options) {
   operation.then(() => { pendingWrites--; saveFailed=false; }, () => { pendingWrites--; saveFailed=true; });
   saveQueue=operation;return operation;
 }
-async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
+async function persistDraftNow({autosave=false, preserveEmpty=false, responseView, ...options} = {}) {
   const draft = snapshot();
   const generatedOnly=draftFingerprint(draft)===automaticBaseline && !draft.labelIds?.length && !draft.mailboxStarred;
-  if (autosave && !props.inline && (!hasDraftContent(draft) || generatedOnly)) {
+  if (autosave && !preserveEmpty && !props.inline && (!hasDraftContent(draft) || generatedOnly)) {
     if (windowContactSeed) {
       saveWindowState(props.separateWindow,{...windowState(props.separateWindow),person:null});
       windowContactSeed=false;
@@ -1323,7 +1323,7 @@ watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingF
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
-  const localSave=persistDraft({autosave:true}).catch(()=>{form.syncState="offline";});
+  const localSave=persistDraft({autosave:true,preserveEmpty:changedFiling}).catch(()=>{form.syncState="offline";});
   cloudSaveTimer=setTimeout(async()=>{
     const draftId = (await localSave)?.draftId;
     if (!draftId || form.draftId !== draftId) return;
