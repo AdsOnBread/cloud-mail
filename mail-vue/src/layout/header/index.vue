@@ -12,7 +12,7 @@
         :aria-controls="showLabels ? 'search-label-suggestions' : undefined"
         :aria-activedescendant="showLabels && matches[choice] ? 'search-label-option-'+choice : undefined"
         :aria-keyshortcuts="userStore.user.generalSettings?.keyboardShortcuts ? '/' : undefined"
-        aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @focus="suggest=true" @input="suggest=true;choice=0" @keydown="searchKeys" />
+        aria-label="Search mail" :aria-describedby="searchScope ? 'mail-search-scope' : undefined" placeholder="Search mail" @pointerdown="searchOrigin=null" @focus="suggest=true" @input="suggest=true;choice=0" @keydown="searchKeys" />
       <button v-if="searchText || mailSearch.query || Object.keys(mailSearch.filters).length" type="button" @pointerdown.left.prevent class="icon-button" aria-label="Clear search" data-tip="Clear search" @click="clearSearch"><Icon icon="material-symbols:close" width="22" /></button>
       </form>
       <div v-if="showLabels" id="search-label-suggestions" role="listbox" aria-label="Go to label" class="search-label-suggestions">
@@ -180,7 +180,9 @@ async function openLabel(item){
   clearSearch();suggest.value=false;searchInput.value?.blur();searchOrigin=null;
 }
 function submitSearch() {
-  if(showLabels.value){if(matches.value[choice.value]) openLabel(matches.value[choice.value]);return;}
+  const selected=matches.value[choice.value];
+  if(showLabels.value && selected){openLabel(selected);return;}
+  suggest.value=false;
   const {query,excluded}=readSearchBar(searchText.value);
   const filters={...mailSearch.filters};
   if (excluded) filters.excluded=excluded; else delete filters.excluded;

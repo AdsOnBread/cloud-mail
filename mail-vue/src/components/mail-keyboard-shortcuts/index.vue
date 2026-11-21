@@ -1,5 +1,5 @@
 <template>
-  <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @close="restoreHelpFocus">
+  <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @keydown.esc.stop.prevent="help.close()" @close="restoreHelpFocus">
     <div class="help-content">
       <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
         <button aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
