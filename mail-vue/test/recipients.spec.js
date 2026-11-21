@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeRecipients, replyRecipients, restoreDraft, hasDraftContent, draftFingerprint, splitRecipients, addresses } from '../src/utils/recipients.js';
+import { normalizeRecipients, replyRecipients, restoreDraft, hasDraftContent, draftFingerprint, splitRecipients, parseRecipientList, formatRecipient, addresses } from '../src/utils/recipients.js';
 import { createRequestGuard } from '../src/utils/request-guard.js';
 
 describe('recipient and draft behavior', () => {
@@ -20,6 +20,16 @@ describe('recipient and draft behavior', () => {
     expect(normalizeRecipients({}, { receiveEmail: headers }).errors.receiveEmail).toContain('Bcc:');
     expect(splitRecipients('alice@example.com <bob@example.com>')).toEqual(['alice@example.com <bob@example.com>']);
     expect(splitRecipients('Broken <broken>,x@example.com')).toEqual(['Broken <broken>','x@example.com']);
+  });
+  it('round-trips formatted contact names without changing the address list',()=>{
+    const address='sam@example.org';
+    for (const name of ['Sam Rivera','Rivera, Sam','S. "Rivera" <Lab>','Lab\\Team','Sam: Bcc: secret@example.net','A，B']) {
+      const copied=formatRecipient(address,name);
+      expect(parseRecipientList(copied)).toEqual([{address,name}]);
+      expect(splitRecipients(copied+'; second@example.org')).toEqual([address,'second@example.org']);
+    }
+    expect(formatRecipient(address,'Sam\r\nRivera')).toBe('Sam Rivera <sam@example.org>');
+    expect(formatRecipient(address,address)).toBe(address);
   });
   it('deduplicates across fields case-insensitively with To/Cc/Bcc precedence', () => {
     expect(normalizeRecipients({ receiveEmail:['A@example.com'], cc:['a@example.com','B@example.com'], bcc:['b@example.com','c@example.com'] })).toEqual({ receiveEmail:['a@example.com'], cc:['b@example.com'], bcc:['c@example.com'], errors:{} });

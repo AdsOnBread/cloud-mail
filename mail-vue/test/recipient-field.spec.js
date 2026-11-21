@@ -75,6 +75,19 @@ describe('recipient entry', () => {
     expect(clipboard['text/plain']).toBe('blind@example.com'); expect(wrapper.vm.recipients).toEqual([]);
     wrapper.unmount();
   });
+  it('renames a chip independently of its delivery address and preserves commas',async()=>{
+    const wrapper=mount(RecipientField,{attachTo:document.body,props:{label:'To',modelValue:['sam@example.net'],names:{'sam@example.net':'Sam'}}});
+    const button=wrapper.get('.chip-address'),input=wrapper.get('input');
+    await button.trigger('keydown',{key:'E',shiftKey:true});
+    expect(input.element.value).toBe('Sam');
+    await input.setValue('Rivera, Sam');
+    const comma=new KeyboardEvent('keydown',{key:',',bubbles:true,cancelable:true});input.element.dispatchEvent(comma);
+    expect(comma.defaultPrevented).toBe(false);
+    wrapper.vm.commit();
+    expect(wrapper.emitted('choosePerson').at(-1)).toEqual([{email:'sam@example.net',name:'Rivera, Sam'}]);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    wrapper.unmount();
+  });
   it('returns keyboard navigation to the field when leaving the address menu', async () => {
     const wrapper=field(), input=wrapper.get('input');
     await input.setValue('menu@example.com'); await input.trigger('blur');

@@ -50,6 +50,14 @@ describe('Cloudflare email payloads', () => {
 		expect(binding.send).toHaveBeenCalledTimes(1);
 	});
 
+	it('uses structured display names for their own envelope entries',async()=>{
+		const data={...params(),receiveEmail:['sam@example.net','plain@example.net'],cc:['team@example.net'],bcc:['blind@example.net'],
+			recipientNames:{'sam@example.net':'Sam Rivera','team@example.net':'Team\r\nLab','blind@example.net':'Hidden','unused@example.net':'Unrelated'}};
+		const message=await buildMessage(data);
+		expect(message.to).toEqual([{email:'sam@example.net',name:'Sam Rivera'},'plain@example.net']);
+		expect(message.cc).toEqual([{email:'team@example.net',name:'Team Lab'}]);
+		expect(message.bcc).toEqual([{email:'blind@example.net',name:'Hidden'}]);
+	});
 	it('allows blind-copy delivery without synthesizing a visible recipient or subject', async () => {
 		const data = { ...params(), receiveEmail: [], bcc: ['blind@example.net'], subject: '', html: '', text: '' };
 		const message = await buildMessage(data);

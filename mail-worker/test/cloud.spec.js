@@ -654,14 +654,14 @@ describe('Scheduled send',()=>{
  });
  it('delivers an empty blind-copy-only scheduled draft and keeps its envelope private',async()=>{
    const {schedule,deliverDue}=await import('../src/cloud/scheduled');
-   const d=await draft({subject:'',text:'',content:'',receiveEmail:[],bcc:['person@example.com'],plainText:true});
+   const d=await draft({subject:'',text:'',content:'',receiveEmail:[],bcc:['person@example.com'],ui:{replyRecipientNames:{'person@example.com':'Private Person'}},plainText:true});
    await schedule(c(),1,d.draftId,{version:d.version,sendAt:Math.floor(Date.now()/1000)+600});
    await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(d.draftId).run();
    await deliverDue(c());
    const {results}=await env.db.prepare('SELECT user_id,subject,recipient,cc,bcc,text FROM email ORDER BY user_id').all();
    expect(results).toHaveLength(2);
    expect(results[0]).toMatchObject({user_id:1,subject:'',recipient:'[]',text:''});
-   expect(JSON.parse(results[0].bcc).map(item=>item.address)).toEqual(['person@example.com']);
+   expect(JSON.parse(results[0].bcc)).toEqual([{address:'person@example.com',name:'Private Person'}]);
    expect(results[1]).toMatchObject({user_id:2,subject:'',recipient:'[]',text:''});
    expect(JSON.parse(results[1].bcc || '[]')).toEqual([]);
  });

@@ -132,7 +132,8 @@ async function edit(index, name=false) {
   menuIndex.value = null;
   editingName.value = name;
   editing.value = index;
-  pending.value = name && display(props.modelValue[index])===props.modelValue[index] ? '' : name ? display(props.modelValue[index]) : props.modelValue[index];
+  const address=props.modelValue[index], shown=display(address);
+  pending.value = name ? (shown===address ? '' : shown) : address;
   await nextTick();
   input.value?.focus();
   input.value?.select();
@@ -197,11 +198,8 @@ function clipboardEvent(event,index) {
 function clipboardShortcut(event,index) {
   if (index===null || event.isComposing || event.shiftKey) return false;
   const key=(event.code || '').replace(/^Key/,'').toLowerCase() || event.key.toLowerCase();
-  const standard=apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  const addressOnly=key==='c' && event.altKey && !event.ctrlKey && !event.metaKey;
-  if (!addressOnly && !(standard && !event.altKey && ['c','x'].includes(key))) return false;
-  // Let the browser's trusted copy/cut event populate its clipboard synchronously.
-  if (!addressOnly) return false;
+  // Standard Copy and Cut use trusted clipboard events on the focused chip or menu.
+  if (key!=='c' || !event.altKey || event.ctrlKey || event.metaKey) return false;
   event.preventDefault();event.stopPropagation();
   clipboardAction(index,'address');return true;
 }
