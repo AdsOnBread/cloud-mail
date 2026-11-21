@@ -110,10 +110,10 @@ onBeforeUnmount(()=>{generation++; window.removeEventListener('beforeunload',bef
 .general-settings{height:100%;overflow:auto;color:var(--el-text-color-primary);font:14px/1.5 Arial,sans-serif}
 form{padding:0 20px 24px}
 .setting-row{display:grid;grid-template-columns:20% minmax(0,1fr);padding:10px 0;border-bottom:1px solid #e5e5e5;align-items:start}
-:global(.dark) .setting-row{border-color:var(--light-border-color)}
+html.dark .setting-row{border-color:var(--light-border-color)}
 .setting-row strong{padding-right:12px}
 form :is(select,button){border:revert;background:revert;padding:revert}
-:global(.dark) form{color-scheme:dark}
+html.dark form{color-scheme:dark}
 select{font:inherit;width:35px;height:22px;margin-inline:4px 0}
 .radio-choice{display:flex;align-items:center;gap:5px;width:fit-content;cursor:pointer}
 .radio-choice input{margin:0;accent-color:var(--el-color-primary)}
