@@ -535,7 +535,7 @@ function heldDelivery(receipt, database, api, id) {
       // The server owns dispatch. Polling only updates this mailbox's confirmation.
       for (let i=0;i<30;i++) {
         session.check();
-        const status=await api.get(path,{noMsg:true});
+        const status=await api.post(path+'/finish',{}, {noMsg:true});
         if (status.state==='sent') return finishSentAttempt(database,id,receipt.attemptId,status.messages);
         if (status.state==='canceled') return null;
         if (status.state==='failed') {

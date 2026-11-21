@@ -26,7 +26,7 @@ app.delete(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.remove(c,ui
 app.post(root+'/drafts/:id/send',async c=>{
   const userId=uid(c);
   const receipt=await send(c,userId,await c.req.json(),{draftId:c.req.param('id')});
-  if (receipt.state==='holding') {
+  if (receipt.state==='holding' && receipt.undoUntil-Date.now()<15000) {
     const job=new Promise(resolve=>setTimeout(resolve,Math.max(0,receipt.undoUntil-Date.now())))
       .then(()=>dispatchHeld({env:c.env},userId,receipt.attemptId));
     c.executionCtx.waitUntil(job);
@@ -69,9 +69,14 @@ app.post(root+'/messages/trash-read',async c=>{
 for(const action of ['trash','restore','purge']) app.post(root+'/messages/'+action,async c=>{
   await permission(c,uid(c),'email:delete');return c.json(result.ok(await mail.trash(c,uid(c),(await c.req.json()).emailIds,action)));
 });
-app.get(root+'/send-attempts/:id',async c=>{
+async function attemptStatus(c) {
   const row=await c.env.db.prepare('SELECT state,result FROM send_attempts WHERE user_id=? AND idempotency_key=?').bind(uid(c),c.req.param('id')).first();
   const receipt=row?.result ? JSON.parse(row.result) : {state:row?'uncertain':'not_started',attemptId:c.req.param('id')};
   if(receipt.state==='holding') receipt.remainingMs=Math.max(0,receipt.undoUntil-Date.now());
   return c.json(result.ok(receipt));
+}
+app.get(root+'/send-attempts/:id',attemptStatus);
+app.post(root+'/send-attempts/:id/finish',async c=>{
+  await dispatchHeld(c,uid(c),c.req.param('id'));
+  return attemptStatus(c);
 });

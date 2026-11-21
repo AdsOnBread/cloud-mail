@@ -97,11 +97,14 @@ export async function send(c,userId,input,{draftId,mode,scheduled=false}={}) {
   return dispatch(c,userId,key,draft,scheduled,async () => payload);
 }
 
-async function dispatch(c,userId,key,draft,scheduled,loadPayload) {
+async function dispatch(c,userId,key,draft,scheduled,loadPayload,claim) {
   let dispatched=false;
   try {
     const payload = await loadPayload();
-    const messages=await emailService.send(c,payload,userId,{beforeDispatch:()=>{dispatched=true;}});
+    const messages=await emailService.send(c,payload,userId,{beforeDispatch:async ()=>{
+      if (claim && !await claim()) throw new Error('Another request completed this preparation.');
+      dispatched=true;
+    }});
     const result={state:'sent',attemptId:key,messages};
     const filing = [];
     if (draft) {
@@ -139,6 +142,9 @@ async function dispatch(c,userId,key,draft,scheduled,loadPayload) {
     console.log(JSON.stringify({event:'send_attempt',attemptId:key,userId,state:'sent'}));
     return result;
   } catch(error) {
+    // Competing or interrupted preparations never own delivery. Only the caller
+    // that wins the same atomic claim may record a definitive preflight failure.
+    if (claim && !dispatched && !await claim()) return;
     // Known preflight/provider rejections are safe; network/unknown errors may follow delivery.
     const known=!dispatched || error.definitelyRejected===true;
     const state=known?'failed':'uncertain';
@@ -159,17 +165,18 @@ function replay(row,hash) {
 // Both the request's background task and the minute timer may wake up for a
 // message. Only the caller that claims the held receipt may contact the provider.
 export async function dispatchHeld(c,userId,key) {
-  const attempt=await c.env.db.prepare(`UPDATE send_attempts SET state='dispatching',result=NULL
-    WHERE user_id=? AND idempotency_key=? AND state='holding' AND json_extract(result,'$.undoUntil')<=?
-    RETURNING draft_id`).bind(userId,key,Date.now()).first();
+  const due="user_id=? AND idempotency_key=? AND state='holding' AND json_extract(result,'$.undoUntil')<=?";
+  const attempt=await c.env.db.prepare('SELECT draft_id FROM send_attempts WHERE '+due).bind(userId,key,Date.now()).first();
   if (!attempt) return;
-  const draft = {draftId:attempt.draft_id};
+  const draft={draftId:attempt.draft_id};
+  const claim=()=>c.env.db.prepare("UPDATE send_attempts SET state='dispatching',result=? WHERE "+due+" RETURNING draft_id")
+    .bind(JSON.stringify({state:'sending',attemptId:key,startedAt:Date.now()}),userId,key,Date.now()).first();
   return dispatch(c,userId,key,draft,false,async () => {
     await permission(c,userId,'email:send');
     Object.assign(draft,await drafts.get(c,userId,draft.draftId,true));
     if (draft.state !== 'sending' || draft.undoSendKey !== key) throw new BizError('This delivery changed.',409);
     return drafts.payload(c,userId,draft);
-  });
+  },claim);
 }
 
 export async function recoverHeld(c) {
