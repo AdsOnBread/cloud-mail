@@ -1,4 +1,4 @@
-import { draftFilingFingerprint } from '@/utils/recipients';
+import { draftEditBase, draftFilingFingerprint } from '@/utils/recipients';
 import { draftSummary, newestDraft } from '@/utils/draft-summary';
 import { useUserStore } from '@/store/user';
 import db from '@/db/db.js';
@@ -44,7 +44,7 @@ function savedFingerprint(row) {
   return fingerprint({...row, content:template.innerHTML, attachments});
 }
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
-const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','attachments'])delete copy[key];return copy;};
+const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','starEditBase','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
   const {attachments:ignored,...metadata}=row;
@@ -84,7 +84,7 @@ async function cloudRow(database, remote, localId, api) {
     await writeDraft(database, {...value, draftId:localId, sendAttemptId:current?.sendAttemptId, sendFingerprint:current?.sendFingerprint});
   });
 }
-export async function saveLocalDraft(input, {requireCurrent = false, session} = {}) {
+export async function saveLocalDraft(input, {requireCurrent = false, session, starOnly = false, preserveStar = false} = {}) {
   const database=db.value;
   session?.check();
   if(input.ownerEmail&&input.ownerEmail!==useUserStore().user.email)throw new Error('The signed-in user changed. Your previous draft was not moved.');
@@ -94,9 +94,14 @@ export async function saveLocalDraft(input, {requireCurrent = false, session} = 
     if (current && requireCurrent && !matchesEditor(current, input)) throw new Error('The draft changed elsewhere. Reopen it before changing it.');
     // A background upload can advance the cloud version of precisely the edit still in the composer.
     // A different edit token means the editor must keep its own base version for conflict detection.
-    const sameEdit = current && input.editToken && input.editToken === current.editToken;
+    const sameEdit = current && ((input.editToken && input.editToken === current.editToken) ||
+      current.starEditBase === draftEditBase(input));
     return writeDraft(database, {
-      ...input, ...(current?.detachedReply ? {detachedReply:true, emailId:0, sendType:'', inlineReply:false} : {}),
+      ...input,
+      // A filing-only edit keeps its content ancestor across tabs and cloud uploads.
+      starEditBase:starOnly && current ? current.starEditBase || draftEditBase(current) : undefined,
+      ...(preserveStar && current ? {mailboxStarred:Boolean(current.mailboxStarred)} : {}),
+      ...(current?.detachedReply ? {detachedReply:true, emailId:0, sendType:'', inlineReply:false} : {}),
       restoredFromDiscard:current?.restoredFromDiscard, updatedAt:new Date().toISOString(), dirty:true, editToken:crypto.randomUUID(),
       clientId:current?.clientId || input.clientId || crypto.randomUUID(),
       cloudVersion:sameEdit ? current.cloudVersion : input.cloudVersion ?? current?.cloudVersion,
@@ -128,7 +133,7 @@ async function push(database,row,api) {
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
     const attachments=value.attachments.map(({attachmentId,...f})=>f);
-    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken}};
+    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};
     await database.transaction('rw', database.draft, database.att, async () => {

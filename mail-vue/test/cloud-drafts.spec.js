@@ -47,6 +47,14 @@ describe('Cloud draft synchronization',()=>{
   expect((await db.value.draft.get(row.draftId)).syncState).toBe('offline');await syncCloudDrafts();expect(http.post).not.toHaveBeenCalled();
   Object.defineProperty(navigator,'onLine',{value:true});await syncCloudDrafts();await syncCloudDrafts();expect(http.post).toHaveBeenCalledTimes(1);expect(http.post.mock.calls[0][1]).toMatchObject({bcc:['hidden@example.net'],attachments:[{filename:'report.txt',content:'aGVsbG8='}]});expect(state.rows.size).toBe(1);
  });
+ it('merges another tab’s filing-only revision into later typing without forking the draft',async()=>{
+  const opened=await saveLocalDraft(input({content:'Original',mailboxStarred:false}));
+  const starred=await saveLocalDraft({...opened,mailboxStarred:true},{starOnly:true,requireCurrent:true});
+  await db.value.draft.put({...await db.value.draft.get(starred.draftId),cloudVersion:4,dirty:false});
+  const typed=await saveLocalDraft({...opened,content:'Original continued'},{preserveStar:true});
+  expect(typed).toMatchObject({draftId:opened.draftId,mailboxStarred:true,cloudVersion:4,content:'Original continued'});
+  expect(typed.starEditBase).toBeUndefined();
+ });
  it('recognizes its own cloud update after a lost response without creating a duplicate',async()=>{
   const row=await saveLocalDraft(input({name:'Alex'}));
   await syncCloudDrafts();

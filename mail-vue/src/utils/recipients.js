@@ -59,6 +59,10 @@ export function hasDraftContent(draft) {
     recipientFields.some(field => draft[field]?.length));
 }
 
+export function draftEditBase(row) {
+  return row.editToken || JSON.stringify([row.cloudVersion ?? null,row.localRevision ?? null]);
+}
+
 // Omit empty filing choices so fingerprints from older versions still compare equal.
 export function draftFilingFingerprint(draft) {
   return [

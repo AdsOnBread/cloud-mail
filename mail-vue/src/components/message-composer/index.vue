@@ -287,8 +287,8 @@
           </el-dropdown>
           <ComposeMore ref="moreOptions" :disabled="sending || preparing || attaching" :active="show && !minimized"
             :full-screen="Boolean(composeMode.fullScreen)" :plain-text="form.plainText"
-            :label-ids="form.labelIds" :starred="form.mailboxStarred"
-            @labels="form.labelIds = $event" @star="form.mailboxStarred = $event" @command="moreCommand"/>
+            :label-ids="form.labelIds" :starred="displayStar"
+            @labels="form.labelIds = $event" @star="chooseStar" @command="moreCommand"/>
           <input ref="photoInput" type="file" :accept="photoTypes.join(',')" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
@@ -395,6 +395,7 @@ import {
   hasDraftContent,
   draftFingerprint,
   draftFilingFingerprint,
+  draftEditBase,
   replyRecipients,
   recipientFields,
 } from "@/utils/recipients.js";
@@ -588,6 +589,19 @@ const emptyForm = () => ({
   draftId: null,
 });
 const form = reactive(emptyForm());
+const starChoice = ref(null);
+const starRevision = ref(0);
+const displayStar = computed(() => {
+  const row = form.draftId && draftStore.items.find(item=>item.draftId===form.draftId);
+  if (!starChoice.value && row && row.starEditBase===draftEditBase(form)) return row.starred;
+  return Boolean(form.mailboxStarred);
+});
+function chooseStar(value) {
+  starChoice.value={value};
+  starRevision.value++;
+  form.mailboxStarred=value;
+}
+
 
 function commitRecipients() {
   [toField, ccField, bccField].forEach((field) => field.value?.commit());
@@ -634,6 +648,7 @@ function startSignatureDefault(){
   })();
 }
 function resetForm() {
+  starChoice.value=null;
   missingRecipient.value = false;
   lastInput = null;
   restoreFocus = null;
@@ -912,7 +927,12 @@ async function persistDraftNow(options) {
   if (props.inline && form.sendType === "reply") data.inlineReply = true;
   data.createTime =
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
-  const saved=await saveLocalDraft({...data,draftId,attachments}, options);
+  const choice=starChoice.value;
+  const saved=await saveLocalDraft({...data,draftId,attachments}, {...options,preserveStar:!choice});
+  if (starChoice.value===choice) {
+    starChoice.value=null;
+    form.mailboxStarred=Boolean(saved.mailboxStarred);
+  }
   Object.assign(form,{draftId:saved.draftId, editToken:saved.editToken, clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
   if (saved.detachedReply) Object.assign(form, {emailId:0, sendType:"", inlineReply:false});
   return saved;
@@ -922,9 +942,9 @@ async function removeSavedDraft() {
 }
 let cloudSaveTimer;
 watch([()=>draftFingerprint(form), ()=>JSON.stringify(draftFilingFingerprint(form)),
-  ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing],[,previousFiling])=>{
+  ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
   if(preparing.value || sending.value || !show.value) return;
-  const changedFiling = form.draftId && filing!==previousFiling;
+  const changedFiling = form.draftId && (filing!==previousFiling || revision!==previousRevision);
   if (!changedFiling && (!hasDraftContent(form) || fingerprint===automaticBaseline ||
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
@@ -1242,7 +1262,7 @@ function starFromList(id, owner, starred) {
   if (!show.value || form.draftId!==id || form.ownerEmail!==owner) return;
   if (sending.value || preparing.value || attaching.value)
     return Promise.reject(new Error("Wait until the message is ready to change its star."));
-  form.mailboxStarred=starred;
+  chooseStar(starred);
   return nextTick().then(()=>saveQueue);
 }
 onMounted(() => {

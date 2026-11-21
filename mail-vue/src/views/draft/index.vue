@@ -184,7 +184,7 @@ async function toggleStar(item) {
     if (editing) { await editing; return; }
     const draft=await readSavedDraft(item.draftId);
     if (draft.sendAttemptId) throw new Error("Check the delivery status before changing this draft.");
-    await saveLocalDraft({...draft,mailboxStarred:!item.starred},{requireCurrent:true,session});
+    await saveLocalDraft({...draft,mailboxStarred:!item.starred},{requireCurrent:true,session,starOnly:true});
     syncCloudDrafts().catch(()=>{});
   } catch(e) { error.value=e.message || "Could not change the draft star."; }
   finally { busy.value=false; }
