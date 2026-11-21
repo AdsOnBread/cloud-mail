@@ -102,3 +102,14 @@ it('leaves ambiguous styled spans intact instead of linking a truncated path', a
   expect(doc.body.textContent).toContain('https://example.org/billing');
   reader.unmount();
 });
+
+it('keeps named inline destinations intact without linking a misleading prefix', async () => {
+  const html = '<div>https://example.org/<span id="destination">billing</span></div>';
+  const reader = mount(MessageContent, { props: { html } });
+  await flushPromises();
+  const doc = new DOMParser().parseFromString(reader.get('iframe').attributes('srcdoc'), 'text/html');
+  expect(doc.querySelectorAll('a')).toHaveLength(0);
+  expect(doc.querySelectorAll('#destination')).toHaveLength(1);
+  expect(doc.body.textContent).toBe('https://example.org/billing');
+  reader.unmount();
+});

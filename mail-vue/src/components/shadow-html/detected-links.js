@@ -71,6 +71,13 @@ export function MessageText({ text }) {
 }
 MessageText.props = ['text'];
 
+function wouldSplitId(node, ancestor) {
+  for (let parent = node.parentNode; parent && parent !== ancestor; parent = parent.parentNode) {
+    if (parent.id) return true;
+  }
+  return false;
+}
+
 function linkTextRun(doc, nodes, stylesheet) {
   const links = linksIn(nodes.map(node => node.data).join(''));
   if (!links.length) return;
@@ -99,6 +106,8 @@ function linkTextRun(doc, nodes, stylesheet) {
       range ??= doc.createRange();
       range.setStart(start.node, start.offset);
       range.setEnd(end.node, end.offset);
+      const ancestor = range.commonAncestorContainer;
+      if (wouldSplitId(start.node, ancestor) || wouldSplitId(end.node, ancestor)) continue;
       const anchor = doc.createElement('a');
       anchor.href = href;
       anchor.append(range.extractContents());
@@ -149,7 +158,7 @@ export function detectDocumentLinks(doc) {
         ['hidden', 'collapse'].includes(node.style?.visibility)) { flush(); continue; }
     if (node.localName === 'wbr' && !node.hasAttribute('style')) continue;
     const display = node.style?.display;
-    if (!node.matches(inline) || node.id || (display && !['inline', 'contents'].includes(display))) {
+    if (!node.matches(inline) || (display && !['inline', 'contents'].includes(display))) {
       flush();
       stack.push(null);
     }
