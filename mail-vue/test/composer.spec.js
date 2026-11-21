@@ -3,6 +3,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import Composer from "../src/layout/write/index.vue";
 import { useUserStore } from "../src/store/user.js";
+import { useSettingStore } from "../src/store/setting.js";
 import { useAccountStore } from "../src/store/account.js";
 import { useEmailStore } from "../src/store/email.js";
 import db from "../src/db/db.js";
@@ -270,6 +271,26 @@ describe("composer persistence and sending", () => {
     expect(state.drafts.size).toBe(0);
     expect(state.attachments.size).toBe(0);
     wrapper.unmount();
+  });
+  it("shows the sender for aliases and hides it when only the primary address is available", async () => {
+    const accounts = useAccountStore();
+    accounts.loaded = false;
+    useSettingStore().settings.manyEmail = 1;
+    const wrapper = composer();
+    wrapper.vm.open();
+    await flushPromises();
+    expect(wrapper.find(".from-row").exists()).toBe(false);
+    useSettingStore().settings.manyEmail = 0;
+    await flushPromises();
+    expect(wrapper.find(".from-row").exists()).toBe(true);
+    wrapper.unmount();
+    accounts.currentAccount = accounts.accounts[1];
+    useSettingStore().settings.manyEmail = 1;
+    const alias = composer();
+    alias.vm.open();
+    await flushPromises();
+    expect(alias.get(".from-row").text()).toContain("alias@example.com");
+    alias.unmount();
   });
   it("updates the docked caption on blur and keeps recipient shortcuts usable from a collapsed header", async () => {
     const wrapper = composer();

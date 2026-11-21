@@ -387,6 +387,7 @@ import { fileToBase64, formatBytes } from "@/utils/file-utils.js";
 import { getIconByName } from "@/utils/icon-utils.js";
 import { formatDetailDate } from "@/utils/day.js";
 import { userDraftStore } from "@/store/draft.js";
+import { useSettingStore } from "@/store/setting.js";
 import { useWriterStore } from "@/store/writer.js";
 import { hasPerm } from "@/perm/perm.js";
 import {
@@ -454,8 +455,12 @@ const editingRecipients = ref(false);
 const addressExpanded = ref(true);
 const subjectCaption = ref("");
 const caption = computed(() => subjectCaption.value || ({reply: "Reply", forward: "Forward"}[form.sendType] || "New Message"));
-const showSender = computed(() => !accountStore.loaded || accountStore.accounts.length > 1 ||
-  form.sendEmail?.toLowerCase() !== userStore.user.email?.toLowerCase());
+const settingStore = useSettingStore();
+const showSender = computed(() => {
+  if (form.sendEmail?.toLowerCase() !== userStore.user.email?.toLowerCase()) return true;
+  const canChooseMailbox = hasPerm("account:query") && settingStore.settings.manyEmail === 0;
+  return canChooseMailbox && (!accountStore.loaded || accountStore.accounts.length > 1);
+});
 
 function toggleMinimized() {
   subjectCaption.value = form.subject.trim();
