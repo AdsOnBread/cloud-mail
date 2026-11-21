@@ -59,3 +59,12 @@ describe('list request generations', () => {
     expect(retry).toBe(current); expect(guard.current(old)).toBe(false);
   });
 });
+
+it('offers Reply all only when more than one other visible participant is addressed',async()=>{
+ const {hasReplyAll}=await import('../src/utils/recipients');
+ const m={sendEmail:'sender@example.org',recipient:[{address:'ME@example.org'}],cc:[],bcc:['hidden@example.org']};
+ const own=['me@example.org','alias@example.org'];
+ expect(hasReplyAll(m,own)).toBe(false);
+ expect(hasReplyAll({...m,cc:['ALIAS@example.org','sender@example.org']},own)).toBe(false);
+ expect(hasReplyAll({...m,cc:['colleague@example.org']},own)).toBe(true);
+});

@@ -276,3 +276,22 @@ describe("conversation navigation and inline targets", () => {
     wrapper.unmount();
   });
 });
+
+it('serializes older-page loading and Expand all and keeps the latest message open on collapse',async()=>{
+ const {emailDetail}=await import('../src/request/email');
+ vi.mocked(emailDetail).mockImplementation(async id=>({...message(id),attList:[]}));
+ let resolveOld;
+ conversationMessages.mockResolvedValueOnce(page([message(9),message(10)],{total:4,hasMore:true,nextCursor:9}))
+   .mockReturnValueOnce(new Promise(resolve=>{resolveOld=resolve;}));
+ const {wrapper}=await setup();
+ await wrapper.get('.older').trigger('click');
+ const expand=wrapper.get('button[aria-label="Expand all"]');
+ expect(expand.element.disabled).toBe(true);
+ resolveOld(page([message(7),message(8)],{total:4}));await flushPromises();
+ await expand.trigger('click');await flushPromises();
+ expect(wrapper.findAll('button[aria-expanded="true"]')).toHaveLength(4);
+ await wrapper.get('button[aria-label="Collapse all"]').trigger('click');
+ expect(wrapper.findAll('button[aria-expanded="true"]')).toHaveLength(1);
+ expect(wrapper.get('button[aria-expanded="true"]').text()).toContain('Message 10');
+ wrapper.unmount();
+});

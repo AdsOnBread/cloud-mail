@@ -1,6 +1,6 @@
 // Build a separate document so printing never includes other messages or the application chrome.
 const allowed = new Set('div p br b strong i em s strike u span sub sup ol ul li blockquote pre code table thead tbody tfoot tr th td h1 h2 h3 h4 h5 h6 hr'.split(' '));
-const ignored = new Set(['script','style','iframe','object','embed','template','svg','math','noscript']);
+const ignored = new Set(['script','style','iframe','object','embed','template','svg','math','noscript','head','title','meta','link','base']);
 const styles = ['color','background-color','font-family','font-size','font-style','font-weight','text-align','text-decoration-line','white-space','margin-left','padding-left'];
 
 export function copyBody(source, target, doc) {
@@ -10,7 +10,8 @@ export function copyBody(source, target, doc) {
       continue;
     }
     const tag = node.localName;
-    if (!tag || ignored.has(tag)) continue;
+    if (!tag || ignored.has(tag) || node.hasAttribute('hidden') || node.style?.display==='none' ||
+        ['hidden','collapse'].includes(node.style?.visibility)) continue;
     let element;
     if (tag === 'img') {
       const src = node.getAttribute('src') || '';

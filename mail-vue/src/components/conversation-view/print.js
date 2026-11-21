@@ -10,6 +10,7 @@ function address({name,address}) {
 async function loadInlineImages(template,message,current,signal) {
   const files=message.attList || [];
   for (const image of template.content.querySelectorAll('img')) {
+    if (image.closest('[hidden]')) continue;
     const src=image.getAttribute('src') || '';
     const key=storedKey(src);
     const file=files.find(f=>(key && f.key===key) || (src.startsWith('cid:') && f.contentId?.replace(/^<|>$/g,'')===src.slice(4)));
