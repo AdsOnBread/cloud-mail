@@ -124,23 +124,26 @@ const api=createHTTPServer(async(req,res)=>{
  else if(path==='/v1/scheduled'){
    const p=Object.fromEntries(url.searchParams),scope=Number(p.accountId);
    const queued=[...cloudDrafts.values()].filter(d=>d.scheduledAt && (!scope || d.accountId===scope));
-   if(p.countOnly==='1')data={count:queued.length};
+   if(p.countOnly==='1')data={count:queued.length,...(p.includeInboxUnread==='1'?{inboxUnread:queued.filter(d=>d.scheduledUnread && d.scheduledInbox).length}:{})};
    else data=queued.filter(d=>(!Number(p.isUnread) || d.scheduledUnread) && matchesDate(d.createTime,p) && matchesRowSize(d,p,d.attachments)).map(d=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
-       unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
+       inbox:d.scheduledInbox||0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
        senderEmail:sender.email,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
+     return (p.mark!=='inbox'||row.inbox) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
- }else if(path==='/v1/scheduled/read' && req.method==='POST'){
-   const {messages,unread}=JSON.parse(body);
+ }else if(['/v1/scheduled/read','/v1/scheduled/inbox'].includes(path) && req.method==='POST'){
+   const {messages,unread,inbox}=JSON.parse(body);
    if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version;})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
-   for(const m of messages)cloudDrafts.get(m.draftId).scheduledUnread=Number(unread);
+   for(const m of messages){
+     const d=cloudDrafts.get(m.draftId);
+     if(path.endsWith('/inbox'))d.scheduledInbox=Number(inbox);else d.scheduledUnread=Number(unread);
+   }
    data={updated:messages.length};
  }else if(path.startsWith('/v1/scheduled/')){
    const draft=cloudDrafts.get(Number(path.split('/')[3]));
@@ -152,7 +155,7 @@ const api=createHTTPServer(async(req,res)=>{
      data={draftId:draft.draftId,field,value};
    }else if(path.endsWith('/cancel')){
      if(JSON.parse(body).version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
-     delete draft.scheduledAt;delete draft.scheduledUnread;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
+     delete draft.scheduledAt;delete draft.scheduledUnread;delete draft.scheduledInbox;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
    }else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path==='/v1/drafts'&&req.method==='POST'){
    const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);

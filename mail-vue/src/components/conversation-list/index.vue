@@ -170,12 +170,20 @@
     <details v-if="scheduledMatches.length" class="marked-scheduled" open>
       <summary>Scheduled ({{ scheduledMatches.length }})</summary>
       <div class="scheduled-links">
-        <RouterLink v-for="message in scheduledMatches" :key="message.draftId"
-          :to="{name:'scheduled', query:{message:message.draftId,from:folder,labelId:folder==='label' ? labelId : undefined}}">
-          <Icon icon="material-symbols:schedule-send-outline" width="18" />
-          <span :class="{'queued-unread':message.unread}">{{ message.subject || '(no subject)' }}</span>
-          <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
-        </RouterLink>
+        <div v-for="message in scheduledMatches" :key="message.draftId" class="filed-queue-row" :class="{ 'inbox-queue-row':folder==='inbox' }">
+          <RouterLink :to="{name:'scheduled', query:{message:message.draftId,from:folder,labelId:folder==='label' ? labelId : undefined}}"
+            :aria-description="'Send scheduled for '+formatDetailDate(message.sendAt*1000)">
+            <Icon icon="material-symbols:schedule-send-outline" width="18" />
+            <span :class="{'queued-unread':message.unread}">{{ message.subject || '(no subject)' }}</span>
+            <span v-if="folder==='inbox' && message.preview" class="queued-preview">– {{ message.preview }}</span>
+            <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
+          </RouterLink>
+          <button v-if="folder==='inbox' && ['scheduled','schedule_failed'].includes(message.state)" type="button" class="queue-archive mail-icon"
+            :aria-label="'Archive '+(message.subject || '(no subject)')" data-tip="Archive" :disabled="Boolean(filingQueue)"
+            @click="archiveQueued(message,$event.currentTarget)">
+            <Icon icon="material-symbols:archive-outline" width="20"/>
+          </button>
+        </div>
       </div>
     </details>
     <p v-if="scheduledError" role="alert" class="list-status">{{ scheduledError }} <button @click="refresh">Retry</button></p>
@@ -375,6 +383,7 @@ import { useEmailStore } from "@/store/email";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useSettingStore } from "@/store/setting";
 import { conversationList, conversationAction } from "@/request/conversation";
+import {fileScheduledMessages} from "@/services/scheduled-filing";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import InboxTabs from "@/components/inbox-tabs.vue";
 import {inboxCategories,categoryFolders,categoryMessageKey} from "@/utils/inbox-categories";
@@ -389,7 +398,24 @@ const account = useAccountStore(),
   settings = useSettingStore();
 const router = useRouter(),
   route = useRoute();
-const scheduledMatches = ref([]), scheduledError = ref("");
+const scheduledMatches = ref([]), scheduledError = ref(""), filingQueue=ref(false);
+async function archiveQueued(message,button) {
+  if (filingQueue.value) return;
+  const ownerKey=key.value, path=route.fullPath, list=button.closest('.conversation-list');
+  filingQueue.value=true;
+  try {
+    await fileScheduledMessages([message],false);
+    if (key.value===ownerKey && route.fullPath===path && list.isConnected) {
+      scheduledMatches.value=scheduledMatches.value.filter(row=>row.draftId!==message.draftId);
+      await nextTick();
+      if (document.activeElement===document.body)
+        list.querySelector('.filed-queue-row a,.conversation-open')?.focus();
+    }
+  } catch(e) {
+    if (key.value===ownerKey && route.fullPath===path && list.isConnected)
+      scheduledError.value=e.message || 'Could not archive the scheduled message.';
+  } finally {filingQueue.value=false;}
+}
 const rows = ref([]),
   selected = ref([]),
   ascending = ref(false),
@@ -809,6 +835,22 @@ defineExpose({ refresh });
 .scheduled-links button,.scheduled-links a { display:flex; gap:12px; align-items:center; padding:8px 16px; color:inherit; text-decoration:none; }
 .scheduled-links button:hover,.scheduled-links button:focus-visible,.scheduled-links a:hover,.scheduled-links a:focus-visible,.marked-scheduled summary:hover { background:var(--mail-hover); }
 .scheduled-links button {width:100%;text-align:left;cursor:pointer;font:inherit}
+.filed-queue-row {position:relative;}
+.filed-queue-row a {min-height:40px;box-sizing:border-box;}
+.queued-preview {font-weight:400;color:var(--secondary-text-color);}
+.scheduled-links .queue-archive {position:absolute;inset-inline-end:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;justify-content:center;padding:0;opacity:0;pointer-events:none;}
+.inbox-queue-row:focus-within .queue-archive {opacity:1;pointer-events:auto;}
+.inbox-queue-row:focus-within:has(.queue-archive) time {visibility:hidden;min-width:32px;}
+@media(hover:hover) {
+  .inbox-queue-row:hover .queue-archive {opacity:1;pointer-events:auto;}
+  .inbox-queue-row:hover:has(.queue-archive) time {visibility:hidden;min-width:32px;}
+}
+@media(hover:none) {
+  .scheduled-links .queue-archive {position:static;transform:none;opacity:1;pointer-events:auto;flex:none;}
+  .inbox-queue-row {display:flex;align-items:center;}
+  .inbox-queue-row a {flex:1;min-width:0;}
+  .inbox-queue-row:focus-within:has(.queue-archive) time {visibility:visible;}
+}
 .draft-marker {color:var(--mail-draft,#b3261e)}
 .scheduled-links button span,.scheduled-links a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .scheduled-links time { margin-left:auto; flex:none; font-size:12px; }
