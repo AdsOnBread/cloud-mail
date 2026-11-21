@@ -14,7 +14,7 @@
         </div>
       </div>
       <button class="save" :aria-label="saveLabel" :data-tip="saveLabel" :disabled="busy || !ready" @click="save">
-        <Icon :icon="saved?'material-symbols:person-check-outline':'material-symbols:person-add-alt'" width="19"/>
+        <Icon :icon="saved?'material-symbols:person-check-outline':'material-symbols:person-add-outline'" width="19"/>
       </button>
     </div>
     <div class="actions">
