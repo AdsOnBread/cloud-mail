@@ -673,7 +673,7 @@ async function cancel(batch) {
         if (!draft || !stillAtOrigin()) return;
         if (canceled.includes(messageId.value)) {
           const before = navigations;
-          const failure = await router.replace({name:"scheduled"});
+          const failure = await router.replace({name:"scheduled", query:route.query.window==="1" ? {window:"1"} : {}});
           // Leaving a filtered reader also resets search. Only a competing navigation
           // or mailbox switch should interrupt reopening the newly editable draft.
           if (failure || !sameMailbox() || route.name !== "scheduled" || messageId.value || navigations !== before + 1) return;
