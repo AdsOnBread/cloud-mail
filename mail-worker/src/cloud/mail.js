@@ -43,6 +43,12 @@ export async function searchPeople(c,userId,params) {
   }
   return suggestions;
 }
+const messageLabels = `(SELECT json_group_array(label_id) FROM mailbox_label_members
+  WHERE user_id=e.user_id AND email_id=e.email_id)`;
+function messageFields(row) {
+  const {label_ids,...message}=row;
+  return label_ids ? {...camel(message),labelIds:JSON.parse(label_ids)} : camel(message);
+}
 export async function list(c,userId,p={}) {
   const filters=[owned]; const args=[userId];
   const folder=p.folder||'inbox';
@@ -61,21 +67,21 @@ export async function list(c,userId,p={}) {
   }
   const limit=pageSize(p.limit);
   const rows=(await c.env.db.prepare(`${folder==='inbox' ? `WITH ${filedConversations}` : ''} SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
-    e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
+    ${folder==='trash' ? messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
     FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
     ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}
     WHERE ${filters.join(' AND ')} ORDER BY e.email_id DESC LIMIT ?`).bind(...args,limit+1).all()).results;
   const page=rows.slice(0,limit);
   const files=folder==='trash' ? await mailboxAttachments(c.env.db,userId,page,'trash') : new Map();
-  return {messages:page.map(row=>({...camel(row),...files.get(row.email_id)})),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
+  return {messages:page.map(row=>({...messageFields(row),...files.get(row.email_id)})),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
 }
 export async function detail(c,userId,emailId) {
-  const row=await c.env.db.prepare(`SELECT e.*,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
+  const row=await c.env.db.prepare(`SELECT e.*,CASE WHEN e.trashed_at IS NOT NULL THEN ${messageLabels} END AS label_ids,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${owned} AND e.email_id=?`).bind(userId,positive(emailId)).first();
   if(!row) throw new BizError('Message not found.',404);
   if(row.type!==1) row.bcc='[]';
   const files=(await c.env.db.prepare('SELECT * FROM attachments WHERE email_id=? AND user_id=?').bind(row.email_id,userId).all()).results;
-  return {...camel(row),text:row.text||emailUtils.htmlToText(row.content||''),attList:files.map(camel)};
+  return {...messageFields(row),text:row.text||emailUtils.htmlToText(row.content||''),attList:files.map(camel)};
 }
 export async function attachment(c,userId,id) {
   const row=await c.env.db.prepare(`SELECT att.* FROM attachments att JOIN email e ON e.email_id=att.email_id JOIN account a ON a.account_id=e.account_id

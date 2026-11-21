@@ -158,13 +158,17 @@ export async function removeLabel(db, userId, id) {
 	if (!result) throw new BizError('Label not found.', 404);
 }
 
-export async function changeLabels(db, userId, ids, add, remove) {
+export function validateLabelChange(add, remove) {
 	if (
 		![add, remove].every((list) => Array.isArray(list) && list.length <= 50 && list.every((id) => Number.isSafeInteger(id) && id > 0)) ||
 		(!add.length && !remove.length) ||
 		add.some((id) => remove.includes(id))
 	)
 		throw new BizError('Invalid label selection.', 400);
+}
+
+export async function changeLabels(db, userId, ids, add, remove) {
+	validateLabelChange(add, remove);
 	const labels = new Set((await listLabels(db, userId)).map((label) => label.id));
 	if ([...add, ...remove].some((id) => !labels.has(id))) throw new BizError('Label not found.', 404);
 	const statements = [];

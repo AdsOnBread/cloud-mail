@@ -1,3 +1,4 @@
+import {validateLabelChange} from '../service/mailbox-labels';
 import {withLabelMove} from '../service/label-move';
 import BizError from '../error/biz-error';
 import { ensureThreads, groupThreads, threadColumns } from '../mobile/threads';
@@ -19,6 +20,31 @@ export async function setTrashRead(db,userId,ids,read) {
     WHERE email_id IN (SELECT email_id FROM selected) AND (SELECT COUNT(*) FROM selected)=? RETURNING email_id`)
     .bind(userId,JSON.stringify(selected),Number(read),selected.length).all();
   if (!result.results.length) throw new BizError('A selected message is no longer in Trash.',409);
+  return {messageCount:selected.length};
+}
+
+export async function setTrashLabels(db,userId,ids,add,remove) {
+  const selected=selectedIds(ids);
+  validateLabelChange(add,remove);
+  const labels=[...new Set([...add,...remove])];
+  const messages=JSON.stringify(selected);
+  const conditions=`SELECT
+    (SELECT COUNT(*) FROM email e JOIN account a ON a.account_id=e.account_id
+      WHERE ${owned} AND e.trashed_at IS NOT NULL AND e.email_id IN (SELECT value FROM json_each(?)))=? AS valid_mail,
+    (SELECT COUNT(*) FROM mailbox_labels WHERE user_id=? AND label_id IN (SELECT value FROM json_each(?)))=? AS valid_labels`;
+  const check=[userId,messages,selected.length,userId,JSON.stringify(labels),labels.length];
+  // D1 runs the eligibility check and guarded writes in a single transaction.
+  const guard=`EXISTS (SELECT 1 FROM (${conditions}) WHERE valid_mail AND valid_labels)`;
+  const statements=[db.prepare(conditions).bind(...check)];
+  if (add.length) statements.push(db.prepare(`INSERT OR IGNORE INTO mailbox_label_members(user_id,label_id,email_id)
+    SELECT ?,l.value,m.value FROM json_each(?) l CROSS JOIN json_each(?) m WHERE ${guard}`)
+    .bind(userId,JSON.stringify(add),messages,...check));
+  if (remove.length) statements.push(db.prepare(`DELETE FROM mailbox_label_members WHERE user_id=?
+    AND label_id IN (SELECT value FROM json_each(?)) AND email_id IN (SELECT value FROM json_each(?)) AND ${guard}`)
+    .bind(userId,JSON.stringify(remove),messages,...check));
+  const [result]=await db.batch(statements);
+  if (!result.results[0].valid_mail) throw new BizError('A selected message is no longer in Trash.',409);
+  if (!result.results[0].valid_labels) throw new BizError('Label not found.',404);
   return {messageCount:selected.length};
 }
 
