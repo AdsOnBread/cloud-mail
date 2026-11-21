@@ -81,6 +81,7 @@
         v-for="message in messages"
         :key="message.emailId"
         :message="message"
+        :now="readerNow"
         :before-delete="save"
         :replying="activeTarget === message.emailId"
         :expanded="expanded.has(message.emailId)"
@@ -108,6 +109,7 @@
   </section>
 </template>
 <script setup>
+import {useNow} from '@vueuse/core';
 import {hasReplyAll} from '@/utils/recipients';
 import {useUserStore} from '@/store/user';
 import {emailDetail} from '@/request/email';
@@ -141,6 +143,7 @@ import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useUiStore } from "@/store/ui";
+const readerNow=useNow({interval:60000});
 const labels=useMailLabels(), ui=useUiStore(), labelIds=ref([]);
 watch(()=>labels.moved,change=>{
   if(change && !change.trash && change.path===route.fullPath && change.ids.includes(Number(route.query.emailId)))back();
@@ -620,7 +623,7 @@ onUnmounted(() => {
 .conversation-body {
   overflow: auto;
   flex: 1;
-  padding: 20px 32px 80px;
+  padding: 20px 16px 80px;
   min-height: 0;
 }
 .thread-heading {display:flex;align-items:flex-start;gap:8px;margin-bottom:16px;}
@@ -632,7 +635,7 @@ onUnmounted(() => {
 h1 {
   font-size: 24px;
   font-weight: 400;
-  margin: 0 0 0 48px;
+  margin: 0 0 0 56px;
   overflow-wrap: anywhere;
   line-height: 1.4;
 }
@@ -686,7 +689,7 @@ h1 {
 .bottom-replies {
   display: flex;
   gap: 8px;
-  margin: 24px 0 0 48px;
+  margin: 24px 0 0 56px;
 }
 .bottom-replies svg {
   margin-right: 8px;

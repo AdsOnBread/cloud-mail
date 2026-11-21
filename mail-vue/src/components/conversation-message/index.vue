@@ -5,21 +5,18 @@
     :aria-label="`Message from ${message.name || message.sendEmail}`"
   >
     <div class="message-header">
-      <div class="avatar" aria-hidden="true">
-        {{ (message.name || message.sendEmail || "?")[0].toUpperCase() }}
-      </div>
-      <button
-        class="message-toggle"
-        :aria-expanded="expanded"
-        @click="$emit('toggle')"
-      >
-        <span
-          ><strong>{{ message.name || message.sendEmail }}</strong>
-          <span class="address">&lt;{{ message.sendEmail }}&gt;</span></span
-        >
-        <span v-if="!expanded" class="snippet">{{ message.listText }}</span>
-        <time>{{ formatDetailDate(message.createTime) }}</time>
+      <div class="avatar" aria-hidden="true" :style="{backgroundColor:avatarColor}">{{initial}}</div>
+      <button type="button" class="message-toggle" :aria-expanded="expanded"
+        :aria-label="(expanded ? 'Collapse' : 'Expand')+' message from '+sender" @click="$emit('toggle')">
+        <strong dir="auto">{{sender}}</strong>
+        <span v-if="expanded && message.name && message.sendEmail && message.name!==message.sendEmail" class="address" dir="ltr">&lt;{{message.sendEmail}}&gt;</span>
       </button>
+      <div v-if="expanded" class="conversation-recipients"><MessageRecipients :message="email"/></div>
+      <div v-else class="snippet" dir="auto">{{message.listText}}</div>
+      <div class="message-actions">
+      <time v-if="stamp" :datetime="stamp.iso" :data-tip="stamp.full">
+        <span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span>
+      </time>
       <button
         class="icon-button"
         :data-tip="message.isStar ? 'Unstar' : 'Star'"
@@ -47,9 +44,9 @@
           <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
         </el-dropdown-menu></template>
       </el-dropdown>
+      </div>
     </div>
     <template v-if="expanded">
-      <div class="conversation-recipients"><MessageRecipients :message="email"/></div>
       <p v-if="loading" role="status">Loading message…</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load">Retry</button>
@@ -90,10 +87,11 @@ import { useUiStore } from "@/store/ui";
 import { emailRead, emailDelete } from "@/request/email";
 import { starAdd, starCancel } from "@/request/star";
 import { downloadablePart } from "@/utils/private-files";
-import { formatDetailDate } from "@/utils/day";
+import { readerTimestamp } from "@/utils/day";
 const props = defineProps({
   message: Object,
   expanded: Boolean,
+  now: Date,
   beforeDelete: Function,
   replying: Boolean,
 });
@@ -106,6 +104,16 @@ const detail = ref(null),
   busy = ref(false);
 function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
+const sender=computed(()=>props.message.name || props.message.sendEmail || 'Unknown sender');
+const initial=computed(()=>Array.from(sender.value.trim())[0]?.toUpperCase() || '?');
+const avatarColors=['#5e35b1','#1967d2','#00796b','#a52714','#5b6670','#7b1fa2','#32652c','#b06000'];
+const avatarColor=computed(()=>{
+  const key=(props.message.sendEmail || sender.value).trim().toLowerCase();
+  let hash=0;
+  for (const character of key) hash=(hash*31+character.codePointAt(0))>>>0;
+  return avatarColors[hash % avatarColors.length];
+});
+const stamp=computed(()=>readerTimestamp(props.message.createTime,props.now));
 const user=useUserStore();
 const replyAll=computed(()=>user.defaultReplyAll && hasReplyAll(email.value,account.ownAddresses));
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
@@ -172,106 +180,61 @@ async function remove() {
 </script>
 <style scoped>
 .message-card {
-  padding: 20px 0;
-  border-bottom: 1px solid var(--light-border-color);
-  min-width: 0;
+  --avatar-size:40px;
+  --header-gap:16px;
+  padding:20px 0;
+  min-width:0;
 }
-.message-card.collapsed {
-  padding: 14px 0;
-}
+.message-card + .message-card {border-top:1px solid var(--light-border-color)}
 .message-header {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  min-width: 0;
+  position:relative;
+  display:grid;
+  grid-template-columns:var(--avatar-size) minmax(0,1fr) auto;
+  grid-template-rows:20px 20px;
+  column-gap:var(--header-gap);
+  align-items:center;
+  min-width:0;
+  font-family:Arial,Helvetica,sans-serif;
 }
 .avatar {
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--mail-compose);
-  color: var(--mail-on-compose);
-  font-size: 18px;
+  grid-area:1 / 1 / 3 / 2;
+  width:var(--avatar-size);height:var(--avatar-size);
+  border-radius:50%;display:grid;place-items:center;
+  color:white;font-size:20px;font-weight:500;user-select:none;
 }
 .message-toggle {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  gap: 12px;
-  align-items: center;
-  text-align: left;
-  cursor: pointer;
-  color: inherit;
-  font-size: 14px;
+  grid-area:1 / 2;
+  display:flex;align-items:baseline;gap:4px;min-width:0;
+  text-align:start;cursor:pointer;color:var(--el-text-color-primary);font:14px/20px Arial,sans-serif;
 }
-.message-toggle > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.message-toggle strong,.address,.snippet {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.message-toggle strong {flex:0 1 auto;min-width:0}
+.message-toggle::after {content:'';position:absolute;inset:-20px 0;z-index:1}
+.message-toggle:focus-visible {outline:0}
+.message-toggle:focus-visible::after {outline:2px solid var(--el-color-primary);outline-offset:-2px;border-radius:4px}
+.address,time {font:12px/20px Arial,sans-serif;color:var(--regular-text-color)}
+.address {flex:0 1 auto}
+.snippet,.conversation-recipients {grid-area:2 / 2 / 3 / -1;min-width:0;text-align:start}
+.snippet {color:var(--regular-text-color);font:13px/20px Arial,sans-serif}
+.conversation-recipients {width:fit-content;max-width:100%;position:relative;z-index:2;line-height:20px}
+.message-actions {
+  grid-area:1 / 3;display:flex;align-items:center;justify-content:end;
+  position:relative;z-index:2;height:20px;color:var(--regular-text-color);
 }
-.address,
-time {
-  font-size: 12px;
-  color: var(--regular-text-color);
-}
-time {
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.snippet {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--regular-text-color);
-  flex: 1;
-}
-.icon-button { width:40px; height:40px; border-radius:50%; display:inline-grid; place-items:center; flex-shrink:0;
-  color: var(--regular-text-color);
-  cursor: pointer;
-}
-.icon-button:is(:hover,:focus-visible) { background:var(--mail-hover); }
-.conversation-recipients {display:block;margin:0 0 18px 48px;max-width:calc(100% - 48px)}
-.message-html { margin-left:48px; }
-.message-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 14px/1.6 Arial;
-  padding-left: 48px;
-}
-.attachments {margin-inline-start:48px}
-.delivery-status {
-  padding: 12px;
-  color: var(--el-color-warning);
-}
-@media (max-width: 767px) {
-  .message-html { margin-left:0; }
-  .message-toggle {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .message-toggle > span:first-child {
-    max-width: 100%;
-  }
-  .address {
-    display: none;
-  }
-  time {
-    margin: 0;
-    width: 100%;
-    font-size: 11px;
-  }
-  .snippet {
-    display: none;
-  }
-  .attachments {
-    margin-left: 0;
-  }
-
-  .message-text {
-    padding-left: 0;
-  }
-
+time {margin-inline-end:10px;white-space:nowrap}
+.short-time {display:none}
+.icon-button {width:40px;height:40px;border-radius:50%;display:inline-grid;place-items:center;flex-shrink:0;color:inherit;cursor:pointer}
+.icon-button:is(:hover,:focus-visible) {background:var(--mail-hover)}
+.message-html,.attachments {margin-inline-start:calc(var(--avatar-size) + var(--header-gap))}
+.message-html {margin-top:8px}
+.delivery-status {padding:12px;color:var(--el-color-warning)}
+@media(max-width:900px){.full-time{display:none}.short-time{display:inline}}
+@media(max-width:767px){
+  .message-card{--avatar-size:32px;--header-gap:8px;padding-block:16px}
+  .message-toggle::after{inset:-16px 0}
+  .message-html,.attachments{margin-inline-start:0}
+  .address{display:none}
+  .icon-button{width:32px;height:36px}
+  time{margin-inline-end:4px}
 }
 </style>
