@@ -1,9 +1,10 @@
+import { importanceSchema } from './mail-importance.js';
 import { categorySchema } from './inbox-categories.js';
 import { labelSchema } from './mailbox-labels.js';
 // A filing follows the latest received message. A new reply therefore reopens the thread.
 export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 	const statements = [
-		...labelSchema, categorySchema,
+		...labelSchema, categorySchema, importanceSchema,
 		`CREATE TABLE IF NOT EXISTS conversation_filing (
 			user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, wake_at INTEGER, notified INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (user_id,email_id))`,
@@ -18,6 +19,7 @@ export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 		DELETE FROM conversation_filing WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END`);
 	if (tables.has('email')) statements.push('CREATE TRIGGER IF NOT EXISTS label_member_cleanup AFTER DELETE ON email BEGIN DELETE FROM mailbox_label_members WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END');
     if (tables.has('email')) statements.push('CREATE TRIGGER IF NOT EXISTS category_cleanup AFTER DELETE ON email BEGIN DELETE FROM mailbox_categories WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END');
+    if (tables.has('email')) statements.push('CREATE TRIGGER IF NOT EXISTS importance_cleanup AFTER DELETE ON email BEGIN DELETE FROM mailbox_importance WHERE email_id=OLD.email_id AND user_id=OLD.user_id; END');
 	return statements;
 }
 

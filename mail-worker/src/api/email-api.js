@@ -56,7 +56,7 @@ app.delete('/email/conversation/labels/:id', async c => {
   await removeLabel(c.env.db,userContext.getUserId(c),c.req.param('id'));
   return c.json(result.ok());
 });
-for (const action of ['read', 'delete', 'star', 'archive', 'snooze', 'inbox', 'label', 'move', 'category']) {
+for (const action of ['read', 'delete', 'star', 'archive', 'snooze', 'inbox', 'label', 'move', 'category','importance']) {
 	app.post(`/email/conversation/${action}`, async c =>
 		c.json(result.ok(await conversationAction(c, await c.req.json(), userContext.getUserId(c), action))));
 }

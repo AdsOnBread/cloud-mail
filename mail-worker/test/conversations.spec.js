@@ -341,3 +341,24 @@ it('categorizes complete conversations before pagination and retains explicit fi
   expect((await list({category:'promotions'})).total).toBe(0);
   expect((await list({q:'New titles'})).total).toBe(1);
 });
+
+it('keeps manual importance through replies, filing, and changes to read or star state',async()=>{
+  const original=await insert({subject:'A question',message_id:'<important@example.com>'});
+  const reply=await insert({type:1,status:2,subject:'Re: A question',in_reply_to:'<important@example.com>',reply_to_email_id:original.email_id});
+  const ordinary=await insert({subject:'A receipt'});
+  expect((await list({folder:'important'})).threads.map(t=>[t.lastEmailId,t.importanceReason])).toEqual([[reply.email_id,'reply']]);
+  expect((await messages(original.email_id)).importanceReason).toBe('reply');
+  await action('importance',[original.email_id],{important:false});
+  await insert({reply_to_email_id:original.email_id,subject:'Thanks!'});
+  expect((await list({folder:'important'})).total).toBe(0);
+  await action('importance',[ordinary.email_id],{important:true});
+  await action('archive',[ordinary.email_id]);
+  await action('read',[ordinary.email_id],{unread:1});
+  expect((await list({folder:'important',q:'receipt'})).threads[0]).toMatchObject({importanceReason:'user',unreadCount:0,starred:0});
+  expect((await messages(ordinary.email_id)).importanceReason).toBe('user');
+  const foreign=await insert({user_id:2,account_id:2});
+  await expect(action('importance',[ordinary.email_id,foreign.email_id],{important:false})).rejects.toMatchObject({code:404});
+  expect((await list({folder:'important'})).total).toBe(1);
+  await expect(action('importance',[ordinary.email_id],{important:1})).rejects.toMatchObject({code:400});
+  expect((await list({folder:'important',accountId:3})).total).toBe(0);
+});

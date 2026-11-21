@@ -1,4 +1,5 @@
 import { addMailFilters } from '../service/mail-search-filters';
+import { importanceFields, importanceJoin, importanceReason, setImportance } from "./mail-importance";
 import { checkCategory, categoryQuery, fileCategory } from './inbox-categories';
 import { changeLabels } from './mailbox-labels';
 import { filedConversations, inboxMember } from './conversation-filing';
@@ -43,7 +44,7 @@ export async function conversationList(c, p, userId) {
   if(category && p.folder!=='inbox')throw new BizError('Categories are available in Inbox.',400);
   const filters = [];
 	const args = [userId];
-	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
+	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label','important'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
 	if (p.folder === 'label') {
     if (!validId(p.labelId)) throw new BizError('Invalid label.',400);
     filters.push('EXISTS (SELECT 1 FROM mailbox_label_members lm WHERE lm.user_id=e.user_id AND lm.email_id=e.email_id AND lm.label_id=?)');
@@ -77,14 +78,18 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    grouped AS (SELECT m.thread_id,${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    summaries AS (SELECT m.thread_id,${importanceFields},${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
       JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
       FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
+      ${importanceJoin}
       ${category?'LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id':''}
-      WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id)${category?categoryQuery:''}`;
+      WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id),
+    grouped AS (SELECT summary.*, ${importanceReason} AS importance_reason FROM summaries summary
+      LEFT JOIN mailbox_importance choice ON choice.change_id=summary.importance_change
+      ${p.folder==='important'?'WHERE ('+importanceReason+') IS NOT NULL':''})${category?categoryQuery:''}`;
 	const bound = [userId, userId, ...args, userId];
   const groupSource=category?'categorized':'grouped';
 	if (String(p.countOnly) === '1') {
@@ -93,7 +98,7 @@ export async function conversationList(c, p, userId) {
   }
   const asc = Number(p.timeSort) === 1;
 	const limit = limitOf(p.limit);
-	const chronological = ['inbox', 'sent', 'starred','all','label'].includes(p.folder);
+	const chronological = ['inbox', 'sent', 'starred','all','label','important'].includes(p.folder);
 	// Older clients may submit a numeric cursor. The new opaque cursor also carries reminder time.
 	const parts = String(p.cursor || '').split(':');
 	const cursor = Number(parts.at(-1)) || 0;
@@ -127,7 +132,7 @@ export async function conversationList(c, p, userId) {
   const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
-			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, ...summary } = row;
+			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, importance_change, replied, ...summary } = row;
 			return { ...camel(summary), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
 		unreadThreads: totals?.unread_threads||0,
@@ -167,12 +172,15 @@ export async function conversationMessages(c, p, userId) {
 	const [count, page, accounts, labels] = await db.batch([
 		db
 			.prepare(
-				`WITH ${filedConversations} SELECT COUNT(*) total,
+				`WITH ${filedConversations}, summary AS (SELECT COUNT(*) total,${importanceFields},
         SUM(e.type=0) incoming, SUM(e.type=0 AND e.unread=0) unread_count,
         CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,
-        MIN(e.email_id) first_id, e.subject FROM email e JOIN account a ON a.account_id=e.account_id
+        MIN(e.email_id) first_id FROM email e JOIN account a ON a.account_id=e.account_id
         JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id
-        WHERE ${visible} AND m.thread_id=?`,
+        ${importanceJoin} WHERE ${visible} AND m.thread_id=?)
+        SELECT summary.*,first.subject,${importanceReason} AS importance_reason FROM summary
+        LEFT JOIN email first ON first.email_id=summary.first_id
+        LEFT JOIN mailbox_importance choice ON choice.change_id=summary.importance_change`,
             )
             .bind(userId,userId,userId,threadId),
 		db
@@ -194,7 +202,7 @@ export async function conversationMessages(c, p, userId) {
 	const rows = page.results.slice(0, limit);
 	return {
 		threadId,
-		subject: count.results[0].subject,
+		subject: count.results[0].subject, importanceReason:count.results[0].importance_reason,
     unreadCount: count.results[0].unread_count, incoming: count.results[0].incoming, filedAway: Boolean(count.results[0].filed_away),
 		labelIds: labels.results.map(row=>row.label_id),
 		ownedAddresses: accounts.results.map((row) => row.email),
@@ -210,6 +218,7 @@ export async function conversationAction(c, p, userId, action) {
 	if (!Array.isArray(p.emailIds) || !anchors.length || anchors.length > 95 || anchors.some((id) => !validId(id)))
 		throw new BizError('Invalid conversations.', 400);
 	if (action === 'read' && ![0, 1].includes(p.unread ?? 1)) throw new BizError('Invalid read state.', 400);
+	if (action === 'importance' && typeof p.important !== 'boolean')throw new BizError('Invalid importance state.',400);
 	if (action === 'star' && typeof p.starred !== 'boolean') throw new BizError('Invalid star state.', 400);
 	const db = c.env.db;
 	await ensureThreads(db, userId);
@@ -234,7 +243,9 @@ export async function conversationAction(c, p, userId, action) {
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
-	if (action === 'category') {
+	if(action==='importance'){
+    await setImportance(db,userId,ids,p.important);
+  } else if (action === 'category') {
     await fileCategory(db,userId,ids,p.category);
   } else if (action === 'label') {
     await changeLabels(db,userId,ids,p.add,p.remove);
