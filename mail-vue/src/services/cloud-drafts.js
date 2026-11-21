@@ -435,29 +435,33 @@ export async function scheduleCloudDraft(id,sendAt,editToken) {
   return result;
 }
 async function finishSentAttempt(database, id, attemptId, messages) {
-  const snapshot = await database.transaction('r', database.draft, database.att, async () => {
-    const row = await database.draft.get(id);
-    if (row?.sendAttemptId === attemptId) return withFiles(database, row);
-  });
-  if (!snapshot) return messages;
-  // Hash outside IndexedDB; after hashing, recheck the revision inside the write
-  // transaction to also preserve any edits made while reading the receipt.
-  const changed = snapshot.sendFingerprint && await signature(snapshot) !== snapshot.sendFingerprint;
-  const preserved = await database.transaction('rw', database.draft, database.att, async () => {
-    const current = await database.draft.get(id);
-    if (current?.sendAttemptId !== attemptId) return false;
-    const keep = !current.deleted && (changed || !matchesEditor(current, snapshot));
-    if (keep) {
-      const {draftId, cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, uploadIntent, ...copy} = await withFiles(database, current);
-      await writeDraft(database, {...copy, clientId:crypto.randomUUID(), editToken:crypto.randomUUID(),
-        dirty:true, conflictCopy:true, syncState:'conflict'});
-    }
-    await database.draft.delete(id);
-    await database.att.delete(id);
-    return keep;
-  });
+  let outcome;
+  // Hash outside IndexedDB. If an editor changed the draft while hashing,
+  // compare its new content before deciding whether it needs a separate copy.
+  do {
+    const snapshot = await database.transaction('r', database.draft, database.att, async () => {
+      const row = await database.draft.get(id);
+      if (row?.sendAttemptId === attemptId) return withFiles(database, row);
+    });
+    if (!snapshot) return messages;
+    const changed = snapshot.sendFingerprint && await signature(snapshot) !== snapshot.sendFingerprint;
+    outcome = await database.transaction('rw', database.draft, database.att, async () => {
+      const current = await database.draft.get(id);
+      if (current?.sendAttemptId !== attemptId) return 'finished';
+      if (!matchesEditor(current, snapshot)) return 'retry';
+      const keep = !current.deleted && changed;
+      if (keep) {
+        const {draftId, cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, uploadIntent, ...copy} = await withFiles(database, current);
+        await writeDraft(database, {...copy, clientId:crypto.randomUUID(), editToken:crypto.randomUUID(),
+          dirty:true, conflictCopy:true, syncState:'conflict'});
+      }
+      await database.draft.delete(id);
+      await database.att.delete(id);
+      return keep ? 'preserved' : 'finished';
+    });
+  } while (outcome === 'retry');
   userDraftStore().refreshList++;
-  if (preserved) {
+  if (outcome === 'preserved') {
     throw Object.assign(new Error('The original message was sent. Your newer edits are preserved in a separate draft.'), {sentMessages:messages});
   }
   return messages;
