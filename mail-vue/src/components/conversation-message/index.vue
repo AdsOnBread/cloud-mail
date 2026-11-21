@@ -5,7 +5,7 @@
     :aria-label="`Message from ${message.name || message.sendEmail}`"
   >
     <div class="message-header">
-      <div class="avatar" aria-hidden="true" :style="{backgroundColor:avatarColor}">{{initial}}</div>
+      <SenderAvatar :name="message.name" :address="message.sendEmail"/>
       <button type="button" class="message-toggle" :aria-expanded="expanded" :aria-describedby="description"
         :aria-label="(expanded ? 'Collapse' : 'Expand')+' message from '+sender" @click="$emit('toggle')">
         <strong dir="auto">{{sender}}</strong>
@@ -78,6 +78,7 @@ const feedback = useMailFeedback();
 import { ref, computed, watch, useId } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
+import SenderAvatar from "@/components/sender-avatar.vue";
 import DownloadMessage from "@/components/download-message.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import MessageContent from "@/components/shadow-html/message-content.vue";
@@ -108,14 +109,6 @@ const detail = ref(null),
 function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
 const sender=computed(()=>props.message.name || props.message.sendEmail || 'Unknown sender');
-const initial=computed(()=>Array.from(sender.value.trim())[0]?.toUpperCase() || '?');
-const avatarColors=['#5e35b1','#1967d2','#00796b','#a52714','#5b6670','#7b1fa2','#32652c','#b06000'];
-const avatarColor=computed(()=>{
-  const key=(props.message.sendEmail || sender.value).trim().toLowerCase();
-  let hash=0;
-  for (const character of key) hash=(hash*31+character.codePointAt(0))>>>0;
-  return avatarColors[hash % avatarColors.length];
-});
 const stamp=computed(()=>readerTimestamp(props.message.createTime,props.now));
 const dateId=useId(),snippetId=useId();
 const description=computed(()=>[stamp.value && dateId,!props.expanded && props.message.listText && snippetId].filter(Boolean).join(' ') || undefined);
@@ -202,12 +195,7 @@ async function remove() {
   min-width:0;
   font-family:Arial,Helvetica,sans-serif;
 }
-.avatar {
-  grid-area:1 / 1 / 3 / 2;
-  width:var(--avatar-size);height:var(--avatar-size);
-  border-radius:50%;display:grid;place-items:center;
-  color:white;font-size:20px;font-weight:500;user-select:none;
-}
+.avatar {grid-area:1 / 1 / 3 / 2}
 .message-toggle {
   grid-area:1 / 2;height:20px;
   display:flex;align-items:baseline;gap:4px;min-width:0;

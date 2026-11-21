@@ -43,7 +43,7 @@
         <div v-if="messages.length" class="heading-actions">
           <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" :disabled="loading" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:unfold-less' : 'material-symbols:unfold-more'" width="20"/></button>
           <button type="button" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail()"><Icon icon="material-symbols:print-outline" width="20"/></button>
-          <a v-if="route.query.window!=='1'" :href="windowHref" target="_blank" rel="noopener noreferrer" aria-label="In new window" data-tip="In new window" @click="openWindow"><Icon icon="material-symbols:open-in-new" width="19"/></a>
+          <ReaderWindowLink v-if="route.query.window!=='1'" :href="windowHref"/>
         </div>
       </div>
       <p v-if="printing || expanding" role="status">{{printing ? 'Preparing to print…' : 'Expanding messages…'}}</p>
@@ -115,6 +115,7 @@ import {
 import { Icon } from "@iconify/vue";
 
 import {labelStyle} from "@/components/mail-labels/colors";
+import ReaderWindowLink from "@/components/reader-window-link.vue";
 import MailImportance from "@/components/mail-importance.vue";
 import ConversationMessage from "@/components/conversation-message/index.vue";
 import MessageComposer from "@/components/message-composer/index.vue";
@@ -236,10 +237,6 @@ const windowHref=computed(()=>{
   return router.resolve({path:'/mail',query:{emailId:requested ? draft.emailId : emailId,folder,labelId,category,
     ...(requested ? {draft:requested} : {}),window:'1'}}).href;
 });
-function openWindow(event) {
-  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-  event.preventDefault();window.open(windowHref.value,'_blank','popup,noopener,noreferrer,width=1000,height=760');
-}
 function readerCurrent() {
   const session=sessionEpoch,epoch=viewEpoch,token=localStorage.getItem('token'),owner=user.user.userId,account=accountStore.currentAccountId;
   return ()=>session===sessionEpoch && epoch===viewEpoch && token===localStorage.getItem('token') && owner===user.user.userId && account===accountStore.currentAccountId;

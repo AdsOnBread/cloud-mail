@@ -52,7 +52,7 @@ function focusRail(e){keyboardInRail.value=e.target.matches(':focus-visible,.lab
 function blurRail(e){if(!e.currentTarget.contains(e.relatedTarget))keyboardInRail.value=false;}
 watch(()=>uiStore.asideShow,()=>{leaveRail();keyboardInRail.value=false;});
 const route = useRoute();
-const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled'));
+const conversationWindow=computed(()=>route.query.window==='1' && ((route.name==='content' && !!route.query.emailId) || route.name==='scheduled' || route.name==='trash'));
 const writerRef = ref();
 const composeModal=computed(()=>Boolean(writerRef.value?.modalOpen));
 const isMobile = ref(window.innerWidth < 768);

@@ -7,17 +7,19 @@ import {attachmentBlob,previewMime} from '@/components/mail-attachments/content'
 function address({name,address}) {
   return name && name!==address ? name+' <'+address+'>' : address;
 }
-async function loadInlineImages(template,message,current,signal) {
+async function loadInlineImages(template,message,current,signal,token) {
   const files=message.attList || [];
   for (const image of template.content.querySelectorAll('img')) {
     if (image.closest('[hidden]')) continue;
     const src=image.getAttribute('src') || '';
     const key=storedKey(src);
-    const file=files.find(f=>(key && f.key===key) || (src.startsWith('cid:') && f.contentId?.replace(/^<|>$/g,'')===src.slice(4)));
+    const file=files.find(f=>(key && f.key===key) ||
+      (message.scheduledDraftId && f.related && src==='/api/v1/drafts/attachments/'+f.related+'/content') ||
+      (src.startsWith('cid:') && f.contentId?.replace(/^<|>$/g,'')===src.slice(4)));
     if (!file) continue;
     if (!current()) return;
     try {
-      const blob=await attachmentBlob(file,signal);
+      const blob=await attachmentBlob(file,signal,false,token);
       const type=await previewMime(blob);
       if (!/^image\/(png|jpeg|webp|gif|avif)$/i.test(type)) continue;
       image.src=await new Promise((resolve,reject)=>{
@@ -33,7 +35,7 @@ async function loadInlineImages(template,message,current,signal) {
   }
 }
 
-export async function appendPrintedMessage(doc,message,owner,current,signal) {
+export async function appendPrintedMessage(doc,message,owner,current,signal,token) {
   const article=doc.createElement('article'),header=doc.createElement('header');
   const sender=doc.createElement('strong');
   sender.textContent=address({name:message.name,address:message.sendEmail}) || '';
@@ -50,7 +52,7 @@ export async function appendPrintedMessage(doc,message,owner,current,signal) {
   if (message.content) {
     const template=doc.createElement('template');
     template.innerHTML=message.content;
-    await loadInlineImages(template,message,current,signal);
+    await loadInlineImages(template,message,current,signal,token);
     copyBody(template.content,article,doc);
   } else {
     const pre=doc.createElement('pre');pre.textContent=message.text || '';article.append(pre);
@@ -62,7 +64,7 @@ export async function appendPrintedMessage(doc,message,owner,current,signal) {
   doc.body.append(article);
 }
 
-export function printMessages({subject,rows,read,owner,current,signal}) {
+export function printMessages({subject,rows,read,owner,current,signal,token}) {
   return printDocument(async doc=>{
     doc.title=subject || '(no subject)';
     const style=doc.createElement('style');
@@ -71,10 +73,10 @@ export function printMessages({subject,rows,read,owner,current,signal}) {
     const title=doc.createElement('h1');title.textContent=doc.title;doc.body.append(title);
     for (let start=0;start<rows.length;start+=4) {
       if (!current()) return;
-      const batch=await Promise.all(rows.slice(start,start+4).map(read));
+      const batch=read ? await Promise.all(rows.slice(start,start+4).map(read)) : rows.slice(start,start+4);
       for (const message of batch) {
         if (!current()) return;
-        await appendPrintedMessage(doc,message,owner,current,signal);
+        await appendPrintedMessage(doc,message,owner,current,signal,token);
       }
     }
   },current,signal);

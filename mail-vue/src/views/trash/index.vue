@@ -104,7 +104,7 @@
     </p>
     <div v-if="messageId" class="trash-detail">
       <article v-if="detail">
-        <div class="trash-subject">
+        <div class="trash-heading"><div class="trash-subject">
           <h1>{{detail.subject || "(no subject)"}}</h1>
           <span class="trash-folder-chip">
             <button type="button" aria-label="Show all messages in Trash" data-tip="Show all messages in Trash" @click="showTrash">Trash</button>
@@ -113,18 +113,27 @@
           </span>
           <span v-for="label in rowLabels(detail,true)" :key="label.id" class="trash-label" :style="labelStyle(label)">{{label.name}}</span>
         </div>
+          <div class="heading-actions">
+            <button type="button" class="mail-icon" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail"><Icon icon="material-symbols:print-outline" width="20"/></button>
+            <ReaderWindowLink v-if="!separateWindow" class="mail-icon" :href="windowHref"/>
+          </div>
+        </div>
         <div class="sender">
-          <span class="initial" aria-hidden="true">{{(detail.name || detail.sendEmail || "?")[0].toUpperCase()}}</span>
+          <SenderAvatar :name="detail.name" :address="detail.sendEmail"/>
           <div class="sender-info">
             <div class="sender-name"><strong>{{detail.name || detail.sendEmail}}</strong>
               <span v-if="detail.name && detail.name!==detail.sendEmail">&lt;{{detail.sendEmail}}&gt;</span>
             </div>
             <MessageRecipients :message="detail"/>
           </div>
-          <time>{{formatDetailDate(detail.createTime)}}</time>
+          <time v-if="stamp" :datetime="stamp.iso" :data-tip="stamp.full"><span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span></time>
           <el-dropdown trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
             <button class="mail-icon" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
-            <template #dropdown><el-dropdown-menu><DownloadMessage :message="detail"/></el-dropdown-menu></template>
+            <template #dropdown><el-dropdown-menu>
+              <el-dropdown-item :disabled="busy || loading" @click="setRead([detail.emailId],targetUnread)"><Icon :icon="readIcon(targetUnread)"/>{{readLabel(targetUnread)}}</el-dropdown-item>
+              <el-dropdown-item divided :disabled="printing" @click="printMail"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
+              <DownloadMessage :message="detail"/>
+            </el-dropdown-menu></template>
           </el-dropdown>
         </div>
         <div class="message-body">
@@ -216,6 +225,11 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import { ElMessageBox } from "element-plus";
+import {useNow} from "@vueuse/core";
+import {printMessages} from "@/components/conversation-view/print";
+import {useUserStore} from "@/store/user";
+import ReaderWindowLink from "@/components/reader-window-link.vue";
+import SenderAvatar from "@/components/sender-avatar.vue";
 import DownloadMessage from "@/components/download-message.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import {labelStyle} from "@/components/mail-labels/colors";
@@ -226,7 +240,7 @@ import MailRow from "@/components/mail-row/index.vue";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import {downloadablePart,inlineImageURL,storedKey} from "@/utils/private-files";
 import MessageContent from "@/components/shadow-html/message-content.vue";
-import { mailboxDate, formatDetailDate } from "@/utils/day";
+import { mailboxDate, formatDetailDate, readerTimestamp } from "@/utils/day";
 import MessageRecipients from "@/components/message-recipients.vue";
 import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
@@ -242,9 +256,9 @@ const route = useRoute(),
 const root=ref();
 const account = useAccountStore();
 const labels = useMailLabels();
-const mailbox = computed(() =>
-  account.currentAccount.allReceive ? undefined : account.currentAccountId,
-);
+const separateWindow = computed(() => route.query.window === "1");
+const windowAccount = computed(() => separateWindow.value ? Number(route.query.sender) || undefined : undefined);
+const mailbox = computed(() => windowAccount.value || (account.currentAccount.allReceive ? undefined : account.currentAccountId));
 const canDelete = computed(() => hasPerm("email:delete"));
 const messages = ref([]),
   selected = ref([]),
@@ -256,6 +270,35 @@ const detail = ref(null),
   error = ref(""),
   notice = ref("");
 const messageId = computed(() => Number(route.query.message) || 0);
+
+const user = useUserStore(), now = useNow({interval:60000});
+const stamp = computed(() => readerTimestamp(detail.value?.createTime, now.value));
+const windowHref = computed(() => detail.value && router.resolve({name:"trash", query:{message:detail.value.emailId,sender:detail.value.accountId,window:"1"}}).href);
+const printing = ref(false);
+let printController;
+function cancelPrint() {
+  printController?.abort();
+  printController = null;
+  printing.value = false;
+}
+watch([messageId, detail, mailbox, () => user.authenticatedToken, () => user.user.userId], cancelPrint, {flush:"sync"});
+async function printMail() {
+  const message = detail.value, token = user.authenticatedToken, owner = user.user.userId;
+  if (!message || printing.value) return;
+  const current = () => !disposed && detail.value === message && token && token === user.authenticatedToken &&
+    token === localStorage.getItem("token") && owner != null && owner === user.user.userId && message.userId === owner;
+  if (!current()) {notify("Reopen this message in your current mailbox to print it.");return;}
+  cancelPrint();
+  const controller = printController = new AbortController();
+  printing.value = true;
+  try {
+    await printMessages({subject:message.subject, rows:[message], owner, current, token, signal:controller.signal});
+  } catch {
+    if (current()) notify("Couldn’t print this message. Try again.");
+  } finally {
+    if (printController === controller) printing.value = false;
+  }
+}
 const targets = computed(() =>
   messageId.value
     ? detail.value
@@ -404,7 +447,7 @@ function toggle(id) {
 }
 function open(message) {
   returnFocus=null;
-  router.push({ path: route.path, query: { message: message.emailId } });
+  router.push({ path: route.path, query: { ...route.query, message: message.emailId } });
 }
 function showTrash() {
   history.value=[];
@@ -413,7 +456,8 @@ function showTrash() {
 }
 function back() {
   if (messageId.value) returnFocus={id:messageId.value,scope:mailbox.value};
-  if (window.history.state.back === route.path) router.back();
+  if (separateWindow.value) router.replace({path:route.path,query:{window:"1",sender:windowAccount.value}});
+  else if (window.history.state.back === route.path) router.back();
   else router.replace({ path: route.path });
 }
 async function loadDetail(id) {
@@ -478,7 +522,7 @@ async function act(action, ids, destination) {
   let changed = 0;
   const scope = mailbox.value;
   const scopeLabel = scope
-    ? account.currentAccount.email
+    ? (scope === account.currentAccountId ? account.currentAccount.email : account.accounts.find(a => a.accountId === scope)?.email || "this mailbox")
     : "all your mailboxes";
   const request = revision;
   const selectedIndex = ids?.length ? messages.value.findIndex(message=>ids.includes(message.emailId)) : 0;
@@ -563,6 +607,7 @@ async function inlineFileURL(key) {
 }
 onBeforeUnmount(() => {
   disposed = true;
+  cancelPrint();
   revision++;
   clearTimeout(noticeTimer);
 });
@@ -626,7 +671,11 @@ onBeforeUnmount(() => {
 .trash-detail {
   padding: 16px 24px;
 }
-.trash-subject { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 24px 56px; }
+.trash-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin:0 0 20px 56px}
+.heading-actions {display:flex;flex-shrink:0}
+.heading-actions .mail-icon,.sender .mail-icon {width:40px;height:40px}
+.heading-actions .mail-icon:is(:hover,:focus-visible),.sender .mail-icon:is(:hover,:focus-visible) {background:var(--mail-hover)}
+.trash-subject { min-height:40px;display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
 h1 { margin:0 6px 0 0; min-width:0; font:400 22px/28px Arial,sans-serif; overflow-wrap:anywhere; }
 .trash-folder-chip { display:inline-flex; border-radius:4px; background:var(--light-border-color); }
 .trash-folder-chip button { padding:0 4px; font:12px/18px Arial,sans-serif; color:var(--regular-text-color); cursor:pointer; border-radius:inherit; }
@@ -639,18 +688,10 @@ h1 { margin:0 6px 0 0; min-width:0; font:400 22px/28px Arial,sans-serif; overflo
 .sender strong {
   color: var(--el-text-color-primary);
 }
-.initial {
-  display: grid;
-  place-items: center;
-  flex: 0 0 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--mail-selected);
-}
-.sender time {
-  margin-left: auto;
-  font-size: 12px;
-}
+.sender {container:trash-sender / inline-size;align-items:center}
+.sender time {white-space:nowrap;font:12px/20px Arial,sans-serif}
+.short-time {display:none}
+@container trash-sender (max-width:650px) {.full-time{display:none}.short-time{display:inline}}
 .message-body {
   margin: 16px 0 0 56px;
 }
@@ -681,7 +722,9 @@ pre {
   .trash-detail {
     padding: 16px;
   }
-  .trash-subject,
+  .sender {--avatar-size:32px;gap:8px}
+  .sender-name span {display:none}
+  .trash-heading,
   .message-body {
     margin-left: 0;
   }
