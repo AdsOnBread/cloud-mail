@@ -6,7 +6,8 @@
     :aria-checked="Boolean(reason)"
     aria-label="Important"
     :aria-description="explanation"
-    :data-tip="explanation"
+    data-tip-delay="1500"
+    :data-tip="reason ? explanation+'\nClick to mark as not important.' : explanation"
     :disabled="disabled"
     @click="$emit('toggle', !reason)"
   >

@@ -85,7 +85,8 @@ function enter(event) {
   if (target===button) return;
   hide();
   target=button;
-  timer=setTimeout(()=>reveal(button),450);
+  const delay=event.type==='pointerover' ? Number(button.dataset.tipDelay) || 450 : 450;
+  timer=setTimeout(()=>reveal(button),delay);
 }
 function leave(event) {
   if (target?.contains(event.target) && !target.contains(event.relatedTarget)) hide();
@@ -128,6 +129,7 @@ onBeforeUnmount(()=>{
   box-shadow: 0 1px 3px #0002;
   max-width: calc(100vw - 8px);
   overflow-wrap: anywhere;
+  white-space:pre-line;
   color: white;
   font:
     500 12px/18px Arial,

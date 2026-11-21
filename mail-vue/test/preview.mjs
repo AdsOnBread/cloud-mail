@@ -52,7 +52,13 @@ function importanceReason(members) {
   const latest = members.map(row => importanceChoices.get(row.emailId)).filter(Boolean)
     .sort((a, b) => b.revision - a.revision)[0];
   if (latest) return latest.important ? 'user' : null;
-  return members.some(row => row.type === 1 && [1,2].includes(row.status) && (row.replyToEmailId || row.inReplyTo)) ? 'reply' : null;
+  const sent=members.filter(row=>row.type===1 && [1,2].includes(row.status));
+  if(sent.some(row=>row.replyToEmailId || row.inReplyTo))return 'reply';
+  return sent.some(row=>{
+    const email=accounts.find(account=>account.accountId===row.accountId)?.email;
+    const to=typeof row.recipient==='string' ? JSON.parse(row.recipient || '[]') : row.recipient || [];
+    return email && to.some(person=>(person.address || person).toLowerCase()===email.toLowerCase());
+  }) ? 'direct' : null;
 }
 function scheduledImportance(d,email) {
   if (d.mailboxImportant!=null)return d.mailboxImportant ? 'user' : null;
