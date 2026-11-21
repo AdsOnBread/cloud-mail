@@ -5,8 +5,8 @@ export function normalizeLinkUrl(value) {
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
   try {
     let candidate = raw;
-    if (/^[\w-]+(?:\.[\w-]+)+(?:[/?#:][^\s]*)?$/.test(raw)) candidate = "https://" + raw;
-    else if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@/:]+@[^\s@/:]+\.[^\s@/:]+$/.test(raw)) candidate = "mailto:" + raw;
+    if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@]+@[^\s@/:]+\.[^\s@/:]+$/.test(raw)) candidate = "mailto:" + raw;
+    else if (/^[\w-]+(?:\.[\w-]+)+(?:[/?#:][^\s]*)?$/.test(raw)) candidate = "https://" + raw;
     const url = new URL(candidate);
     return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)
       ? url.href
