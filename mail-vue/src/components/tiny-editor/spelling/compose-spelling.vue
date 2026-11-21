@@ -68,7 +68,7 @@ async function runNavigation() {
   if (!request || destroyed) return;
   keyboardRequest=undefined;
   if (!ed.hasFocus() || !sameSelection(request.range)) return;
-  const issue=spellingTarget(issues.filter(valid),request.range,request.action);
+  const issue=spellingTarget(issues.filter(valid),request.range,request.action,issue=>renderedRects(issue).length>0);
   if (!issue) {
     noMatch.value=true;
     status.value=request.action==='next' ? 'No spelling errors found.' : 'No spelling suggestions at the cursor.';
@@ -135,6 +135,11 @@ function menuKeys(event) {
 function valid(issue) {
   return ed.getBody().contains(issue.range.commonAncestorContainer) && issue.range.toString() === issue.word;
 }
+function renderedRects(issue) {
+  const element=issue.range.startContainer.parentElement;
+  if (!element || ed.getWin().getComputedStyle(element).visibility!=='visible') return [];
+  return Array.from(issue.range.getClientRects()).filter(rect=>rect.width>0 && rect.height>0);
+}
 function draw() {
   frame = undefined;
   if (destroyed) return;
@@ -148,7 +153,7 @@ function draw() {
   for (const issue of issues) {
     if (!valid(issue)) continue;
     let part = 0;
-    for (const rect of issue.range.getClientRects()) {
+    for (const rect of renderedRects(issue)) {
       const x = Math.max(0, rect.left), y = Math.max(0, rect.top);
       const width = Math.min(rect.right, viewport.width) - x;
       const height = Math.min(rect.bottom, viewport.height) - y;

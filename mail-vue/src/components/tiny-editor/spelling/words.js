@@ -87,15 +87,15 @@ export function spellingShortcut(event, apple) {
   if (apple && event.key===';') return 'next';
 }
 
-export function spellingTarget(issues, selection, action) {
-  if (action==='suggest') return issues.find(({range})=>
-    range.isPointInRange(selection.startContainer,selection.startOffset) &&
-    range.isPointInRange(selection.endContainer,selection.endOffset));
+export function spellingTarget(issues, selection, action, available=()=>true) {
+  if (action==='suggest') return issues.find(issue=>available(issue) &&
+    issue.range.isPointInRange(selection.startContainer,selection.startOffset) &&
+    issue.range.isPointInRange(selection.endContainer,selection.endOffset));
   // Compare with the *end* of each word. An already selected word advances,
   // while a caret within a word selects that word before moving on.
-  return issues.find(({range})=>{
-    const end=range.cloneRange();
+  return issues.find(issue=>{
+    const end=issue.range.cloneRange();
     end.collapse(false);
-    return end.comparePoint(selection.endContainer,selection.endOffset)<0;
-  }) || issues[0];
+    return end.comparePoint(selection.endContainer,selection.endOffset)<0 && available(issue);
+  }) || issues.find(available);
 }

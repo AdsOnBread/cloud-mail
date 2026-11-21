@@ -55,6 +55,8 @@ it('finds the word under the caret and wraps past an already selected error',()=
   expect(spellingTarget(issues,caret,'next')).toBe(issues[0]);
   expect(spellingTarget(issues,issues[0].range,'next')).toBe(issues[1]);
   expect(spellingTarget(issues,issues[1].range,'next')).toBe(issues[0]);
+  expect(spellingTarget(issues,issues[1].range,'next',item=>item===issues[1])).toBe(issues[1]);
+  expect(spellingTarget(issues,issues[1].range,'next',()=>false)).toBeUndefined();
   caret.selectNodeContents(body);expect(spellingTarget(issues,caret,'suggest')).toBeUndefined();
 });
 it('uses the platform spelling shortcuts without consuming IME or other modifier combinations',()=>{
