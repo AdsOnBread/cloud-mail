@@ -1,3 +1,4 @@
+import {peopleSuggestions} from '../../shared/mail-people-suggestions.js';
 import {peopleTerms,matchesPeople} from '../../shared/mail-search-people.js';
 import {searchDateBounds,withinDateBounds} from '../../shared/mail-search-date.js';
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
@@ -158,6 +159,11 @@ const api=createHTTPServer(async(req,res)=>{
    else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
+ else if(path==='/v1/search/people'){
+   const p=Object.fromEntries(url.searchParams), scoped=rows.filter(r=>!p.accountId||r.accountId===Number(p.accountId));
+   const initial=p.folder==='trash'?scoped.filter(r=>r.trashedAt):[];
+   data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q);
+ }
  else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),preview:r.text})),hasMore:false,nextCursor:null};}
  else if(path==='/v1/messages/trash-read'){
    const {emailIds,read}=JSON.parse(body);rows.filter(row=>emailIds.includes(row.emailId)&&row.trashedAt).forEach(row=>row.unread=Number(read));

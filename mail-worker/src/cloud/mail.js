@@ -1,5 +1,6 @@
 import { mailboxAttachments } from '../service/mailbox-attachments';
-import { addMailFilters } from '../service/mail-search-filters';
+import {peopleSuggestions} from '../../../shared/mail-people-suggestions';
+import { addMailFilters,addPeopleFilter } from '../service/mail-search-filters';
 import { ensureThreads } from '../mobile/threads';
 import { filedConversations, inboxMember } from '../service/conversation-filing';
 import emailUtils from '../utils/email-utils';
@@ -10,6 +11,25 @@ import emailService from '../service/email-service';
 import r2Service from '../service/r2-service';
 
 export const owned = 'e.user_id=? AND a.user_id=e.user_id AND a.is_del=0 AND e.is_del=0 AND e.status NOT IN (6,7)';
+// A small address-only projection keeps autocomplete independent of message bodies and attachments.
+export async function searchPeople(c,userId,params) {
+  const {field,accountId,folder}=params;
+  if (!['from','to'].includes(field) || !['trash','scheduled'].includes(folder)) throw new BizError('Invalid people filter.',400);
+  const filters=[owned], args=[userId], term=params.q?.trim().slice(0,200) || '';
+  if (accountId) { filters.push('e.account_id=?'); args.push(positive(accountId)); }
+  const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
+  addPeopleFilter({[field]:term}, field, field==='from' ? ['e.name','e.send_email'] : to, filters, args);
+  const projection=field==='from' ? 'e.name,e.send_email sendEmail' : `e.type,e.recipient,e.cc,${to[2]} bcc`;
+  const query=`SELECT ${projection} FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${filters.join(' AND ')}`;
+  const read=async condition=>(await c.env.db.prepare(query+condition+' ORDER BY e.email_id DESC LIMIT 80').bind(...args).all()).results;
+  const recent=await read(folder==='trash' ? ' AND e.trashed_at IS NOT NULL' : ' AND e.trashed_at IS NULL');
+  let suggestions=peopleSuggestions(recent,field,term);
+  if (folder==='trash' && suggestions.length<8) {
+    const other=await read(' AND e.trashed_at IS NULL');
+    suggestions=peopleSuggestions([...recent,...other],field,term);
+  }
+  return suggestions;
+}
 export async function list(c,userId,p={}) {
   const filters=[owned]; const args=[userId];
   const folder=p.folder||'inbox';

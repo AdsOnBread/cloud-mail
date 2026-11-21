@@ -32,6 +32,7 @@ app.get(root+'/scheduled/:id',async c=>{
 });
 app.post(root+'/scheduled/:id/mark',async c=>c.json(result.ok(await setScheduledMark(c,uid(c),c.req.param('id'),await c.req.json()))));
 app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,uid(c),c.req.param('id'),(await c.req.json()).version))));
+app.get(root+'/search/people',async c=>c.json(result.ok(await mail.searchPeople(c,uid(c),c.req.query()))));
 app.get(root+'/messages',async c=>c.json(result.ok(await mail.list(c,uid(c),c.req.query()))));
 app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c),c.req.param('id')))));
 app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
