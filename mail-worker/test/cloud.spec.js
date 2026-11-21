@@ -29,7 +29,7 @@ describe('Incoming mail filters',()=>{
  const create=(criteria,actions,extra={})=>saveFilter(db,1,crypto.randomUUID(),{version:0,criteria,actions,...extra});
  it('previews and files existing mail only on request, then files future received copies across owned aliases',async()=>{
    const original=await message(), label=await db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Team') RETURNING label_id").first();
-   const criteria={from:'outside@example.net',subject:'Origi',words:'"Original body"',excluded:'unrelated',to:'copy@example.net'};
+   const criteria={from:'outside@example.net',subject:'Origi',words:'Original body',excluded:'unrelated',to:'copy@example.net'};
    expect(await previewFilter(db,1,criteria)).toEqual({conversations:1});
    const actions={read:true,star:true,archive:true,category:'updates',important:false,labelId:label.label_id};
    const r=await create(criteria,actions);
@@ -61,11 +61,19 @@ describe('Incoming mail filters',()=>{
  it('matches partial addresses, visible HTML text and thread counts without indexing markup',async()=>{
    const html={text:'',content:'<p>Project <b>invoice</b></p><script>invisible</script>'};
    const original=await message(html);await message({...html,in_reply_to:original.message_id,message_id:'<followup@example.net>'});
-   expect(await previewFilter(db,1,{from:'@example.net',to:'copy@',words:'"Project invoice"',excluded:'invisible'})).toEqual({conversations:1});
+   expect(await previewFilter(db,1,{from:'@example.net',to:'copy@',words:'invoice',excluded:'invisible'})).toEqual({conversations:1});
    await create({from:'outside@',words:'invoice',excluded:'invisible'},{archive:true},{applyExisting:true});
    const arrived=await message({...html,status:6,is_del:1});await emailService.completeReceive(c(),0,arrived.email_id);
    expect((await db.prepare('SELECT count(*) n FROM conversation_filing').first()).n).toBe(3);
    expect((await db.prepare("SELECT count(*) n FROM mobile_changes WHERE entity_id=? AND entity='message' AND operation='upsert'").bind(arrived.email_id).first()).n).toBeGreaterThan(1);
+ });
+ it('converts recipient and whole-word exclusions without widening or narrowing the search',async()=>{
+   await message({name:'Émile',recipient:'robin@example.net',text:'A partial report'});
+   expect(await previewFilter(db,1,{from:'émile',to:'robin@example.net',words:'robin',excluded:'art'})).toEqual({conversations:1});
+   expect(await previewFilter(db,1,{excluded:'robin'})).toEqual({conversations:0});
+   await create({excluded:'art robin'},{star:true});
+   const hidden=await message({name:'Robin',text:'Partial'}),visible=await message({recipient:'[]',text:'Partial'});
+   expect((await db.prepare('SELECT email_id FROM star').all()).results).toEqual([{email_id:visible.email_id}]);
  });
  it('applies conflicting attachment and sender rules in creation order to a real local delivery',async()=>{
    await saveFilter(db,2,crypto.randomUUID(),{version:0,criteria:{hasAttachment:true},actions:{category:'updates'}});

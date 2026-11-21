@@ -1,25 +1,19 @@
+import {indexedHeaders} from './mail-word-schema.js';
+import {peopleSQL} from './people-filter-sql.js';
 // Both delivery and "also apply" evaluate the same incoming-message criteria.
 const field = (key) => "json_extract(r.criteria,'$." + key + "')";
 const contains = (haystack, needle) => 'instr(lower(coalesce(' + haystack + ",'')),lower(" + needle + '))>0';
-const matchesPerson = (address, name, key) => `CASE WHEN ${field(key + 'Exact')}=1
-  THEN ${address}=${field(key)} COLLATE NOCASE ELSE ${contains(address, field(key))} OR ${contains(name, field(key))} END`;
-function recipientMatches(column) {
-	// json_tree also visits the members of named address groups.
-	return `EXISTS (SELECT 1 FROM json_tree(CASE WHEN json_valid(${column}) THEN ${column} ELSE '[]' END) p
-    WHERE (p.type='object' AND ${matchesPerson("json_extract(p.value,'$.address')", "json_extract(p.value,'$.name')", 'to')})
-       OR (p.type='text' AND typeof(p.key)='integer' AND ${matchesPerson('p.value', "''", 'to')}))`;
-}
-const body =
-	"coalesce(e.subject,'')||char(10)||coalesce((SELECT b.body FROM mail_filter_bodies b WHERE b.email_id=e.email_id),e.text,'')||char(10)||coalesce(e.send_email,'')||char(10)||coalesce(e.name,'')";
+const textColumns=['e.name','e.send_email','e.recipient','e.cc','e.subject','e.text','e.content'];
 const attached = (alias) => `${alias}.type=0 AND (lower(${alias}.disposition)='attachment' OR
   (coalesce(${alias}.content_id,'')='' AND lower(coalesce(${alias}.disposition,''))!='inline'))`;
 export const filterMatches = `e.user_id=r.user_id AND e.type=0 AND e.status=0 AND e.is_del=0 AND e.trashed_at IS NULL
   AND EXISTS (SELECT 1 FROM account a WHERE a.account_id=e.account_id AND a.user_id=e.user_id AND a.is_del=0)
-  AND (${field('from')} IS NULL OR ${matchesPerson('e.send_email', 'e.name', 'from')})
-  AND (${field('to')} IS NULL OR ${recipientMatches('e.recipient')} OR ${recipientMatches('e.cc')})
-  AND (${field('subject')} IS NULL OR ${contains('e.subject', field('subject'))})
-  AND NOT EXISTS (SELECT 1 FROM json_each(r.criteria,'$.includes') term WHERE NOT (${contains(body, 'term.value')}))
-  AND NOT EXISTS (SELECT 1 FROM json_each(r.criteria,'$.excludes') term WHERE ${contains(body, 'term.value')})
+  AND (${field('from')} IS NULL OR ${peopleSQL('from',['e.send_email','e.name'],field('fromPatterns'))})
+  AND (${field('to')} IS NULL OR ${peopleSQL('to',['e.recipient','e.cc'],field('toPatterns'))})
+  AND (${field('subject')} IS NULL OR ${contains('e.subject',field('subject'))})
+  AND (${field('words')} IS NULL OR ${textColumns.map(column=>contains(column,field('words'))).join(' OR ')})
+  AND (${field('excludedQuery')} IS NULL OR NOT EXISTS (SELECT 1 FROM mail_word_index
+    WHERE rowid=e.email_id AND mail_word_index MATCH ${field('excludedQuery')}))
   AND (${field('hasAttachment')} IS NULL OR EXISTS (SELECT 1 FROM attachments att
     WHERE att.email_id=e.email_id AND att.user_id=e.user_id AND att.account_id=e.account_id AND ${attached('att')}))`;
 
@@ -57,6 +51,11 @@ export const messageFilterSchema = [
 		([name, event, transition]) =>
 			`CREATE TRIGGER IF NOT EXISTS mail_filter_${name} AFTER ${event} ON email
       WHEN NEW.type=0 AND NEW.status=0 AND NEW.is_del=0${transition} AND ${ownedRules}
-      BEGIN ${applyMatches('NEW.email_id')} END`,
+      BEGIN
+        INSERT OR REPLACE INTO mail_word_index(rowid,headers,body)
+          SELECT e.email_id,${indexedHeaders('e')},coalesce(b.body,e.text,'') FROM email e
+          LEFT JOIN mail_filter_bodies b ON b.email_id=e.email_id WHERE e.email_id=NEW.email_id
+          AND EXISTS (SELECT 1 FROM mail_filters r WHERE r.user_id=NEW.user_id AND ${field('excludedQuery')} IS NOT NULL);
+        ${applyMatches('NEW.email_id')} END`,
 	),
 ];

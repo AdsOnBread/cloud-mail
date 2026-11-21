@@ -1,6 +1,7 @@
-import { fullAddress } from '../../../shared/mail-search-people';
+import {personPatterns} from '../service/people-filter-sql';
+import {excludedPhrases} from '../../../shared/mail-search-words';
 import { ensureThreads } from '../mobile/threads';
-import { prepareFilterBodies } from '../service/filter-body';
+import {indexWordBatch} from '../service/mail-word-index';
 import BizError from '../error/biz-error';
 import { filterMatches } from '../service/message-filter-schema';
 import { checkCategory } from '../service/inbox-categories';
@@ -25,16 +26,12 @@ function criteria(value = {}) {
 		const text = value[key].trim();
 		if (text) result[key] = text;
 	}
-	for (const key of ['from', 'to']) if (result[key] && fullAddress(result[key])) result[key + 'Exact'] = true;
-	if (value.hasAttachment === true) result.hasAttachment = true;
-	for (const [key, list] of [
-		['words', 'includes'],
-		['excluded', 'excludes'],
-	]) {
-		if (result[key]) result[list] = result[key].match(/"[^"]+"|[^\s"]+/gu)?.map((term) => term.replace(/^"|"$/g, '')) || [];
-		if (result[list]?.length === 0) invalid('Enter a word or phrase.');
-	}
-	if (!Object.keys(result).length) invalid('Choose at least one search criterion.');
+	for (const key of ['from','to']) if(result[key]) result[key+'Patterns']=personPatterns([result[key]]);
+  if (value.hasAttachment===true) result.hasAttachment=true;
+  const phrases=excludedPhrases(result.excluded);
+  if(phrases.length) result.excludedQuery=phrases.map(word=>'"'+word+'"').join(' OR ');
+  else if(result.excluded)invalid('Enter a word or phrase.');
+  if (!Object.keys(result).length) invalid('Choose at least one search criterion.');
 	return result;
 }
 
@@ -53,16 +50,23 @@ function actions(value = {}) {
 }
 
 function exposed(row) {
-	const { includes, excludes, fromExact, toExact, ...criteria } = JSON.parse(row.criteria);
+	const { fromPatterns,toPatterns,excludedQuery, ...criteria } = JSON.parse(row.criteria);
 	return { id: row.id, version: row.version, criteria, actions: JSON.parse(row.actions) };
 }
 export async function listFilters(db, user) {
 	const { results } = await db.prepare('SELECT * FROM mail_filters WHERE user_id=? ORDER BY rowid').bind(user).all();
 	return results.map(exposed);
 }
+// The search index tracks its backfill cursor and pending HTML by owner. Drain several
+// bounded pages per request while leaving time for the preview itself.
+async function prepareExclusions(db,user){
+  const deadline=Date.now()+500;
+  do { if(await indexWordBatch(db,user,null))return true; } while(Date.now()<deadline);
+  return false;
+}
 export async function previewFilter(db, user, input) {
 	const rule = JSON.stringify(criteria(input));
-	if ((input.words || input.excluded) && !(await prepareFilterBodies(db, user))) return { preparing: true };
+	if (input.excluded && !(await prepareExclusions(db,user))) return { preparing: true };
 	await ensureThreads(db, user);
 	const row = await db
 		.prepare(
@@ -83,7 +87,7 @@ export async function saveFilter(db, user, id, input) {
 	const mutation = crypto.randomUUID(),
 		label = action.labelId || null;
 	const validLabel = '(? IS NULL OR EXISTS (SELECT 1 FROM mailbox_labels WHERE user_id=? AND label_id=?))';
-	if (input.applyExisting === true && (input.criteria?.words || input.criteria?.excluded) && !(await prepareFilterBodies(db, user)))
+	if (input.applyExisting === true && input.criteria?.excluded && !(await prepareExclusions(db,user)))
 		return { preparing: true };
 	const statements = [
 		input.version === 0
