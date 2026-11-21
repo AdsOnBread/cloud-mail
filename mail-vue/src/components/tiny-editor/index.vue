@@ -10,7 +10,7 @@
       :id="editorId"
       ref="editorRef"
     ></textarea>
-    <ComposeSpelling v-if="mailCompose && spelling && spellActive && isInitialized" :editor="editor" v-model:language="spellLanguage" @close="spelling = false" />
+    <ComposeSpelling ref="spellPanel" :initial-action="spelling" v-if="mailCompose && spelling && spellActive && isInitialized" :editor="editor" v-model:language="spellLanguage" @close="spelling = false" />
     <ComposeFormat v-if="mailCompose && !spelling && showToolbar && isInitialized" :editor="editor" :request-format="plainText ? requestFormat : undefined" />
     <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.openPhoto(link)" />
     <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
@@ -46,6 +46,7 @@ import {replaceSignature,signatureId} from "../mail-signatures/content";
 import {hasFiles,hasRichSelection} from "../message-composer/files";
 import {plainBodyText, plainMarkup, plainSelection, restorePlainSelection} from "../message-composer/plain-text";
 import {fonts, formattingShortcut} from "./format-options";
+import {spellingShortcut} from './spelling/words';
 import ComposeSpelling from "./spelling/compose-spelling.vue";
 import ComposeFormat from "./compose-format.vue";
 import ComposePhoto from "./compose-photo.vue";
@@ -64,7 +65,7 @@ defineExpose({
   toPlain: () => plainMarkup(editor.value.getBody().innerHTML),
   ready,
   openLink,
-  openSpelling: () => { photoPanel.value?.close(); linkPanel.value?.close(); spelling.value = true; },
+  openSpelling,
   setSignature,
   currentSignature: () => editor.value?.initialized ? signatureId(editor.value.getBody()) : "",
   insertEmoji,
@@ -101,6 +102,15 @@ async function ready() {
     current = pendingInit;
     await current;
   } while (current !== pendingInit);
+}
+const spellPanel=ref();
+const appleSpellingKeys=/Mac|iPhone|iPad/.test(navigator.platform);
+function openSpelling(action='check') {
+  if (!props.spellActive) return;
+  photoPanel.value?.close();
+  linkPanel.value?.close();
+  if (spellPanel.value && action!=='check') spellPanel.value.navigate(action);
+  else spelling.value=action;
 }
 const spelling = ref(false), spellLanguage = ref("auto");
 watch(() => props.spellActive, active => { if (!active) spelling.value = false; });
@@ -335,6 +345,11 @@ function initEditor(initialContent) {
       }
       if (props.mailCompose) {
         ed.on("keydown", event => {
+          const action=props.spellActive && spellingShortcut(event,appleSpellingKeys);
+          if (action) {
+            event.preventDefault();event.stopImmediatePropagation();
+            openSpelling(action);return;
+          }
           if (!props.plainText) return formattingShortcut(ed, event);
           const shortcut = {b:"Bold", i:"Italic", u:"Underline", k:"link"}[event.key.toLowerCase()];
           if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && !event.isComposing && shortcut) {

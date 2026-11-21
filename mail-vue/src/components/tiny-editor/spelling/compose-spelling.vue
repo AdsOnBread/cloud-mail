@@ -1,7 +1,7 @@
 <template>
-  <div ref="root" class="spell-layer" @keydown.esc.stop.prevent="finish">
+  <div ref="root" class="spell-layer" @keydown.esc.stop.prevent="finish" @keydown="layerKeys">
     <button v-for="mark in boxes" :key="mark.key" type="button" class="word-mark" :style="mark.style"
-      :aria-label="mark.issue.word" aria-haspopup="menu" :tabindex="mark.first ? 0 : -1"
+      :data-issue="mark.issue.index" :aria-label="mark.issue.word" aria-haspopup="menu" :tabindex="mark.first ? 0 : -1"
       @mousedown.prevent @click="correct(mark.issue, $event.currentTarget)" />
     <div ref="bar" role="toolbar" aria-label="Spell Check" class="spell-bar">
       <button type="button" :disabled="busy" @click="scan">Recheck</button>
@@ -35,9 +35,9 @@
 import {nextTick, onBeforeUnmount, onMounted, ref, shallowRef} from 'vue';
 import {Icon} from '@iconify/vue';
 import {languages} from './languages';
-import {collectWords, liveWords, replaceWord} from './words';
+import {collectWords, liveWords, replaceWord, spellingTarget, spellingShortcut} from './words';
 
-const props = defineProps({editor:{type:Object, required:true}});
+const props = defineProps({editor:{type:Object, required:true},initialAction:{type:String,default:'check'}});
 const emit = defineEmits(['close']);
 const language = defineModel('language', {default:'auto'});
 const choices = [['auto','','Auto'], ...languages];
@@ -46,6 +46,52 @@ const busy = ref(false), error = ref(false), status = ref('');
 const boxes = shallowRef([]), suggestions = ref([]), popup = ref(''), menuStyle = ref({});
 let entering = true, issues = [], selected, opener, worker, pending, revision = 0, frame, observer, textChanged = false, destroyed = false;
 const ed = props.editor;
+const apple=/Mac|iPhone|iPad/.test(navigator.platform);
+let keyboardRequest, needsScan=true, fromKeyboard=false;
+defineExpose({navigate});
+function sameSelection(range) {
+  const current=ed.selection.getRng();
+  return current.startContainer===range.startContainer && current.startOffset===range.startOffset &&
+    current.endContainer===range.endContainer && current.endOffset===range.endOffset;
+}
+function navigate(action) {
+  dismiss();
+  entering=false;
+  keyboardRequest={action,range:ed.selection.getRng().cloneRange()};
+  if (busy.value) return;
+  if (needsScan) scan();
+  else runNavigation();
+}
+async function runNavigation() {
+  const request=keyboardRequest;
+  if (!request || destroyed) return;
+  keyboardRequest=undefined;
+  if (!ed.hasFocus() || !sameSelection(request.range)) return;
+  const issue=spellingTarget(issues.filter(valid),request.range,request.action);
+  if (!issue) {
+    status.value=request.action==='next' ? 'No spelling errors found.' : 'No spelling suggestions at the cursor.';
+    return;
+  }
+  ed.selection.setRng(issue.range.cloneRange());
+  ed.selection.scrollIntoView(issue.range);
+  status.value='Misspelled word: '+issue.word;
+  if (request.action==='suggest') {
+    draw();
+    await nextTick();
+    if (destroyed || !ed.hasFocus() || !sameSelection(issue.range)) return;
+    const mark=root.value?.querySelector('[data-issue="'+issue.index+'"]');
+    if (mark) correct(issue,mark,true);
+  }
+}
+function layerKeys(event) {
+  const action=spellingShortcut(event,apple);
+  const button=event.target.closest?.('[data-issue]');
+  const issue=button && issues.find(item=>String(item.index)===button.dataset.issue);
+  if (!action || !issue || !valid(issue)) return;
+  event.preventDefault();event.stopPropagation();
+  ed.focus();ed.selection.setRng(issue.range.cloneRange());
+  navigate(action);
+}
 
 function finish() {
   emit('close');
@@ -54,7 +100,9 @@ function finish() {
 function dismiss(restore = false) {
   popup.value = '';
   selected = undefined;
-  if (restore && opener?.isConnected) opener.focus({preventScroll:true});
+  if (restore && fromKeyboard) ed.focus();
+  else if (restore && opener?.isConnected) opener.focus({preventScroll:true});
+  fromKeyboard=false;
   opener = undefined;
 }
 function outside(event) {
@@ -163,7 +211,8 @@ function ask(message, receive) {
 }
 function failed() {
   worker?.terminate();
-  worker = pending = undefined;
+  worker = pending = keyboardRequest = undefined;
+  needsScan=true;
   busy.value = false;
   error.value = true;
   status.value = 'Spell check unavailable. Select Recheck to try again.';
@@ -173,6 +222,7 @@ function scan() {
   busy.value = true;
   error.value = false;
   status.value = 'Checking spelling';
+  needsScan=false;
   const words = collectWords(ed.getBody());
   issues = [];
   redraw();
@@ -187,15 +237,17 @@ function scan() {
       busy.value = false;
       status.value = 'Spell checking completed';
       redraw();
+      if (keyboardRequest) needsScan ? scan() : runNavigation();
     });
   } catch { failed(); }
 }
-function correct(issue, trigger) {
+function correct(issue, trigger, keyboard=false) {
   if (busy.value || !liveWords(ed.getBody(), [issue]).length) return;
   dismiss();
   selected = issue;
+  fromKeyboard=keyboard;
   ask({type:'suggest', word:issue.word}, data => {
-    if (selected !== issue || !valid(issue) || !trigger.isConnected) return;
+    if (selected !== issue || !valid(issue) || !trigger.isConnected || (keyboard && (!ed.hasFocus() || !sameSelection(issue.range)))) return;
     suggestions.value = data.suggestions;
     display('suggest', trigger);
   });
@@ -223,6 +275,7 @@ function editorEscape(event) {
   finish();
 }
 function edited() {
+  keyboardRequest=undefined;needsScan=true;
   textChanged = true;
   if (selected && !valid(selected)) dismiss();
   redraw();
@@ -240,6 +293,7 @@ onMounted(() => {
   window.addEventListener('resize', redraw);
   window.visualViewport?.addEventListener('resize', redraw);
   window.visualViewport?.addEventListener('scroll', redraw);
+  if (props.initialAction!=='check') { navigate(props.initialAction);return; }
   scan();
   bar.value.querySelector('[aria-label="Language"]').focus({preventScroll:true});
 });

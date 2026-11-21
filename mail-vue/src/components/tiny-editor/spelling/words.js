@@ -79,3 +79,23 @@ export function replaceWord(range, value) {
   caret.collapse(true);
   return caret;
 }
+
+export function spellingShortcut(event, apple) {
+  if (event.isComposing || event.keyCode===229 || event.shiftKey || event.altKey) return;
+  if (apple ? (!event.metaKey || event.ctrlKey) : (!event.ctrlKey || event.metaKey)) return;
+  if (event.key.toLowerCase()==='m') return 'suggest';
+  if (apple && event.key===';') return 'next';
+}
+
+export function spellingTarget(issues, selection, action) {
+  if (action==='suggest') return issues.find(({range})=>
+    range.isPointInRange(selection.startContainer,selection.startOffset) &&
+    range.isPointInRange(selection.endContainer,selection.endOffset));
+  // Compare with the *end* of each word. An already selected word advances,
+  // while a caret within a word selects that word before moving on.
+  return issues.find(({range})=>{
+    const end=range.cloneRange();
+    end.collapse(false);
+    return end.comparePoint(selection.endContainer,selection.endOffset)<0;
+  }) || issues[0];
+}
