@@ -17,7 +17,7 @@
           </label>
         </div>
       </div>
-      <div class="setting-row">
+      <div ref="keyboardRow" class="setting-row">
         <strong id="keyboard-shortcuts">Keyboard shortcuts:</strong>
         <div role="radiogroup" aria-labelledby="keyboard-shortcuts">
           <label v-for="enabled in [false,true]" :key="String(enabled)" class="radio-choice">
@@ -47,7 +47,7 @@
   </section>
 </template>
 <script setup>
-import {computed, onBeforeUnmount, reactive, ref, watch} from 'vue';
+import {computed, nextTick, onBeforeUnmount, reactive, ref, watch} from 'vue';
 import {onBeforeRouteLeave, useRouter} from 'vue-router';
 import {ElMessageBox} from 'element-plus';
 import http from '@/axios';
@@ -61,6 +61,7 @@ const user=useUserStore(), account=useAccountStore(), router=useRouter();
 const form=reactive({undoSeconds:5,replyAll:false,keyboardShortcuts:false});
 const baseline=ref(null), busy=ref(false), conflict=ref(''), error=ref(''), preferencesError=ref('');
 const signatures=useMailSignatures(), signatureForm=ref(null), signatureRevision=ref(0), savedSignatures=ref(''), signatureError=ref('');
+const keyboardRow=ref(null);
 const ready=computed(()=>Boolean(baseline.value));
 const preferencesChanged=computed(()=>ready.value && (baseline.value.undoSeconds!==form.undoSeconds || baseline.value.replyAll!==form.replyAll || baseline.value.keyboardShortcuts!==form.keyboardShortcuts));
 const signaturesChanged=computed(()=>signatureForm.value && JSON.stringify(signatureForm.value)!==savedSignatures.value);
@@ -150,6 +151,12 @@ watch([()=>user.user.userId,()=>user.authenticatedToken],()=>{
   baseline.value=null; signatureForm.value=null; savedSignatures.value=''; conflict.value=''; error.value=''; signatureError.value=''; preferencesError.value='';
   if (user.user.userId && user.authenticatedToken) load();
 },{immediate:true});
+watch([ready,()=>router.currentRoute.value.hash],async ([loaded,hash])=>{
+  if (!loaded || hash!=='#keyboard-shortcuts') return;
+  await nextTick();
+  if (document.activeElement===document.body || !document.activeElement?.isConnected)
+    keyboardRow.value?.querySelector('input:checked')?.focus();
+},{flush:'post'});
 onBeforeRouteLeave(async to=>{
   if (to.path==='/login' || !dirty.value) return true;
   if (busy.value) return false;

@@ -2,19 +2,28 @@
   <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @keydown.esc.stop.prevent="help.close()" @close="restoreHelpFocus">
     <div class="help-content">
       <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
-        <button aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
+        <button autofocus aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
       </header>
+      <div class="shortcut-content">
       <section><h3>Always available</h3>
         <dl><div><dt>Show keyboard shortcuts</dt><dd><kbd>?</kbd></dd></div>
           <div><dt>Next / previous message in a conversation</dt><dd><kbd>n</kbd> / <kbd>p</kbd></dd></div></dl>
+      </section>
+      <section v-if="hasPerm('email:send')"><h3>Compose and format</h3>
+        <dl><div v-for="[label,keys] in composeActions" :key="label"><dt>{{label}}</dt><dd><kbd>{{keys}}</kbd></dd></div></dl>
       </section>
       <section><h3>Navigation</h3>
         <dl><div v-for="item in actions" :key="item.keys"><dt>{{item.label}}</dt><dd>
           <template v-for="(key,i) in item.keys.split(' ')" :key="i"><span v-if="i"> then </span><kbd>{{key}}</kbd></template>
         </dd></div></dl>
       </section>
-      <footer>Keyboard shortcuts are {{enabled ? 'on' : 'off'}}.
-        <RouterLink :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="help.close()">Keyboard shortcut settings</RouterLink>
+      </div>
+      <footer>
+        <span>Keyboard shortcuts are {{enabled ? 'on' : 'off'}}.
+          <button type="button" class="help-link" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
+        </span>
+        <RouterLink :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
+        <p v-if="saveError" role="alert">{{saveError}}</p>
       </footer>
     </div>
   </dialog>
@@ -23,6 +32,7 @@
 import {computed,onBeforeUnmount,onMounted,ref,watch} from 'vue';
 import {useRoute,useRouter} from 'vue-router';
 import {Icon} from '@iconify/vue';
+import http from '@/axios';
 import {useUserStore} from '@/store/user';
 import {useUiStore} from '@/store/ui';
 import {hasPerm} from '@/perm/perm';
@@ -42,6 +52,35 @@ const actions=computed(()=>[
   {keys:'g a',label:'Go to All mail',route:'all'},
   {keys:'g l',label:'Go to label'},
 ].filter(item=>!item.permission || hasPerm(item.permission)));
+const modifier=/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+const composeActions=[
+  ['Send',modifier+' + Enter'],['Add Cc recipients',modifier+' + Shift + C'],['Add Bcc recipients',modifier+' + Shift + B'],
+  ['Insert link',modifier+' + K'],['Bold',modifier+' + B'],['Italic',modifier+' + I'],['Underline',modifier+' + U'],
+  ['Discard draft',modifier+' + Shift + D'],
+];
+const saving=ref(false),saveError=ref('');
+let saveRun=0;
+async function toggle(){
+  if(saving.value) return;
+  const token=user.authenticatedToken, owner=user.user.userId,run=++saveRun;
+  const current=()=>run===saveRun && token===user.authenticatedToken && token===localStorage.getItem('token') && owner===user.user.userId;
+  const value=!enabled.value;
+  saving.value=true;
+  saveError.value='';
+  try {
+    const config={headers:{Authorization:token},noMsg:true};
+    const saved=await http.get('/v1/general-settings',config);
+    if(!current()) return;
+    const next=saved.keyboardShortcuts===value ? saved : await http.put('/v1/general-settings',{
+      version:saved.version,undoSeconds:saved.undoSeconds ?? user.undoSeconds,replyAll:saved.replyAll,keyboardShortcuts:value,
+    },config);
+    if(current() && (user.user.generalSettings?.version ?? 0)<=next.version) user.user.generalSettings=next;
+  } catch(error) {
+    if(current()) saveError.value=error.message || 'Could not save keyboard shortcuts.';
+  } finally {
+    if(current()) saving.value=false;
+  }
+}
 const help=ref(null);
 let sequenceUntil=0, opener;
 function reset(){sequenceUntil=0;}
@@ -66,7 +105,7 @@ function keydown(event){
   reset();
   if(!(event.key==='?' || enabled.value) || !inMailContext(event)) return;
   if(event.key==='?'){
-    event.preventDefault();opener=document.activeElement;help.value.showModal();return;
+    event.preventDefault();opener=document.activeElement;saveError.value='';help.value.showModal();return;
   }
   if(event.shiftKey) return;
   if(event.key==='g'){
@@ -80,7 +119,10 @@ function keydown(event){
   else if(action.keys==='c') ui.writerRef?.open();
   else emit('search',action.keys==='g l');
 }
-watch([()=>route.fullPath,()=>user.authenticatedToken,enabled],reset);
+watch([()=>route.fullPath,enabled],reset);
+watch([()=>user.authenticatedToken,()=>user.user.userId],()=>{
+  saveRun++;saving.value=false;saveError.value='';reset();if(help.value?.open) help.value.close();
+});
 const resetEvents=['focusin','pointerdown','blur','compositionstart'];
 onMounted(()=>{
   window.addEventListener('keydown',keydown);
@@ -99,5 +141,9 @@ h2{font-size:20px;font-weight:500;margin:0}h3{font-size:14px;margin:18px 0 4px}d
 dd{white-space:nowrap;color:var(--regular-text-color)}kbd{font:13px monospace;border:1px solid var(--light-border-color);border-radius:4px;display:inline-block;min-width:22px;text-align:center;padding:1px 3px}
 header button{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;cursor:pointer}header button:hover{background:var(--mail-hover)}
 footer{border-top:1px solid var(--light-border-color);margin-top:14px;padding-top:14px;flex-wrap:wrap}
-footer a{color:var(--el-color-primary);text-decoration:underline}
+.help-content{display:flex;flex-direction:column;box-sizing:border-box;max-height:calc(100dvh - 48px)}
+.shortcut-content{min-height:0;overflow:auto;overscroll-behavior:contain;padding-inline-end:4px}
+header,footer{flex:none}footer p{width:100%;margin:0;color:var(--el-color-danger)}
+.help-link{padding:0 3px;cursor:pointer}.help-link:disabled{opacity:.6}
+.help-link,footer a{color:var(--el-color-primary);text-decoration:underline}
 </style>
