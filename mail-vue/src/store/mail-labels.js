@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import http from "@/axios";
+import router from "@/router";
 import { useMailFeedback } from "./mail-feedback";
 import { useEmailStore } from "./email";
 import { userDraftStore } from "./draft";
@@ -61,10 +62,20 @@ export const useMailLabels = defineStore("mail-labels", {
       feedback.show(result?.alreadyProcessed ? 'This move was already processed.' : selection+(destination?' moved'+(name?' to '+name:''):' restored')+'.');
       if (result?.undoToken) {
         const notice=feedback.notice;
+        let sibling=null;
         notice.undoFiling=async()=>{
           try {
+            // The route can point to the message about to go back into Trash.
+            // Remember a live sibling even if every row on screen was recovered.
+            const route=trash && router.currentRoute.value, anchor=Number(route?.query?.emailId);
+            if (trash && route.name==="content" && ids.includes(anchor) && sibling?.anchor!==anchor) {
+              try {
+                const page=await client.get('/email/conversation/messages?'+new URLSearchParams({emailId:anchor,limit:Math.min(100,ids.length+1)}));
+                sibling={anchor,id:page.messages.findLast(m=>!ids.includes(m.emailId))?.emailId};
+              } catch { /* A list refresh or an already committed Undo can remove this anchor. */ }
+            }
             await client.post(trash?'/v1/messages/undo-recovery':'/email/conversation/undo-move',{token:result.undoToken});
-            if (trash) this.returnedToTrash={ids:[...ids]};
+            if (trash) this.returnedToTrash={ids:[...ids],sibling};
             else this.undoneMove++;
             useEmailStore().conversationRevision++;
           } catch (error) {

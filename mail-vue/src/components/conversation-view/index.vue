@@ -305,7 +305,8 @@ async function save() {
   finally { savingInline--; }
 }
 onBeforeRouteLeave(async () => await save());
-onBeforeRouteUpdate(async () => await save());
+let retainedReaderPath=null;
+onBeforeRouteUpdate(async to => to.fullPath===retainedReaderPath || await save());
 let filingVersion=0;
 function applyFiling(data) {
   labelIds.value=data.labelIds || [];
@@ -332,18 +333,28 @@ async function refreshFiling() {
 watch(()=>labels.undoneMove,refreshFiling);
 watch(()=>labels.returnedToTrash,async change=>{
   if (!change || route.name!=="content") return;
-  const removed=new Set(change.ids), current=readerCurrent();
-  if (removed.has(Number(route.query.emailId))) { back(); return; }
+  const removed=new Set(change.ids), current=readerCurrent(), anchor=Number(route.query.emailId);
+  const outstanding=loading.value || expanding.value;
+  if (!outstanding && !hasMore.value && !removed.has(anchor) && !messages.value.some(m=>removed.has(m.emailId))) return;
+  generation++; expandRun++; loading.value=false; expanding.value=false;
   if (removed.has(activeTarget.value) && (!(await save()) || !current())) return;
   const remaining=messages.value.filter(message=>!removed.has(message.emailId));
-  if (remaining.length!==messages.value.length) {
-    total.value-=messages.value.length-remaining.length;
-    messages.value=remaining;
+  if (removed.has(anchor)) {
+    const survivor=remaining.find(m=>m.emailId===activeTarget.value)?.emailId || remaining.at(-1)?.emailId
+      || (change.sibling?.anchor===anchor && change.sibling.id);
+    if (!survivor) { back(); return; }
+    const location={path:route.path,query:{...route.query,emailId:survivor,reply:undefined,draft:undefined}};
+    retainedReaderPath=router.resolve(location).fullPath;
+    try {
+      await router.replace(location);
+      await nextTick();
+      if (!current() || route.fullPath!==retainedReaderPath) return;
+    } finally { retainedReaderPath=null; }
   }
-  if (loading.value || !remaining.length) { await load(); return; }
-  await refreshFiling();
+  messages.value=remaining;
+  await load(false,true);
 });
-async function load(older = false) {
+async function load(older = false, reconcile = false) {
   if (older && (loading.value || expanding.value)) return;
   expandRun++;expanding.value=false;
   const current=readerCurrent();
@@ -359,6 +370,21 @@ async function load(older = false) {
       limit: 30,
     });
     if (request !== generation || !current()) return;
+    // Retain the loaded history and the keyed inline editor while reconciling
+    // against the regrouped thread. Never reinsert a pre-Undo message page.
+    if (reconcile && messages.value.length) {
+      const earliest=messages.value[0].emailId;
+      while (data.hasMore && data.nextCursor>earliest) {
+        const previous=data.nextCursor;
+        const page=await conversationMessages({emailId:anchor,before:previous,limit:100});
+        if (request!==generation || !current()) return;
+        if (page.threadId!==data.threadId || (page.hasMore && !(page.nextCursor>0 && page.nextCursor<previous)))
+          throw new Error("Conversation changed. Reopen it and try again.");
+        data.messages=[...page.messages,...data.messages];
+        data.hasMore=page.hasMore;
+        data.nextCursor=page.nextCursor;
+      }
+    }
     if (data.ownedAddresses)
       accountStore.recipientOwnAddresses = data.ownedAddresses;
     const prior = scroll.value?.scrollHeight || 0;
@@ -410,6 +436,7 @@ async function load(older = false) {
 watch(
   [() => route.query.emailId, () => route.query.draft],
   () => {
+    if (retainedReaderPath && route.fullPath===retainedReaderPath) return;
     printController?.abort();
     viewEpoch++;printRun++;expandRun++;printing.value=false;expanding.value=false;
     switching = false;

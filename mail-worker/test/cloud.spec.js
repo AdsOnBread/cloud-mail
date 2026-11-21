@@ -466,6 +466,20 @@ describe('Recoverable Trash',()=>{
    await expect(moveFromTrash(env.db,1,ids,0,undefined,{previousLocation:true,undoable:true,requestId})).rejects.toMatchObject({code:409});
    expect(await env.db.prepare('SELECT result FROM conversation_move_requests WHERE request_id=?').bind(requestId).first()).toBeNull();
  });
+ it('replays creation and recovery without offering an invalidated Undo',async()=>{
+   const {saveLabel}=await import('../src/service/mailbox-labels');
+   const {moveFromTrash}=await import('../src/cloud/trash-actions');
+   const token=crypto.randomUUID(), label=await saveLabel(env.db,1,'Recovered',undefined,null,token);
+   const row=await message();
+   await mail.trash(c(),1,[row.email_id]);
+   const recover=()=>moveFromTrash(env.db,1,[row.email_id],label.id,token,{undoable:true});
+   const move=await recover();
+   expect(move.undoToken).toBeTruthy();
+   expect(await recover()).toEqual(move);
+   await mail.trash(c(),1,[row.email_id]);
+   expect(await recover()).toEqual({messageCount:1,alreadyProcessed:true});
+   expect((await mail.detail(c(),1,row.email_id)).trashedAt).toBeTruthy();
+ });
  it('files recovered mail atomically and preserves the folder of a surviving sibling',async()=>{
    const {moveFromTrash,setTrashRead}=await import('../src/cloud/trash-actions');
    const first=await message(), second=await message({message_id:'<reply@local>',in_reply_to:'<original@example.net>'});

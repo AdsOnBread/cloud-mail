@@ -153,6 +153,22 @@ describe("conversation navigation and inline targets", () => {
     expect(wrapper.findAll(".thread-label").map(l=>l.text())).toEqual(["Keep"]);
     wrapper.unmount();
   });
+  it("reanchors a recovered thread to the surviving inline reply when Undo returns the route anchor to Trash", async()=>{
+    conversationMessages.mockResolvedValueOnce(page([message(9),message(10)],{threadId:"t-9",total:2,unreadCount:1}));
+    const {wrapper,router}=await setup();
+    await wrapper.findAll("button").find(b=>b.text()==="Reply to 9").trigger("click");
+    await flushPromises();
+    const input=wrapper.get('[aria-label="Reply body"]');
+    await input.setValue("Unsent reply to the surviving message");
+    conversationMessages.mockResolvedValueOnce(page([message(9)],{threadId:"t-9",unreadCount:0,total:1}));
+    useMailLabels().returnedToTrash={ids:[10]};
+    await flushPromises();
+    expect(router.currentRoute.value.query.emailId).toBe("9");
+    expect(wrapper.findAll("article")).toHaveLength(1);
+    expect(wrapper.get('[aria-label="Reply body"]').element).toBe(input.element);
+    expect(input.element.value).toBe("Unsent reply to the surviving message");
+    wrapper.unmount();
+  });
   it("initially expands unread/latest cards and prepends older pages chronologically", async () => {
     conversationMessages
       .mockResolvedValueOnce(

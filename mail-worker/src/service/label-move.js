@@ -7,11 +7,18 @@ export async function withLabelMove(db,userId,token,labelId,request,apply) {
   if (typeof token!=='string' || !/^[a-zA-Z0-9-]{8,80}$/.test(token)) throw new BizError('Invalid label request.',400);
   const intent=JSON.stringify(request);
   async function replay() {
-    const row=await db.prepare(`SELECT c.label_id,m.intent,m.result FROM mailbox_label_creations c
+    const row=await db.prepare(`SELECT c.label_id,m.intent,m.result,u.state AS undo_state FROM mailbox_label_creations c
       LEFT JOIN mailbox_label_moves m ON m.user_id=c.user_id AND m.token=c.token
+      LEFT JOIN conversation_move_undo u ON u.user_id=c.user_id AND u.token=json_extract(m.result,'$.undoToken')
       WHERE c.user_id=? AND c.token=?`).bind(userId,token).first();
     if (!row || row.label_id!==labelId || (row.intent && row.intent!==intent)) throw new BizError('This request is for a different move.',409);
-    return row.result ? JSON.parse(row.result) : null;
+    if (!row.result) return null;
+    const result=JSON.parse(row.result);
+    if (result.undoToken && row.undo_state!=='ready') {
+      delete result.undoToken;
+      result.alreadyProcessed=true;
+    }
+    return result;
   }
   const prior=await replay();
   if (prior) return prior;
