@@ -54,6 +54,11 @@ function importanceReason(members) {
   if (latest) return latest.important ? 'user' : null;
   return members.some(row => row.type === 1 && [1,2].includes(row.status) && (row.replyToEmailId || row.inReplyTo)) ? 'reply' : null;
 }
+function scheduledImportance(d,email) {
+  if (d.mailboxImportant!=null)return d.mailboxImportant ? 'user' : null;
+  if (d.sendType==='reply' && d.emailId)return 'reply';
+  return d.receiveEmail.some(a=>a.toLowerCase()===email.toLowerCase()) ? 'direct' : null;
+}
 const fixtureCategory = new Map([['Oliver at Figma','promotions'],['Fieldwork Shop','updates'],['GitHub','updates'],['Linear','updates'],['The Browser','forums'],['Taylor Brooks','social']]);
 const cloudDrafts=new Map(),draftEvents=[],sendAttempts=new Map();let nextDraft=1;
 const trashOperations=new Map();
@@ -175,7 +180,7 @@ const api=createHTTPServer(async(req,res)=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,labelIds:d.labelIds || [],subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
-       inbox:Number(Boolean(d.scheduledInbox && !(d.scheduledWakeAt>now))),wakeAt:d.scheduledWakeAt || 0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
+       inbox:Number(Boolean(d.scheduledInbox && !(d.scheduledWakeAt>now))),wakeAt:d.scheduledWakeAt || 0,unread:d.scheduledUnread||0,starred:d.mailboxStarred||0,importanceReason:scheduledImportance(d,sender.email),
        senderEmail:sender.email,mailboxName:sender.name,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
@@ -293,13 +298,21 @@ const api=createHTTPServer(async(req,res)=>{
      });
    data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,p.view==='picker' ? 50 : 8+maxPeople);
  }
- else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,importanceReason:r.scheduledDraftId ? scheduledImportance(cloudDrafts.get(r.scheduledDraftId),r.sendEmail) : importanceReason([r]),...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text})),hasMore:false,nextCursor:null};}
  else if(path==='/v1/messages/trash-labels'){
    const {emailIds,add,remove}=JSON.parse(body);
    for(const row of rows.filter(r=>r.trashedAt&&emailIds.includes(r.emailId))){
      const applied=membership.get(row.emailId)||new Set();add.forEach(id=>applied.add(id));remove.forEach(id=>applied.delete(id));membership.set(row.emailId,applied);
    }
    data={messageCount:emailIds.length};
+ }
+ else if(/^\/v1\/messages\/\d+\/trash-importance$/.test(path) && req.method==='POST'){
+   const row=rows.find(r=>r.emailId===Number(path.split('/')[3]) && r.trashedAt);
+   if(!row){res.writeHead(409);res.end(JSON.stringify({code:409,message:'This message is no longer in Trash.'}));return;}
+   const {important}=JSON.parse(body);
+   if(row.scheduledDraftId)cloudDrafts.get(row.scheduledDraftId).mailboxImportant=Number(important);
+   else importanceChoices.set(row.emailId,{revision:++importanceRevision,important});
+   data={importanceReason:important?'user':null};
  }
  else if(path==='/v1/messages/trash-read'){
    const {emailIds,read}=JSON.parse(body);rows.filter(row=>emailIds.includes(row.emailId)&&row.trashedAt).forEach(row=>row.unread=Number(read));

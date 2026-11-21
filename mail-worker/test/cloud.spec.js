@@ -416,6 +416,22 @@ describe('Recoverable Trash',()=>{
    await mail.trash(c(),1,[original.email_id],'restore');expect((await mobile.bootstrap(env.db,1)).unreadTotal).toBe(1);
    await expect(mail.trash(c(),1,[original.email_id],'purge')).rejects.toMatchObject({code:400});
  });
+ it('keeps a Trash importance choice on the restored message and rejects inactive targets',async()=>{
+   const {setTrashImportance}=await import('../src/cloud/trash-actions');
+   const {conversationList}=await import('../src/service/conversation-service');
+   const mark=(owner,id,value)=>setTrashImportance(env.db,owner,id,value);
+   const direct=await message({type:1,status:2}), reply=await message({type:1,status:2,message_id:'<reply@local>',in_reply_to:'<original@example.net>'});
+   await mail.trash(c(),1,[direct.email_id,reply.email_id]);
+   const list=async()=>(await mail.list(c(),1,{folder:'trash'})).messages;
+   expect((await list()).map(m=>m.importanceReason)).toEqual(['reply','direct']);
+   await expect(mark(2,direct.email_id,false)).rejects.toMatchObject({code:409});
+   await expect(mark(1,direct.email_id,1)).rejects.toMatchObject({code:400});
+   await mark(1,direct.email_id,false);await mark(1,reply.email_id,true);
+   expect((await list()).map(m=>m.importanceReason)).toEqual(['user',null]);
+   await mail.trash(c(),1,[reply.email_id],'restore');
+   await expect(mark(1,reply.email_id,false)).rejects.toMatchObject({code:409});
+   expect((await conversationList(c(),{folder:'important',accountId:1},1)).threads).toMatchObject([{importanceReason:'user'}]);
+ });
  it('applies labels to the selected Trash messages without restoring them or changing siblings',async()=>{
    const {setTrashLabels}=await import('../src/cloud/trash-actions');
    const a=await message(), b=await message({message_id:'<b@local>',in_reply_to:'<original@example.net>'});
@@ -1361,6 +1377,24 @@ describe('Scheduled Trash',()=>{
    expect(recovered.scheduledAt).toBeUndefined();
    expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
    await expect(undoScheduledTrash(c(),1,second)).rejects.toMatchObject({code:409});
+ });
+ it('retains the importance choice through Trash, Undo and restoring the unsent draft',async()=>{
+   const {setTrashImportance}=await import('../src/cloud/trash-actions');
+   const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');
+   const {scheduledList}=await import('../src/cloud/scheduled');
+   const d=await queue({receiveEmail:['admin@example.com']});
+   const trash=await trashScheduled(c(),1,{messages:[d]});
+   const first=async()=>(await mail.list(c(),1,{folder:'trash'})).messages[0];
+   const receipt=await first();expect(receipt.importanceReason).toBe('direct');
+   await setTrashImportance(env.db,1,receipt.emailId,false);
+   expect((await first()).importanceReason).toBeNull();
+   await undoScheduledTrash(c(),1,trash);
+   const [again]=await scheduledList(c(),1);expect(again.importanceReason).toBeNull();
+   await trashScheduled(c(),1,{messages:[again]});
+   const next=await first();
+   await setTrashImportance(env.db,1,next.emailId,true);
+   await mail.trash(c(),1,[next.emailId],'restore');
+   expect(await drafts.get(c(),1,d.draftId)).toMatchObject({state:'draft',mailboxImportant:1});
  });
  it('preserves draft consent for connected apps after an unsent message enters Trash',async()=>{
    const {trashScheduled}=await import('../src/cloud/scheduled-trash');
