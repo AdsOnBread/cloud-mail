@@ -188,11 +188,10 @@ onUnmounted(() => {
 })
 
 function handleKeyDown(event) {
-  if (event.key !== 'Escape') return;
+  if (event.key !== 'Escape' || event.defaultPrevented) return;
   if (showPreview.value) return;
   if (document.querySelector('.el-message-box')) return;
-  const writeBox = document.querySelector('.write-box');
-  if (writeBox && writeBox.offsetParent !== null) return;
+  if ([...document.querySelectorAll('.send.compose-open,dialog[open]')].some(node=>node.getClientRects().length)) return;
   handleBack();
 }
 
