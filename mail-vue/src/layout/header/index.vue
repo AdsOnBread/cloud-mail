@@ -442,9 +442,12 @@ function formatName(email) {
 .icon-button:hover { background:var(--mail-hover); }
 .mail-search { display:flex; align-items:center; height:48px; min-width:0; border-radius:24px; background:var(--mail-search); padding:0 6px; }
 .search-entry { flex:1; min-width:0; display:flex; align-items:center; }
-.search-folder { font-size:16px; margin-left:8px; white-space:nowrap; }
+.search-folder { font-size:16px; margin-left:8px; white-space:nowrap; max-width:42%; overflow:hidden; text-overflow:ellipsis; }
 .mail-search:focus-within { background:var(--mail-surface); box-shadow:0 1px 3px #0003; }
 .mail-search input { flex:1; width:0; min-width:0; color:var(--el-text-color-primary); font-size:16px; padding:0 8px; }
+.mail-search input:focus-visible { outline:0; }
+.mail-search:has(input:focus-visible) { box-shadow:0 0 0 1px var(--light-border-color),0 2px 6px #0003; }
+@media (forced-colors:active) { .mail-search:has(input:focus-visible) { outline:2px solid Highlight; } }
 .search-folder + input::placeholder { visibility:hidden; }
 .mail-search input::placeholder { color:var(--regular-text-color); opacity:1; }
 .page-title { font-size:20px; padding-left:16px; }

@@ -146,6 +146,7 @@ footer{border-bottom:1px solid var(--light-border-color);margin-top:8px;padding-
 .help-content{display:flex;flex-direction:column;box-sizing:border-box;max-height:calc(100dvh - 48px)}
 .shortcut-content{min-height:0;overflow:auto;overscroll-behavior:contain;padding-inline-end:4px}
 header,footer{flex:none}footer p{width:100%;margin:0;color:var(--el-color-danger)}
+footer>span{display:inline-flex;align-items:baseline;column-gap:4px;flex-wrap:wrap}
 .help-link{padding:0 3px;cursor:pointer}.help-link:disabled{opacity:.6}
 .help-link,footer a{color:var(--el-color-primary);text-decoration:underline}
 </style>
