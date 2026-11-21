@@ -2,6 +2,7 @@
   <div
     ref="strip"
     class="format-strip"
+    :class="{'with-history':showHistory}"
     role="toolbar"
     aria-label="Text formatting"
     @pointerdown.capture="remember"
@@ -451,6 +452,8 @@ function navigateColors(event, command) {
   display: flex;
   align-items: center;
   align-self: flex-start;
+  width: min(100%, 521px);
+  justify-content: space-between;
   box-sizing: border-box;
   max-width: 100%;
   flex-shrink: 0;
@@ -460,6 +463,7 @@ function navigateColors(event, command) {
   border-radius: 22px;
   background: var(--mail-compose-header);
 }
+.format-strip.with-history { width: min(100%, 595px); }
 .group {
   display: flex;
   align-items: center;
