@@ -5,7 +5,9 @@ import {diffChars, diffWordsWithSpace} from "diff";
 // Domains can be entered as displayed, including international characters and
 // spaces in the path. URL handles encoding after the host has been identified.
 const domainLink = /^(?:[\p{L}\p{M}\p{N}_-]+[.。．｡])+[\p{L}\p{M}\p{N}_-]+(?::\d+)?(?:[/?#].*)?$/u;
-const knownSuffixes = new Set(tlds);
+const knownSuffixes = new Set(tlds.map(suffix =>
+  /^[a-z0-9-]+$/.test(suffix) ? suffix : new URL("https://domain." + suffix).hostname.split(".").at(-1)
+));
 const bareMailbox = /^[^\s@]+@[^\s@/:?#]+\.[^\s@/:?#]+$/;
 
 export function normalizeLinkUrl(value) {
@@ -15,11 +17,13 @@ export function normalizeLinkUrl(value) {
     let candidate = raw;
     const isMailbox = !/^[a-z][a-z\d+.-]*:/i.test(raw) && bareMailbox.test(raw);
     if (domainLink.test(raw)) {
-      const webUrl = new URL("https://" + raw);
+      candidate = "https://" + raw;
       // A dotted mailbox name can contain slash, question mark or hash.
-      // Treat an ambiguous prefix as a website only for a known domain suffix.
-      const suffix = webUrl.hostname.split(".").at(-1);
-      candidate = isMailbox && !knownSuffixes.has(suffix) ? mailboxHref(raw) : webUrl.href;
+      // Prefer the website only when the prefix parses as a host with a known suffix.
+      if (isMailbox) {
+        const suffix = URL.canParse(candidate) && new URL(candidate).hostname.split(".").at(-1);
+        if (!knownSuffixes.has(suffix)) candidate = mailboxHref(raw);
+      }
     } else if (isMailbox) candidate = mailboxHref(raw);
     const url = new URL(candidate);
     return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)

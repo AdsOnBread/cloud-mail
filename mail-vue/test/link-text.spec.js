@@ -33,6 +33,9 @@ it("only links an entire explicit web address immediately", () => {
   expect(normalizeLinkUrl("jane.doe?tag@example.net")).toBe("mailto:jane.doe%3Ftag@example.net");
   expect(normalizeLinkUrl("first.last/reports@example.net")).toBe("mailto:first.last%2Freports@example.net");
   expect(normalizeLinkUrl("first.last#reports@example.net")).toBe("mailto:first.last%23reports@example.net");
+  expect(normalizeLinkUrl("billing.2026?copy@example.org")).toBe("mailto:billing.2026%3Fcopy@example.org");
+  const internationalWebsite = "例子.中国/share?to=maya@example.org";
+  expect(normalizeLinkUrl(internationalWebsite)).toBe(new URL("https://" + internationalWebsite).href);
   expect(normalizeLinkUrl("orders/returns@example.org")).toBe("mailto:orders%2Freturns@example.org");
   expect(normalizeLinkUrl("orders?tag+new@example.org")).toBe("mailto:orders%3Ftag+new@example.org");
   expect(normalizeLinkUrl("mailto:orders@example.org?subject=Returns")).toBe("mailto:orders@example.org?subject=Returns");
