@@ -394,6 +394,7 @@ import {
   restoreDraft,
   hasDraftContent,
   draftFingerprint,
+  draftFilingFingerprint,
   replyRecipients,
   recipientFields,
 } from "@/utils/recipients.js";
@@ -920,9 +921,12 @@ async function removeSavedDraft() {
   if(form.draftId)await removeLocalDraft(form.draftId);
 }
 let cloudSaveTimer;
-watch(()=>JSON.stringify([draftFingerprint(form),form.accountId,form.name,form.sendType,form.emailId]),()=>{
-  if(preparing.value||sending.value||!show.value||!hasDraftContent(form))return;
-  if (draftFingerprint(form)===automaticBaseline || (restoredUntouched && draftFingerprint(form) === baseline)) return;
+watch([()=>draftFingerprint(form), ()=>JSON.stringify(draftFilingFingerprint(form)),
+  ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing],[,previousFiling])=>{
+  if(preparing.value || sending.value || !show.value) return;
+  const changedFiling = form.draftId && filing!==previousFiling;
+  if (!changedFiling && (!hasDraftContent(form) || fingerprint===automaticBaseline ||
+      (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
   clearTimeout(cloudSaveTimer);
   const localSave=persistDraft().catch(()=>{form.syncState="offline";});

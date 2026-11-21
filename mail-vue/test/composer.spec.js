@@ -315,6 +315,15 @@ describe("composer persistence and sending", () => {
       confirm.mockRestore();
     }
   });
+  it("persists removing the last star from an otherwise empty open draft", async () => {
+    const wrapper=composer();
+    try {
+      await wrapper.vm.openDraft({draftId:24,cloudDraftId:31,mailboxStarred:true});
+      await starInOpenEditor(24,"me@example.com",false);
+      await flushPromises();
+      expect(state.drafts.get(24)).toMatchObject({mailboxStarred:false});
+    } finally {wrapper.unmount();}
+  });
   it.each([false,true])("keeps row star changes when typing in an open composer (inline %s)", async inline => {
     const wrapper=composer({inline});
     try {
