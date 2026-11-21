@@ -7,7 +7,7 @@
         :disabled="disabled" :aria-expanded="open"><Icon icon="material-symbols:label-outline" width="20"/></button>
     </template>
     <FilingMenu ref="menu" v-model="query" title="Label as" search-label="Search labels" :show-manage="!query.trim()"
-      @dismiss="dismiss" @create="createLabel" @manage="manageLabels">
+      @dismiss="dismiss" @leave="open=false" @create="createLabel" @manage="manageLabels">
       <button v-for="label in filtered" :key="label.id" type="button" role="menuitemcheckbox" :aria-checked="state(label.id)"
         :title="label.name" @click="toggle(label.id)">
         <Icon :icon="checkboxIcon(state(label.id))" width="18"/><span>{{label.name}}</span>

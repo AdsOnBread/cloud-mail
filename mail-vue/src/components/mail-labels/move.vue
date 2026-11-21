@@ -25,7 +25,7 @@
         /></button
     ></template>
     <FilingMenu ref="menu" v-model="query" title="Move to" search-label="Find destination" show-manage
-      @dismiss="dismiss" @create="createLabel" @manage="manageLabels">
+      @dismiss="dismiss" @leave="open=false" @create="createLabel" @manage="manageLabels">
       <button v-for="item in destinations" :key="item.id" type="button" role="menuitem" :title="item.name" @click="choose(item.id)">
         <Icon :style="{color:item.background}" :icon="item.id ? (item.background ? 'material-symbols:label' : 'material-symbols:label-outline') : 'material-symbols:inbox-outline'" width="18"/>
         <span>{{item.name}}</span>

@@ -1,5 +1,5 @@
 <template>
-  <div ref="menu" class="filing-menu" role="menu" :aria-label="title" @keydown="navigate">
+  <div ref="menu" class="filing-menu" role="menu" :aria-label="title" @keydown="navigate" @focusout="leave">
     <div class="filing-title">{{ title }}:</div>
     <div class="filing-search">
       <input ref="input" v-model="query" :aria-label="searchLabel" autocomplete="off" spellcheck="false">
@@ -18,9 +18,12 @@ import { ref } from "vue";
 import { Icon } from "@iconify/vue";
 defineProps({title:String,searchLabel:String,showManage:Boolean});
 const query=defineModel({type:String,required:true});
-const emit=defineEmits(["create","manage","dismiss"]);
+const emit=defineEmits(["create","manage","dismiss","leave"]);
 const input=ref(),menu=ref();
 defineExpose({focus:()=>input.value?.focus()});
+function leave(event) {
+  if (event.relatedTarget && !menu.value.contains(event.relatedTarget)) emit("leave");
+}
 function navigate(event) {
   if (event.isComposing || event.keyCode===229) return;
   const buttons=[...menu.value.querySelectorAll('button:not(:disabled)')];
