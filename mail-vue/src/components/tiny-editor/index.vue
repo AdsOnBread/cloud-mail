@@ -406,8 +406,24 @@ function initEditor(initialContent) {
         const text = messageText();
         emit("change", content, text);
       });
+      // Recipient fields collapse on focus. Let an initiating pointer gesture
+      // finish first so the iframe stays under the link, image or selected text.
+      let pointerDown = false, pendingFocus = false;
+      function finishPointerFocus() {
+        pointerDown = false;
+        if (pendingFocus) {
+          pendingFocus = false;
+          if (!ed.removed && ed.hasFocus()) emit("focus", focus);
+        }
+      }
+      if (props.mailCompose) {
+        ed.on("mousedown", () => { pointerDown = true; }, true);
+        ed.on("click keydown dragend pointercancel", finishPointerFocus);
+        ed.on("blur", () => { pointerDown = pendingFocus = false; });
+      }
       ed.on("focus", () => {
-        emit("focus", focus);
+        if (pointerDown) pendingFocus = true;
+        else emit("focus", focus);
       });
     },
 
