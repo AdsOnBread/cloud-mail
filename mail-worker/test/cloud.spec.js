@@ -659,6 +659,60 @@ describe('Scheduled send',()=>{
    await schedule(c(),1,rows[1].draftId,{version:rows[1].version+1,sendAt:when});
    expect(await inbox()).toEqual([]);
  });
+ it('sets and undoes a queued reminder atomically while keeping the original send time and placement',async()=>{
+   const {schedule,snoozeScheduled,scheduledList,setScheduledInbox,setScheduledRead,cancel}=await import('../src/cloud/scheduled');
+   const {conversationList}=await import('../src/service/conversation-service');
+   const now=Math.floor(Date.now()/1000),sendAt=now+7200,wakeAt=now+3600;
+   const rows=[];
+   for (const subject of ['Snooze first','Snooze second']) {
+     const d=await draft({subject});
+     rows.push(await schedule(c(),1,d.draftId,{version:d.version,sendAt}));
+   }
+   const snooze=(messages,time=wakeAt,uid=1)=>snoozeScheduled(c(),uid,{messages,wakeAt:time});
+   const folder=mark=>scheduledList(c(),1,1,{mark});
+   await setScheduledInbox(c(),1,{messages:[rows[0]],inbox:true});
+   await setScheduledRead(c(),1,{messages:rows,unread:true});
+   await expect(snooze(rows,now-1)).rejects.toMatchObject({code:400});
+   await expect(snooze(rows,wakeAt,2)).rejects.toMatchObject({code:409});
+   await expect(snooze([rows[0],{...rows[1],version:200}])).rejects.toMatchObject({code:409});
+   expect(await folder('snoozed')).toEqual([]);
+   const result=await snooze(rows);
+   expect(await folder('snoozed')).toMatchObject(rows.map(row=>({...row,inbox:0,wakeAt})));
+   expect(await folder('inbox')).toEqual([]);
+   expect(await scheduledList(c(),1,1,{countOnly:'1',includeInboxUnread:'1',includeNextWake:'1'})).toEqual({count:2,inboxUnread:0,nextWakeAt:wakeAt});
+   expect((await conversationList(c(),{folder:'inbox',accountId:1},1)).nextWakeAt).toBe(wakeAt);
+   await setScheduledInbox(c(),1,{messages:rows,inbox:false,previousEdit:result.edit});
+   expect(await folder('snoozed')).toEqual([]);
+   expect((await folder('inbox')).map(row=>row.draftId)).toEqual([rows[0].draftId]);
+   const first=await snooze(rows),later=await snooze([rows[0]],wakeAt+60);
+   await expect(setScheduledInbox(c(),1,{messages:rows,inbox:false,previousEdit:first.edit})).rejects.toMatchObject({code:409});
+   await setScheduledInbox(c(),1,{messages:[rows[0]],inbox:false,previousEdit:later.edit});
+   expect(await folder('snoozed')).toMatchObject(rows.map(row=>({...row,wakeAt})));
+   await cancel(c(),1,rows[0].draftId,rows[0].version);
+   expect((await drafts.get(c(),1,rows[0].draftId)).scheduledWakeAt).toBeUndefined();
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledWakeAt',unixepoch()-1) WHERE draft_id=?").bind(rows[1].draftId).run();
+   expect(await folder('snoozed')).toEqual([]);
+   expect(await folder('inbox')).toMatchObject([{...rows[1],unread:1,inbox:1}]);
+ });
+ it('keeps a reminder on the sender copy after its scheduled delivery and returns the conversation to Inbox on wake',async()=>{
+   const {schedule,snoozeScheduled,deliverDue,scheduledList}=await import('../src/cloud/scheduled');
+   const {conversationList}=await import('../src/service/conversation-service');
+   const d=await draft(),wakeAt=Math.floor(Date.now()/1000)+86400;
+   const queued=await schedule(c(),1,d.draftId,{version:d.version,sendAt:wakeAt-300});
+   await snoozeScheduled(c(),1,{messages:[queued],wakeAt});
+   await env.db.prepare("UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',1) WHERE draft_id=?").bind(d.draftId).run();
+   await deliverDue(c());await deliverDue(c());
+   expect(await scheduledList(c(),1,1)).toEqual([]);
+   expect(await env.db.prepare('SELECT wake_at FROM scheduled_inbox_deliveries WHERE user_id=1').first('wake_at')).toBe(wakeAt);
+   const list=(folder,user=1)=>conversationList(c(),{folder,accountId:user},user);
+   expect((await list('snoozed')).threads).toMatchObject([{subject:d.subject,wakeAt}]);
+   expect((await list('inbox')).threads).toEqual([]);
+   expect((await list('snoozed',2)).threads).toEqual([]);
+   await env.db.prepare('UPDATE conversation_filing SET wake_at=unixepoch()-1 WHERE user_id=1').run();
+   expect((await list('inbox')).threads).toMatchObject([{subject:d.subject}]);
+   expect((await list('snoozed')).threads).toEqual([]);
+   expect(await env.db.prepare("SELECT count(*) n FROM send_attempts WHERE state='sent'").first('n')).toBe(1);
+ });
  it('retains Inbox on the delivered conversation without filing the recipient’s mailbox',async()=>{
    const {schedule,setScheduledInbox,deliverDue}=await import('../src/cloud/scheduled');
    const {conversationList,conversationAction}=await import('../src/service/conversation-service');
