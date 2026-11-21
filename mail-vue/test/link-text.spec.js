@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { renameLink } from "../src/components/tiny-editor/link-text";
+import { normalizeLinkUrl, selectedWebUrl, renameLink } from "../src/components/tiny-editor/link-text";
 
 it.each([
   ["Read <b>these</b> <i>notes</i>", "Read those notes", "Read <b>those</b> <i>notes</i>"],
@@ -16,4 +16,19 @@ it.each([
   link.innerHTML = html;
   renameLink(link, label);
   expect(link.innerHTML).toBe(expected);
+});
+
+
+it("only links an entire explicit web address immediately", () => {
+  expect(selectedWebUrl("https://example.org")).toBe("https://example.org/");
+  expect(selectedWebUrl("https://example.org/?contact=person@example.org")).toBe("https://example.org/?contact=person@example.org");
+  expect(normalizeLinkUrl("mailto:person@example.org")).toBe("mailto:person@example.org");
+  expect(selectedWebUrl("http://example.org/a?x=1&y=2")).toBe("http://example.org/a?x=1&y=2");
+  for (const text of [undefined, "", "example.org", "person@example.org", "mailto:person@example.org",
+    "read https://example.org", "https://example.org/a b", "https://example.org\n",
+    "https://example.org/\u0000", "https://", "javascript:alert(1)"]) {
+    expect(selectedWebUrl(text)).toBe("");
+  }
+  expect(normalizeLinkUrl("example.org")).toBe("https://example.org/");
+  expect(normalizeLinkUrl("person@example.org")).toBe("mailto:person@example.org");
 });

@@ -28,30 +28,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import { Icon } from "@iconify/vue";
-import { renameLink } from "./link-text";
+import { normalizeLinkUrl, selectedWebUrl, renameLink } from "./link-text";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
   textField = ref(null), urlField = ref(null);
 let bookmark, anchor, originalText, owner, range, resize, fragment = null;
-const safeUrl = computed(() => normalizeUrl(panel.value?.url));
-function normalizeUrl(value) {
-  const raw = value?.trim();
-  if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
-  try {
-    const candidate = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)
-      ? "mailto:" + raw
-      : /^[\w-]+(?:\.[\w-]+)+(?:[/?#:][^\s]*)?$/.test(raw)
-        ? "https://" + raw
-        : raw;
-    const url = new URL(candidate);
-    return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)
-      ? url.href
-      : "";
-  } catch {
-    return "";
-  }
-}
+const safeUrl = computed(() => normalizeLinkUrl(panel.value?.url));
 function outside(event) {
   if (
     !box.value?.contains(event.target) &&
@@ -86,7 +69,7 @@ function position() {
 function close(focus = false) {
   if (!panel.value) return;
   document.removeEventListener("pointerdown", outside, true);
-  owner.off("mousedown", insideEditor);
+  owner.off("mousedown Undo Redo SetContent", insideEditor);
   owner.off("keydown", editorKey);
   owner.getWin()?.removeEventListener("scroll", position);
   resize?.disconnect();
@@ -126,29 +109,27 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   originalText = anchor?.textContent ?? ed.selection.getContent({format:"text"});
   const imageLink = photoAction || (!originalText.trim() && Boolean((anchor || range.cloneContents()).querySelector("img")));
   const selectedText = !anchor && !imageLink && !range.collapsed && Boolean(originalText.trim());
-  if (selectedText && /^https?:\/\/[^\s]+$/i.test(originalText)) {
-    const href = normalizeUrl(originalText);
-    if (href) {
-      ed.undoManager.transact(() => ed.execCommand("mceInsertLink", false, {href}));
-      ed.nodeChanged();
-      ed.dispatch("change");
-      anchor = ed.dom.getParent(ed.selection.getEnd(), "a[href]");
-      if (anchor) {
-        preview = true;
-        range.selectNodeContents(anchor);
-        const after = ed.dom.createRng();
-        after.setStartAfter(anchor);
-        after.collapse(true);
-        ed.selection.setRng(after);
-        bookmark = ed.selection.getBookmark(2, true);
-      }
+  const directUrl = selectedText && selectedWebUrl(originalText);
+  if (directUrl && !range.cloneContents().querySelector("img,hr,table,br:not([data-mce-bogus]),audio,video,iframe,object,embed,svg,canvas,[contenteditable=false]")) {
+    ed.undoManager.transact(() => ed.execCommand("mceInsertLink", false, {href:directUrl}));
+    ed.nodeChanged();
+    ed.dispatch("change");
+    anchor = ed.dom.getParent(ed.selection.getEnd(), "a[href]");
+    if (anchor) {
+      preview = true;
+      range.selectNodeContents(anchor);
+      const after = ed.dom.createRng();
+      after.setStartAfter(anchor);
+      after.collapse(true);
+      ed.selection.setRng(after);
+      bookmark = ed.selection.getBookmark(2, true);
     }
   }
   panel.value = {text:originalText, url:anchor?.getAttribute("href") || "", preview, imageLink,
     selectedText:selectedText && !anchor, existing:Boolean(anchor)};
   const opened = panel.value;
   document.addEventListener("pointerdown", outside, true);
-  ed.on("mousedown", insideEditor);
+  ed.on("mousedown Undo Redo SetContent", insideEditor);
   ed.on("keydown", editorKey, true);
   ed.getWin().addEventListener("scroll", position, {passive:true});
   await nextTick();

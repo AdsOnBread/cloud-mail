@@ -34,6 +34,7 @@ import ComposeSpelling from "./spelling/compose-spelling.vue";
 import ComposeFormat from "./compose-format.vue";
 import ComposePhoto from "./compose-photo.vue";
 import { defaultPhotoWidth, defaultPhotoHeight } from "./photo-size";
+import { observeWebPaste } from "./web-paste";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
 import { useUiStore } from "@/store/ui.js";
@@ -238,6 +239,7 @@ async function initTinyMCE() {
 
 function observeFileTransfers(ed) {
   const doc = ed.getDoc();
+  const webPaste = observeWebPaste(ed);
   const handle = event => {
     const transfer = event.clipboardData || event.dataTransfer;
     if (event.type === "paste" && props.plainText && (!hasFiles(transfer) || hasRichSelection(transfer))) {
@@ -248,6 +250,7 @@ function observeFileTransfers(ed) {
       return;
     }
     if (!hasFiles(transfer)) {
+      if (event.type === "paste" && !props.plainText) webPaste(event);
       if (props.plainText && event.type === "drop") {
         event.preventDefault();
         event.stopImmediatePropagation();

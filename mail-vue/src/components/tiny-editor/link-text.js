@@ -1,5 +1,26 @@
 import {diffChars, diffWordsWithSpace} from "diff";
 
+export function normalizeLinkUrl(value) {
+  const raw = value?.trim();
+  if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
+  try {
+    let candidate = raw;
+    if (/^[\w-]+(?:\.[\w-]+)+(?:[/?#:][^\s]*)?$/.test(raw)) candidate = "https://" + raw;
+    else if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@/:]+@[^\s@/:]+\.[^\s@/:]+$/.test(raw)) candidate = "mailto:" + raw;
+    const url = new URL(candidate);
+    return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)
+      ? url.href
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+export function selectedWebUrl(text) {
+  if (!/^https?:\/\//i.test(text) || /\s/.test(text)) return "";
+  return normalizeLinkUrl(text);
+}
+
 // Keep the existing inline elements, including styles on text between separate edits.
 export function renameLink(link, label) {
   const original = link.textContent;
