@@ -132,7 +132,8 @@ it('shows the snippet when collapsed and the sender address and recipient contro
   expect(wrapper.get('.snippet').text()).toBe('See the revised copy.');
   expect(wrapper.find('.address').exists()).toBe(false);
   await wrapper.get('.message-toggle').trigger('click');
-  expect(wrapper.emitted('toggle')).toHaveLength(1);
+  await wrapper.get('time').trigger('click');
+  expect(wrapper.emitted('toggle')).toHaveLength(2);
   await wrapper.setProps({expanded:true});await flushPromises();
   expect(wrapper.find('.snippet').exists()).toBe(false);
   expect(wrapper.get('.address').text()).toContain('person@example.net');

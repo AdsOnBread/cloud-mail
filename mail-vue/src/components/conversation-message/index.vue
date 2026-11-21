@@ -6,44 +6,45 @@
   >
     <div class="message-header">
       <div class="avatar" aria-hidden="true" :style="{backgroundColor:avatarColor}">{{initial}}</div>
-      <button type="button" class="message-toggle" :aria-expanded="expanded"
+      <button type="button" class="message-toggle" :aria-expanded="expanded" :aria-describedby="description"
         :aria-label="(expanded ? 'Collapse' : 'Expand')+' message from '+sender" @click="$emit('toggle')">
         <strong dir="auto">{{sender}}</strong>
         <span v-if="expanded && message.name && message.sendEmail && message.name!==message.sendEmail" class="address" dir="ltr">&lt;{{message.sendEmail}}&gt;</span>
       </button>
       <div v-if="expanded" class="conversation-recipients"><MessageRecipients :message="email"/></div>
-      <div v-else class="snippet" dir="auto">{{message.listText}}</div>
-      <div class="message-actions">
-      <time v-if="stamp" :datetime="stamp.iso" :data-tip="stamp.full">
-        <span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span>
-      </time>
-      <button
-        class="icon-button"
-        :data-tip="message.isStar ? 'Unstar' : 'Star'"
-        :aria-label="message.isStar ? 'Unstar message' : 'Star message'"
-        @click="star"
-      >
-        <Icon
-          :icon="
-            message.isStar
-              ? 'fluent-color:star-16'
-              : 'material-symbols:star-outline'
-          "
-          width="20"
-        />
-      </button>
-      <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" :aria-label="replyAll ? 'Reply all' : 'Reply to message'" :data-tip="replyAll ? 'Reply all' : 'Reply'" @click="$emit('reply',replyAll)"><Icon :icon="replyAll ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20" /></button>
-      <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
-        <button class="icon-button" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20" /></button>
-        <template #dropdown><el-dropdown-menu>
-          <el-dropdown-item v-perm="'email:send'" @click="$emit('reply',false)"><Icon icon="material-symbols:reply"/>Reply</el-dropdown-item>
-          <el-dropdown-item v-if="hasReplyAll(email,account.ownAddresses)" v-perm="'email:send'" @click="$emit('reply',true)"><Icon icon="material-symbols:reply-all"/>Reply all</el-dropdown-item>
-          <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)"><Icon icon="material-symbols:forward"/>Forward</el-dropdown-item>
-          <el-dropdown-item divided v-perm="'email:delete'" @click="remove"><Icon icon="material-symbols:delete-outline"/>Delete</el-dropdown-item>
-          <el-dropdown-item @click="read"><Icon :icon="message.unread===0?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'"/>{{ message.unread===0 ? 'Mark as read' : 'Mark as unread' }}</el-dropdown-item>
-          <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
-        </el-dropdown-menu></template>
-      </el-dropdown>
+      <div v-else :id="snippetId" class="snippet" dir="auto">{{message.listText}}</div>
+      <div class="message-actions" @click.self="$emit('toggle')">
+        <time v-if="stamp" :id="dateId" :datetime="stamp.iso" :data-tip="stamp.full" @click="$emit('toggle')">
+          <span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span>
+        </time>
+        <button
+          class="icon-button"
+          :data-tip="message.isStar ? 'Unstar' : 'Star'"
+          :aria-pressed="Boolean(message.isStar)"
+          :aria-label="message.isStar ? 'Unstar message' : 'Star message'"
+          @click="star"
+        >
+          <Icon
+            :icon="
+              message.isStar
+                ? 'fluent-color:star-16'
+                : 'material-symbols:star-outline'
+            "
+            width="20"
+          />
+        </button>
+        <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" :aria-label="replyAll ? 'Reply all' : 'Reply to message'" :data-tip="replyAll ? 'Reply all' : 'Reply'" @click="$emit('reply',replyAll)"><Icon :icon="replyAll ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20" /></button>
+        <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
+          <button class="icon-button" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20" /></button>
+          <template #dropdown><el-dropdown-menu>
+            <el-dropdown-item v-perm="'email:send'" @click="$emit('reply',false)"><Icon icon="material-symbols:reply"/>Reply</el-dropdown-item>
+            <el-dropdown-item v-if="hasReplyAll(email,account.ownAddresses)" v-perm="'email:send'" @click="$emit('reply',true)"><Icon icon="material-symbols:reply-all"/>Reply all</el-dropdown-item>
+            <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)"><Icon icon="material-symbols:forward"/>Forward</el-dropdown-item>
+            <el-dropdown-item divided v-perm="'email:delete'" @click="remove"><Icon icon="material-symbols:delete-outline"/>Delete</el-dropdown-item>
+            <el-dropdown-item @click="read"><Icon :icon="message.unread===0?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'"/>{{ message.unread===0 ? 'Mark as read' : 'Mark as unread' }}</el-dropdown-item>
+            <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
+          </el-dropdown-menu></template>
+        </el-dropdown>
       </div>
     </div>
     <template v-if="expanded">
@@ -73,7 +74,7 @@
 <script setup>
 import { useMailFeedback } from "@/store/mail-feedback";
 const feedback = useMailFeedback();
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, useId } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
@@ -114,6 +115,8 @@ const avatarColor=computed(()=>{
   return avatarColors[hash % avatarColors.length];
 });
 const stamp=computed(()=>readerTimestamp(props.message.createTime,props.now));
+const dateId=useId(),snippetId=useId();
+const description=computed(()=>[stamp.value && dateId,!props.expanded && props.message.listText && snippetId].filter(Boolean).join(' ') || undefined);
 const user=useUserStore();
 const replyAll=computed(()=>user.defaultReplyAll && hasReplyAll(email.value,account.ownAddresses));
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
@@ -204,7 +207,7 @@ async function remove() {
   color:white;font-size:20px;font-weight:500;user-select:none;
 }
 .message-toggle {
-  grid-area:1 / 2;
+  grid-area:1 / 2;height:20px;
   display:flex;align-items:baseline;gap:4px;min-width:0;
   text-align:start;cursor:pointer;color:var(--el-text-color-primary);font:14px/20px Arial,sans-serif;
 }
@@ -218,12 +221,12 @@ async function remove() {
 .address {flex:0 1 auto}
 .snippet,.conversation-recipients {grid-area:2 / 2 / 3 / -1;min-width:0;text-align:start}
 .snippet {color:var(--regular-text-color);font:13px/20px Arial,sans-serif}
-.conversation-recipients {width:fit-content;max-width:100%;position:relative;z-index:2;line-height:20px}
+.conversation-recipients {display:flex;align-items:center;height:20px;width:fit-content;max-width:100%;position:relative;z-index:2;line-height:20px}
 .message-actions {
   grid-area:1 / 3;display:flex;align-items:center;justify-content:end;
   position:relative;z-index:2;height:20px;color:var(--regular-text-color);
 }
-time {margin-inline-end:10px;white-space:nowrap}
+time {cursor:pointer;margin-inline-end:10px;white-space:nowrap}
 .short-time {display:none}
 .icon-button {width:40px;height:40px;border-radius:50%;display:inline-grid;place-items:center;flex-shrink:0;color:inherit;cursor:pointer}
 .icon-button:is(:hover,:focus-visible) {background:var(--mail-hover)}
