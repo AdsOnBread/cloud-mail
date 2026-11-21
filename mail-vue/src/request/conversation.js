@@ -5,3 +5,5 @@ export const conversationMessages = (params) =>
   http.get("/email/conversation/messages", { params });
 export const conversationAction = (action, emailIds, extra = {}) =>
   http.post(`/email/conversation/${action}`, { emailIds, ...extra });
+export const labelUnreadCounts = (params) =>
+  http.get("/email/conversation/label-unread", { params, noMsg: true });

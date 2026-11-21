@@ -3,6 +3,8 @@
     v-model:visible="open"
     trigger="click"
     placement="bottom-start"
+    :fallback-placements="['top-start','right-start','left-start']"
+    :popper-options="{ modifiers: [{name:'preventOverflow',options:{altAxis:true,tether:false,padding:8}}] }"
     :width="188"
     :show-arrow="false"
     :persistent="false"
@@ -71,6 +73,37 @@
         @back="back"
       />
       <template v-else>
+        <div
+          v-for="section in displaySections"
+          :key="section.id"
+          class="display-section"
+          role="group"
+          :aria-label="section.title"
+          @pointerenter="leavePalette"
+        >
+          <div class="section-title">{{ section.title }}</div>
+          <button
+            v-for="choice in section.options"
+            :key="choice.mode"
+            type="button"
+            class="option"
+            role="menuitemradio"
+            :disabled="saving"
+            :aria-checked="(label[section.id] || 'show') === choice.mode"
+            @click="setDisplay(section.id, choice.mode)"
+          >
+            <span class="choice-check" aria-hidden="true"
+              ><Icon
+                v-if="(label[section.id] || 'show') === choice.mode"
+                icon="material-symbols:check"
+                width="16"
+            /></span>
+            {{ choice.text }}
+          </button>
+        </div>
+        <p v-if="error && !palette" role="alert" class="option-error">
+          {{ error }}
+        </p>
         <button
           class="option"
           role="menuitem"
@@ -148,6 +181,17 @@ import ColorChoices from "./color-choices.vue";
 import ColorGrid from "./color-grid.vue";
 import { customColors, labelStyle } from "./colors";
 
+const emit = defineEmits(["display-changed"]);
+const show = { mode: "show", text: "Show" },
+  hide = { mode: "hide", text: "Hide" };
+const displaySections = [
+  {
+    id: "sidebar",
+    title: "In label list",
+    options: [show, { mode: "unread", text: "Show if unread" }, hide],
+  },
+  { id: "messages", title: "In message list", options: [show, hide] },
+];
 const props = defineProps({ label: { type: Object, required: true } });
 const labels = useMailLabels(),
   trigger = ref(),
@@ -162,7 +206,7 @@ const open = ref(false),
 const background = ref(""),
   foreground = ref(""),
   paletteId = useId(),
-  narrow = useMediaQuery("(max-width: 600px)");
+  narrow = useMediaQuery("(max-width: 600px), (max-height: 540px)");
 const channels = [
   { key: "background", title: "Background color" },
   { key: "foreground", title: "Text color" },
@@ -238,6 +282,22 @@ function customClosed() {
   trigger.value?.focus();
   customMounted.value = false;
 }
+async function setDisplay(list, mode) {
+  if (saving.value) return;
+  saving.value = true;
+  error.value = "";
+  try {
+    await labels.setDisplay(props.label.id, list, mode);
+    if (open.value) {
+      open.value = false;
+      emit("display-changed", props.label.id);
+    }
+  } catch (e) {
+    error.value = e.message || "Could not change label visibility.";
+  } finally {
+    saving.value = false;
+  }
+}
 async function save(bg, fg, remember = custom.value) {
   if (saving.value) return;
   saving.value = true;
@@ -268,11 +328,13 @@ function menuKey(event) {
   }
   if (
     !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) ||
-    !event.target.matches("[role=menuitem]")
+    !event.target.matches('[role="menuitem"],[role="menuitemradio"]')
   )
     return;
   event.preventDefault();
-  const items = [...main.value.querySelectorAll("[role=menuitem]")];
+  const items = [
+    ...main.value.querySelectorAll('[role="menuitem"],[role="menuitemradio"]'),
+  ];
   const index = items.indexOf(event.target);
   const next =
     event.key === "Home"
@@ -286,6 +348,31 @@ function menuKey(event) {
 }
 </script>
 <style scoped>
+.display-section {
+  border-top: 1px solid var(--light-border-color);
+  padding: 4px 0;
+}
+.display-section:last-of-type {
+  border-bottom: 1px solid var(--light-border-color);
+}
+.section-title {
+  font-size: 12px;
+  padding: 3px 16px;
+  color: var(--secondary-text-color);
+}
+.display-section .option {
+  gap: 8px;
+}
+.choice-check {
+  width: 16px;
+  display: inline-flex;
+}
+.option-error {
+  margin: 4px 16px;
+  font-size: 12px;
+  color: var(--mail-draft);
+}
+
 .option {
   display: flex;
   align-items: center;
@@ -355,6 +442,9 @@ h3 {
   font-size: 13px;
   margin: 0 0 6px;
   font-weight: 500;
+}
+@media (max-width:600px), (max-height:540px) {
+  :global(.el-popper.label-options-popover) { max-height:calc(100dvh - 16px); overflow-y:auto; overscroll-behavior:contain; }
 }
 :global(.el-popper.label-options-popover) {
   padding: 6px 0;

@@ -165,7 +165,7 @@
           :participants="row.participants"
           :count="row.messageCount"
           :subject="row.subject"
-          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId)"
+          :labels="labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==labelId && label.messages!=='hide')"
           :preview="replies(row)[0]?.preview || row.preview"
           :draft-count="replies(row).length"
           :date="mailboxDate(rowDate(row))"
@@ -557,6 +557,7 @@ async function load(
       containerProps.ref.value?.scrollTo?.(0, 0);
     if(category.value)categoryUnread.value=data.categoryUnread||{};
     rows.value = data.threads;
+    emailStore.conversationListRefresh++;
     total.value = data.total;
     if(props.folder==="inbox" && !search.query && !Object.keys(search.filters).length)
       emailStore.inboxUnread={accountId:account.currentAccountId,allReceive:Boolean(account.currentAccount.allReceive),count:data.categoryUnread?Object.values(data.categoryUnread).reduce((acc,n)=>acc+n,0):data.unreadThreads};

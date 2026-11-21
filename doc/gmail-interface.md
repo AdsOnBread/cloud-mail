@@ -12,6 +12,7 @@ Compared the signed-in Gmail web interface on November 20, 2026. The reference a
 | Compose window and replies | Docked, minimized, expanded and inline states, recipient chips, subject, editing area, save and close |
 | Formatting and links | Footer toggle, formatting groups, active formats, link text and URL, Apply, editing and removing links, keyboard shortcuts |
 | Importance | Outline and filled markers, reason on hover, keyboard toggle, selection menu and Important folder |
+| Label visibility | Independent sidebar and message-list settings, Show if unread, unread conversation badges and the separate More control for labels |
 | Label colors | Sidebar options, six-column palette, custom background and text, recent pairs and removing a color |
 | Filing and feedback | Move to Trash from each entry point, Undo, retained permanent-delete confirmation, archive and snooze |
 | Menus and dialogs | Anchoring, shadow, typography, hover and selected states, focus return, Escape and outside dismissal |
@@ -26,6 +27,7 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Trash | Compared the live filter order, toolbar, retention notice, sender icon, spacing and page controls. Tested sender and attachment filters, search, hover actions, tooltips, mobile layout and permanent-delete cancellation. |
 | Drafts and reading | Opened a marked inbox thread containing two cloud replies. Switched between them, refreshed, edited and reopened an attached draft. Confirmed that viewing it alone made no draft changes. |
 | Writing | Compared the live docked composer and its bottom formatting strip. Checked font, size, text color, selection, formatted links, keyboard link insertion, removing a link, an inline image and reopening a saved draft. |
+| Label visibility | Compared the order and wording of both groups against signed-in Gmail. Checked read and unread transitions, alias switching, refresh after a change from another session, focus after hiding a label, and the full menu at 667 × 375. |
 | Label colors | Compared the 24 Gmail presets in order and the custom color dialog. Checked hover, keyboard selection, compact navigation, mobile touch targets, rename, reload, recent colors and the same color on the inbox chip and conversation heading. |
 | Filing | Tested moving mail to Trash and undoing it from a message, conversation, row and bulk selection. Created and applied a label from a selection and from an open thread. |
 | Keyboard and search | Checked focus entering and leaving the search and label popovers, the effect of typing before opening search options, and keyboard access to row actions. |

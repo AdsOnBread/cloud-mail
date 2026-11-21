@@ -120,12 +120,12 @@ const api=createHTTPServer(async(req,res)=>{
    for(const [threadId,members] of grouped()) {
      const anchor=filingAnchor(members), state=filing.get(anchor);
      if(p.folder==='inbox' && state!==undefined && (state===null || state>now))continue;
-     if(p.folder==='label' && !threadLabels(members).includes(Number(p.labelId)))continue;
      if(p.folder==='important' && !importanceReason(members))continue;
      if(p.folder==='archived' && state!==null)continue;
      if(p.folder==='snoozed' && !(state>now))continue;
      const matches=members.some(row=>{
        if(!matchesFilters(row,p))return false;
+       if(p.folder==='label' && !membership.get(row.emailId)?.has(Number(p.labelId)))return false;
        if(p.folder!=='starred' && p.allReceive!=='1' && row.accountId!==Number(p.accountId))return false;
        if(p.folder==='starred' && !row.isStar || p.folder==='sent' && row.type!==1)return false;
        if(p.folder==='inbox' && row.type!==0 && !(row.emailId===anchor && typeof state==='number' && state<=now))return false;
@@ -150,10 +150,24 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
    data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId})));
+ }else if(path==='/email/conversation/label-unread'){
+   const accountId=Number(url.searchParams.get('accountId')),combined=url.searchParams.get('allReceive')==='1';
+   data={};
+   for(const members of grouped().values()){
+     if(!members.some(row=>row.type===0 && row.unread===0))continue;
+     for(const id of threadLabels(members.filter(row=>combined || row.accountId===accountId)))data[id]=(data[id]||0)+1;
+   }
  }else if(path==='/email/conversation/label-colors')data=recentColors;
  else if(path==='/email/conversation/labels' && req.method==='GET')data=[...labels.values()];
  else if(path==='/email/conversation/labels' && req.method==='POST'){
    data={id:nextLabel++,name:JSON.parse(body).name};labels.set(data.id,data);
+ }else if(path.startsWith('/email/conversation/labels/') && path.endsWith('/display')){
+   const id=Number(path.split('/').at(-2)),label=labels.get(id),{list,mode}=JSON.parse(body);
+   if(!label){res.writeHead(404,{'Content-Type':'application/json'});res.end(JSON.stringify({code:404,message:'Label not found.'}));return;}
+   if(!['sidebar','messages'].includes(list) || !['show','hide'].includes(mode) && !(list==='sidebar' && mode==='unread')){
+     res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({code:400,message:'Invalid label visibility.'}));return;
+   }
+   label[list]=mode;data={id,[list]:mode};
  }else if(path.startsWith('/email/conversation/labels/') && path.endsWith('/color')){
    const id=Number(path.split('/').at(-2)), colors=JSON.parse(body);
    const {background,foreground,custom}=colors;

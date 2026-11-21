@@ -50,12 +50,24 @@
         </el-menu-item>
         </template>
         <div class="label-heading"><span class="menu-name">Labels</span><button class="mail-icon" aria-label="Create new label" data-tip="Create new label" @click="labels.edit={}"><Icon icon="material-symbols:add" width="20" /></button></div>
-        <div v-for="label in labels.items" :key="label.id" class="label-row" :class="{'selected-label':activeLabel===label.id}">
-          <router-link :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name">
-            <Icon :icon="label.background ? 'material-symbols:label' : 'material-symbols:label-outline'" :style="{color:label.background}" width="20" /><span class="menu-name">{{ label.name }}</span>
-          </router-link>
-          <LabelOptions :key="labels.owner+'-'+label.id" :label="label" />
-        </div>
+        <template v-for="label in orderedLabels" :key="label.id">
+          <button v-if="label.id===firstHidden" class="more-labels" type="button"
+            :aria-label="showHiddenLabels ? 'Fewer labels' : 'More labels'" :aria-expanded="showHiddenLabels"
+            :data-tip="showHiddenLabels ? 'Less' : 'More'" @click="showHiddenLabels=!showHiddenLabels">
+            <Icon :icon="showHiddenLabels ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20" />
+            <span class="menu-name">{{ showHiddenLabels ? 'Less' : 'More' }}</span>
+          </button>
+          <div v-show="showHiddenLabels || !isHiddenLabel(label)" class="label-row" :data-label-id="label.id"
+            :class="{'selected-label':activeLabel===label.id,'unread-label':labelUnread[label.id]}">
+            <router-link :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name"
+              :aria-description="labelUnread[label.id] ? labelUnread[label.id]+' unread' : undefined">
+              <Icon :icon="label.background ? 'material-symbols:label' : 'material-symbols:label-outline'" :style="{color:label.background}" width="20" />
+              <span class="menu-name">{{ label.name }}</span>
+            </router-link>
+            <span v-if="labelUnread[label.id]" class="menu-name label-count" aria-hidden="true">{{ labelUnread[label.id] }}</span>
+            <LabelOptions :key="labels.owner+'-'+label.id" :label="label" @display-changed="focusLabelControl" />
+          </div>
+        </template>
         <button v-if="labels.error" class="labels-error" @click="labels.load()">Retry loading labels</button>
         <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
@@ -103,7 +115,7 @@
 </template>
 
 <script setup>
-import {conversationList} from '@/request/conversation';
+import {conversationList,labelUnreadCounts} from '@/request/conversation';
 import { useEmailStore } from '@/store/email';
 import { userDraftStore } from '@/store/draft';
 import Account from '@/layout/account/index.vue';
@@ -112,7 +124,7 @@ import { useUiStore } from '@/store/ui.js';
 import { hasPerm } from '@/perm/perm.js';
 import router from "@/router/index.js";
 import { useRoute } from 'vue-router';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, nextTick } from 'vue';
 import LabelOptions from "@/components/mail-labels/options.vue";
 import { useMailLabels } from '@/store/mail-labels';
 import { useUserStore } from '@/store/user';
@@ -133,6 +145,44 @@ watch(()=>user.user.email,email=>labels.load(email),{immediate:true});
 const accountStore = useAccountStore();
 const emailStore=useEmailStore();
 const unread=ref(0);
+const labelUnread=ref({}), countsReady=ref(false), showHiddenLabels=ref(false);
+const isHiddenLabel=label=>label.sidebar==='hide' || (label.sidebar==='unread' && !labelUnread.value[label.id]);
+const hiddenLabels=computed(()=>labels.items.filter(isHiddenLabel));
+watch(()=>hiddenLabels.value.length,count=>{if(!count)showHiddenLabels.value=false;});
+const firstHidden=computed(()=>hiddenLabels.value[0]?.id);
+const orderedLabels=computed(()=>[...labels.items.filter(label=>!isHiddenLabel(label)),...hiddenLabels.value]);
+async function focusLabelControl(id) {
+  await nextTick();
+  const row=document.querySelector(`.mail-sidebar [data-label-id="${id}"]`);
+  const target=row?.getClientRects().length ? row.querySelector('.label-options') : document.querySelector('.mail-sidebar .more-labels');
+  target?.focus();
+}
+const activeLabelMode=computed(()=>{
+  const label=labels.items.find(item=>item.id===activeLabel.value);
+  return label ? label.sidebar || 'show' : null;
+});
+watch([activeLabel,activeLabelMode,()=>Boolean(labelUnread.value[activeLabel.value]),
+  ()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),countsReady],
+  ([id,mode,hasUnread,accountId,combined,ready],prev)=>{
+    const explicitlyChanged=prev && prev[0]===id && prev[1] && mode!==prev[1] && prev[3]===accountId && prev[4]===combined;
+    if(!explicitlyChanged && (mode==='hide' || (mode==='unread' && ready && !hasUnread)))showHiddenLabels.value=true;
+  },{immediate:true,flush:'post'});
+watch([()=>user.user.email,()=>accountStore.currentAccountId,()=>Boolean(accountStore.currentAccount.allReceive),
+  ()=>labels.items.length,()=>emailStore.conversationRevision,()=>emailStore.conversationListRefresh],
+  ([owner,accountId,allReceive,size],prev,cleanup)=>{
+    let current=true;
+    if(!prev || owner!==prev[0] || accountId!==prev[1] || allReceive!==prev[2]){
+      labelUnread.value={};countsReady.value=false;showHiddenLabels.value=false;
+    }
+    if(!owner || !accountId || !size)return;
+    const timer=setTimeout(async()=>{
+      try {
+        const counts=await labelUnreadCounts({accountId,allReceive:allReceive?1:0});
+        if(current){labelUnread.value=counts;countsReady.value=true;}
+      } catch { /* Keep the last successful count for this mailbox. */ }
+    },100);
+    cleanup(()=>{current=false;clearTimeout(timer);});
+  },{immediate:true});
 watch(()=>emailStore.inboxUnread, snapshot=>{
   if(snapshot?.accountId===accountStore.currentAccountId && snapshot.allReceive===Boolean(accountStore.currentAccount.allReceive))
     unread.value=snapshot.count;
@@ -158,7 +208,14 @@ const uiStore = useUiStore();
 .folder-name { margin-left:16px; }
 .label-heading { height:48px; margin:10px 16px 0 24px; display:flex; align-items:center; justify-content:space-between; }
 .label-heading span { font-size:16px; font-weight:500; }
-.label-row { display:flex; align-items:center; margin-right:8px; height:32px; border-radius:0 16px 16px 0; }
+.more-labels { display:flex; align-items:center; height:32px; gap:16px; padding:0 12px 0 24px; width:calc(100% - 8px); color:inherit; border-radius:0 16px 16px 0; font:inherit; cursor:pointer; }
+.more-labels:hover { background:var(--mail-hover); }
+.more-labels svg { flex:none; }
+.label-count { pointer-events:none; position:absolute; right:10px; font-size:12px; font-weight:600; }
+.label-row.unread-label { font-weight:600; }
+.label-row:hover .label-count,.label-row:focus-within .label-count,.label-row:has([aria-expanded=true]) .label-count { visibility:hidden; }
+@media (hover:none) { .label-count { position:static; padding-left:4px; } }
+.label-row { position:relative; display:flex; align-items:center; margin-right:8px; height:32px; border-radius:0 16px 16px 0; }
 .label-row:hover { background:var(--mail-hover); }
 .label-row.selected-label { background:var(--mail-selected); font-weight:600; }
 .label-row a { display:flex; align-items:center; gap:16px; padding-left:24px; min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }

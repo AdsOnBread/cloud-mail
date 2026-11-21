@@ -61,6 +61,14 @@ export const useMailLabels = defineStore("mail-labels", {
       this.edit = null;
       await this.load(owner);
     },
+    async setDisplay(id, list, mode) {
+      const owner = this.owner;
+      const changed = await http.put(path + "/" + id + "/display", { list, mode }, { noMsg: true });
+      if (owner !== this.owner) return;
+      const item = this.items.find(label => label.id === id);
+      if (item) item[list] = changed[list];
+      await this.load(owner);
+    },
     async loadRecentColors() {
       const request = ++this.colorRequest;
       try {

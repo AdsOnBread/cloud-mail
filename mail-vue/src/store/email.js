@@ -6,6 +6,7 @@ export const useEmailStore = defineStore('email', {
     state: () => ({
         deleteIds: 0,
         conversationRevision: 0,
+        conversationListRefresh: 0,
         inboxUnread: null,
         starScroll: null,
         emailScroll: null,
