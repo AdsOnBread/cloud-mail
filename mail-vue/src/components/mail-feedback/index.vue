@@ -54,7 +54,7 @@ function schedule() {
 }
 watch(() => [feedback.notice, feedback.notice?.busy, feedback.notice?.holding], schedule, {immediate:true});
 function clearNotices() { feedback.dismiss(); feedback.previousHolds=[]; }
-watch(() => [user.user.email,user.authenticatedToken],clearNotices);
+watch([() => user.user.email, () => user.authenticatedToken],clearNotices);
 watch(()=>[user.user.email,user.authenticatedToken],retryPendingTrash,{immediate:true});
 watch(()=>feedback.notice?.scheduledTrash,(current,previous)=>{if (previous && !current) retryPendingTrash();});
 onMounted(()=>window.addEventListener('online',retryPendingTrash));
