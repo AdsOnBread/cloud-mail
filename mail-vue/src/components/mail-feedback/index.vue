@@ -2,7 +2,7 @@
   <Transition name="mail-feedback">
     <div v-if="feedback.notice" class="mail-feedback" @mouseenter="pause" @mouseleave="schedule" @focusin="pause" @focusout="schedule">
       <span role="status">{{ feedback.notice.message }}</span>
-      <button v-if="feedback.notice.recovery || feedback.notice.emailIds.length" :disabled="feedback.notice.busy" @click="feedback.undo()">Undo</button>
+      <button v-if="feedback.notice.recovery || feedback.notice.undoFiling || feedback.notice.emailIds.length" :disabled="feedback.notice.busy" @click="feedback.undo()">Undo</button>
       <button class="dismiss" aria-label="Dismiss notification" @click="feedback.dismiss()"><Icon icon="material-symbols:close" width="18" /></button>
     </div>
   </Transition>

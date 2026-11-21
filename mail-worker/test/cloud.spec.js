@@ -546,7 +546,14 @@ describe('Scheduled send',()=>{
    await expect(setScheduledInbox(c(),2,{messages:rows,inbox:true})).rejects.toMatchObject({code:409});
    await expect(file([rows[0],{...rows[1],version:999}],true)).rejects.toMatchObject({code:409});
    expect(await inbox()).toEqual([]);
-   await file(rows,true);
+   await file([rows[0]],true);
+   const moved=await file(rows,true);
+   expect(moved.changed).toEqual([rows[1].draftId]);
+   const undo=()=>setScheduledInbox(c(),1,{messages:[rows[1]],inbox:false,previousEdit:moved.edit});
+   await undo();
+   expect((await inbox()).map(r=>r.draftId)).toEqual([rows[0].draftId]);
+   await file([rows[1]],true);
+   await expect(undo()).rejects.toMatchObject({code:409});
    await setScheduledRead(c(),1,{messages:[rows[1]],unread:true});
    expect(await inbox()).toMatchObject(rows.map(row=>({...row,inbox:1})));
    expect(await scheduledList(c(),1,3,{mark:'inbox'})).toEqual([]);

@@ -57,21 +57,35 @@ export function setScheduledRead(c,userId,input) {
   return setScheduledFlag(c,userId,input?.messages,'$.scheduledUnread',input?.unread);
 }
 export function setScheduledInbox(c,userId,input) {
-  return setScheduledFlag(c,userId,input?.messages,'$.scheduledInbox',input?.inbox);
+  const expected=input?.previousEdit;
+  if (expected!==undefined && (typeof expected!=='string' || expected.length!==36)) throw new BizError('Invalid filing change.',400);
+  return setScheduledFlag(c,userId,input?.messages,'$.scheduledInbox',input?.inbox,expected);
 }
-async function setScheduledFlag(c,userId,selection,path,value) {
+async function setScheduledFlag(c,userId,selection,path,value,previousEdit) {
   if (!Array.isArray(selection) || !selection.length || selection.length>50 || typeof value!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
   const messages=selection.map(row=>[positive(row?.draftId),positive(row?.version)]);
   if (new Set(messages.map(([id])=>id)).size!==messages.length) throw new BizError('Duplicate scheduled message.',400);
+  const inbox=path==='$.scheduledInbox', edit=inbox ? crypto.randomUUID() : null;
+  // Materialize the old flags before updating. Undo restores only messages this action moved.
+  const selectionArgs=[path,JSON.stringify(messages),userId];
+  if (previousEdit) selectionArgs.push(previousEdit);
   const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (
-    SELECT d.draft_id FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
+    SELECT d.draft_id,coalesce(json_extract(d.data,?),0) old_value FROM cloud_drafts d
+    JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
     JOIN json_each(?) r ON json_extract(r.value,'$[0]')=d.draft_id AND json_extract(r.value,'$[1]')=d.version
     WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')
-  ) UPDATE cloud_drafts SET data=json_set(data,?,?)
+    ${previousEdit ? "AND json_extract(d.data,'$.scheduledInboxEdit')=?" : ''}
+  ) UPDATE cloud_drafts SET data=json_set(data,?,?${inbox ? ",'$.scheduledInboxEdit',?" : ''})
     WHERE draft_id IN (SELECT draft_id FROM eligible) AND (SELECT count(*) FROM eligible)=?
-    RETURNING draft_id`).bind(JSON.stringify(messages),userId,path,Number(value),messages.length).all();
+    RETURNING draft_id,(SELECT old_value FROM eligible WHERE eligible.draft_id=cloud_drafts.draft_id) AS old_value`)
+    .bind(...selectionArgs,path,Number(value),...(inbox ? [edit] : []),messages.length).all();
   if (!result.results.length) throw new BizError('A scheduled message changed. Refresh Scheduled.',409);
-  return {updated:result.results.length};
+  const reply={updated:result.results.length};
+  if (inbox) {
+    reply.edit=edit;
+    reply.changed=result.results.filter(row=>Boolean(row.old_value)!==value).map(row=>row.draft_id);
+  }
+  return reply;
 }
 
 export async function scheduledList(c, userId, accountId, filters = {}) {
@@ -173,7 +187,7 @@ export async function cancel(c, userId, id, version) {
 	const draft = await drafts.get(c, userId, id, true);
 	const changed = await c.env.db
 		.prepare(
-			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread','$.scheduledInbox'),state='draft',
+			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread','$.scheduledInbox','$.scheduledInboxEdit'),state='draft',
     version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=?
     AND state IN ('scheduled','schedule_failed') RETURNING draft_id`,
 		)

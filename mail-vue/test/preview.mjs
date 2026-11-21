@@ -138,13 +138,17 @@ const api=createHTTPServer(async(req,res)=>{
        matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(['/v1/scheduled/read','/v1/scheduled/inbox'].includes(path) && req.method==='POST'){
-   const {messages,unread,inbox}=JSON.parse(body);
-   if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version;})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+   const {messages,unread,inbox,previousEdit}=JSON.parse(body);
+   if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version && (!previousEdit || d.scheduledInboxEdit===previousEdit);})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+   const edit=crypto.randomUUID(),changed=[];
    for(const m of messages){
      const d=cloudDrafts.get(m.draftId);
-     if(path.endsWith('/inbox'))d.scheduledInbox=Number(inbox);else d.scheduledUnread=Number(unread);
+     if(path.endsWith('/inbox')){
+       if(Boolean(d.scheduledInbox)!==inbox)changed.push(m.draftId);
+       d.scheduledInbox=Number(inbox);d.scheduledInboxEdit=edit;
+     }else d.scheduledUnread=Number(unread);
    }
-   data={updated:messages.length};
+   data={updated:messages.length,...(path.endsWith('/inbox')?{edit,changed}:{})};
  }else if(path.startsWith('/v1/scheduled/')){
    const draft=cloudDrafts.get(Number(path.split('/')[3]));
    if(!draft?.scheduledAt){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Scheduled message not found.'}));return;}

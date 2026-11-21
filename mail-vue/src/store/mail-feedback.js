@@ -25,10 +25,15 @@ export const useMailFeedback = defineStore("mail-feedback", {
     },
     async undo() {
       const notice = this.notice;
-      if (!notice || (!notice.recovery && !notice.emailIds.length) || notice.busy) return;
+      if (!notice || (!notice.recovery && !notice.undoFiling && !notice.emailIds.length) || notice.busy) return;
       const session = localStorage.getItem("token");
       notice.busy = true;
       try {
+        if (notice.undoFiling) {
+          await notice.undoFiling();
+          if (this.notice===notice) this.show('Action undone.');
+          return;
+        }
         if (notice.recovery) {
           const ids = await notice.recovery.restore();
           if (this.notice === notice) {
