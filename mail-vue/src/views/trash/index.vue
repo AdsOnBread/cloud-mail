@@ -227,7 +227,6 @@ import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useAccountStore } from "@/store/account";
 import { useMailFeedback } from "@/store/mail-feedback";
-import {syncCloudDrafts} from "@/services/cloud-drafts";
 import { useEmailStore } from "@/store/email";
 import http from "@/axios";
 
@@ -263,8 +262,7 @@ const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean)
 const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
 const restoreLabel=computed(()=>hasScheduled.value && selectedRows.value.every(row=>row.scheduledDraftId) ? 'Restore to Drafts' : 'Restore to previous location');
 const moreButton=ref(),trashPicker=ref();
-const labelRows=computed(()=>(selectedRows.value)
-  .map(m=>({lastEmailId:m.emailId,labelIds:m.labelIds})));
+const labelRows=computed(()=>selectedRows.value.map(m=>({lastEmailId:m.emailId,labelIds:m.labelIds})));
 function rowLabels(message,reader=false) {
   return labels.items.filter(label=>message.labelIds?.includes(label.id) && (reader || label.messages!=="hide"));
 }
@@ -516,7 +514,7 @@ async function act(action, ids, destination) {
       await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) });
       changed += batch.length;
     }
-    if (unsent) syncCloudDrafts().catch(()=>{});
+    if (unsent) import('@/services/cloud-drafts').then(({syncCloudDrafts})=>syncCloudDrafts()).catch(()=>{});
     if (!disposed && request===revision)
       notify(
         count + (destination ? " moved to " + destination.name + "." : action === "purge" ? " permanently deleted." : " restored."),

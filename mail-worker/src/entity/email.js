@@ -27,6 +27,7 @@ export const email = sqliteTable('email', {
 	unread: integer('unread').default(0).notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),
 	trashedAt: text('trashed_at'),
+	scheduledDraftId: integer('scheduled_draft_id'),
 	isDel: integer('is_del').default(0).notNull()
 });
 export default email

@@ -141,6 +141,32 @@ const api=createHTTPServer(async(req,res)=>{
      return (!p.labelId || row.labelIds.includes(Number(p.labelId))) && (p.mark!=='inbox'||row.inbox) && (p.mark!=='snoozed'||row.wakeAt>now) && (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        !containsExcluded([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],excludedPhrases(p.excluded)) && matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>(p.mark==='snoozed' ? a.wakeAt-b.wakeAt : a.sendAt-b.sendAt)||a.draftId-b.draftId);
+ }else if(path==='/v1/scheduled/trash'){
+   const {messages}=JSON.parse(body),edit=crypto.randomUUID();
+   const selected=messages.map(m=>cloudDrafts.get(m.draftId));
+   if(selected.some((d,i)=>!d?.scheduledAt || d.version!==messages[i].version)){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+   for(const d of selected){
+     const recipient=key=>JSON.stringify((d[key]||[]).map(address=>({address})));
+     const row={emailId:Math.max(0,...rows.map(r=>r.emailId))+1,scheduledDraftId:d.draftId,userId:1,accountId:d.accountId,
+       subject:d.subject,name:d.name,sendEmail:accounts.find(a=>a.accountId===d.accountId).email,text:d.text,content:d.content,
+       type:1,status:0,unread:1-(d.scheduledUnread||0),createTime:d.createTime,trashedAt:new Date().toISOString(),
+       recipient:recipient('receiveEmail'),cc:recipient('cc'),bcc:recipient('bcc'),attList:[]};
+     rows.unshift(row);membership.set(row.emailId,new Set(d.labelIds||[]));
+     d.trashEdit=edit;d.trashSendAt=d.scheduledAt;delete d.scheduledAt;d.state='trashed';d.version++;recordDraft(d);
+   }
+   data={edit,count:selected.length};
+ }else if(path==='/v1/scheduled/undo-trash'){
+   const {edit,count}=JSON.parse(body);
+   const selected=[...cloudDrafts.values()].filter(d=>d.state==='trashed' && d.trashEdit===edit);
+   if(selected.length!==count){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+   let scheduled=0;
+   for(const d of selected){
+     if(d.trashSendAt>Date.now()/1000){d.scheduledAt=d.trashSendAt;scheduled++;}
+     const i=rows.findIndex(r=>r.scheduledDraftId===d.draftId);
+     d.labelIds=[...(membership.get(rows[i].emailId)||[])];rows.splice(i,1);
+     delete d.trashEdit;delete d.trashSendAt;d.state=d.scheduledAt?'scheduled':'draft';d.version++;recordDraft(d);
+   }
+   data={scheduled,drafts:count-scheduled};
  }else if(['/v1/scheduled/read','/v1/scheduled/inbox','/v1/scheduled/snooze','/v1/scheduled/labels'].includes(path) && req.method==='POST'){
    const {messages,unread,inbox,wakeAt,previousEdit,add,remove}=JSON.parse(body);
    if(!messages.every(m=>{const d=cloudDrafts.get(m.draftId);return d?.scheduledAt && d.version===m.version && (!previousEdit || d.scheduledInboxEdit===previousEdit);})){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
@@ -210,7 +236,9 @@ const api=createHTTPServer(async(req,res)=>{
      filing.set(id,labelId?null:0);}
    data={messageCount:emailIds.length};
  }
- else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
+ else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(rows[i].scheduledDraftId && !path.endsWith('/trash')){
+   const d=cloudDrafts.get(rows[i].scheduledDraftId);d.state=path.endsWith('/purge')?'deleted':'draft';d.version++;delete d.trashEdit;delete d.trashSendAt;d.labelIds=[...(membership.get(rows[i].emailId)||[])];recordDraft(d);rows.splice(i,1);
+ }else if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
  else if(path==='/my/loginUserInfo')data=user;

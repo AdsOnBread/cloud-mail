@@ -3,7 +3,7 @@ import email from '../entity/email';
 import { emailListColumns, emailBriefColumns, EMAIL_LIST_TEXT_LEN } from '../lib/email-list-columns';
 import { mailSearchFilter } from '../lib/mail-search';
 import { attConst, emailConst, isDel, settingConst } from '../const/entity-const';
-import { and, desc, eq, gt, inArray, notInArray, lt, count, asc, sql, ne, or, like, lte, gte } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, notInArray, lt, count, asc, sql, ne, isNull, or, like, lte, gte } from 'drizzle-orm';
 import { star } from '../entity/star';
 import settingService from './setting-service';
 import accountService from './account-service';
@@ -16,7 +16,6 @@ import { parseHTML } from 'linkedom';
 import userService from './user-service';
 import roleService from './role-service';
 import user from '../entity/user';
-import starService from './star-service';
 import dayjs from 'dayjs';
 import kvConst from '../const/kv-const';
 import { t } from '../i18n/i18n'
@@ -192,7 +191,7 @@ const emailService = {
 	},
 
 	allEmailListFilters({ emailId, name, subject, accountEmail, userEmail, type, timeSort, withCursor = true }) {
-		const conditions = [];
+		const conditions = [isNull(email.scheduledDraftId)];
 
 		if (type === 'send') {
 			conditions.push(eq(email.type, emailConst.type.SEND));
@@ -698,6 +697,7 @@ const emailService = {
 			.from(email)
 			.where(and(
 				inArray(email.userId, userIds),
+				isNull(email.scheduledDraftId),
 				eq(email.type, type),
 				eq(email.isDel, del),
 				ne(email.status, emailConst.status.SAVING),
@@ -934,6 +934,7 @@ const emailService = {
 			return;
 		}
 
+		conditions.push(isNull(email.scheduledDraftId));
 		const emailIdsRow = await orm(c).select({emailId: email.emailId}).from(email).where(conditions.length > 1 ? and(...conditions) : conditions[0]).all();
 
 		const emailIds = emailIdsRow.map(row => row.emailId);

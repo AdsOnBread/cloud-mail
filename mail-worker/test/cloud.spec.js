@@ -911,6 +911,13 @@ describe('Scheduled Trash',()=>{
    expect(receipt).toMatchObject({scheduledDraftId:d.draftId,attachmentCount:1,labelIds:[label]});
    expect((await mail.list(c(),2,{folder:'trash'})).messages).toEqual([]);
    const detail=await mail.detail(c(),1,receipt.emailId);
+   const {default:publicFeed}=await import('../src/service/public-service');
+   const {default:adminFeed}=await import('../src/service/email-service');
+   const {default:stats}=await import('../src/dao/analysis-dao');
+   expect(await publicFeed.emailList(c(),{subject:d.subject})).toEqual([]);
+   expect((await adminFeed.allList(c(),{type:'send'})).total).toBe(0);
+   expect(await adminFeed.selectUserEmailCountList(c(),[1],1)).toEqual([]);
+   expect((await stats.numberCount(c())).sendTotal).toBe(0);
    expect(detail.content).toBe(d.content);
    expect(JSON.parse(detail.bcc)[0].address).toBe('private@example.net');
    expect(detail.attList).toHaveLength(2);

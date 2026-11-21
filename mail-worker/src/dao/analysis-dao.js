@@ -24,7 +24,7 @@ const analysisDao = {
                         SUM(CASE WHEN type = 0 AND is_del = 0 THEN 1 ELSE 0 END) AS normalReceiveTotal,
                         SUM(CASE WHEN type = 1 AND is_del = 0 THEN 1 ELSE 0 END) AS normalSendTotal
                     FROM
-                        email
+                        email WHERE scheduled_draft_id IS NULL
                 ) e
             CROSS JOIN (
                 SELECT
@@ -94,7 +94,7 @@ const analysisDao = {
             FROM
                 email
             WHERE
-                type = 1
+                type = 1 AND scheduled_draft_id IS NULL
                 AND create_time >= datetime('now', '${tzMod}', 'start of day', '-15 days', '${tzBack}')
                 AND create_time < datetime('now', '${tzMod}', 'start of day', '${tzBack}')
             GROUP BY
