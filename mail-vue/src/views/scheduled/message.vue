@@ -1,6 +1,9 @@
 <template>
   <article class="scheduled-message">
-    <h1>{{ row.subject || "(no subject)" }}</h1>
+    <div class="subject-line">
+      <h1>{{ row.subject || "(no subject)" }}</h1>
+      <MailImportance :reason="row.importanceReason" :disabled="busy || !canCancel" @toggle="$emit('importance',$event)" />
+    </div>
     <div class="sender">
       <span class="avatar" aria-hidden="true">{{
         sender.charAt(0).toUpperCase()
@@ -33,6 +36,11 @@
           </dl>
         </el-popover>
       </div>
+      <button class="mail-icon message-star" :aria-pressed="Boolean(row.starred)"
+        :aria-label="row.starred ? 'Unstar message' : 'Star message'" :data-tip="row.starred ? 'Unstar' : 'Star'"
+        :disabled="busy || !canCancel" @click="$emit('star')">
+        <Icon :icon="row.starred ? 'material-symbols:star' : 'material-symbols:star-outline'" width="20" />
+      </button>
     </div>
     <div class="message-content">
       <div class="timing" role="status">
@@ -87,6 +95,7 @@
 import { computed, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import http from "@/axios";
+import MailImportance from "@/components/mail-importance.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import FilePreview from "@/components/mail-attachments/preview.vue";
 const props = defineProps({
@@ -97,7 +106,7 @@ const props = defineProps({
   canCancel: Boolean,
   busy: Boolean,
 });
-const emit = defineEmits(["cancel", "error"]);
+const emit = defineEmits(["cancel", "error", "star", "importance"]);
 const preview = ref(null);
 const files = computed(
   () => props.detail?.attachments?.filter((f) => !f.contentId) || [],
@@ -146,8 +155,11 @@ async function download(file) {
   padding: 16px 32px 32px;
   overflow-wrap: anywhere;
 }
+.subject-line { display:flex; align-items:center; gap:8px; margin:0 0 24px 52px; }
+.message-star { margin-left:auto; flex-shrink:0; }
+.message-star[aria-pressed="true"] { color:#e9a900; }
 h1 {
-  margin: 0 0 24px 52px;
+  margin:0;
   font:
     400 24px/32px Arial,
     sans-serif;
@@ -269,7 +281,7 @@ pre {
   .scheduled-message {
     padding: 12px 16px 76px;
   }
-  h1,
+  .subject-line,
   .message-content {
     margin-left: 0;
   }

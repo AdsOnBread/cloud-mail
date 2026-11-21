@@ -50,4 +50,6 @@ Cloudmail offers its own photos and supports choosing a personal image. Cloudmai
 
 The inbox comparison covered Primary, Promotions, Social, Updates and Forums, the active underline, unread counts and keyboard switching. Checked manual filing from search and from a tab, returning from the reader, paging and the single-inbox setting. Cloudmail’s tab badges count unread conversations.
 
+Scheduled rows and their message reader support stars and importance. Starred and Important show matching queued messages in a Scheduled section. Canceling keeps the choices with the draft. Delivery applies them to the sender’s copy. Messages addressed directly to the sending mailbox and replies can show automatic importance, with an explicit choice taking precedence.
+
 The bundled photographs come from NASA’s public image library. [Orbital sunset](https://images.nasa.gov/details/iss067e124176) · [Aurora, photographed by Terry Virts](https://images.nasa.gov/details/iss043e125565) · [Himalayas](https://images.nasa.gov/details/iss068e047346)

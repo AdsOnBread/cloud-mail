@@ -103,17 +103,23 @@ const api=createHTTPServer(async(req,res)=>{
      const sender=accounts.find(a=>a.accountId===d.accountId);
      const attachments=(d.attachments||[]).filter(f=>!f.contentId).map(({content,...f})=>f);
      return {draftId:d.draftId,version:d.version,accountId:d.accountId,state:d.state,subject:d.subject,recipients:d.receiveEmail,cc:d.cc||[],bcc:d.bcc||[],
+       starred:d.mailboxStarred||0,importanceReason:d.mailboxImportant===0?null:d.mailboxImportant?'user':d.sendType==='reply'&&d.emailId?'reply':d.receiveEmail.some(a=>a.toLowerCase()===sender.email.toLowerCase())?'direct':null,
        senderEmail:sender.email,senderName:d.name||sender.name,preview:d.text,sendAt:d.scheduledAt,attachmentCount:attachments.length,attachments:attachments.slice(0,3)};
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return matches([row.senderEmail,row.senderName],p.from)&&matches(recipients,p.to)&&matches([row.subject],p.subject)&&
+     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matches([row.senderEmail,row.senderName],p.from)&&matches(recipients,p.to)&&matches([row.subject],p.subject)&&
        matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(path.startsWith('/v1/scheduled/')){
    const draft=cloudDrafts.get(Number(path.split('/')[3]));
    if(!draft?.scheduledAt){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Scheduled message not found.'}));return;}
-   if(path.endsWith('/cancel')){
+   if(path.endsWith('/mark')){
+     const {field,value,version}=JSON.parse(body);
+     if(version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
+     draft[field==='starred'?'mailboxStarred':'mailboxImportant']=Number(value);
+     data={draftId:draft.draftId,field,value};
+   }else if(path.endsWith('/cancel')){
      if(JSON.parse(body).version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Message changed.'}));return;}
      delete draft.scheduledAt;draft.state='draft';draft.version++;recordDraft(draft);data={draftId:draft.draftId};
    }else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};

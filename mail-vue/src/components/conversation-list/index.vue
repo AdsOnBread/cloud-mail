@@ -157,6 +157,18 @@
     <p v-if="error" role="alert" class="list-status">
       {{ error }} <button @click="refresh">Retry</button>
     </p>
+    <details v-if="scheduledMatches.length" class="marked-scheduled" open>
+      <summary>Scheduled ({{ scheduledMatches.length }})</summary>
+      <div class="scheduled-links">
+        <RouterLink v-for="message in scheduledMatches" :key="message.draftId"
+          :to="{name:'scheduled', query:{message:message.draftId,from:folder}}">
+          <Icon icon="material-symbols:schedule-send-outline" width="18" />
+          <span>{{ message.subject || '(no subject)' }}</span>
+          <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
+        </RouterLink>
+      </div>
+    </details>
+    <p v-if="scheduledError" role="alert" class="list-status">{{ scheduledError }} <button @click="refresh">Retry</button></p>
     <div v-bind="containerProps" class="conversation-scroll" :id="category?panelId:undefined" :role="category?'tabpanel':undefined" :aria-labelledby="category?panelId+'-'+category:undefined">
       <div v-bind="wrapperProps">
         <MailRow
@@ -283,7 +295,7 @@
       <p v-if="loading" role="status" class="list-status">
         Loading conversations…
       </p>
-      <p v-else-if="!rows.length && !error" class="list-status">
+      <p v-else-if="!rows.length && !scheduledMatches.length && !scheduledError && !error" class="list-status">
         {{
           search.query
             ? "No conversations match your search."
@@ -325,6 +337,7 @@
   </section>
 </template>
 <script setup>
+import http from "@/axios";
 import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
@@ -365,6 +378,7 @@ const account = useAccountStore(),
   settings = useSettingStore();
 const router = useRouter(),
   route = useRoute();
+const scheduledMatches = ref([]), scheduledError = ref("");
 const rows = ref([]),
   selected = ref([]),
   ascending = ref(false),
@@ -546,7 +560,14 @@ async function load(
   loading.value = true;
   error.value = "";
   try {
-    const data = await conversationList({ ...params(), cursor: target.cursor });
+    const includeScheduled = !target.cursor && ["starred","important"].includes(props.folder)
+      && !search.filters.isUnread && owner.user.email && (props.folder==="starred" || account.currentAccountId);
+    const [data, queue] = await Promise.all([
+      conversationList({ ...params(), cursor: target.cursor }),
+      includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder,
+        accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
+        noMsg:true}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
+    ]);
     if (request !== generation) return;
     if (target.cursor && data.total !== total.value)
       return await load({ cursor: null, offset: 0 }, []);
@@ -555,6 +576,8 @@ async function load(
     if (target.cursor !== pageCursor.value)
       containerProps.ref.value?.scrollTo?.(0, 0);
     if(category.value)categoryUnread.value=data.categoryUnread||{};
+    scheduledMatches.value = queue.messages || [];
+    scheduledError.value = queue.error || "";
     rows.value = data.threads;
     emailStore.conversationListRefresh++;
     total.value = data.total;
@@ -609,6 +632,8 @@ watch(
     hasMore.value = false;
     total.value = 0;
     rows.value = [];
+    scheduledMatches.value = [];
+    scheduledError.value = "";
     selected.value = [];
     cursor.value = null;
     containerProps.ref.value?.scrollTo?.(0, 0);
@@ -617,7 +642,7 @@ watch(
   { immediate: true },
 );
 watch(
-  () => emailStore.conversationRevision,
+  [() => emailStore.conversationRevision, () => drafts.scheduledRevision],
   () => {
     if (active && !busy.value) refresh();
   },
@@ -737,6 +762,13 @@ defineExpose({ refresh });
   flex-direction: column;
   min-width: 0;
 }
+.marked-scheduled { flex:none; font-size:14px; border-bottom:1px solid var(--el-border-color-lighter); }
+.marked-scheduled summary { cursor:pointer; padding:8px 16px; font-weight:500; }
+.scheduled-links { max-height:min(30vh,240px); overflow:auto; }
+.scheduled-links a { display:flex; gap:12px; align-items:center; padding:8px 16px; color:inherit; text-decoration:none; }
+.scheduled-links a:hover,.scheduled-links a:focus-visible,.marked-scheduled summary:hover { background:var(--mail-hover); }
+.scheduled-links a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.scheduled-links time { margin-left:auto; flex:none; font-size:12px; }
 .conversation-scroll {
   flex: 1;
   min-height: 0;

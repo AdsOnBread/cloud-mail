@@ -15,8 +15,8 @@
       <button
         v-if="messageId"
         class="mail-icon"
-        data-tip="Back to Scheduled"
-        aria-label="Back to Scheduled"
+        :data-tip="backLabel"
+        :aria-label="backLabel"
         ref="backButton"
         @click="back"
       >
@@ -140,6 +140,8 @@
         :short-recipients="who(item)"
         :can-cancel="canCancel(item)"
         :busy="busy"
+        @star="mark(item, 'starred', !item.starred)"
+        @importance="mark(item, 'important', $event)"
         @cancel="cancel([item])"
         @error="error = $event"
       />
@@ -155,7 +157,12 @@
         v-for="row in page"
         :key="row.draftId"
         :data-scheduled-id="row.draftId"
-        hide-star
+        :starred="Boolean(row.starred)"
+        show-importance
+        :importance-reason="row.importanceReason"
+        :busy="busy || !canCancel(row)"
+        @star="mark(row, 'starred', !row.starred)"
+        @importance="mark(row, 'important', $event)"
         :participants="'To: ' + who(row)"
         :subject="row.subject"
         :preview="row.preview"
@@ -230,8 +237,10 @@ const router = useRouter(),
   drafts = userDraftStore(),
   feedback = useMailFeedback(),
   search = useMailSearchStore();
+const originFolder = computed(() => ["starred","important"].includes(route.query.from) ? route.query.from : "");
+const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important"}[originFolder.value] || "Scheduled"));
 const scope = computed(() =>
-  account.currentAccount.allReceive ? undefined : account.currentAccountId,
+  account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
 );
 const identity = computed(() => JSON.stringify([user.user.email, scope.value]));
 const messageId = computed(() => Number(route.query.message) || 0);
@@ -368,10 +377,16 @@ function retry() {
   else loadDetail();
 }
 function open(row, replace = false) {
-  const location = { name: "scheduled", query: { message: row.draftId } };
+  const location = { name: "scheduled", query: { message: row.draftId, from: originFolder.value || undefined } };
   return replace ? router.replace(location) : router.push(location);
 }
 function back() {
+  if (originFolder.value) {
+    const path = "/" + originFolder.value;
+    if (window.history.state?.back?.split("?")[0] === path) router.back();
+    else router.replace(path);
+    return;
+  }
   if (window.history.state?.back === "/scheduled") router.back();
   else router.replace({ name: "scheduled" });
 }
@@ -397,6 +412,31 @@ function toggleFiles() {
   if (filters.hasAttachment) delete filters.hasAttachment;
   else filters.hasAttachment = 1;
   search.filters = filters;
+}
+async function mark(row, field, value) {
+  if (busy.value || !canCancel(row)) return;
+  const owner = identity.value;
+  const session = localStorage.getItem("token");
+  const current = () => !disposed && identity.value === owner && localStorage.getItem("token") === session;
+  busy.value = true;
+  error.value = "";
+  try {
+    await http.post("/v1/scheduled/" + row.draftId + "/mark", {version: row.version, field, value}, {noMsg:true});
+    if (!current()) return;
+    const saved = rows.value.find(item => item.draftId === row.draftId);
+    if (saved) {
+      if (field === "starred") saved.starred = value;
+      else saved.importanceReason = value ? "user" : null;
+    }
+    drafts.scheduledRevision++;
+  } catch (e) {
+    if (current()) {
+      await load();
+      if (current()) error.value = e.message || "Could not update the scheduled message.";
+    }
+  } finally {
+    busy.value = false;
+  }
 }
 async function cancel(batch) {
   if (busy.value || !batch.length || batch.some((row) => !canCancel(row)))
@@ -490,7 +530,7 @@ watch(
     offset.value = 0;
     detail.value = null;
     error.value = "";
-    if (old?.[0] && old[2] && messageId.value)
+    if (old?.[0] && old[2] && messageId.value && (old[2] !== account.currentAccountId || old[0] !== user.user.email))
       router.replace({ name: "scheduled" });
     load();
   },
