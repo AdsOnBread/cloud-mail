@@ -710,6 +710,19 @@ describe('Attachment retention',()=>{
 });
 
 describe('Scheduled send',()=>{
+ it('remembers only the last successful schedule per user across retries and cancellation',async()=>{
+   const {schedule,cancel,lastSchedule}=await import('../src/cloud/scheduled');
+   const a=await draft(),b=await draft({clientId:crypto.randomUUID()}),t=Math.floor(Date.now()/1000)+3600;
+   const req={version:a.version,sendAt:t},first=await schedule(c(),1,a.draftId,req);
+   expect(first.lastSchedule).toEqual({sendAt:t,version:1});
+   const next=await schedule(c(),1,b.draftId,{version:b.version,sendAt:t+900});
+   expect((await schedule(c(),1,a.draftId,req)).lastSchedule).toEqual(next.lastSchedule);
+   await cancel(c(),1,b.draftId,next.version);
+   await expect(schedule(c(),1,a.draftId,{...req,sendAt:t+600})).rejects.toMatchObject({code:409});
+   expect(await lastSchedule(env.db,1)).toEqual({sendAt:t+900,version:2});
+   expect(await lastSchedule(env.db,2)).toBeNull();
+ });
+
  it('applies label differences to a whole queue selection and preserves each message’s unrelated labels',async()=>{
    const {schedule,scheduledList,setScheduledLabels,cancel}=await import('../src/cloud/scheduled');
    const label=(user,name)=>env.db.prepare('INSERT INTO mailbox_labels(user_id,name) VALUES(?,?) RETURNING label_id').bind(user,name).first('label_id');

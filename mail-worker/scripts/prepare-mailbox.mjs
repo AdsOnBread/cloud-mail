@@ -5,7 +5,7 @@ import {mailWordSchema,seedWordIndex,wordIndexProgress} from '../src/service/mai
 import { filingSchema,ensureDeliveredWakeColumn } from '../src/service/conversation-filing.js';
 
 import {scheduledTrashSchema} from "../src/cloud/scheduled-trash-schema.js";
-import { ensureEmailColumn,ensureRawSizeColumn,ensureGeneralPreferenceColumns,signatureSchema,systemLabelSchema,generalSettingsSchema } from '../src/cloud/schema.js';
+import { ensureEmailColumn,ensureRawSizeColumn,ensureGeneralPreferenceColumns,lastScheduleSchema,signatureSchema,systemLabelSchema,generalSettingsSchema } from '../src/cloud/schema.js';
 
 const config = process.argv[2] || 'wrangler.toml';
 const command = ['exec','wrangler','d1','execute','db','--remote','--config',config,'--json','--command'];
@@ -24,7 +24,7 @@ if (existing.has('email')) {
     execute(seedWordIndex(progress).join(';\n'));
   }
 }
-for (const statement of [...filingSchema(existing), signatureSchema, systemLabelSchema, generalSettingsSchema]) execute(statement);
+for (const statement of [...filingSchema(existing), signatureSchema, systemLabelSchema, generalSettingsSchema, lastScheduleSchema]) execute(statement);
 await ensureGeneralPreferenceColumns(()=>execute('PRAGMA table_info(mail_general_settings)')[0].results,execute);
 if (existing.has('email') && existing.has('cloud_drafts')) {
   await ensureEmailColumn(()=>execute('PRAGMA table_info(email)')[0].results,execute,'scheduled_draft_id');

@@ -113,6 +113,7 @@ function matchesFilters(row,p) {
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
+let lastSchedule=null;
 let generalSettings={version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false,hoverActions:true};
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
@@ -239,7 +240,7 @@ const api=createHTTPServer(async(req,res)=>{
    if(!draft){res.writeHead(404);res.end(JSON.stringify({code:404,message:'Draft not found.'}));return;}
    if(path.endsWith('/schedule')){
      if(input.version!==draft.version || draft.state!=='draft'){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.'}));return;}
-     draft.state='scheduled';draft.scheduledAt=input.sendAt;draft.version++;recordDraft(draft);data={draftId:id,version:draft.version,sendAt:input.sendAt};
+     draft.state='scheduled';draft.scheduledAt=input.sendAt;draft.version++;recordDraft(draft);lastSchedule={sendAt:input.sendAt,version:(lastSchedule?.version||0)+1};data={draftId:id,version:draft.version,sendAt:input.sendAt,lastSchedule};
    }else if(path.endsWith('/send')){
      const key=input.idempotencyKey;
      const deliver=()=>{const receipt={state:'sent',attemptId:key,messages:previewSend(draft)};sendAttempts.set(key,receipt);draft.state='sent';draft.version++;recordDraft(draft);return receipt;};
@@ -297,7 +298,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
- else if(path==='/my/loginUserInfo')data={...user,generalSettings};
+ else if(path==='/my/loginUserInfo')data={...user,generalSettings,lastSchedule};
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;
  else if(path==='/email/conversations'){
    const p=Object.fromEntries(url.searchParams),q=(p.q||'').toLowerCase(),asc=Number(p.timeSort)===1;

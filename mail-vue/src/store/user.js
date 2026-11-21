@@ -26,6 +26,8 @@ export const useUserStore = defineStore('user', {
                 if (token!==this.authenticatedToken || token!==localStorage.getItem("token")) return;
                 if (this.user.userId===user.userId && this.user.generalSettings?.version > (user.generalSettings?.version ?? 0))
                     user.generalSettings=this.user.generalSettings;
+                if (this.user.userId===user.userId && this.user.lastSchedule?.version > (user.lastSchedule?.version ?? 0))
+                    user.lastSchedule=this.user.lastSchedule;
                 this.user = user
             })
         }

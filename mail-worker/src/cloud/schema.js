@@ -8,6 +8,8 @@ export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_se
   undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)),
   keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)),
   hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)))`;
+export const lastScheduleSchema = `CREATE TABLE IF NOT EXISTS mail_last_schedule (
+  user_id INTEGER PRIMARY KEY, send_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1)`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 // Recheck after a concurrent initializer adds the same column.
@@ -50,6 +52,7 @@ export async function migrateCloud(db) {
     ...scheduledTrashSchema.map(sql=>db.prepare(sql)),
     ...mailWordSchema().map(sql=>db.prepare(sql)),
     db.prepare(signatureSchema),
+    db.prepare(lastScheduleSchema),
     db.prepare(systemLabelSchema),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_email_trash ON email(user_id,trashed_at,email_id)'),
     db.prepare(`CREATE TABLE IF NOT EXISTS cloud_drafts (

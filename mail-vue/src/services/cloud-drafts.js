@@ -391,6 +391,12 @@ async function reconcileSchedule(database,api,row) {
   let scheduled;
   try {
     scheduled=await api.post(path,{version,sendAt},{noMsg:true});
+    const user = useUserStore();
+    if (scheduled.lastSchedule && database === db.value && database.name === user.user.email &&
+        scheduled.lastSchedule.version > (user.user.lastSchedule?.version || 0)) {
+      user.user.lastSchedule = scheduled.lastSchedule;
+    }
+
   } catch(raw) {
     const err=apiError(raw), code=Number(err.code);
     // The server returns its current revision on conflict, including a completed send.

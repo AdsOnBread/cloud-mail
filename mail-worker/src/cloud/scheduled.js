@@ -10,32 +10,40 @@ import { send } from './send';
 import { normalizeRecipients, validateSubject } from '../service/email-sender';
 
 const timeField = "json_extract(data,'$.scheduledAt')";
+export function lastSchedule(db, userId) {
+  return db.prepare('SELECT send_at AS sendAt,version FROM mail_last_schedule WHERE user_id=?').bind(userId).first();
+}
 export async function schedule(c, userId, id, input) {
 	id = positive(id);
 	await permission(c, userId, 'email:send');
 	const current = await drafts.get(c, userId, id, true);
 	const { version, sendAt } = input;
 	if (current.state === 'scheduled' && current.version === version + 1 && current.scheduledAt === sendAt)
-		return { draftId: id, sendAt, version: current.version };
+		return { draftId: id, sendAt, version: current.version, lastSchedule: await lastSchedule(c.env.db,userId) };
 	if (current.version !== version || current.state !== 'draft') throw conflict(current);
 	if (!Number.isSafeInteger(sendAt) || sendAt <= Math.floor(Date.now() / 1000) || sendAt > 253402300799)
 		throw new BizError('Choose a future send time.', 400);
 	normalizeRecipients(current.receiveEmail, current.cc, current.bcc);
 	validateSubject(current.subject);
-	const saved = await c.env.db
-		.prepare(
+	const db = c.env.db;
+	const [update, history] = await db.batch([
+		db.prepare(
 			`UPDATE cloud_drafts SET data=json_set(data,'$.scheduledAt',?,'$.scheduleKey',?),state='scheduled',
       version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=? AND state='draft'
       AND (SELECT COUNT(*) FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0 WHERE d.user_id=? AND json_extract(d.data,'$.scheduledAt') IS NOT NULL)<100 RETURNING version`,
 		)
-		.bind(sendAt, 'cloudmail.schedule/' + crypto.randomUUID(), userId, id, version, userId)
-		.first();
+		.bind(sendAt, 'cloudmail.schedule/' + crypto.randomUUID(), userId, id, version, userId),
+    db.prepare(`INSERT INTO mail_last_schedule(user_id,send_at) SELECT ?,? WHERE changes()=1
+      ON CONFLICT(user_id) DO UPDATE SET send_at=excluded.send_at,version=version+1
+      RETURNING send_at AS sendAt,version`).bind(userId,sendAt),
+  ]);
+  const saved = update.results[0];
 	if (!saved) {
 		const latest = await drafts.get(c, userId, id, true);
 		if (latest.version !== version) throw conflict(latest);
 		throw new BizError('You can have up to 100 messages in Scheduled.', 400);
 	}
-	return { draftId: id, sendAt, version: saved.version };
+	return { draftId: id, sendAt, version: saved.version, lastSchedule: history.results[0] };
 }
 
 // Keep filing choices separate from the content revision used to claim or cancel delivery.
