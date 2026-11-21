@@ -51,7 +51,7 @@
         {{ error }} <button @click="load()">Retry</button>
       </p>
       <p v-if="draftFailure" role="alert">
-        {{ draftFailure.message }} <button @click="editSavedDraft(draftFailure.summary)">Retry opening draft</button>
+        {{ draftFailure.message }} <button @click="retryDraft">Retry opening draft</button>
       </p>
       <button
         v-if="hasMore"
@@ -62,29 +62,9 @@
         Load older messages
       </button>
       <p v-if="loading" role="status">Loading conversation…</p>
-      <div
-        v-if="threadDrafts.length"
-        ref="draftList"
-        class="thread-drafts"
-        aria-label="Saved replies"
-      >
-        <button
-          v-for="draft in threadDrafts"
-          :key="draft.draftId"
-          :aria-pressed="activeDraft === draft.draftId"
-          @click="chooseDraft(draft)"
-        >
-          <Icon icon="material-symbols:edit-outline" width="18" />
-          <span class="draft-label">Draft</span>
-          <span class="draft-snippet">{{
-            draft.preview || draft.recipients || "(empty draft)"
-          }}</span>
-          <time>{{ mailboxDate(draft.lastDate) }}</time>
-        </button>
-      </div>
+      <SavedReplies :drafts="unloadedDrafts" @open="chooseDraft" />
+      <template v-for="message in messages" :key="message.emailId">
       <ConversationMessage
-        v-for="message in messages"
-        :key="message.emailId"
         :data-reader-message="message.emailId"
         :message="message"
         :now="readerNow"
@@ -105,6 +85,8 @@
           @closed="closed"
         />
       </ConversationMessage>
+      <SavedReplies v-if="draftsByMessage.has(message.emailId)" :drafts="draftsByMessage.get(message.emailId)" @open="chooseDraft"/>
+      </template>
       <div v-if="messages.length && !activeTarget" class="bottom-replies">
         <el-button v-for="all in replyChoices" :key="String(all)" v-perm="'email:send'" round @click="reply(messages.at(-1),all)">
           <Icon :icon="all ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20"/>{{all ? 'Reply all' : 'Reply'}}
@@ -144,7 +126,7 @@ import { useEmailStore } from "@/store/email";
 import { useAccountStore } from "@/store/account";
 import { userDraftStore } from "@/store/draft";
 import { draftKey } from "@/utils/draft-summary";
-import { mailboxDate } from "@/utils/day";
+import SavedReplies from './saved-replies.vue';
 import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
@@ -172,15 +154,15 @@ const filingAction=computed(()=>filedAway.value?"inbox":"archive");
 const filingTitle=computed(()=>filingAction.value==="archive"?"Archive":"Move to Inbox");
 const drafts = userDraftStore();
 const threadId = ref(null);
-const draftList = ref(null);
 function jumpToDraft() {
   if (threadDrafts.value.length===1) return chooseDraft(threadDrafts.value[0]);
-  draftList.value?.querySelector("button")?.focus();
-  draftList.value?.scrollIntoView({ block: "nearest" });
+  const first=scroll.value?.querySelector('.thread-drafts button');
+  first?.focus({preventScroll:true});
+  first?.scrollIntoView({block:'nearest'});
 }
 const activeDraft = ref(null), draftFailure=ref(null);
 const reader=ref(null), currentMessage=ref(null);
-let draftRun=0;
+let draftRun=0, sessionEpoch=0, firstPagedId=null;
 const threadDrafts = computed(() => {
   const ids = new Set(messages.value.map((message) => message.emailId));
   if (messages.value.length) ids.add(Number(route.query.emailId));
@@ -190,6 +172,19 @@ const threadDrafts = computed(() => {
       (ids.has(draft.emailId) ||
         (threadId.value && drafts.threads[draft.emailId] === threadId.value)),
   );
+});
+const draftsByMessage=computed(()=>{
+  const groups=new Map();
+  for (const draft of threadDrafts.value) {
+    if (draft.draftId===activeDraft.value) continue;
+    if (!groups.has(draft.emailId)) groups.set(draft.emailId,[]);
+    groups.get(draft.emailId).push(draft);
+  }
+  return groups;
+});
+const unloadedDrafts=computed(()=>{
+  const loaded=new Set(messages.value.map(message=>message.emailId));
+  return threadDrafts.value.filter(draft=>!loaded.has(draft.emailId) && draft.draftId!==activeDraft.value);
 });
 function closed() {
   activeTarget.value = 0;
@@ -234,8 +229,8 @@ function openWindow(event) {
   event.preventDefault();window.open(windowHref.value,'_blank','popup,noopener,noreferrer,width=1000,height=760');
 }
 function readerCurrent() {
-  const epoch=viewEpoch,token=localStorage.getItem('token'),owner=user.user.userId,account=accountStore.currentAccountId;
-  return ()=>epoch===viewEpoch && token===localStorage.getItem('token') && owner===user.user.userId && account===accountStore.currentAccountId;
+  const session=sessionEpoch,epoch=viewEpoch,token=localStorage.getItem('token'),owner=user.user.userId,account=accountStore.currentAccountId;
+  return ()=>session===sessionEpoch && epoch===viewEpoch && token===localStorage.getItem('token') && owner===user.user.userId && account===accountStore.currentAccountId;
 }
 async function allRows(current) {
   const ids=new Map(messages.value.map(m=>[m.emailId,m]));
@@ -261,7 +256,10 @@ async function printMail(message) {
   } catch(e) {if(!controller.signal.aborted && current())error.value=e.message || 'Could not print the message.';}
   finally {if(run===printRun)printing.value=false;}
 }
-watch([()=>user.user.userId,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>printController?.abort(),{flush:'sync'});
+watch([()=>user.user.userId,()=>user.user.email,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>{
+  sessionEpoch++;draftRun++;draftFailure.value=null;currentMessage.value=null;
+  printController?.abort();
+},{flush:'sync'});
 async function toggleAll() {
   if (loading.value) return;
   const run=++expandRun,valid=readerCurrent(),current=()=>valid() && run===expandRun;
@@ -309,17 +307,15 @@ async function load(older = false) {
     if (data.ownedAddresses)
       accountStore.recipientOwnAddresses = data.ownedAddresses;
     const prior = scroll.value?.scrollHeight || 0;
-    messages.value = older
-      ? [
-          ...data.messages,
-          ...messages.value.filter(
-            (item) =>
-              !data.messages.some(
-                (newItem) => item.emailId === newItem.emailId,
-              ),
-          ),
-        ]
-      : data.messages;
+    if (older && ((threadId.value && data.threadId!==threadId.value) ||
+        (data.hasMore && !(data.nextCursor>0 && data.nextCursor<cursor.value))))
+      throw new Error('Conversation changed. Reopen it and try again.');
+    if (older) {
+      const joined=new Map(messages.value.map(message=>[message.emailId,message]));
+      for (const message of data.messages) joined.set(message.emailId,message);
+      messages.value=[...joined.values()].sort((a,b)=>a.emailId-b.emailId);
+    } else messages.value=data.messages;
+    firstPagedId=data.messages[0]?.emailId ?? (older ? firstPagedId : null);
     threadId.value = data.threadId;
     labelIds.value=data.labelIds || [];
     unreadCount.value=data.unreadCount ?? messages.value.filter(m=>m.type===0 && m.unread===0).length;
@@ -348,6 +344,7 @@ async function load(older = false) {
         await reply(data.messages.at(-1), route.query.reply === "replyAll");
       }
     }
+    return true;
   } catch (e) {
     if (request === generation)
       error.value = e.message || "Could not load conversation.";
@@ -421,10 +418,26 @@ async function editSavedDraft(summary) {
     const {readSavedDraft}=await import("@/services/draft-list");
     if (!current() || run!==draftRun) return;
     const draft=await readSavedDraft(summary.draftId);
-    if (current() && run===draftRun) await reply({emailId:summary.emailId},false,draft);
+    if (!current() || run!==draftRun) return;
+    if (Number(draft.emailId)!==Number(summary.emailId) ||
+        (summary.accountId && Number(summary.accountId)!==Number(draft.accountId)) ||
+        (summary.cloudDraftId && String(summary.cloudDraftId)!==String(draft.cloudDraftId)) ||
+        (summary.clientId && draft.clientId!==summary.clientId) ||
+        (draft.ownerEmail && draft.ownerEmail!==user.user.email))
+      throw new Error('This draft is no longer available.');
+    await reply({emailId:summary.emailId},false,draft);
   } catch (e) {
-    if (current() && run===draftRun) draftFailure.value={summary,message:e.message || "Could not open draft."};
+    if (current() && run===draftRun) draftFailure.value={summary,current,message:e.message || "Could not open draft."};
   }
+}
+function retryDraft() {
+  const failure=draftFailure.value;
+  draftFailure.value=null;
+  if (!failure?.current()) return;
+  const item=threadDrafts.value.find(d=>d.draftId===failure.summary.draftId);
+  if (item && item.emailId===failure.summary.emailId &&
+      (!failure.summary.cloudDraftId || item.cloudDraftId===failure.summary.cloudDraftId) &&
+      (!failure.summary.clientId || item.clientId===failure.summary.clientId)) editSavedDraft(item);
 }
 async function reply(message, all, draft) {
   if (switching) return;
@@ -589,11 +602,13 @@ async function stepMessage(event,step) {
   let index=messages.value.findIndex(message=>message.emailId===origin);
   if (index<0) index=step>0 ? -1 : messages.value.length;
   event.preventDefault();
-  if (index===0 && step<0 && hasMore.value) {
-    if (expanding.value) return;
-    const current=readerCurrent(), focused=document.activeElement;
-    await load(true);
-    if (!current() || document.activeElement!==focused || currentMessage.value!==origin || switching || loading.value || readerObscured()) return;
+  const current=readerCurrent(), focused=document.activeElement;
+  // A deep-linked draft can insert a single anchor before the loaded pages.
+  // Fetch the intervening history before calling two messages adjacent.
+  while (origin!=null && hasMore.value && (origin<firstPagedId || (origin===firstPagedId && step<0))) {
+    if (expanding.value || !(await load(true))) return;
+    if (!current() || document.activeElement!==focused || currentMessage.value!==origin ||
+        switching || loading.value || readerObscured()) return;
     index=messages.value.findIndex(message=>message.emailId===origin);
   }
   const next=messages.value[index+step];
@@ -695,44 +710,6 @@ h1 {
   margin: 0 0 0 56px;
   overflow-wrap: anywhere;
   line-height: 1.4;
-}
-.thread-drafts {
-  margin: 0 0 12px;
-  border-block: 1px solid var(--light-border-color);
-}
-.thread-drafts button {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 8px;
-  color: var(--regular-text-color);
-  text-align: left;
-  font: inherit;
-}
-.thread-drafts button:hover {
-  background: var(--mail-read);
-}
-.thread-drafts button[aria-pressed="true"] {
-  background: var(--mail-search);
-}
-.thread-drafts button + button {
-  border-top: 1px solid var(--light-border-color);
-}
-.draft-label {
-  color: var(--mail-draft);
-  font-size: 14px;
-}
-.draft-snippet {
-  flex: 1;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 14px;
-}
-.thread-drafts time {
-  font-size: 12px;
 }
 .older {
   display: block;

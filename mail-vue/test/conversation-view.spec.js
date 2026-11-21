@@ -194,6 +194,7 @@ describe("conversation navigation and inline targets", () => {
       emailId: 10,
       inlineReply: true,
       content: "Saved",
+      cloudDraftId:5,
       draftId: 3,
     });
     userDraftStore().items = [
@@ -230,6 +231,7 @@ describe("conversation navigation and inline targets", () => {
       .mockResolvedValue(page([message(22)]));
     state.readSaved.mockImplementation(async (id) => ({
       draftId: id,
+      cloudDraftId:id===1 ? 7 : 8,
       emailId: id === 1 ? 10 : 22,
     }));
     let finishDetail;
