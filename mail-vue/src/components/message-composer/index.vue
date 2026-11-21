@@ -412,7 +412,7 @@ import db from "@/db/db.js";
 import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-import {openSeparateWindow, returnComposeWindow, saveWindowState} from "@/layout/write/separate-window";
+import {openSeparateWindow, returnComposeWindow, saveWindowState, windowState} from "@/layout/write/separate-window";
 const props = defineProps({ inline: Boolean, separateWindow:String, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
 const emit = defineEmits(["sent", "closed", "dock-state", "editor-focus"]);
 const composeRoot = ref();
@@ -612,11 +612,11 @@ async function moveWindow() {
   }
   try {
     if (props.separateWindow) {
-      saveWindowState(props.separateWindow, await saveForMove());
+      saveWindowState(props.separateWindow, {...windowState(props.separateWindow), ...await saveForMove()});
       await returnComposeWindow(props.separateWindow);
       window.close();
     } else {
-      await openSeparateWindow(saveForMove, session.check);
+      await openSeparateWindow(saveForMove, session);
       show.value = false;
       resetForm();
       emit("closed");

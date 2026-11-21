@@ -62,7 +62,7 @@ import {useRouter} from "vue-router";
 import {useAccountStore} from "@/store/account";
 import {hasPerm} from "@/perm/perm";
 import {readSavedDraft} from "@/services/draft-list";
-import {announceComposeWindow, focusSeparateDraft, openSeparateWindow, receiveComposeWindows, saveWindowState, windowState} from "./separate-window";
+import {checkWindowSession, separateEditors, focusSeparateDraft, openSeparateWindow, receiveComposeWindows, saveWindowState, windowState} from "./separate-window";
 import { ElMessage } from "element-plus";
 import { draftSession, discardDrafts } from "@/services/cloud-drafts";
 import { useMailFeedback } from "@/store/mail-feedback";
@@ -223,13 +223,12 @@ async function discardEditor(ids, session) {
   const matches = occupied.value.filter(
     (item) => ids.includes(item.draftId) || ids.includes(item.requestedId),
   );
-  if (!matches.length) return false;
+  const targets = [...matches.map(item => editors.get(item.key)), ...separateEditors(ids)];
+  if (!targets.length) return false;
   const locked = [];
   try {
-    for (const item of matches) {
-      const editor = editors.get(item.key);
-      if (!editor)
-        throw new Error("Wait until the draft is open before discarding.");
+    for (const editor of targets) {
+      if (!editor) throw new Error("Wait until the draft is open before discarding.");
       const expected = await editor.prepareDiscard(session);
       locked.push({ editor, expected });
     }
@@ -265,20 +264,32 @@ async function openFromButton(event) {
   if (!event.shiftKey) return launch("open");
   try {
     const session = draftSession(), account = accounts.currentAccount?.email ? accounts.currentAccount : user.user.account;
-    await openSeparateWindow(() => ({owner:session.owner,sender:{accountId:account.accountId,email:account.email,name:account.name || user.user.name}}),session.check);
+    await openSeparateWindow(() => ({owner:session.owner,sender:{accountId:account.accountId,email:account.email,name:account.name || user.user.name}}),session);
   } catch (error) { ElMessage.error(error.message); }
 }
 let stopReceiving;
 onMounted(async () => {
   window.addEventListener("resize", resize);
-  stopReceiving = receiveComposeWindows(restoreWindow);
   const id = props.separateWindow;
+  const endpoint = receiveComposeWindows({restore:restoreWindow, getSession:draftSession, id,
+    discardEditor(draftId) {
+      const item = occupied.value.find(row => row.draftId === draftId);
+      const editor = item && editors.get(item.key);
+      if (!editor || !id || !editor.visible) return;
+      const session = draftSession();
+      return {prepareDiscard:() => editor.prepareDiscard(session), unlockDiscard:() => editor.unlockDiscard(),
+        finishDiscard:() => { session.check(); editor.finishDiscard(); }};
+    },
+  });
+  stopReceiving = endpoint.stop;
   if (!id) return;
   try {
-    await restoreWindow(windowState(id), draftSession().check);
-    announceComposeWindow(id,true);
+    const state = windowState(id), session = draftSession();
+    await checkWindowSession(state,session);
+    await restoreWindow(state,session.check);
+    await endpoint.opened();
   } catch (error) {
-    announceComposeWindow(id,false);
+    endpoint.failed();
     ElMessage.error(error.message);
     router.replace("/inbox");
   }
