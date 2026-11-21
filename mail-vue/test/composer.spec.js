@@ -241,6 +241,20 @@ describe("composer persistence and sending", () => {
     expect(wrapper.get('[aria-label="Subject"]').element.value).toBe("Report");
     wrapper.unmount();
   });
+  it("writes a forwarded attachment once in a separate window, then saves the next user edit", async () => {
+    const wrapper = composer({separateWindow:"test-window"});
+    const file = {filename:"original.eml", contentType:"message/rfc822", content:"VGVzdA==", size:4};
+    const writes = db.value.att.put.mock.calls.length;
+    try {
+      wrapper.vm.openAttachedMessages({attachments:[file]});
+      await flushPromises();
+      expect([...state.attachments.values()][0]?.attachments).toEqual([file]);
+      expect(db.value.att.put.mock.calls.length - writes).toBe(1);
+      await wrapper.get('[aria-label="Subject"]').setValue("For your review");
+      await flushPromises();
+      expect(db.value.att.put.mock.calls.length - writes).toBe(2);
+    } finally { wrapper.unmount(); }
+  });
   it("autosaves a separate window’s unfinished Bcc before native close", async () => {
     const wrapper = composer({separateWindow:"test-window"});
     try {

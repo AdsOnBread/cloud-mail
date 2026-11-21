@@ -1329,6 +1329,7 @@ async function removeSavedDraft() {
   if(form.draftId)await removeLocalDraft(form.draftId);
 }
 let cloudSaveTimer;
+// Track changes to editable values. A save also updates metadata on the form.
 const autosaveForm = computed(() => props.separateWindow ? {...form,...pendingRecipients.value} : form);
 watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingFingerprint(form)),
   ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
@@ -1351,7 +1352,7 @@ watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingF
         Object.assign(form, {clientId:saved.clientId, cloudDraftId:saved.cloudDraftId, cloudVersion:saved.cloudVersion, syncState:saved.syncState});
     } catch { if (form.draftId === draftId) form.syncState='offline'; }
   },1000);
-},{deep:true});
+});
 
 async function saveAndClose() {
   if (sending.value || attaching.value || preparing.value) return false;
