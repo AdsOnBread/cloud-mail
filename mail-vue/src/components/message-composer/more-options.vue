@@ -17,6 +17,7 @@
       </button>
       <hr>
       <button role="menuitem" @pointerenter="closeLabels" @click="command('print')"><span/>Print</button>
+      <button role="menuitem" @pointerenter="closeLabels" @click="command('spell')"><span/>Spell check</button>
       <el-popover :visible="labelsOpen" placement="left-start" :fallback-placements="['right-start','top-end','bottom-end']"
         :show-arrow="false" :width="257" :offset="0" :persistent="false"
         popper-class="compose-format-popup compose-choice-popup compose-label-popup">

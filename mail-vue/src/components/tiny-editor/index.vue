@@ -10,7 +10,8 @@
       :id="editorId"
       ref="editorRef"
     ></textarea>
-    <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" :request-format="plainText ? requestFormat : undefined" />
+    <ComposeSpelling v-if="mailCompose && spelling && spellActive && isInitialized" :editor="editor" v-model:language="spellLanguage" @close="spelling = false" />
+    <ComposeFormat v-if="mailCompose && !spelling && showToolbar && isInitialized" :editor="editor" :request-format="plainText ? requestFormat : undefined" />
     <ComposePhoto v-if="mailCompose && !plainText && isInitialized" ref="photoPanel" :editor="editor" @edit-link="link => linkPanel?.openPhoto(link)" />
     <ComposeLink v-if="!plainText && (mailCompose || signatureEditor)" ref="linkPanel" :editor="editor" />
   </div>
@@ -29,6 +30,7 @@ import {replaceSignature,signatureId} from "../mail-signatures/content";
 import {hasFiles,hasRichSelection} from "../message-composer/files";
 import {plainBodyText, plainMarkup, plainSelection, restorePlainSelection} from "../message-composer/plain-text";
 import {fonts, formattingShortcut} from "./format-options";
+import ComposeSpelling from "./spelling/compose-spelling.vue";
 import ComposeFormat from "./compose-format.vue";
 import ComposePhoto from "./compose-photo.vue";
 import { defaultPhotoWidth, defaultPhotoHeight } from "./photo-size";
@@ -45,6 +47,7 @@ defineExpose({
   toPlain: () => plainMarkup(editor.value.getBody().innerHTML),
   ready,
   openLink,
+  openSpelling: () => { photoPanel.value?.close(); linkPanel.value?.close(); spelling.value = true; },
   setSignature,
   currentSignature: () => editor.value?.initialized ? signatureId(editor.value.getBody()) : "",
   insertEmoji,
@@ -60,6 +63,7 @@ const props = defineProps({
   },
   showToolbar: { type: Boolean, default: true },
   mailCompose: Boolean,
+  spellActive: Boolean,
   signatureEditor: Boolean,
   plainText: Boolean,
   collapseQuote: Boolean,
@@ -81,6 +85,8 @@ async function ready() {
     await current;
   } while (current !== pendingInit);
 }
+const spelling = ref(false), spellLanguage = ref("auto");
+watch(() => props.spellActive, active => { if (!active) spelling.value = false; });
 const editor = shallowRef(null);
 const linkPanel = ref(), photoPanel = ref();
 function openLink() { photoPanel.value?.close(); linkPanel.value?.open(); }
@@ -206,6 +212,7 @@ function writeContent(ed, html) {
   else ed.setContent(html);
 }
 function clearEditor() {
+  spelling.value = false;
   linkPanel.value?.close();
   photoPanel.value?.close();
   if (isInitialized.value && editor.value) {

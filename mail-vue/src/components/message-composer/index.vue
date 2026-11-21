@@ -183,6 +183,7 @@
             :plain-text="form.plainText"
             :def-value="defValue"
             mail-compose
+            :spell-active="show && !minimized && !sending"
             :show-toolbar="showFormatting"
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
@@ -969,6 +970,11 @@ async function moreCommand(command) {
     }, onCreated(id) {
       if (current() && !form.labelIds.includes(id)) form.labelIds = [...form.labelIds,id];
     }};
+    return;
+  }
+  if (command === "spell") {
+    await editor.value?.ready();
+    if (current()) editor.value?.openSpelling();
     return;
   }
   if (command === "manage-labels") {
