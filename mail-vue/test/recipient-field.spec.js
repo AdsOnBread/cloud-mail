@@ -99,6 +99,17 @@ describe('recipient entry', () => {
     expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([['safe@example.net']]);
     wrapper.unmount();
   });
+  it.each(['Enter','Tab'])('preserves a complete typed address on %s when a longer address previously matched',async key=>{
+    const wrapper=mount(RecipientField,{props:{label:'To',owner:'owner',accountId:1,recent:['alexandra@example.com.au']}});
+    const input=wrapper.get('input');
+    await input.setValue('alexandra');
+    expect(input.attributes('aria-activedescendant')).toBeTruthy();
+    await input.setValue('alexandra@example.com');
+    expect(input.attributes('aria-activedescendant')).toBeUndefined();
+    await input.trigger('keydown',{key});
+    expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([['alexandra@example.com']]);
+    wrapper.unmount();
+  });
   it('ignores late mailbox matches after the sending identity changes',async()=>{
     vi.useFakeTimers();
     const wrapper=mount(RecipientField,{props:{label:'Cc',owner:'first',accountId:1}});

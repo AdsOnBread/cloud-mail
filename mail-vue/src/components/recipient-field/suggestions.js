@@ -45,8 +45,8 @@ export function useRecipientSuggestions(props, pending, input, editing, choose) 
   function place() {
     if (panel.value && input.value) position.value=positionMailboxPopup(panel.value,input.value,420,input.value);
   }
-  watch(options,(items,previous)=>{
-    const selected=previous?.[active.value];
+  watch([options,query],([items,term],[previous,previousTerm])=>{
+    const selected=term===previousTerm ? previous?.[active.value] : null;
     const retained=selected ? items.findIndex(person=>person.email===selected.email) : -1;
     const exact=items.findIndex(person=>person.email.toLowerCase()===query.value.toLowerCase());
     active.value=retained>=0 ? retained : exact>=0 ? exact : items.length && !isEmail(query.value) ? 0 : -1;
