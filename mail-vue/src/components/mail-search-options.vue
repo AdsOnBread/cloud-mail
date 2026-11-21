@@ -66,7 +66,7 @@
       <SearchCalendar v-if="calendarOpen" ref="calendar" v-model:cursor="cursor" :today="today" :selected="parsedDate" :style="calendarStyle" @pick="pickDate"/>
       <div class="option-actions">
         <button type="button" @click="clear">Clear</button>
-        <button type="button" :disabled="!ruleCriteria" @click="createFilter">Create filter</button>
+        <button type="button" :disabled="!ruleCriteria" :title="form.scope!=='all' ? 'Choose All Mail to create an incoming filter.' : undefined" @click="createFilter">Create filter</button>
         <button type="submit">Search</button>
       </div>
     </form>
@@ -112,7 +112,7 @@ const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.da
 const filtersEditor=useMessageFilters();
 const ruleCriteria=computed(()=>{
   const f=form.value;
-  if(!f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
+  if(f.scope!=='all' || !f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
     f.from.filter(v=>v.trim()).length>1 || f.to.filter(v=>v.trim()).length>1)return null;
   const result={from:f.from.find(v=>v.trim()) || '',to:f.to.find(v=>v.trim()) || '',subject:f.subject,words:f.q,excluded:f.excluded,hasAttachment:f.hasAttachment};
   return Object.values(result).some(v=>typeof v==='string' ? v.trim() : v) ? result : null;

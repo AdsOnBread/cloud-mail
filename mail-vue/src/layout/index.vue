@@ -45,7 +45,13 @@ import {useUserStore} from '@/store/user';
 const user=useUserStore();
 const labels=useMailLabels(), filters=useMessageFilters(), filterAccount=useAccountStore();
 watch(()=>[user.authenticatedToken,user.user.userId,filterAccount.currentAccountId],()=>{filters.editor=null;filters.senderRequest=null},{flush:'sync'});
-onBeforeUnmount(()=>{filters.editor=null;filters.senderRequest=null;});
+function filterStorage(event){
+  if((event.key===null || event.key==='token') && localStorage.getItem('token')!==user.authenticatedToken){
+    filters.editor=null;filters.senderRequest=null;
+  }
+}
+onMounted(()=>window.addEventListener('storage',filterStorage));
+onBeforeUnmount(()=>{window.removeEventListener('storage',filterStorage);filters.editor=null;filters.senderRequest=null;});
 const pointerInRail=ref(false),keyboardInRail=ref(false);
 const peek=computed(()=>!isMobile.value && (pointerInRail.value || keyboardInRail.value || labels.optionsAnchor!==null));
 let railTimer;

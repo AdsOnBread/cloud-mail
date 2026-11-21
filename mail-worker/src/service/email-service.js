@@ -1,3 +1,5 @@
+import {blankMailText} from './mail-word-schema';
+import {filterBodyStatement,filterBodies} from './filter-body';
 import {recipientName} from '../../../shared/recipient-names';
 import {replySource} from './reply-source';
 import orm from '../entity/orm';
@@ -557,17 +559,18 @@ const emailService = {
 
 		for (const emailData of receiveEmailList) {
 
-			const emailRow = await orm(c).insert(email).values(emailData).returning().get();
-
-			//Save attachment references for the received copy
-			for (const attRow of attList) {
-				const attValues = {...attRow};
-				attValues.emailId = emailRow.emailId;
-				attValues.accountId = emailRow.accountId;
-				attValues.userId = emailRow.userId;
-				attValues.attId = null;
-				await orm(c).insert(att).values(attValues).run();
-			}
+			// The message, its attachment copies, and filter actions become visible together.
+      const marker=crypto.randomUUID();
+      const target=sql`(SELECT email_id FROM email WHERE user_id=${emailData.userId} AND account_id=${emailData.accountId}
+        AND message=${marker} AND status=6 ORDER BY email_id DESC LIMIT 1)`;
+      const connection=orm(c);
+      const insert=connection.insert(email).values({...emailData,status:emailConst.status.SAVING,isDel:isDel.DELETE,message:marker});
+      const files=attList.map(file=>connection.insert(att).values({...file,attId:null,emailId:target,accountId:emailData.accountId,userId:emailData.userId}));
+      const body=emailData.userId && !emailData.text?.trim() && emailData.content
+        ? [connection.insert(filterBodies).values({emailId:target,body:emailUtils.htmlToText(emailData.content)})] : [];
+      const publish=connection.update(email).set({status:emailData.status,isDel:emailData.isDel,message:emailData.message ?? null})
+        .where(eq(email.emailId,target));
+      await connection.batch([insert,...files,...body,publish]);
 
 		}
 
@@ -825,6 +828,11 @@ const emailService = {
 	},
 
 	async completeReceive(c, status, emailId) {
+    if(status===emailConst.status.RECEIVE){
+      const row=await c.env.db.prepare(`SELECT user_id AS userId,email_id AS emailId,text,content FROM email WHERE email_id=? AND ${blankMailText('text')} AND length(content)>0`).bind(emailId).first();
+      const body=row && filterBodyStatement(c.env.db,row);
+      if(body)await body.run();
+    }
 		return await orm(c).update(email).set({
 			isDel: isDel.NORMAL,
 			status: status

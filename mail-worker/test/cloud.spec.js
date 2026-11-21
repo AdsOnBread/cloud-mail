@@ -50,13 +50,29 @@ describe('Incoming mail filters',()=>{
  });
  it('waits for completed mail and real attachments, and never files hidden, sent, or unrelated messages',async()=>{
    await create({hasAttachment:true},{read:true,star:true});
-   const incoming=await message({status:6,is_del:1}),local=await message(),sent=await message({type:1});
+   const incoming=await message({status:6,is_del:1}),local=await message({status:6,is_del:1}),sent=await message({type:1});
    const file=(id,disposition)=>db.prepare("INSERT INTO attachments(user_id,email_id,account_id,key,type,disposition) VALUES(1,?,1,'k',0,?)").bind(id,disposition).run();
    await file(incoming.email_id,'attachment');await file(local.email_id,'inline');await file(sent.email_id,'attachment');
    expect((await db.prepare('SELECT count(*) n FROM star').first()).n).toBe(0);
-   await emailService.completeReceive(c(),0,incoming.email_id);await file(local.email_id,'attachment');await file(local.email_id,'attachment');
+   await emailService.completeReceive(c(),0,incoming.email_id);await file(local.email_id,'attachment');await file(local.email_id,'attachment');await emailService.completeReceive(c(),0,local.email_id);
    expect((await db.prepare('SELECT email_id FROM star ORDER BY email_id').all()).results).toEqual([{email_id:incoming.email_id},{email_id:local.email_id}]);
    expect((await db.prepare('SELECT count(*) n FROM mail_filter_hits').first()).n).toBe(0);
+ });
+ it('matches partial addresses, visible HTML text and thread counts without indexing markup',async()=>{
+   const html={text:'',content:'<p>Project <b>invoice</b></p><script>invisible</script>'};
+   const original=await message(html);await message({...html,in_reply_to:original.message_id,message_id:'<followup@example.net>'});
+   expect(await previewFilter(db,1,{from:'@example.net',to:'copy@',words:'"Project invoice"',excluded:'invisible'})).toEqual({conversations:1});
+   await create({from:'outside@',words:'invoice',excluded:'invisible'},{archive:true},{applyExisting:true});
+   const arrived=await message({...html,status:6,is_del:1});await emailService.completeReceive(c(),0,arrived.email_id);
+   expect((await db.prepare('SELECT count(*) n FROM conversation_filing').first()).n).toBe(3);
+   expect((await db.prepare("SELECT count(*) n FROM mobile_changes WHERE entity_id=? AND entity='message' AND operation='upsert'").bind(arrived.email_id).first()).n).toBeGreaterThan(1);
+ });
+ it('applies conflicting attachment and sender rules in creation order to a real local delivery',async()=>{
+   await saveFilter(db,2,crypto.randomUUID(),{version:0,criteria:{hasAttachment:true},actions:{category:'updates'}});
+   await saveFilter(db,2,crypto.randomUUID(),{version:0,criteria:{from:'admin@example.com'},actions:{category:'promotions',read:true}});
+   const saved=await draft({receiveEmail:['person@example.com'],text:'',content:'<b>Only HTML</b>',attachments:[{filename:'report.txt',content:'SGVsbG8=',contentType:'text/plain'}]});
+   await send(c(),1,{version:saved.version,idempotencyKey:'test-filter-local'},{draftId:saved.draftId});
+   expect(await db.prepare('SELECT m.category,e.unread FROM email e JOIN mailbox_categories m ON m.email_id=e.email_id WHERE e.user_id=2').first()).toEqual({category:'promotions',unread:1});
  });
  it('keeps label ownership and empty criteria out of saved rules',async()=>{
    const label=await db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(2,'Private') RETURNING label_id").first();
