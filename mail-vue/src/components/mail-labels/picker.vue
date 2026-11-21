@@ -8,7 +8,7 @@
         :disabled="disabled" :aria-expanded="open"><Icon icon="material-symbols:label-outline" width="20"/></button>
     </template>
     <FilingMenu ref="menu" v-model="query" title="Label as" search-label="Search labels" :show-manage="!query.trim()"
-      @dismiss="dismiss" @leave="open=false" @create="createLabel" @manage="manageLabels">
+      @keydown.left="backToParent" @dismiss="dismiss" @leave="open=false" @create="createLabel" @manage="manageLabels">
       <button v-for="label in filtered" :key="label.id" type="button" role="menuitemcheckbox" :aria-checked="state(label.id)"
         :title="label.name" @click="toggle(label.id)">
         <Icon :icon="checkboxIcon(state(label.id))" width="18"/><span>{{label.name}}</span>
@@ -43,6 +43,12 @@ watch(open,value=>{
 watch(()=>JSON.stringify(rowIds.value),()=>{open.value=false;});
 function restoreFocus() { (props.reference || trigger.value)?.focus(); }
 function dismiss() { open.value=false; restoreFocus(); }
+function backToParent(event) {
+  if (!props.submenu || event.isComposing || event.target.matches('input,textarea')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  dismiss();
+}
 function createLabel() {
   dismiss();
   labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,scheduled:props.scheduled,restoreFocus:props.returnFocus || restoreFocus};
