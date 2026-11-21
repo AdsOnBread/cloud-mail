@@ -12,6 +12,15 @@ export function addresses(value) {
   } catch { return []; }
 }
 
+export function recipientEntries(value) {
+  try {
+    const entries=typeof value==="string" ? JSON.parse(value || "[]") : value;
+    if (!Array.isArray(entries)) return [];
+    return entries.map(entry=>typeof entry==="string" ? {address:entry} : entry)
+      .filter(entry=>typeof entry?.address==="string" && entry.address.trim());
+  } catch { return []; }
+}
+
 export function normalizeRecipients(form, pending = {}) {
   const seen = new Set();
   const result = { errors: {} };

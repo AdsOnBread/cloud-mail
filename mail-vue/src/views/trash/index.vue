@@ -102,19 +102,24 @@
     </p>
     <div v-if="messageId" class="trash-detail">
       <article v-if="detail">
-        <h1>{{ detail.subject || "(no subject)" }} <span v-for="label in rowLabels(detail,true)" :key="label.id" class="trash-label" :style="labelStyle(label)">{{label.name}}</span></h1>
+        <div class="trash-subject">
+          <h1>{{detail.subject || "(no subject)"}}</h1>
+          <span class="trash-folder-chip">
+            <button type="button" aria-label="Show all messages in Trash" data-tip="Show all messages in Trash" @click="showTrash">Trash</button>
+            <button v-if="canDelete" type="button" aria-label="Remove Trash label" data-tip="Remove Trash label"
+              :disabled="busy || loading" @click="act('restore',[detail.emailId])">×</button>
+          </span>
+          <span v-for="label in rowLabels(detail,true)" :key="label.id" class="trash-label" :style="labelStyle(label)">{{label.name}}</span>
+        </div>
         <div class="sender">
-          <span class="initial">{{
-            (detail.name || detail.sendEmail || "?")[0].toUpperCase()
-          }}</span>
-          <div>
-            <strong>{{ detail.name || detail.sendEmail }}</strong>
-            <span v-if="detail.name">&lt;{{ detail.sendEmail }}&gt;</span>
-            <div>
-              to {{ addresses(detail.recipient).join(", ") || detail.toEmail }}
+          <span class="initial" aria-hidden="true">{{(detail.name || detail.sendEmail || "?")[0].toUpperCase()}}</span>
+          <div class="sender-info">
+            <div class="sender-name"><strong>{{detail.name || detail.sendEmail}}</strong>
+              <span v-if="detail.name && detail.name!==detail.sendEmail">&lt;{{detail.sendEmail}}&gt;</span>
             </div>
+            <MessageRecipients :message="detail"/>
           </div>
-          <time>{{ formatDetailDate(detail.createTime) }}</time>
+          <time>{{formatDetailDate(detail.createTime)}}</time>
         </div>
         <div class="message-body">
           <ShadowHtml
@@ -226,7 +231,7 @@ import MailRow from "@/components/mail-row/index.vue";
 import {downloadablePart} from "@/utils/private-files";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
-import { addresses } from "@/utils/recipients";
+import MessageRecipients from "@/components/message-recipients.vue";
 import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useAccountStore } from "@/store/account";
@@ -385,6 +390,12 @@ function toggle(id) {
 }
 function open(message) {
   router.push({ path: route.path, query: { message: message.emailId } });
+}
+function showTrash() {
+  if (!search.query && !filtered.value) { back(); return; }
+  router.replace({path:route.path});
+  search.query="";
+  search.filters={};
 }
 function back() {
   if (window.history.state.back === route.path) router.back();
@@ -602,22 +613,18 @@ onBeforeUnmount(() => {
   background: var(--mail-hover);
 }
 .trash-detail {
-  padding: 20px 32px;
+  padding: 16px 24px;
 }
-h1 {
-  font-size: 24px;
-  font-weight: 400;
-  margin: 0 0 24px 52px;
-  overflow-wrap: anywhere;
-}
-.sender {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-size: 13px;
-  color: var(--regular-text-color);
-  overflow-wrap: anywhere;
-}
+.trash-subject { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 24px 56px; }
+h1 { margin:0 6px 0 0; min-width:0; font:400 22px/28px Arial,sans-serif; overflow-wrap:anywhere; }
+.trash-folder-chip { display:inline-flex; border-radius:4px; background:var(--light-border-color); }
+.trash-folder-chip button { padding:0 4px; font:12px/18px Arial,sans-serif; color:var(--regular-text-color); cursor:pointer; border-radius:inherit; }
+.trash-folder-chip button+button { padding:0 3px; }
+.trash-folder-chip button:is(:hover,:focus-visible) { background:var(--mail-hover); color:var(--el-text-color-primary); }
+.sender { display:flex; gap:16px; align-items:flex-start; min-width:0; color:var(--regular-text-color); }
+.sender-info { flex:1; min-width:0; }
+.sender-name { font:12px/20px Arial,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sender-name strong { font-size:14px; }
 .sender strong {
   color: var(--el-text-color-primary);
 }
@@ -634,7 +641,7 @@ h1 {
   font-size: 12px;
 }
 .message-body {
-  margin: 16px 0 0 52px;
+  margin: 16px 0 0 56px;
 }
 pre {
   font:
@@ -672,7 +679,7 @@ pre {
   .trash-detail {
     padding: 16px;
   }
-  h1,
+  .trash-subject,
   .message-body {
     margin-left: 0;
   }

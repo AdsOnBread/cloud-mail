@@ -48,34 +48,7 @@
       </el-dropdown>
     </div>
     <template v-if="expanded">
-      <el-popover v-model:visible="recipientsOpen" trigger="click" placement="bottom-start" :show-arrow="false" :width="340" popper-class="recipient-popper">
-      <template #reference><button
-        class="recipient-toggle" data-tip="Show details"
-        :aria-expanded="recipientsOpen"
-
-      >
-        {{ recipientSummary }}
-        <Icon icon="material-symbols:expand-more" width="16" />
-      </button>
-      </template>
-      <div class="recipient-details">
-        <div><span>From</span>{{ email.sendEmail }}</div>
-        <div v-if="addresses(email.recipient).length"><span>To</span>{{ addresses(email.recipient).join(", ") }}</div>
-        <div v-if="addresses(email.cc).length">
-          <span>Cc</span>{{ addresses(email.cc).join(", ") }}
-        </div>
-        <div
-          v-if="
-            email.type === 1 &&
-            email.userId === user.user.userId &&
-            addresses(email.bcc).length
-          "
-        >
-          <span>Bcc</span>{{ addresses(email.bcc).join(", ") }}
-        </div>
-        <div><span>Date</span>{{ formatDetailDate(email.createTime) }}</div>
-      </div>
-      </el-popover>
+      <div class="conversation-recipients"><MessageRecipients :message="email"/></div>
       <p v-if="loading" role="status">Loading message…</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load">Retry</button>
@@ -119,14 +92,13 @@ import { ElMessage } from "element-plus";
 import FilePreview from "@/components/mail-attachments/preview.vue";
 import ShadowHtml from "@/components/shadow-html/index.vue";
 import { useEmailStore } from "@/store/email";
-import { useUserStore } from "@/store/user";
+import MessageRecipients from "@/components/message-recipients.vue";
 import { useUiStore } from "@/store/ui";
 import { emailRead, emailDelete } from "@/request/email";
 import { starAdd, starCancel } from "@/request/star";
 import { privateFileURL, downloadablePart } from "@/utils/private-files";
 import { formatDetailDate } from "@/utils/day";
 import { formatBytes } from "@/utils/file-utils";
-import { addresses } from "@/utils/recipients";
 const props = defineProps({
   message: Object,
   expanded: Boolean,
@@ -135,27 +107,13 @@ const props = defineProps({
 });
 const emit = defineEmits(["toggle", "reply", "deleted", "changed"]);
 const store = useEmailStore(),
-  user = useUserStore(),
   ui = useUiStore();
 const detail = ref(null),
   loading = ref(false),
   error = ref(""),
-  recipientsOpen = ref(false),
   busy = ref(false);
 const previewFile = ref(null);
 const email = computed(() => detail.value || props.message);
-const recipientSummary = computed(() => {
-  const message = email.value;
-  const to = addresses(message.recipient);
-  if (to.length) return "to " + to.join(", ");
-  const cc = addresses(message.cc);
-  if (cc.length) return "cc " + cc.join(", ");
-  if (message.type === 1 && message.userId === user.user.userId) {
-    const bcc = addresses(message.bcc);
-    if (bcc.length) return "bcc " + bcc.join(", ");
-  }
-  return email.value.toEmail ? "to " + email.value.toEmail : "Show details";
-});
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
 async function load() {
   if (loading.value) return;
@@ -292,32 +250,7 @@ time {
   cursor: pointer;
 }
 .icon-button:hover { background:var(--mail-hover); }
-.recipient-toggle {
-  margin: 0 0 18px 48px;
-  font-size: 12px;
-  color: var(--regular-text-color);
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  text-align: left;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-}
-.recipient-details {
-  padding: 4px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.recipient-details > div {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-.recipient-details span {
-  width: 32px;
-  flex-shrink: 0;
-  color: var(--regular-text-color);
-}
+.conversation-recipients {display:block;margin:0 0 18px 48px;max-width:calc(100% - 48px)}
 .message-html { margin-left:48px; }
 .message-text {
   white-space: pre-wrap;
@@ -378,16 +311,13 @@ time {
   .snippet {
     display: none;
   }
-  .attachments,
-  .recipient-details {
+  .attachments {
     margin-left: 0;
   }
 
   .message-text {
     padding-left: 0;
   }
-  .recipient-toggle {
-    max-width: calc(100% - 48px);
-  }
+
 }
 </style>
