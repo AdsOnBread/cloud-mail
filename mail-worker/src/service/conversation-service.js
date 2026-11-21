@@ -1,4 +1,5 @@
 import { addMailFilters } from '../service/mail-search-filters';
+import { checkCategory, categoryQuery, fileCategory } from './inbox-categories';
 import { changeLabels } from './mailbox-labels';
 import { filedConversations, inboxMember } from './conversation-filing';
 import { ensureThreads } from '../mobile/threads';
@@ -38,7 +39,9 @@ function participants(row, folder) {
 export async function conversationList(c, p, userId) {
 	const db = c.env.db;
 	await ensureThreads(db, userId);
-	const filters = [];
+	const category = p.category ? checkCategory(p.category) : null;
+  if(category && p.folder!=='inbox')throw new BizError('Categories are available in Inbox.',400);
+  const filters = [];
 	const args = [userId];
 	if (!['inbox', 'sent', 'starred', 'archived', 'snoozed', 'all', 'label'].includes(p.folder)) throw new BizError('Invalid folder.', 400);
 	if (p.folder === 'label') {
@@ -74,16 +77,18 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    grouped AS (SELECT m.thread_id, MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    grouped AS (SELECT m.thread_id,${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.rowid) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
       JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
       FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
-      WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id)`;
+      ${category?'LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id':''}
+      WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id)${category?categoryQuery:''}`;
 	const bound = [userId, userId, ...args, userId];
+  const groupSource=category?'categorized':'grouped';
 	if (String(p.countOnly) === '1') {
-    const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM grouped WHERE unread_count>0`).bind(...bound).first();
+    const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM ${groupSource} WHERE unread_count>0 ${category?'AND category=?':''}`).bind(...bound,...(category?[category]:[])).first();
     return {unreadThreads:result.unreadThreads};
   }
   const asc = Number(p.timeSort) === 1;
@@ -99,7 +104,7 @@ export async function conversationList(c, p, userId) {
 	const byTime = chronological && parts.length === 2 && Number.isFinite(Number(parts[0]));
 	const after = byTime ? `(${orderTime},g.last_email_id) ${comparison} (?,?)` : `g.last_email_id ${comparison} ?`;
 	const [count, page, nextWake] = await db.batch([
-		db.prepare(`${base} SELECT COUNT(*) total, COALESCE(SUM(unread_count>0),0) unread_threads FROM grouped`).bind(...bound),
+		db.prepare(`${base} SELECT ${category?'category,':''}COUNT(*) total, COALESCE(SUM(unread_count>0),0) unread_threads FROM ${groupSource} ${category?'GROUP BY category':''}`).bind(...bound),
 		db
 			.prepare(
 				`${base}, draft_times AS (
@@ -112,21 +117,23 @@ export async function conversationList(c, p, userId) {
         JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0
         WHERE tm.user_id=e.user_id AND tm.thread_id=g.thread_id AND member.is_del=0 AND member.trashed_at IS NULL AND member.status NOT IN (6,7)) label_ids,
         CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,sent.recipient sent_recipients,f.wake_at,${orderTime} activity_time,first.subject,e.create_time last_date,e.status,
-      SUBSTR(COALESCE(e.text,''),1,180) preview FROM grouped g JOIN email e ON e.email_id=g.last_email_id JOIN email first ON first.email_id=g.first_email_id LEFT JOIN email sent ON sent.email_id=g.last_sent_id LEFT JOIN filed f ON f.thread_id=g.thread_id LEFT JOIN draft_times d ON d.thread_id=g.thread_id
-      ${cursor ? 'WHERE ' + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
+      SUBSTR(COALESCE(e.text,''),1,180) preview FROM ${groupSource} g JOIN email e ON e.email_id=g.last_email_id JOIN email first ON first.email_id=g.first_email_id LEFT JOIN email sent ON sent.email_id=g.last_sent_id LEFT JOIN filed f ON f.thread_id=g.thread_id LEFT JOIN draft_times d ON d.thread_id=g.thread_id
+      ${category?'WHERE g.category=?':''} ${cursor ? (category?'AND ':'WHERE ') + after : ''} ORDER BY ${chronological ? 'activity_time ' + ordered + ',' : ''} g.last_email_id ${ordered} LIMIT ?`,
 			)
-			.bind(...bound, userId, ...(cursor && byTime ? [Number(parts[0])] : []), ...(cursor ? [cursor] : []), limit + 1),
+			.bind(...bound, userId, ...(category?[category]:[]), ...(cursor && byTime ? [Number(parts[0])] : []), ...(cursor ? [cursor] : []), limit + 1),
 		db.prepare('SELECT MIN(wake_at) wake FROM conversation_filing WHERE user_id=? AND wake_at>unixepoch()').bind(userId),
 	]);
 	const rows = page.results.slice(0, limit);
+  const totals=category?count.results.find(row=>row.category===category):count.results[0];
 	return {
 		threads: rows.map((row) => {
-			const { sent_recipients, first_email_id, last_sent_id, ...summary } = row;
+			const { sent_recipients, first_email_id, last_sent_id, category_source, category_override, ...summary } = row;
 			return { ...camel(summary), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder) };
 		}),
-		unreadThreads: count.results[0].unread_threads,
+		unreadThreads: totals?.unread_threads||0,
+    ...(category?{categoryUnread:Object.fromEntries(count.results.map(row=>[row.category,row.unread_threads]))}:{}),
 		nextWakeAt: nextWake.results[0].wake,
-		total: count.results[0].total,
+		total: totals?.total||0,
 		hasMore: page.results.length > limit,
 		nextCursor:
 			page.results.length > limit
@@ -227,7 +234,9 @@ export async function conversationAction(c, p, userId, action) {
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
-	if (action === 'label') {
+	if (action === 'category') {
+    await fileCategory(db,userId,ids,p.category);
+  } else if (action === 'label') {
     await changeLabels(db,userId,ids,p.add,p.remove);
   } else if (['archive', 'snooze', 'inbox','move'].includes(action)) {
 		if (action === 'snooze' && (!Number.isSafeInteger(p.wakeAt) || p.wakeAt <= Math.floor(Date.now() / 1000) || p.wakeAt > 253402300799))

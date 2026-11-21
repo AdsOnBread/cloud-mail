@@ -318,3 +318,26 @@ it('moves between labels and Inbox atomically while retaining other labels',asyn
   expect((await list()).total).toBe(1);
   expect((await messages(id)).labelIds).toEqual([src.id]);
 });
+
+it('categorizes complete conversations before pagination and retains explicit filing across replies',async()=>{
+  const personal=await insert({subject:'Dinner?',message_id:'<dinner@example.com>'});
+  const promo=await insert({send_email:'offers@bookshop.example',subject:'New titles',message_id:'<books@example.com>'});
+  const update=await insert({send_email:'alerts@delivery.example',subject:'Your delivery'});
+  const forum=await insert({send_email:'reading@groups.io',subject:'Next meeting'});
+  const social=await insert({send_email:'invites@linkedin.com',subject:'An invitation'});
+  for(const [category,id] of [['primary',personal.email_id],['promotions',promo.email_id],['updates',update.email_id],['forums',forum.email_id],['social',social.email_id]]) {
+    const page=await list({category});
+    expect(page.threads.map(t=>t.lastEmailId)).toEqual([id]);
+    expect(page.categoryUnread).toHaveProperty('primary');
+  }
+  await expect(action('category',[personal.email_id],{category:'custom'})).rejects.toMatchObject({code:400});
+  const foreign=await insert({user_id:2,account_id:2});
+  await expect(action('category',[foreign.email_id],{category:'social'})).rejects.toMatchObject({code:404});
+  await action('category',[promo.email_id],{category:'primary'});
+  const reply=await insert({reply_to_email_id:promo.email_id,in_reply_to:'<books@example.com>',subject:'Re: New titles',send_email:'offers@bookshop.example'});
+  const first=await list({category:'primary',limit:1}),second=await list({category:'primary',limit:1,cursor:first.nextCursor});
+  expect(first.total).toBe(2);
+  expect([first,second].map(p=>p.threads[0].lastEmailId).sort((a,b)=>a-b)).toEqual([personal.email_id,reply.email_id]);
+  expect((await list({category:'promotions'})).total).toBe(0);
+  expect((await list({q:'New titles'})).total).toBe(1);
+});
