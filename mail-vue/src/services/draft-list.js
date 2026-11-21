@@ -119,8 +119,9 @@ export async function readSavedDraft(draftId) {
   return { ...draft, attachments: files?.attachments || [] };
 }
 
-export async function openSavedDraft(draftId, router, folder, labelId, category) {
+export async function openSavedDraft(draftId, router, folder, labelId, category, canOpen) {
   const draft = await readSavedDraft(draftId);
+  if (canOpen && !canOpen()) return;
   if (
     draftKey(draft) &&
     draft.sendType === "reply" &&

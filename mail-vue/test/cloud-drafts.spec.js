@@ -1,7 +1,7 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest';
 import {createPinia,setActivePinia} from 'pinia';
 import {useUserStore} from '../src/store/user';
-import {draftSession,discardDrafts,saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft} from '../src/services/cloud-drafts';
+import {draftSession,discardDrafts,saveLocalDraft,syncCloudDrafts,removeLocalDraft,sendCloudDraft,scheduleCloudDraft,cancelScheduledReceipt} from '../src/services/cloud-drafts';
 import db from '../src/db/db';
 import http from '../src/axios';
 const state=vi.hoisted(()=>({rows:new Map(),files:new Map(),meta:new Map(),remote:new Map(),events:[],next:1,cloudNext:1,attempts:new Map()}));
@@ -429,4 +429,23 @@ it('drops deleted CID photos during editing and upload while keeping regular att
  const payload=http.post.mock.calls.find(([path])=>path==='/v1/drafts')[1];
  expect(payload.attachments).toEqual([...photos.slice(1),note]);
  expect(payload.content).toContain('base64,eA==');
+});
+
+it('uses only the acknowledged cloud revision and original owner for schedule Undo', async () => {
+  const row = await saveLocalDraft(input());
+  const when = Math.floor(Date.now()/1000) + 3600;
+  const original = http.post.getMockImplementation();
+  http.post.mockImplementation(async (path, body, ...args) => {
+    if (path.endsWith('/schedule')) return {draftId:1, version:body.version + 1, sendAt:when};
+    if (path.endsWith('/cancel')) return {draftId:1};
+    return original(path, body, ...args);
+  });
+  const session = draftSession();
+  const {scheduled} = await scheduleCloudDraft(row.draftId, when);
+  expect(scheduled).toMatchObject({draftId:1, accountId:1, version:2, sendAt:when});
+  await cancelScheduledReceipt(scheduled, session);
+  expect(http.post).toHaveBeenCalledWith('/v1/scheduled/1/cancel', {version:2}, expect.objectContaining({noMsg:true}));
+  localStorage.setItem('token', 'different-owner');
+  await expect(cancelScheduledReceipt(scheduled, session)).rejects.toThrow(/user changed/);
+  expect(http.post.mock.calls.filter(([path]) => path.endsWith('/cancel'))).toHaveLength(1);
 });

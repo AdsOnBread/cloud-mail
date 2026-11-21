@@ -1206,20 +1206,26 @@ function scheduledFeedback(result, sendAt, session) {
   feedback.notice.scheduledMessage = receipt;
   feedback.notice.undoFiling = async () => {
     session.check();
-    const origin = router.currentRoute.value.fullPath;
     const notice = feedback.notice;
-    const restored = await cancelScheduledReceipt(receipt, session);
-    // Cancellation is committed even if the user navigates away or draft sync is offline.
+    let moved = false;
+    const stop = watch([router.currentRoute, () => accountStore.currentAccountId,
+      () => accountStore.currentAccount.allReceive], () => { moved = true; }, {flush:"sync"});
+    const canOpen = () => !moved && feedback.notice === notice;
     try {
-      const draft = await restored.localDraft();
-      session.check();
-      if (draft && !draft.deleted && feedback.notice === notice && router.currentRoute.value.fullPath === origin) {
-        const {openSavedDraft} = await import("@/services/draft-list");
+      const restored = await cancelScheduledReceipt(receipt, session);
+      // The cloud cancellation is final even if the local draft cannot yet be reopened.
+      try {
+        const draft = await restored.localDraft();
         session.check();
-        if (feedback.notice === notice && router.currentRoute.value.fullPath === origin)
-          await openSavedDraft(draft.draftId, router, "draft");
-      }
-    } catch { /* The cloud draft remains available from Drafts. */ }
+        if (draft && !draft.deleted && canOpen()) {
+          const {openSavedDraft} = await import("@/services/draft-list");
+          await openSavedDraft(draft.draftId, router, "draft", undefined, undefined, () => {
+            session.check();
+            return canOpen();
+          });
+        }
+      } catch { /* The saved message is available in Drafts. */ }
+    } finally { stop(); }
     return "Sending undone. Message returned to Drafts.";
   };
 }
