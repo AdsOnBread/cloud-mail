@@ -127,10 +127,16 @@
             <MessageRecipients :message="detail"/>
           </div>
           <time v-if="stamp" :datetime="stamp.iso" :data-tip="stamp.full"><span class="full-time">{{stamp.label}}</span><span class="short-time">{{stamp.compact}}</span></time>
+          <button v-if="canRespond" class="mail-icon" :aria-label="responseChoices[0].title" :data-tip="responseChoices[0].title" @click="responses?.open(responseChoices[0].command)">
+            <Icon :icon="responseChoices[0].icon" width="20"/>
+          </button>
           <el-dropdown trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
             <button class="mail-icon" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
             <template #dropdown><el-dropdown-menu>
-              <el-dropdown-item :disabled="busy || loading" @click="setRead([detail.emailId],targetUnread)"><Icon :icon="readIcon(targetUnread)"/>{{readLabel(targetUnread)}}</el-dropdown-item>
+              <template v-if="canRespond">
+                <el-dropdown-item v-for="choice in menuChoices" :key="choice.command" @click="responses?.open(choice.command)"><Icon :icon="choice.icon"/>{{choice.title}}</el-dropdown-item>
+              </template>
+              <el-dropdown-item :divided="canRespond" :disabled="busy || loading" @click="setRead([detail.emailId],targetUnread)"><Icon :icon="readIcon(targetUnread)"/>{{readLabel(targetUnread)}}</el-dropdown-item>
               <el-dropdown-item divided :disabled="printing" @click="printMail"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
               <DownloadMessage :message="detail"/>
             </el-dropdown-menu></template>
@@ -143,6 +149,8 @@
         </div>
       </article>
       <p v-else-if="loading" role="status">Loading message…</p>
+      <TrashResponses v-if="hasPerm('email:send') && !detail?.scheduledDraftId" ref="responses" :key="messageId" :source-id="messageId"
+        :message="detail" :choices="responseChoices"/>
     </div>
     <div v-else class="trash-list">
       <div class="retention">
@@ -228,6 +236,8 @@ import { ElMessageBox } from "element-plus";
 import {useNow} from "@vueuse/core";
 import {printMessages} from "@/components/conversation-view/print";
 import {useUserStore} from "@/store/user";
+import TrashResponses from "./responses.vue";
+import {hasReplyAll} from "@/utils/recipients";
 import ReaderWindowLink from "@/components/reader-window-link.vue";
 import SenderAvatar from "@/components/sender-avatar.vue";
 import DownloadMessage from "@/components/download-message.vue";
@@ -272,6 +282,15 @@ const detail = ref(null),
 const messageId = computed(() => Number(route.query.message) || 0);
 
 const user = useUserStore(), now = useNow({interval:60000});
+const responses = ref();
+const canRespond = computed(() => detail.value && !detail.value.scheduledDraftId && hasPerm("email:send"));
+const replyChoice = {title:"Reply",command:"openReply",icon:"material-symbols:reply"};
+const replyAllChoice = {title:"Reply all",command:"openReplyAll",icon:"material-symbols:reply-all"};
+const forwardChoice = {title:"Forward",command:"openForward",icon:"material-symbols:forward"};
+const menuChoices = computed(() => detail.value && hasReplyAll(detail.value,account.ownAddresses)
+  ? [replyChoice,replyAllChoice,forwardChoice] : [replyChoice,forwardChoice]);
+const responseChoices = computed(() => user.defaultReplyAll && menuChoices.value.length===3
+  ? [replyAllChoice,replyChoice,forwardChoice] : menuChoices.value);
 const stamp = computed(() => readerTimestamp(detail.value?.createTime, now.value));
 const windowHref = computed(() => detail.value && router.resolve({name:"trash", query:{message:detail.value.emailId,sender:detail.value.accountId,window:"1"}}).href);
 const printing = ref(false);
@@ -517,6 +536,7 @@ async function emptyTrash() {
 }
 async function act(action, ids, destination) {
   if (busy.value || !canDelete.value) return;
+  if (responses.value && !await responses.value.save()) return;
   busy.value = true;
   error.value = "";
   let changed = 0;
