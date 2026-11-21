@@ -1276,18 +1276,20 @@ function persistDraft(options) {
 }
 async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
   const draft = snapshot();
-  if (autosave && props.separateWindow && !hasDraftContent(draft)) {
+  if (autosave && !props.inline && !hasDraftContent(draft)) {
     if (windowContactSeed) {
       saveWindowState(props.separateWindow,{...windowState(props.separateWindow),person:null});
       windowContactSeed=false;
     }
     if (!draft.draftId) return;
+    const generation=fileGeneration;
     const recovery = await discardDrafts([draft.draftId], draft);
+    recovery.dispose().catch(() => {});
+    if (generation!==fileGeneration || form.draftId!==draft.draftId) return;
     // The empty document remains editable. Later typing starts a fresh draft
     // and cannot overwrite the cloud row queued for deletion.
     for (const key of ["draftId","cloudDraftId","clientId","cloudVersion","editToken","starEditBase",
       "sendAttemptId","sendFingerprint","localRevision","syncState","uploadIntent"]) delete form[key];
-    recovery.dispose().catch(() => {});
     return;
   }
   const { attachments, draftId, ...data } = draft;
@@ -1314,7 +1316,7 @@ watch([()=>draftFingerprint(autosaveForm.value), ()=>JSON.stringify(draftFilingF
   ()=>starRevision.value, ()=>form.accountId, ()=>form.name, ()=>form.sendType, ()=>form.emailId], ([fingerprint,filing,revision],[,previousFiling,previousRevision])=>{
   if(preparing.value || sending.value || !show.value) return;
   const changedFiling = form.draftId && (filing!==previousFiling || revision!==previousRevision);
-  const empty = !(props.separateWindow && form.draftId) && !hasDraftContent(autosaveForm.value);
+  const empty = !form.draftId && !pendingWrites && !hasDraftContent(autosaveForm.value);
   if (!changedFiling && (empty || fingerprint===automaticBaseline ||
       (restoredUntouched && fingerprint===baseline))) return;
   restoredUntouched = false;
