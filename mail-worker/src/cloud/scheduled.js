@@ -53,18 +53,23 @@ export async function setScheduledMark(c, userId, rawId, { field, value, version
 
 // Apply the user's whole selection to one snapshot. A delivery or cancellation
 // racing the request must not change a different revision or half the selection.
-export async function setScheduledRead(c, userId, input) {
-  if (!Array.isArray(input?.messages) || !input.messages.length || input.messages.length>50 ||
-      typeof input.unread!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
-  const messages=input.messages.map(row=>[positive(row?.draftId),positive(row?.version)]);
+export function setScheduledRead(c,userId,input) {
+  return setScheduledFlag(c,userId,input?.messages,'$.scheduledUnread',input?.unread);
+}
+export function setScheduledInbox(c,userId,input) {
+  return setScheduledFlag(c,userId,input?.messages,'$.scheduledInbox',input?.inbox);
+}
+async function setScheduledFlag(c,userId,selection,path,value) {
+  if (!Array.isArray(selection) || !selection.length || selection.length>50 || typeof value!=='boolean') throw new BizError('Invalid scheduled message selection.',400);
+  const messages=selection.map(row=>[positive(row?.draftId),positive(row?.version)]);
   if (new Set(messages.map(([id])=>id)).size!==messages.length) throw new BizError('Duplicate scheduled message.',400);
   const result=await c.env.db.prepare(`WITH eligible AS MATERIALIZED (
     SELECT d.draft_id FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0
     JOIN json_each(?) r ON json_extract(r.value,'$[0]')=d.draft_id AND json_extract(r.value,'$[1]')=d.version
     WHERE d.user_id=? AND d.state IN ('scheduled','schedule_failed')
-  ) UPDATE cloud_drafts SET data=json_set(data,'$.scheduledUnread',?)
+  ) UPDATE cloud_drafts SET data=json_set(data,?,?)
     WHERE draft_id IN (SELECT draft_id FROM eligible) AND (SELECT count(*) FROM eligible)=?
-    RETURNING draft_id`).bind(JSON.stringify(messages),userId,Number(input.unread),messages.length).all();
+    RETURNING draft_id`).bind(JSON.stringify(messages),userId,path,Number(value),messages.length).all();
   if (!result.results.length) throw new BizError('A scheduled message changed. Refresh Scheduled.',409);
   return {updated:result.results.length};
 }
@@ -86,12 +91,15 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   const reason = `CASE WHEN ${important}=1 THEN 'user' WHEN ${important}=0 THEN NULL
     WHEN json_extract(d.data,'$.sendType')='reply' AND json_extract(d.data,'$.emailId')>0 THEN 'reply'
     WHEN EXISTS (SELECT 1 FROM json_each(d.data,'$.receiveEmail') address WHERE address.value=a.email COLLATE NOCASE) THEN 'direct' END`;
+  const inbox="coalesce(json_extract(d.data,'$.scheduledInbox'),0)";
+  const unread="COALESCE(json_extract(d.data,'$.scheduledUnread'),0)";
+  if (filters.mark==='inbox') conditions.push(inbox+'=1');
   if (filters.mark==='starred') conditions.push(starred+'=1');
   if (filters.mark==='important') conditions.push('('+reason+') IS NOT NULL');
   if (filters.countOnly === '1') {
-    return c.env.db.prepare(`SELECT COUNT(*) count ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
+    const extra=filters.includeInboxUnread==='1' ? `,COUNT(CASE WHEN ${inbox}=1 AND ${unread}=1 THEN 1 END) inboxUnread` : '';
+    return c.env.db.prepare(`SELECT COUNT(*) count ${extra} ${from} WHERE ${conditions.join(' AND ')}`).bind(...args).first();
   }
-  const unread="COALESCE(json_extract(d.data,'$.scheduledUnread'),0)";
   if (String(filters.isUnread)==='1') conditions.push(unread+'=1');
   const fileCount = "(SELECT COUNT(*) FROM draft_files f WHERE f.user_id=d.user_id AND f.draft_id=d.draft_id AND COALESCE(f.content_id,'')='')";
   const fileNames = `(SELECT json_group_array(json_object('attachmentId',attachment_id,'filename',filename,'mimeType',mime_type,'size',size))
@@ -125,7 +133,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    ${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
+    ${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.labelIds') AS labelIds,
@@ -165,7 +173,7 @@ export async function cancel(c, userId, id, version) {
 	const draft = await drafts.get(c, userId, id, true);
 	const changed = await c.env.db
 		.prepare(
-			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread'),state='draft',
+			`UPDATE cloud_drafts SET data=json_remove(data,'$.scheduledAt','$.scheduleKey','$.scheduleError','$.retryAt','$.scheduledUnread','$.scheduledInbox'),state='draft',
     version=version+1,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND draft_id=? AND version=?
     AND state IN ('scheduled','schedule_failed') RETURNING draft_id`,
 		)
