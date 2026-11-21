@@ -15,46 +15,14 @@
       <Icon icon="material-symbols:upload-file-outline" width="36" /><span>{{ dragHint }}</span>
     </div>
     <div class="write-box" :aria-busy="sending || preparing" :inert="preparing || undefined">
-      <div v-if="inline" class="inline-reply-header">
-        <button
-          type="button"
-          class="inline-recipients"
-          :aria-label="form.sendType === 'forward' ? 'Edit forward recipients' : 'Edit reply recipients'"
-          :aria-expanded="editingRecipients"
-          :data-tip="replyRecipientTitle"
-          :disabled="sending || attaching"
-          @click="editReplyRecipients"
-        >
-          <Icon :icon="form.sendType === 'forward' ? 'material-symbols:forward' : 'material-symbols:reply'" width="22" />
-          <Icon
-            :icon="
-              editingRecipients
-                ? 'material-symbols:expand-less'
-                : 'material-symbols:arrow-drop-down'
-            "
-            width="18"
-          />
-          <span>{{ replyRecipientSummary }}</span>
-        </button>
-        <button
-          type="button"
-          class="compose-tool inline-close"
-          aria-label="Close and save draft"
-          data-tip="Save and close reply"
-          :disabled="sending || attaching"
-          @click="close"
-        >
-          <Icon icon="material-symbols:close" width="18" />
-        </button>
-      </div>
-      <div v-else-if="separateWindow" class="compose-title separate-title">
+      <div v-if="separateWindow" class="compose-title separate-title">
         <span class="compose-caption">{{ caption }}</span>
         <div class="window-actions"><button type="button" aria-label="Pop-in" data-tip="Pop-in"
           :disabled="preparing || sending || attaching" @click="moveWindow">
           <Icon icon="material-symbols:close-fullscreen" width="16"/>
         </button></div>
       </div>
-      <div v-else class="compose-title">
+      <div v-else-if="!inline" class="compose-title">
         <button
           type="button"
           class="compose-caption"
@@ -101,21 +69,34 @@
         </div>
       </div>
       <div v-show="!minimized" class="compose-container">
+        <div v-if="responseHeader" class="inline-reply-header">
+          <ResponseMenu :mode="responseMode" :all="hasReplyAll(responseSource,accountStore.ownAddresses)"
+            :inline="inline" :disabled="sending || preparing || attaching" @command="responseCommand"/>
+          <button type="button" class="inline-recipients" :aria-expanded="editingRecipients"
+            :aria-label="form.sendType === 'forward' ? 'Edit forward recipients' : 'Edit reply recipients'"
+            :data-tip="replyRecipientTitle" :disabled="sending || preparing || attaching" @click="editReplyRecipients">
+            <span>{{ replyRecipientSummary }}</span>
+          </button>
+          <button v-if="inline" type="button" class="compose-tool pop-reply" aria-label="Pop out reply" data-tip="Pop out reply"
+            :disabled="sending || preparing || attaching" @click="responseCommand('pop')">
+            <Icon icon="material-symbols:open-in-new" width="18"/>
+          </button>
+        </div>
         <fieldset
-          v-show="!inline || editingRecipients"
+          v-show="!responseHeader || editingRecipients"
           :disabled="sending || attaching"
           class="compose-fields"
           @focusin="rememberInput"
         >
           <button
-            v-if="!inline && !addressExpanded"
+            v-if="!responseHeader && !addressExpanded"
             type="button"
             class="recipient-summary"
             aria-label="Edit recipients"
             :title="replyRecipientTitle || 'Recipients'"
             @click="focusRecipients('receiveEmail')"
           >{{ replyRecipientTitle || "Recipients" }}</button>
-          <div v-show="inline || addressExpanded">
+          <div v-show="responseHeader || addressExpanded">
             <div v-if="!inline && showSender" class="from-row">
               <span>From</span
               ><span :title="form.sendEmail"
@@ -187,7 +168,7 @@
             />
           </div>
           <input
-            v-if="!inline"
+            v-if="!responseHeader"
             v-model="form.subject"
             class="subject-input"
             aria-label="Subject"
@@ -211,7 +192,7 @@
             mail-compose
             :spell-active="show && !minimized && !sending"
             :show-toolbar="showFormatting"
-            :collapse-quote="inline"
+            :collapse-quote="responseHeader"
             :show-quote="quoteExpanded"
             ref="editor"
             @focus="focusBody"
@@ -222,7 +203,7 @@
             @change="change"
           />
         </div>
-        <div v-if="inline && hasQuotedContent" class="quote-actions">
+        <div v-if="responseHeader && hasQuotedContent" class="quote-actions">
           <button
             type="button"
             class="quote-toggle"
@@ -351,6 +332,8 @@ import {quotedMessage} from "./quoted-message";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import ContactPicker from './contact-picker.vue';
+import {changeQuotedBody,responseSubject} from "./response";
+import ResponseMenu from "./response-menu.vue";
 import SendControls from "./send-controls.vue";
 import {sendConfirmation} from "./send-confirmation";
 import {plainMarkup,richMarkup} from "./plain-text";
@@ -373,7 +356,7 @@ import {
   reactive,
   ref,
   toRaw,
-  computed,
+  computed, shallowRef,
   watch,
 } from "vue";
 import { Icon } from "@iconify/vue";
@@ -395,7 +378,7 @@ import {
   hasDraftContent,
   draftFingerprint,
   draftFilingFingerprint,
-  replyRecipients,
+  hasReplyAll, replyRecipients,
   recipientFields,
 } from "@/utils/recipients.js";
 import db from "@/db/db.js";
@@ -403,7 +386,7 @@ import dayjs from "dayjs";
 import { ElMessage, ElMessageBox } from "element-plus";
 
 import {openSeparateWindow, returnComposeWindow, saveWindowState, windowState} from "@/layout/write/separate-window";
-const props = defineProps({ inline: Boolean, separateWindow:String, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
+const props = defineProps({ inline: Boolean, responseMessage:Object, separateWindow:String, dockActive:{type:Boolean,default:true}, dockHidden:Boolean });
 const emit = defineEmits(["sent", "closed", "dock-state", "editor-focus"]);
 const composeRoot = ref();
 const labelStore=useMailLabels();
@@ -521,6 +504,10 @@ const ccField = ref();
 const bccField = ref();
 const show = ref(false);
 const editingRecipients = ref(false);
+const loadedSource = shallowRef(null);
+const responseSource = computed(() => loadedSource.value || props.responseMessage || emailStore.detailMap?.[form.responseSourceId || form.emailId]);
+const responseHeader = computed(() => props.inline || form.responseView === "pop");
+const responseMode = computed(() => form.sendType === "forward" ? "forward" : form.replyAll ? "all" : "reply");
 const addressExpanded = ref(true);
 const subjectCaption = ref("");
 const formatCaption = ref("");
@@ -624,7 +611,7 @@ function collapseAddresses() {
   if (!props.inline) addressExpanded.value = false;
 }
 function focusRecipients(field,address,focus=true) {
-  if (props.inline) editingRecipients.value = true;
+  if (responseHeader.value) editingRecipients.value = true;
   else addressExpanded.value = true;
   if (field === "cc") showCc.value = true;
   if (field === "bcc") showBcc.value = true;
@@ -809,6 +796,7 @@ function resetForm() {
   recipientNotice.value = null;
   showContacts.value=false;
   lastInput = null;
+  loadedSource.value = null;
   restoreFocus = null;
   signatureGeneration++;pendingDefault=Promise.resolve();automaticBaseline="";menuItems.value=[];
   selectedSignature.value="";signatureError.value="";managingSignatures.value=false;
@@ -882,12 +870,13 @@ function open(person, sender) {
   });
   startSignatureDefault();
 }
-async function openDraft(draft) {
+async function openDraft(draft, options) {
   if (!available()) return;
   preparing.value = true;
   try {
     resetForm();
     Object.assign(form, restoreDraft(draft), { subject: draft.subject ?? "" });
+    loadedSource.value = options?.source || null;
     if(draft.deliveryError)sendError.value=draft.deliveryError;
     if(draft.schedulingError)sendError.value="Scheduling failed. "+draft.schedulingError;
     form.ownerEmail = userStore.user.email;
@@ -898,7 +887,7 @@ async function openDraft(draft) {
     }
     if (!form.content && form.text)
       form.content = escapeHTML(form.text).replace(/\r\n?|\n/g, "<br>");
-    if (props.inline && form.sendType === "reply")
+    if (responseHeader.value && form.sendType === "reply")
       form.content = foldLegacyReplyQuote(form.content || "");
     defValue.value = form.content || "";
     reveal();
@@ -911,7 +900,10 @@ async function openDraft(draft) {
   }
   await nextTick();
   if (!mounted || !props.dockActive) return;
-  if (props.inline || replyRecipientTitle.value) {
+  if (options?.selectSubject) {
+    const subject = composeRoot.value?.querySelector(".subject-input");
+    subject?.focus(); subject?.select();
+  } else if (responseHeader.value || replyRecipientTitle.value) {
     collapseAddresses();
     editor.value?.resumeDraft?.();
   } else toField.value?.focus();
@@ -960,6 +952,9 @@ async function prepareMessage(message, mode, all = false) {
     if (!current()) return false;
     resetForm();
     setSender();
+    loadedSource.value = email;
+    form.replyAll = all;
+    if (props.inline) form.responseSourceId = email.emailId;
     const originalAccount =
       accountStore.accounts.find(
         (account) => account.accountId === email.accountId,
@@ -979,13 +974,12 @@ async function prepareMessage(message, mode, all = false) {
       form.accountId = originalAccount.accountId;
       form.name = originalAccount.name || userStore.user.name || "";
     }
-    const subject = email.subject || "";
-    const hasPrefix = mode === "reply" ? /^re:/i.test(subject) : /^fwd:/i.test(subject);
-    form.subject = hasPrefix ? subject : (mode === "reply" ? "Re: " : "Fwd: ") + subject;
+    form.subject = responseSubject(email.subject,mode);
     form.sendType = mode;
     form.emailId = mode === "reply" ? email.emailId : 0;
     if (email.trashedAt) form.trashSource = email.emailId;
     Object.assign(form,quote);
+    if (props.inline && mode==="forward") form.attachments=quote.attachments.map(file=>({...file,fromResponse:true}));
     if (mode === "reply") {
       Object.assign(form, replyRecipients(email, accountStore.ownAddresses, all));
       if (props.inline) {
@@ -998,7 +992,7 @@ async function prepareMessage(message, mode, all = false) {
         if (email.sendEmail && email.name)
           form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
       }
-    } else if (props.inline) editingRecipients.value = true;
+    } else if (responseHeader.value) editingRecipients.value = true;
     if (form.plainText) Object.assign(form, plainMarkup(form.content));
     defValue.value = form.content;
     reveal();
@@ -1018,6 +1012,101 @@ async function prepareMessage(message, mode, all = false) {
   if (props.inline && mode === "reply") editor.value?.focus?.(true);
   else toField.value?.focus();
   return true;
+}
+async function responseCommand(command) {
+  if (sending.value || preparing.value || attaching.value || !show.value) return;
+  if (command === "pop" || command === "subject") return moveResponse(command);
+  if (command === responseMode.value) {
+    editor.value?.focus();
+    return;
+  }
+  await changeResponse(command);
+}
+
+async function moveResponse(command) {
+  const session=draftSession();
+  preparing.value=true;
+  try {
+    await editor.value?.ready?.();
+    await pendingDefault;
+    commitRecipients();
+    await saveQueue;
+    session.check();
+    if (!mounted) return;
+    const view=command === "subject" ? "subject" : "pop";
+    if (props.inline) {
+      // The inline instance stays locked until its docked successor is ready.
+      clearTimeout(cloudSaveTimer);
+      const pristine=!form.draftId && [baseline,automaticBaseline].includes(draftFingerprint(form));
+      const saved=pristine ? snapshot() : await persistDraft({requireCurrent:true,session,responseView:view});
+      session.check();
+      const moved=await uiPreferences.writerRef?.openDraft({...saved,responseView:view},{
+        source:responseSource.value, selectSubject:view==="subject", handoff:true,
+      });
+      if (!moved) throw new Error("Could not open the docked reply.");
+      show.value=false;
+      resetForm();
+      emit("closed");
+    } else {
+      form.responseView=view;
+      if (form.draftId) await persistDraft({requireCurrent:true,session});
+      await nextTick();
+      const subject=composeRoot.value?.querySelector(".subject-input");
+      subject?.focus(); subject?.select();
+    }
+  } catch (error) { sendError.value=error.message || "Your reply is still open."; }
+  finally { preparing.value=false; }
+}
+async function changeResponse(command) {
+  const id=form.responseSourceId || form.trashSource || form.emailId;
+  if (!id || form.detachedReply) { sendError.value="The original message is no longer available."; return; }
+  const session=draftSession(), controller=sourceController=new AbortController();
+  preparing.value=true;
+  try {
+    commitRecipients();
+    await pendingDefault;
+    await saveQueue;
+    const source=form.trashSource
+      ? await http.get("/v1/messages/"+id,{signal:controller.signal,headers:{Authorization:session.token}})
+      : await emailStore.ensureDetail({emailId:id});
+    session.check();
+    if (controller.signal.aborted || !mounted) return;
+    if (!source || Number(source.accountId)!==Number(form.accountId) || Number(source.emailId)!==Number(id))
+      throw new Error("The original message is no longer available.");
+    const mode=command==="forward" ? "forward" : "reply";
+    if (mode!==form.sendType) {
+      const quote=await quotedMessage(source,mode,controller.signal,session.token);
+      session.check();
+      if (controller.signal.aborted || !mounted) return;
+      const html=changeQuotedBody(editor.value?.getContent() ?? form.content, quote.content,form.plainText);
+      const files=form.attachments.filter(file=>!file.fromResponse);
+      form.attachments=[...files,...quote.attachments.map(file=>({...file,fromResponse:true}))];
+      form.content=defValue.value=html;
+      form.text=plainMarkup(form.content).text;
+      form.subject=responseSubject(source.subject,mode);
+      form.emailId=mode==="reply" ? source.emailId : 0;
+    }
+    loadedSource.value=source;
+    form.responseSourceId=id;
+    form.sendType=mode;
+    form.replyAll=command==="all";
+    Object.assign(form,mode==="reply" ? replyRecipients(source,accountStore.ownAddresses,form.replyAll) : {receiveEmail:[],cc:[],bcc:[]});
+    form.bcc=[];
+    showCc.value=!!form.cc.length;showBcc.value=false;
+    quoteExpanded.value=false;
+    editingRecipients.value=mode==="forward";
+    validateAddresses.value=false;
+    sendError.value="";
+    await nextTick();
+    await persistDraft({requireCurrent:true,session});
+    syncCloudDrafts().catch(()=>{});
+  } catch (error) { if(!controller.signal.aborted) sendError.value=error.message || "Could not change the response."; }
+  finally { preparing.value=false; }
+  await nextTick();
+  if (mounted && show.value) {
+    if (editingRecipients.value) toField.value?.focus();
+    else editor.value?.focus();
+  }
 }
 function openReply(email) {
   return prepareMessage(email, "reply");
@@ -1144,7 +1233,7 @@ function persistDraft(options) {
   operation.then(() => { pendingWrites--; saveFailed=false; }, () => { pendingWrites--; saveFailed=true; });
   saveQueue=operation;return operation;
 }
-async function persistDraftNow({autosave=false, ...options} = {}) {
+async function persistDraftNow({autosave=false, responseView, ...options} = {}) {
   const draft = snapshot();
   if (autosave && props.separateWindow && !hasDraftContent(draft)) {
     if (!draft.draftId) return;
@@ -1157,7 +1246,8 @@ async function persistDraftNow({autosave=false, ...options} = {}) {
     return;
   }
   const { attachments, draftId, ...data } = draft;
-  if (props.inline && form.sendType === "reply") data.inlineReply = true;
+  if (responseView) data.responseView=responseView;
+  if (props.inline && !form.detachedReply) data.inlineReply = true;
   data.createTime =
     draft.createTime || dayjs().utc().format("YYYY-MM-DD HH:mm:ss");
   const choice=starChoice.value;
@@ -1910,10 +2000,10 @@ defineExpose({
 .inline-reply-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 16px 0 20px;
+  gap: 4px;
+  min-height: 44px;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 .inline-recipients {
   display: flex;
@@ -1933,7 +2023,8 @@ defineExpose({
 .inline-recipients svg {
   flex-shrink: 0;
 }
-.inline-close {
+.pop-reply {
+  margin-inline-start:auto;
   flex-shrink: 0;
 }
 .inline .compose-container {

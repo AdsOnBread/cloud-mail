@@ -1,3 +1,4 @@
+import {responseFileSignatures,restoreResponseFiles} from "@/components/message-composer/response";
 import {watch} from 'vue';
 import {draftSearchBytes,referencedAttachments} from "../components/message-composer/files";
 import { draftEditBase, draftFilingFingerprint, draftRecipientNames } from '@/utils/recipients';
@@ -75,6 +76,7 @@ async function downloadDraft(remote, api) {
     const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(response);});
     attachments.push({...f,content,contentType:f.mimeType});
   }
+  await restoreResponseFiles(attachments,remote.ui?.responseFiles);
   let content=remote.content||'';
   for(const f of attachments.filter(f=>f.contentId))content=content.replaceAll(`cid:${f.contentId.replace(/^<|>$/g,'')}`,f.content);
   return {...remote, ...(remote.ui || {}), content, attachments, draftId:undefined,
@@ -141,7 +143,11 @@ async function push(database,row,api) {
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
     const attachments=referencedAttachments(value).map(({attachmentId,...f})=>f);
-    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,...(value.trashSource ? {trashSource:value.trashSource} : {}),inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
+    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,
+      ...(value.responseSourceId ? {responseSourceId:value.responseSourceId,replyAll:Boolean(value.replyAll)} : {}),
+      ...(value.responseView ? {responseView:value.responseView} : {}),
+      ...(attachments.some(file=>file.fromResponse) ? {responseFiles:await responseFileSignatures(attachments)} : {}),
+      ...(value.trashSource ? {trashSource:value.trashSource} : {}),inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};
     await database.transaction('rw', database.draft, database.att, async () => {

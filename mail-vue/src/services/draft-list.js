@@ -5,7 +5,7 @@ import { userDraftStore } from "@/store/draft";
 import { useEmailStore } from "@/store/email";
 import { useUiStore } from "@/store/ui";
 import http from "@/axios";
-import { draftKey, draftSummary, newestDraft } from "@/utils/draft-summary";
+import { draftKey, responseAnchor, draftSummary, newestDraft } from "@/utils/draft-summary";
 
 export function startDraftList() {
   const store = userDraftStore(),
@@ -149,13 +149,13 @@ export async function openSavedDraft(draftId, router, folder, labelId, category,
   if (canOpen && !canOpen()) return;
   if (
     draftKey(draft) &&
-    draft.sendType === "reply" && !draft.trashSource &&
-    draft.emailId &&
+    !draft.responseView && !draft.trashSource && responseAnchor(draft) &&
+    (draft.sendType === "reply" || draft.inlineReply) &&
     (draft.inlineReply || folder !== "draft")
   ) {
     await router.push({
       path: "/mail",
-      query: { emailId: draft.emailId, draft: draftKey(draft), folder, labelId, ...(router.currentRoute?.value.query.window==="1" ? {window:"1"} : {}), ...(folder==="inbox" && category?{category}:{}) },
+      query: { emailId: responseAnchor(draft), draft: draftKey(draft), folder, labelId, ...(router.currentRoute?.value.query.window==="1" ? {window:"1"} : {}), ...(folder==="inbox" && category?{category}:{}) },
     });
   } else await useUiStore().writerRef.openDraft(draft);
 }

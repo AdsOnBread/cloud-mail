@@ -73,6 +73,7 @@
         :expanded="expanded.has(message.emailId)"
         @toggle="toggle(message)"
         @reply="reply(message, $event)"
+        @forward="reply(message,false,null,true)"
         @changed="updateMessage(message,$event)"
         @deleted="deleted(message)"
         @print="printMail"
@@ -80,6 +81,7 @@
         <MessageComposer
           v-if="activeTarget === message.emailId"
           ref="composer"
+          :response-message="message"
           inline
           @sent="sent"
           @closed="inlineClosed(message.emailId)"
@@ -91,7 +93,7 @@
         <el-button v-for="all in replyChoices" :key="String(all)" v-perm="'email:send'" round @click="reply(messages.at(-1),all)">
           <Icon :icon="all ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20"/>{{all ? 'Reply all' : 'Reply'}}
         </el-button>
-        <el-button v-perm="'email:send'" round @click="ui.writerRef.openForward(messages.at(-1))"><Icon icon="material-symbols:forward" width="20"/>Forward</el-button>
+        <el-button v-perm="'email:send'" round @click="reply(messages.at(-1),false,null,true)"><Icon icon="material-symbols:forward" width="20"/>Forward</el-button>
       </div>
     </div>
   </section>
@@ -126,7 +128,7 @@ import {
 import { useEmailStore } from "@/store/email";
 import { useAccountStore } from "@/store/account";
 import { userDraftStore } from "@/store/draft";
-import { draftKey } from "@/utils/draft-summary";
+import { draftKey, responseAnchor } from "@/utils/draft-summary";
 import SavedReplies from './saved-replies.vue';
 import MovePicker from "@/components/mail-labels/move.vue";
 import LabelPicker from "@/components/mail-labels/picker.vue";
@@ -436,13 +438,14 @@ async function editSavedDraft(summary) {
     if (!current() || run!==draftRun) return;
     const draft=await readSavedDraft(summary.draftId);
     if (!current() || run!==draftRun) return;
-    if (Number(draft.emailId)!==Number(summary.emailId) ||
+    if (responseAnchor(draft)!==Number(summary.emailId) ||
         (summary.accountId && Number(summary.accountId)!==Number(draft.accountId)) ||
         (summary.cloudDraftId && String(summary.cloudDraftId)!==String(draft.cloudDraftId)) ||
         (summary.clientId && draft.clientId!==summary.clientId) ||
         (draft.ownerEmail && draft.ownerEmail!==user.user.email))
       throw new Error('This draft is no longer available.');
-    await reply({emailId:summary.emailId},false,draft);
+    if (draft.responseView) await ui.writerRef.openDraft(draft);
+    else await reply({emailId:summary.emailId},false,draft);
   } catch (e) {
     if (current() && run===draftRun) draftFailure.value={summary,current,message:e.message || "Could not open draft."};
   }
@@ -456,7 +459,7 @@ function retryDraft() {
       (!failure.summary.cloudDraftId || item.cloudDraftId===failure.summary.cloudDraftId) &&
       (!failure.summary.clientId || item.clientId===failure.summary.clientId)) editSavedDraft(item);
 }
-async function reply(message, all, draft) {
+async function reply(message, all, draft, forward=false) {
   if (switching) return;
   if (!draft) { draftRun++;draftFailure.value=null; }
   const request = viewEpoch, current=readerCurrent();
@@ -479,7 +482,7 @@ async function reply(message, all, draft) {
       try { await editor.openDraft(draft); }
       catch (e) { if (current()) closed(); throw e; }
     }
-    else await editor[all ? "openReplyAll" : "openReply"](message);
+    else await editor[forward ? "openForward" : all ? "openReplyAll" : "openReply"](message);
     await nextTick();
     if (!current()) return;
     activeDraft.value=draft?.draftId ?? null;

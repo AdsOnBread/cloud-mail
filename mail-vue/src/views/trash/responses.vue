@@ -5,6 +5,7 @@
       :is="editorType"
       v-if="editing"
       ref="composer"
+      :response-message="message"
       inline
       @closed="closed"
       @sent="closed"
@@ -139,6 +140,7 @@ async function open(command, summary) {
     editing.value = true;
     await nextTick();
     if (!current() || !composer.value) return;
+    if (draft?.responseView) { closed(); await ui.writerRef.openDraft(draft); return; }
     if (draft) await composer.value.openDraft(draft);
     else if (!(await composer.value[command](props.message))) {
       if (current()) closed();

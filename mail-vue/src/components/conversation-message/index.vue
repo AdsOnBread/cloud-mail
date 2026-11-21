@@ -39,7 +39,7 @@
           <template #dropdown><el-dropdown-menu>
             <el-dropdown-item v-perm="'email:send'" @click="$emit('reply',false)"><Icon icon="material-symbols:reply"/>Reply</el-dropdown-item>
             <el-dropdown-item v-if="hasReplyAll(email,account.ownAddresses)" v-perm="'email:send'" @click="$emit('reply',true)"><Icon icon="material-symbols:reply-all"/>Reply all</el-dropdown-item>
-            <el-dropdown-item v-perm="'email:send'" @click="ui.writerRef.openForward(message)"><Icon icon="material-symbols:forward"/>Forward</el-dropdown-item>
+            <el-dropdown-item v-perm="'email:send'" @click="$emit('forward')"><Icon icon="material-symbols:forward"/>Forward</el-dropdown-item>
             <el-dropdown-item divided v-perm="'email:delete'" @click="remove"><Icon icon="material-symbols:delete-outline"/>Delete</el-dropdown-item>
             <el-dropdown-item @click="read"><Icon :icon="message.unread===0?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'"/>{{ message.unread===0 ? 'Mark as read' : 'Mark as unread' }}</el-dropdown-item>
             <el-dropdown-item divided @click="$emit('print',message)"><Icon icon="material-symbols:print-outline"/>Print</el-dropdown-item>
@@ -102,7 +102,7 @@ const props = defineProps({
   beforeDelete: Function,
   replying: Boolean,
 });
-const emit = defineEmits(["toggle", "reply", "deleted", "changed", "print"]);
+const emit = defineEmits(["forward","toggle", "reply", "deleted", "changed", "print"]);
 const account=useAccountStore(),store = useEmailStore(),
   ui = useUiStore();
 const detail = ref(null),

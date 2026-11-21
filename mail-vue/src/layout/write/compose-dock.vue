@@ -202,6 +202,7 @@ async function launch(method, arg, extra) {
         (item.draftId === arg.draftId || item.requestedId === arg.draftId),
     );
     if (existing) {
+      if (extra?.handoff) throw new Error("This draft is already open in the compose dock.");
       await switchTo(existing.key);
       return;
     }
@@ -233,6 +234,7 @@ async function launch(method, arg, extra) {
     )
       return;
     await editor[method](arg, extra);
+    return Boolean(editor.visible);
   } finally {
     item.requestedId = null;
     if (!editor.visible && windows.value.includes(item)) remove(item);
@@ -324,7 +326,7 @@ defineExpose({
   openReply: (email) => launch("openReply", email),
   openReplyAll: (email) => launch("openReplyAll", email),
   openForward: (email) => launch("openForward", email),
-  openDraft: (draft) => launch("openDraft", draft),
+  openDraft: (draft, options) => launch("openDraft", draft, options),
   focusDraft,
   followDelivery,
   discardEditor,

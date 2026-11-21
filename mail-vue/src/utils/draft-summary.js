@@ -25,13 +25,19 @@ export function draftKey(draft) {
   return null;
 }
 
+export function responseAnchor(draft) {
+  if (draft.detachedReply) return 0;
+  if (draft.sendType === "forward" && draft.inlineReply) return Number(draft.responseSourceId) || 0;
+  return Number(draft.emailId) || 0;
+}
+
 export function draftSummary(draft) {
   const {body,snippet}=draftText(draft);
   return {
     draftId: draft.draftId,
     cloudDraftId: draft.cloudDraftId,
     clientId: draft.clientId,
-    emailId: Number(draft.emailId),
+    emailId: responseAnchor(draft),
     trashSource: Number(draft.trashSource) || undefined,
     hasFiles: Boolean(draft.hasFiles),
     sizeBytes:draft.sizeBytes ?? storedMessageBytes(draft),
@@ -41,7 +47,7 @@ export function draftSummary(draft) {
     searchBody: body,
     labelIds: draft.labelIds || [],
     starred: Boolean(draft.mailboxStarred),
-    reply: draft.sendType === "reply",
+    reply: draft.sendType === "reply" || Boolean(draft.sendType === "forward" && responseAnchor(draft)),
     subject: draft.subject || "",
     preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : draft.deliveryError ? 'Send status: '+draft.deliveryError : snippet.slice(0,180),
     lastDate: tzDayjs(draft.updatedAt || draft.createTime).valueOf(),
