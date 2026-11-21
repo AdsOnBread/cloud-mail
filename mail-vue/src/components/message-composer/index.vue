@@ -62,7 +62,7 @@
             v-if="!inline"
             type="button"
             :aria-label="minimized ? 'Restore compose' : 'Minimize compose'"
-            :title="minimized ? 'Restore' : 'Minimize'"
+            :data-tip="minimized ? 'Restore' : 'Minimize'"
             @click="minimized = !minimized"
           >
             <Icon icon="material-symbols:remove" width="18" />
@@ -71,7 +71,7 @@
             v-if="!inline"
             type="button"
             :aria-label="expanded ? 'Exit full screen' : 'Expand compose'"
-            :title="expanded ? 'Exit full screen' : 'Full screen'"
+            :data-tip="expanded ? 'Exit full screen' : 'Full screen'"
             @click="
               expanded = !expanded;
               minimized = false;
@@ -177,7 +177,8 @@
         >
           <tinyEditor
             :def-value="defValue"
-            :show-toolbar="!inline || showFormatting"
+            mail-compose
+            :show-toolbar="showFormatting"
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
             ref="editor"
@@ -228,7 +229,6 @@
             >{{ sending ? "Sending…" : "Send" }}</el-button
           >
           <button
-            v-if="inline"
             type="button"
             class="compose-tool formatting-toggle"
             aria-label="Formatting options"
@@ -249,6 +249,16 @@
           >
             <Icon icon="material-symbols:attach-file" width="22" />
           </button>
+          <button type="button" class="compose-tool" data-compose-link data-tip="Insert link (⌘/Ctrl+K)" aria-label="Insert link" :disabled="sending" @mousedown.prevent @click="editor?.openLink()">
+            <Icon icon="material-symbols:link" width="20" />
+          </button>
+          <button type="button" class="compose-tool" data-tip="Insert emoji" aria-label="Insert emoji" :disabled="sending" @mousedown.prevent @click="editor?.openEmoji()">
+            <Icon icon="material-symbols:mood-outline" width="20" />
+          </button>
+          <button type="button" class="compose-tool" data-tip="Insert photo" aria-label="Insert photo" :disabled="sending || attaching" @mousedown.prevent @click="photoInput?.click()">
+            <Icon icon="material-symbols:image-outline" width="20" />
+          </button>
+          <input ref="photoInput" type="file" accept="image/*" hidden @change="insertPhoto" />
           <span class="draft-status">{{
             form.draftId ? ({saving:"Saving…",saved:"Saved",offline:"Saved on this device · Offline",conflict:"Both versions saved",uncertain:"Delivery uncertain"}[form.syncState] || "Saved to Drafts") : ""
           }}</span>
@@ -359,6 +369,20 @@ const emailStore = useEmailStore();
 const accountStore = useAccountStore();
 const userStore = useUserStore();
 const editor = ref();
+const photoInput = ref();
+async function insertPhoto(event) {
+  const input = event.target, file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  attaching.value = true;
+  try {
+    if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+    const data = await fileToBase64(file, true);
+    await editor.value?.ready();
+    editor.value?.insertPhoto(data, file.name);
+  } catch (e) { sendError.value = e.message || "Could not insert the photo."; }
+  finally { attaching.value = false; }
+}
 const toField = ref();
 const ccField = ref();
 const bccField = ref();
@@ -690,63 +714,8 @@ async function saveAndClose() {
   }
 }
 async function close() {
-  clearTimeout(cloudSaveTimer);
-  if (props.inline) return saveAndClose();
-  if (!show.value || sending.value || attaching.value || showContacts.value)
-    return;
-  try {
-    await editor.value?.ready?.();
-  } catch {
-    sendError.value =
-      "Could not finish loading the editor. Your draft is still open.";
-    return;
-  }
-  commitRecipients();
-  if (restoredUntouched && draftFingerprint(form) === baseline) {
-    show.value = false;
-    resetForm();
-    return;
-  }
-  if (!hasDraftContent(form)) {
-    try {
-      await removeSavedDraft();
-      show.value = false;
-      resetForm();
-    } catch {
-      ElMessage.error(
-        "Could not remove the empty saved draft. Please try again.",
-      );
-    }
-    return;
-  }
-  if (!form.draftId && baseline && draftFingerprint(form) === baseline) {
-    show.value = false;
-    resetForm();
-    return;
-  }
-  try {
-    if (!form.draftId) {
-      try {
-        await ElMessageBox.confirm("Save this message to Drafts?", {
-          confirmButtonText: "Save draft",
-          cancelButtonText: "Discard",
-          distinguishCancelAndClose: true,
-        });
-      } catch (action) {
-        if (action === "cancel") {
-          show.value = false;
-          resetForm();
-        }
-        return;
-      }
-    }
-    await persistDraft();
-    syncCloudDrafts().catch(()=>{});
-    show.value = false;
-    resetForm();
-  } catch {
-    ElMessage.error("Could not save your draft. Your message is still open.");
-  }
+  if (showContacts.value) return;
+  return saveAndClose();
 }
 async function discard() {
   try {
@@ -1004,7 +973,7 @@ defineExpose({
   position: fixed;
   bottom: 0;
   right: 48px;
-  width: 560px;
+  width: 520px;
   max-width: calc(100vw - 32px);
   z-index: 200;
   color: var(--el-text-color-primary);
@@ -1061,7 +1030,7 @@ defineExpose({
 .compose-container {
   display: flex;
   flex-direction: column;
-  height: min(620px, calc(100dvh - 120px));
+  height: min(500px, calc(100dvh - 100px));
   padding: 0 16px;
 }
 .compose-fields {
@@ -1155,13 +1124,13 @@ defineExpose({
 .compose-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 3px;
   min-height: 68px;
   flex-shrink: 0;
 }
 .compose-footer .el-button {
   height: 36px;
-  min-width: 96px;
+  min-width: 76px;
   font-weight: 600;
 }
 .compose-tool {
@@ -1314,11 +1283,11 @@ defineExpose({
 }
 .inline .compose-footer {
   min-height: 64px;
-  gap: 8px;
+  gap: 3px;
 }
 .inline .compose-footer .el-button {
   height: 40px;
-  min-width: 96px;
+  min-width: 76px;
   font-weight: 500;
 }
 .formatting-toggle {

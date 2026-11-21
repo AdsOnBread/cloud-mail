@@ -1,7 +1,7 @@
 <template>
   <div
     class="editor-box"
-    :class="{ 'editor-box-loading': showLoading, 'hide-toolbar': !showToolbar }"
+    :class="{ 'compose-rich-editor': mailCompose, 'editor-box-loading': showLoading, 'hide-toolbar': !showToolbar }"
   >
     <loading class="loading" v-if="showLoading" />
     <textarea
@@ -10,6 +10,7 @@
       :id="editorId"
       ref="editorRef"
     ></textarea>
+    <ComposeLink v-if="mailCompose" ref="linkPanel" :editor="editor" />
   </div>
 </template>
 
@@ -22,6 +23,7 @@ import {
   nextTick,
   shallowRef,
 } from "vue";
+import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
 import { useUiStore } from "@/store/ui.js";
 
@@ -30,6 +32,10 @@ defineExpose({
   focus,
   getContent,
   ready,
+  openLink,
+  openEmoji,
+  insertPhoto,
+  command,
 });
 
 const props = defineProps({
@@ -38,6 +44,7 @@ const props = defineProps({
     default: "",
   },
   showToolbar: { type: Boolean, default: true },
+  mailCompose: Boolean,
   collapseQuote: Boolean,
   showQuote: Boolean,
   editorId: {
@@ -58,6 +65,23 @@ async function ready() {
   } while (current !== pendingInit);
 }
 const editor = shallowRef(null);
+const linkPanel = ref();
+function openLink() { linkPanel.value?.open(); }
+function openEmoji() { command("mceEmoticons"); }
+function command(name) {
+  if (!isInitialized.value) return;
+  editor.value.focus();
+  editor.value.execCommand(name);
+}
+function insertPhoto(data, name) {
+  if (!isInitialized.value) return;
+  const ed = editor.value;
+  ed.focus();
+  const image = ed.getDoc().createElement("img");
+  image.src = data; image.alt = name; image.style.maxWidth = "100%";
+  ed.insertContent(image.outerHTML);
+  ed.dispatch("change");
+}
 const isInitialized = ref(false);
 const editorRef = ref(null);
 const showLoading = ref(false);
@@ -113,6 +137,7 @@ watch(
 );
 
 function clearEditor() {
+  linkPanel.value?.close();
   if (isInitialized.value && editor.value) {
     editor.value.setContent("");
   }
@@ -150,10 +175,15 @@ function initEditor(initialContent) {
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
-    toolbar:
+    toolbar: props.mailCompose ?
+      "undo redo | fontfamily fontsize | bold italic underline | forecolor backcolor | align bullist numlist outdent indent blockquote strikethrough removeformat" :
       "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
     toolbar_location: "bottom",
-    toolbar_mode: "sliding",
+    toolbar_mode: props.mailCompose ? "floating" : "sliding",
+    ...(props.mailCompose ? {
+      font_family_formats: "Sans Serif=arial,helvetica,sans-serif;Serif=georgia,serif;Fixed Width=monospace;Wide=verdana,sans-serif;Narrow=arial narrow,sans-serif;Comic Sans MS=comic sans ms,sans-serif;Garamond=garamond,serif;Tahoma=tahoma,sans-serif;Trebuchet MS=trebuchet ms,sans-serif",
+      relative_urls: false, remove_script_host:false
+    } : {}),
     font_size_formats: "8px 10px 12px 14px 16px 18px 24px 36px",
     emoticons_search: false,
     language: "en",
@@ -163,6 +193,20 @@ function initEditor(initialContent) {
     noneditable_class: "mceNonEditable",
     setup: (ed) => {
       editor.value = ed;
+      if (props.mailCompose) {
+        ed.on("keydown", event => {
+          if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+            event.preventDefault(); event.stopImmediatePropagation(); openLink();
+          }
+        }, true);
+        ed.on("click", event => {
+          const link = ed.dom.getParent(event.target, "a[href]");
+          if (link && !event.altKey && !event.metaKey && !event.ctrlKey) {
+            event.preventDefault();
+            linkPanel.value?.open(link, true);
+          }
+        });
+      }
       ed.on("init", () => {
         ed.setContent(initialContent ?? props.defValue);
         if (props.collapseQuote)
@@ -230,6 +274,7 @@ function getContent() {
 }
 
 function destroyEditor() {
+  linkPanel.value?.close();
   isInitialized.value = false;
   if (editor.value) {
     editor.value.remove();
@@ -243,6 +288,7 @@ function destroyEditor() {
   display: none;
 }
 .editor-box {
+  position: relative;
   height: 100%;
   width: 100%;
 }
@@ -290,6 +336,11 @@ function destroyEditor() {
 :deep(.tox .tox-edit-area::before) {
   display: none;
 }
+.compose-rich-editor :deep(.tox .tox-editor-header) { align-self:flex-start; max-width:100%; padding:2px 4px; border-radius:6px; background:var(--mail-surface); border:1px solid var(--light-border-color); box-shadow:0 1px 3px #3c404326; }
+.compose-rich-editor :deep(.tox .tox-toolbar__group) { padding:0 3px !important; border-right:1px solid var(--light-border-color); }
+.compose-rich-editor :deep(.tox .tox-tbtn) { height:26px; min-width:26px; width:26px; border-radius:4px; }
+.compose-rich-editor :deep(.tox .tox-tbtn svg) { width:18px; height:18px; }
+.compose-rich-editor :deep(.tox .tox-tbtn--select) { width:auto; }
 </style>
 
 <style scoped>
