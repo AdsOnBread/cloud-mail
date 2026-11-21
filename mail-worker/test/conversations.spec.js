@@ -584,3 +584,12 @@ it('records received MIME bytes including headers across split UTF-8 chunks',asy
  const saved=await env.db.prepare("SELECT raw_size,text FROM email WHERE subject='Counts original bytes'").first();
  expect(saved.raw_size).toBe(raw.byteLength);expect(saved.text).toContain('Café ☁');
 });
+
+it('hands MIME bytes to the parser with their declared character set',async()=>{
+ const {email:receive}=await import('../src/email/email');
+ const headers='From: Sender <pat@example.net>\r\nTo: admin@example.com\r\nSubject: Latin mail\r\nContent-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCaf';
+ const raw=new Uint8Array([...new TextEncoder().encode(headers),0xe9]);
+ await receive({to:'admin@example.com',from:'pat@example.net',raw:new Blob([raw]).stream(),setReject(reason){throw new Error(reason)}},{...env,admin:'admin@example.com'},{});
+ const saved=await env.db.prepare("SELECT raw_size,text FROM email WHERE subject='Latin mail'").first();
+ expect(saved.raw_size).toBe(raw.byteLength);expect(saved.text).toContain('Café');
+});

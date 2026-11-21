@@ -222,7 +222,7 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
 </script>
 
 <style scoped>
-.options-form {position:fixed;z-index:2400;box-sizing:border-box;display:flex;flex-direction:column;width:722px;max-width:calc(100vw - 16px);
+.options-form {position:fixed;z-index:2400;box-sizing:border-box;container-type:inline-size;display:flex;flex-direction:column;width:722px;max-width:calc(100vw - 16px);
   padding:24px;border:1px solid var(--light-border-color);background:var(--mail-surface);color:var(--el-text-color-primary);
   box-shadow:0 2px 6px #0003;font:14px/20px Arial,sans-serif;}
 .criteria {display:grid;gap:20px;overflow-y:auto;overscroll-behavior:contain;min-height:0;}
@@ -244,4 +244,12 @@ onBeforeUnmount(()=>{listen(false);opener.value=null});
 .option-actions button {cursor:pointer;height:36px;border-radius:18px;padding:0 18px;color:var(--el-color-primary);font-weight:500;}
 .option-actions button[type=submit] {background:var(--el-color-primary);color:var(--mail-surface);}
 @media(max-width:620px) {.options-form{padding:16px;}.criterion{grid-template-columns:minmax(60px,22%) minmax(0,1fr);gap:10px;}.date-fields,.size-fields{gap:8px;}}
+@container (max-width:300px) {
+  .criterion {grid-template-columns:minmax(0,1fr);gap:4px;}
+  .size-fields {grid-template-columns:minmax(0,1fr) minmax(52px,.65fr);gap:8px;}
+  .size-fields select:first-child {grid-column:1/-1;}
+  .date-fields {grid-template-columns:minmax(0,1fr);}
+  .date-error {padding-left:0;}
+  .option-actions {flex-wrap:wrap;gap:4px;}
+}
 </style>

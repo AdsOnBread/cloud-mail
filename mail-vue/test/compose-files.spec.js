@@ -32,9 +32,13 @@ it('measures local draft size using UTF-8 and one decoded file for repeated inli
  const f={subject:'☁',text:'é',content:'<img src="'+photo+'"><img src="'+photo+'">'};
  const canonical={...f,content:f.content.replaceAll(photo,'cid:'+cid)};
  const expected=storedMessageBytes(canonical,7);
- const attachment={filename:'note',content:'YWJjZA=='};
+ const attachment={filename:'note',size:0,content:'YWJjZA=='};
  expect(draftSearchBytes(f,[attachment])).toBe(expected);
  expect(draftSearchBytes(f,[attachment,{contentId:cid,content:photo}])).toBe(expected);
+ const markup='<b class="">A</b><table><tr><td>A</td></tr></table>';
+ const rich={...f,content:markup+f.content};
+ const stored={...canonical,content:'<b>A</b><table><tr><td>A</td></tr></table>'+canonical.content};
+ expect(draftSearchBytes(rich,[attachment])).toBe(storedMessageBytes(stored,7));
  expect(matchesSize(1048576,sizeCriterion({sizeValue:'1',sizeUnit:'MB'}))).toBe(false);
  expect(matchesSize(0,sizeCriterion({sizeValue:'0',sizeOperator:'smaller'}))).toBe(false);
  expect(sizeCriterion({sizeValue:'1.2'})).toBeNull();

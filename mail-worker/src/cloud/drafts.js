@@ -1,3 +1,4 @@
+import {extractDraftImages} from '../../../shared/draft-inline-images';
 import { parseHTML } from 'linkedom';
 import BizError from '../error/biz-error';
 import { mailbox,positive,pageSize,conflict } from './auth';
@@ -109,21 +110,12 @@ export async function save(c,userId,input,id) {
     if(exists) return get(c,userId,exists.draft_id,true);
   }
   let attachmentInput=input.attachments;
-  const {document}=parseHTML('<html><body>'+data.content+'</body></html>');
-  let extracted=false;
-  for(const image of document.querySelectorAll('img')) {
-    const source=image.getAttribute('src')||'';
-    if(source.startsWith('data:image/')) {
-      const match=/^data:(image\/(?:png|jpeg|gif|webp|heic|avif));base64,([\s\S]+)$/.exec(source);
-      if(!match)throw new BizError('Unsupported inline image data.',400);
-      if(!attachmentInput)attachmentInput=old?old.attachments:[];
-      attachmentInput=[...attachmentInput];
-      const existingInline=attachmentInput.find(f=>f.contentId&&typeof f.content==='string'&&f.content.replace(/^data:[^,]*;base64,/, '')===match[2]);
-      const contentId=existingInline?.contentId||crypto.randomUUID();if(!existingInline)attachmentInput.push({filename:`inline-${contentId}.${match[1].split('/')[1]}`,content:match[2],contentType:match[1],contentId});
-      image.setAttribute('src','cid:'+contentId);extracted=true;
-    }
+  const extracted=extractDraftImages(data.content,attachmentInput || old?.attachments || [],parseHTML,
+    ()=>crypto.randomUUID(),()=>new BizError('Unsupported inline image data.',400));
+  if (extracted) {
+    data.content=extracted.content;
+    attachmentInput=extracted.attachments;
   }
-  if(extracted)data.content=document.body.innerHTML;
   const prepared=attachmentInput===undefined?null:await prepareFiles(c,userId,id,attachmentInput);
   const mutation=crypto.randomUUID();
   const existingFiles=old?(await c.env.db.prepare('SELECT * FROM draft_files WHERE draft_id=? AND user_id=?').bind(id,userId).all()).results:[];

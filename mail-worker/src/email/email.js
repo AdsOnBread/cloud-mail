@@ -43,19 +43,9 @@ export async function email(message, env, ctx) {
 			return;
 		}
 
-		const reader = message.raw.getReader();
-		const decoder = new TextDecoder();
-		let rawSize = 0, content = '';
-
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			rawSize += value.byteLength;
-			content += decoder.decode(value, {stream:true});
-		}
-
-		const email = await PostalMime.parse(content + decoder.decode());
-
+		const raw = await new Response(message.raw).arrayBuffer();
+		const rawSize = raw.byteLength;
+		const email = await PostalMime.parse(raw);
 
 		const blockFlag = checkBlock(blackSubject, blackContent, blackFrom, email);
 

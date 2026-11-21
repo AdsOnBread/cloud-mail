@@ -151,7 +151,7 @@ const api=createHTTPServer(async(req,res)=>{
    }else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path==='/v1/drafts'&&req.method==='POST'){
    const input=JSON.parse(body);let draft=[...cloudDrafts.values()].find(d=>d.clientId===input.clientId);
-   if(!draft){draft={...input,draftId:nextDraft++,version:1,state:'draft',createTime:new Date().toISOString(),attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:Buffer.from(f.content.replace(/^data:[^,]*;base64,/,''),'base64').length}))};cloudDrafts.set(draft.draftId,draft);recordDraft(draft);}
+   if(!draft){draft={...input,draftId:nextDraft++,version:1,state:'draft',createTime:new Date().toISOString(),attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:fileContentBytes(f)}))};cloudDrafts.set(draft.draftId,draft);recordDraft(draft);}
    data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/drafts/')){
    const id=Number(path.split('/')[3]),draft=cloudDrafts.get(id),input=body?JSON.parse(body):{};
@@ -161,7 +161,7 @@ const api=createHTTPServer(async(req,res)=>{
      draft.state='scheduled';draft.scheduledAt=input.sendAt;draft.version++;recordDraft(draft);data={draftId:id,version:draft.version,sendAt:input.sendAt};
    }else if(path.endsWith('/send')){data=sendAttempts.get(input.idempotencyKey);if(!data){data={state:'sent',attemptId:input.idempotencyKey,messages:previewSend(draft)};sendAttempts.set(input.idempotencyKey,data);draft.state='sent';draft.version++;recordDraft(draft);}}
    else if(req.method==='DELETE'){draft.state='deleted';draft.version++;recordDraft(draft);data={deleted:true};}
-   else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:0}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
+   else if(req.method==='PUT'){if(input.version!==draft.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Draft changed.',current:draft}));return;}Object.assign(draft,input,{version:draft.version+1,attachments:(input.attachments||[]).map(f=>({...f,attachmentId:crypto.randomUUID(),mimeType:f.contentType||f.mimeType,size:fileContentBytes(f)}))});recordDraft(draft);data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};}
    else data={...draft,attachments:draft.attachments.map(({content,...f})=>f)};
  }else if(path.startsWith('/v1/send-attempts/'))data=sendAttempts.get(path.split('/').at(-1))||{state:'not_started'};
  else if(path==='/v1/search/people'){

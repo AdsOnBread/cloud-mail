@@ -1,3 +1,5 @@
+import {parseHTML} from 'linkedom/worker';
+import {extractDraftImages} from '../../../../shared/draft-inline-images';
 import {base64Bytes,fileContentBytes,storedMessageBytes} from "../../../../shared/mail-search-size";
 import { MAX_MESSAGE_BYTES, messageSize } from "../../../../shared/message-size";
 
@@ -81,25 +83,9 @@ export function planFiles(files, mode, form, content) {
 
 // Cloud drafts store inline images as CID references and separate binary files.
 export function draftSearchBytes(draft,files=draft.attachments || []) {
-  let fileBytes=files.reduce((sum,file)=>sum+fileContentBytes(file),0);
-  if (!draft.content?.includes('data:image/')) return storedMessageBytes(draft,fileBytes);
-  const template=document.createElement('template');
-  template.innerHTML=draft.content;
-  const sources=new Map();
-  for (const file of files) {
-    if (file.contentId) for (const src of inlineImageSources(file)) sources.set(src,file.contentId);
-  }
-  for (const image of template.content.querySelectorAll('img[src]')) {
-    const src=image.getAttribute('src');
-    if (!src.startsWith('data:image/')) continue;
-    if (!sources.has(src)) {
-      // The cloud assigns one UUID to each distinct embedded image.
-      sources.set(src,'0'.repeat(36));
-      fileBytes+=base64Bytes(src);
-    }
-    image.setAttribute('src','cid:'+sources.get(src));
-  }
-  return storedMessageBytes({...draft,content:template.innerHTML},fileBytes);
+  const extracted=extractDraftImages(draft.content,files,parseHTML,()=>'0'.repeat(36));
+  const fileBytes=(extracted?.attachments || files).reduce((sum,file)=>sum+fileContentBytes(file),0);
+  return storedMessageBytes(extracted ? {...draft,content:extracted.content} : draft,fileBytes);
 }
 
 export function inlineImageSources(file) {

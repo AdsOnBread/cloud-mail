@@ -18,10 +18,11 @@ export function storedMessageBytes({subject='',text='',content=''},fileBytes=0) 
 }
 
 export function fileContentBytes(file) {
-  if (Number.isSafeInteger(file.size) && file.size>=0) return file.size;
   const value=file.content;
-  if (typeof value!=='string') return value?.byteLength ?? value?.size ?? 0;
-  return base64Bytes(value);
+  if (typeof value==='string' && value.length) return base64Bytes(value);
+  if (value?.byteLength != null) return value.byteLength;
+  if (value?.size != null) return value.size;
+  return Number.isSafeInteger(file.size) && file.size>=0 ? file.size : 0;
 }
 
 export function base64Bytes(value) {
