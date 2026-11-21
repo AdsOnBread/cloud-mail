@@ -99,7 +99,7 @@
         <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
       </button>
       <ScheduledLabelActions v-if="readTargets.length" ref="labelActions" :rows="readTargets" :disabled="busy"
-        :filing-disabled="labelsDisabled" @apply="applyLabels"/>
+        :filing-disabled="labelsDisabled" @apply="applyLabels" @snooze="chooseSnooze(readTargets,$event)"/>
       <div class="scheduled-pager">
       <span class="total">{{ range }}</span>
       <button
@@ -144,6 +144,7 @@
         :busy="busy"
         @star="mark(item, 'starred', !item.starred)"
         @importance="mark(item, 'important', $event)"
+        @unsnooze="fileInbox([item],true)"
         @cancel="cancel([item])"
         @error="error = $event"
       />
@@ -196,6 +197,9 @@
             @click="setRead([row],!row.unread)">
             <Icon :icon="readIcon(row.unread)" width="20" />
           </button>
+          <button class="mail-icon" aria-label="Snooze" data-tip="Snooze" aria-haspopup="menu"
+            :aria-expanded="Boolean(snoozePicker?.anchor && snoozeRow===row.draftId)" :disabled="busy"
+            @click="chooseSnooze([row],$event.currentTarget,row.draftId)"><Icon icon="material-symbols:schedule-outline" width="20"/></button>
           <button
             class="mail-icon"
             :aria-label="'Cancel send for ' + row.subject"
@@ -217,6 +221,7 @@
         }}
       </p>
     </div>
+    <MailSnoozePicker ref="snoozePicker" @choose="(wakeAt,batch)=>fileInbox(batch,true,wakeAt)"/>
   </section>
 </template>
 <script setup>
@@ -243,6 +248,7 @@ import { syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
+import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import ScheduledLabelActions from "./label-actions.vue";
@@ -260,8 +266,8 @@ function visibleLabels(row,reader=false) {
   return labelStore.items.filter(label=>(reader || label.messages!=="hide") && row.labelIds?.includes(label.id));
 }
 const originLabelId = computed(()=>route.query.from==="label" && /^\d+$/.test(route.query.labelId || "") ? Number(route.query.labelId) : 0);
-const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important","inbox"].includes(route.query.from) ? route.query.from : "");
-const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label",inbox:"Inbox"}[originFolder.value] || "Scheduled"));
+const originFolder = computed(() => originLabelId.value ? "label" : ["starred","important","inbox","snoozed"].includes(route.query.from) ? route.query.from : "");
+const backLabel = computed(() => "Back to " + ({starred:"Starred", important:"Important",label:"label",inbox:"Inbox",snoozed:"Snoozed"}[originFolder.value] || "Scheduled"));
 const scope = computed(() =>
   account.currentAccount.allReceive || originFolder.value === "starred" ? undefined : account.currentAccountId,
 );
@@ -282,6 +288,7 @@ const ordered = computed(() => {
   // Opening the last unread result keeps its reader and pager until the user leaves.
   let matches = search.filters.isUnread ? rows.value.filter(row=>row.unread || row.draftId===messageId.value) : rows.value;
   if (originLabelId.value) matches=matches.filter(row=>row.labelIds?.includes(originLabelId.value));
+  if (originFolder.value === "snoozed") matches=matches.filter(row=>row.wakeAt && !row.inbox);
   if (originFolder.value === "inbox") matches=matches.filter(row=>row.inbox);
   if (originFolder.value === "starred") matches = matches.filter(row => row.starred);
   if (originFolder.value === "important") matches = matches.filter(row => row.importanceReason);
@@ -514,18 +521,26 @@ function toggle(id) {
       ? selected.value.filter((key) => key !== id)
       : [...selected.value, id];
 }
-async function fileInbox(batch,inbox) {
+const snoozePicker=ref(),snoozeRow=ref(0);
+function chooseSnooze(batch,element,rowId=0) {
+  if (busy.value || !batch.length || batch.some(row=>!canCancel(row))) return;
+  snoozeRow.value=rowId;
+  snoozePicker.value?.show(element,batch.map(({draftId,version,state})=>({draftId,version,state})),batch.length===1 ? batch[0].wakeAt : 0);
+}
+watch([identity,()=>user.authenticatedToken,()=>route.fullPath,()=>selected.value.join(',')],()=>snoozePicker.value?.close(),{flush:'sync'});
+async function fileInbox(batch,inbox,wakeAt=0) {
   if (busy.value || !batch.length || batch.some(row=>!canCancel(row))) return;
   const owner=identity.value, session=localStorage.getItem('token'), navigation=navigations;
   const current=()=>!disposed && identity.value===owner && session===localStorage.getItem('token');
   busy.value=true;
   error.value='';
   try {
-    await fileScheduledMessages(batch,inbox);
+    await fileScheduledMessages(batch,inbox,wakeAt);
     if (!current()) return;
     const ids=new Set(batch.map(row=>row.draftId));
-    for (const row of rows.value) if (ids.has(row.draftId)) row.inbox=Number(inbox);
-    if (!inbox && originFolder.value==='inbox' && navigation===navigations && ids.has(messageId.value)) back();
+    for (const row of rows.value) if (ids.has(row.draftId)) {row.inbox=Number(inbox && !wakeAt);row.wakeAt=wakeAt;}
+    if (navigation===navigations && ids.has(messageId.value) &&
+      ((originFolder.value==='inbox' && (!inbox || wakeAt)) || (originFolder.value==='snoozed' && !wakeAt))) back();
   } catch(e) {
     if (current()) error.value=e.message || 'Could not change Inbox placement.';
   } finally {busy.value=false;}

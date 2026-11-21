@@ -112,7 +112,7 @@
           aria-label="Snooze conversations"
           :disabled="busy"
           aria-haspopup="menu"
-          :aria-expanded="Boolean(snoozeAnchor && !snoozeRow)"
+          :aria-expanded="Boolean(snoozePicker?.anchor && !snoozeRow)"
           @click="chooseSnooze(selected, $event)"
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
@@ -176,7 +176,7 @@
             <Icon icon="material-symbols:schedule-send-outline" width="18" />
             <span :class="{'queued-unread':message.unread}">{{ message.subject || '(no subject)' }}</span>
             <span v-if="folder==='inbox' && message.preview" class="queued-preview">– {{ message.preview }}</span>
-            <time :title="formatDetailDate(message.sendAt*1000)">{{ mailboxDate(message.sendAt*1000) }}</time>
+            <time :title="formatDetailDate((folder==='snoozed' ? message.wakeAt : message.sendAt)*1000)">{{ mailboxDate((folder==='snoozed' ? message.wakeAt : message.sendAt)*1000) }}</time>
           </RouterLink>
           <button v-if="folder==='inbox' && ['scheduled','schedule_failed'].includes(message.state)" type="button" class="queue-archive mail-icon"
             :aria-label="'Archive '+(message.subject || '(no subject)')" data-tip="Archive" :disabled="Boolean(filingQueue)"
@@ -268,7 +268,7 @@
               :disabled="busy"
               aria-haspopup="menu"
               :aria-expanded="
-                Boolean(snoozeAnchor) && snoozeRow === row.lastEmailId
+                Boolean(snoozePicker?.anchor) && snoozeRow === row.lastEmailId
               "
               @click="chooseSnooze([row.lastEmailId], $event, row.lastEmailId)"
             >
@@ -321,37 +321,7 @@
         }}
       </p>
     </div>
-    <el-dropdown
-      v-if="snoozeAnchor"
-      ref="snoozeMenu"
-      virtual-triggering
-      :virtual-ref="snoozeAnchor"
-      :trigger="[]"
-      placement="bottom-end"
-      :show-arrow="false"
-      popper-class="mail-action-menu snooze-menu"
-      @visible-change="!$event && (snoozeAnchor = null)"
-      @command="snoozeCommand"
-    >
-      <template #dropdown>
-        <el-dropdown-menu>
-          <div class="snooze-heading">Snooze until</div>
-          <el-dropdown-item
-            v-for="option in snoozeOptions"
-            :key="option.label"
-            :command="option.date"
-          >
-            <span>{{ option.label }}</span><small>{{ option.detail }}</small>
-          </el-dropdown-item>
-          <el-dropdown-item divided command="custom"
-            >Pick date &amp; time</el-dropdown-item
-          >
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
-    <el-dialog v-model="snoozeOpen" title="Pick date &amp; time" class="mail-dialog snooze-date-dialog" width="492px" append-to-body align-center destroy-on-close @opened="focusSnoozeCalendar" @closed="restoreSnoozeFocus">
-      <MailDateTime v-if="snoozeOpen" ref="snoozePicker" :initial="snoozeOptions[0].date" action="Save" @choose="applySnooze" @cancel="snoozeOpen=false"/>
-    </el-dialog>
+    <MailSnoozePicker ref="snoozePicker" @choose="(wakeAt,ids)=>mutate('snooze',{wakeAt},ids)"/>
   </section>
 </template>
 <script setup>
@@ -388,7 +358,7 @@ import {fileScheduledMessages} from "@/services/scheduled-filing";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
 import InboxTabs from "@/components/inbox-tabs.vue";
 import {inboxCategories,categoryFolders,categoryMessageKey} from "@/utils/inbox-categories";
-import MailDateTime from "@/components/mail-date-time/index.vue";
+import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
 const drafts = userDraftStore();
@@ -554,66 +524,10 @@ const replies = (row) =>
   drafts.replies[row.threadId] ||
   drafts.replies["anchor-" + row.lastEmailId] ||
   [];
-const snoozeOpen = ref(false),
-  snoozeIds = ref([]),
-  snoozePicker = ref(),
-  snoozeOptions = ref([]);
-const snoozeAnchor = ref(null),
-  snoozeMenu = ref(null),
-  snoozeRow = ref(0);
-let snoozeOpener;
-function focusSnoozeCalendar() {
-  if(document.activeElement?.matches('.snooze-date-dialog'))snoozePicker.value?.focus();
-}
-async function restoreSnoozeFocus() {
-  await new Promise(requestAnimationFrame);
-  if (snoozeOpen.value || !snoozeOpener?.isConnected) return;
-  const current=document.activeElement;
-  if(current!==document.body && current?.getClientRects().length && !current.closest('.snooze-date-dialog,.snooze-menu'))return;
-  const target=snoozeOpener.getClientRects().length ? snoozeOpener : snoozeOpener.closest('.conversation-row')?.querySelector('.conversation-open');
-  target?.focus();
-}
-async function chooseSnooze(ids, event, row = 0) {
-  if (snoozeAnchor.value === event.currentTarget) {
-    snoozeAnchor.value = null;
-    return;
-  }
-  snoozeOpener = event.currentTarget;
-  snoozeAnchor.value = event.currentTarget;
-  snoozeRow.value = row;
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(8, 0, 0, 0);
-  const nextWeek = new Date(tomorrow);
-  nextWeek.setDate(nextWeek.getDate() + ((8 - nextWeek.getDay()) % 7));
-  const option = (label, date) => ({
-    label,
-    date,
-    detail: date.toLocaleString(undefined, {
-      weekday: "short",
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  });
-  snoozeOptions.value = [option("Tomorrow", tomorrow)];
-  if (nextWeek > tomorrow)
-    snoozeOptions.value.push(option("Next week", nextWeek));
-  snoozeIds.value = [...ids];
-  await nextTick();
-  snoozeMenu.value?.handleOpen();
-}
-function snoozeCommand(value) {
-  if (value === "custom") snoozeOpen.value = true;
-  else applySnooze(value);
-}
-function applySnooze(date) {
-  if (!(date > new Date())) return;
-  snoozeOpen.value = false;
-  return mutate(
-    "snooze",
-    { wakeAt: Math.floor(date.getTime() / 1000) },
-    snoozeIds.value,
-  );
+const snoozePicker=ref(),snoozeRow=ref(0);
+function chooseSnooze(ids,event,row=0) {
+  snoozeRow.value=row;
+  snoozePicker.value?.show(event.currentTarget,ids);
 }
 async function load(
   target = { cursor: pageCursor.value, offset: offset.value },
@@ -624,7 +538,7 @@ async function load(
   loading.value = true;
   error.value = "";
   try {
-    const includeScheduled = !target.cursor && (["starred","important","label"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
+    const includeScheduled = !target.cursor && (["starred","important","label","snoozed"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
       && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
       searchPage(()=>conversationList({ ...params(), cursor: target.cursor }),()=>active && request===generation,()=>{preparingSearch.value=true;}),
@@ -688,8 +602,7 @@ watch(
   key,
   () => {
     generation++;
-    snoozeAnchor.value = null;
-    snoozeOpen.value = false;
+    snoozePicker.value?.close();
     history.value = [];
     pageCursor.value = null;
     offset.value = 0;
@@ -797,8 +710,7 @@ onActivated(() => {
 });
 onDeactivated(() => {
   active = false;
-  snoozeAnchor.value = null;
-  snoozeOpen.value = false;
+  snoozePicker.value?.close();
 });
 timer = setInterval(
   () => {

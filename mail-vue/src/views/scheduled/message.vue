@@ -6,6 +6,11 @@
         class="schedule-label" :style="labelStyle(label)" :title="label.name">{{ label.name }}</RouterLink>
       <MailImportance :reason="row.importanceReason" :disabled="busy || !canCancel" @toggle="$emit('importance',$event)" />
     </div>
+    <div v-if="row.wakeAt && !row.inbox" class="reminder">
+      <Icon icon="material-symbols:schedule-outline" width="18"/>
+      <span>Snoozed until {{ formatDetailDate(row.wakeAt*1000) }}</span>
+      <button type="button" :disabled="busy || !canCancel" @click="$emit('unsnooze')">Unsnooze</button>
+    </div>
     <div class="sender">
       <span class="avatar" aria-hidden="true">{{
         sender.charAt(0).toUpperCase()
@@ -83,7 +88,7 @@ const props = defineProps({
   canCancel: Boolean,
   busy: Boolean,
 });
-defineEmits(["cancel", "error", "star", "importance"]);
+defineEmits(["cancel", "unsnooze", "error", "star", "importance"]);
 const files = computed(
   () => props.detail?.attachments?.filter((f) => !f.contentId) || [],
 );
@@ -122,6 +127,9 @@ async function fileURL(id) {
 }
 </script>
 <style scoped>
+.reminder {display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;margin-bottom:12px;border-radius:8px;background:var(--mail-read);font-size:14px}
+.reminder button {margin-inline-start:auto;padding:4px 8px;cursor:pointer;color:var(--el-color-primary);font:inherit}
+
 .scheduled-message {
   padding: 16px 16px 32px;
   overflow-wrap: anywhere;

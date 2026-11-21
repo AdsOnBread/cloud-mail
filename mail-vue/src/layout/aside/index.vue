@@ -128,7 +128,7 @@ const mailSearch = useMailSearchStore();
 const activeFolder = computed(() => {
   if (route.name==='content') return mailSearch.folder;
   if (route.name==='scheduled' && route.query.message) {
-    const folders={inbox:'email',starred:'star',important:'important'};
+    const folders={inbox:'email',starred:'star',important:'important',snoozed:'snoozed'};
     if (Object.hasOwn(folders,route.query.from)) return folders[route.query.from];
     if (route.query.from==='label' && /^\d+$/.test(route.query.labelId || '')) return 'label';
   }

@@ -1,13 +1,14 @@
 <template>
   <el-popover :visible="open" placement="bottom-start" :width="210" :show-arrow="false" :persistent="false"
-    popper-class="mail-action-menu scheduled-more-menu" @after-enter="open && !picker?.open && item?.focus()">
+    popper-class="mail-action-menu scheduled-more-menu" @after-enter="open && !picker?.open && snoozeItem?.focus()">
     <template #reference>
       <button ref="trigger" type="button" class="mail-icon" aria-label="More email options" data-tip="More"
         aria-haspopup="menu" :aria-expanded="open" :disabled="disabled" @click="open=!open" @keydown.down.prevent="open=true">
         <Icon icon="material-symbols:more-vert" width="20"/>
       </button>
     </template>
-    <div ref="panel" role="menu" aria-label="More email options" @keydown.esc.stop.prevent="finish">
+    <div ref="panel" role="menu" aria-label="More email options" @keydown.esc.stop.prevent="finish" @keydown.down.stop.prevent="cycle" @keydown.up.stop.prevent="cycle">
+      <button ref="snoozeItem" type="button" role="menuitem" :aria-disabled="filingDisabled" @click="snooze">Snooze</button>
       <button ref="item" type="button" role="menuitem" aria-haspopup="menu" :aria-expanded="!!picker?.open"
         :aria-disabled="filingDisabled" @pointermove="$event.pointerType==='mouse' && show()"
         @keydown.right.stop.prevent="show" @click="show">
@@ -23,11 +24,16 @@ import {ref,watch,onBeforeUnmount} from 'vue';
 import {Icon} from '@iconify/vue';
 import LabelPicker from '@/components/mail-labels/picker.vue';
 const props=defineProps({rows:Array,disabled:Boolean,filingDisabled:Boolean});
-const emit=defineEmits(['apply']);
-const trigger=ref(),panel=ref(),item=ref(),picker=ref(),open=ref(false);
+const emit=defineEmits(['apply','snooze']);
+const trigger=ref(),panel=ref(),snoozeItem=ref(),item=ref(),picker=ref(),open=ref(false);
 function focus(){trigger.value?.focus();}
 function finish(){open.value=false;focus();}
 function show(){if(!props.filingDisabled) picker.value?.show();}
+function cycle(){(document.activeElement===item.value ? snoozeItem.value : item.value)?.focus();}
+function snooze(){
+  if(props.filingDisabled)return;
+  finish();emit('snooze',trigger.value);
+}
 function outside(event){
   const target=event.target;
   if (!trigger.value?.contains(target) && !panel.value?.contains(target) && !target.closest?.('.scheduled-label-flyout')) open.value=false;
