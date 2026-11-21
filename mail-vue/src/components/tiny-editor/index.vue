@@ -93,7 +93,12 @@ function insertEmoji(character) {
   if (!isInitialized.value) return false;
   const ed = editor.value;
   ed.focus();
-  ed.insertContent(ed.dom.encode(character));
+  ed.undoManager.transact(() => {
+    if (!ed.getDoc().execCommand("insertText", false, character))
+      ed.insertContent(ed.dom.encode(character));
+  });
+  ed.nodeChanged();
+  ed.dispatch("change");
   return true;
 }
 function command(name) {

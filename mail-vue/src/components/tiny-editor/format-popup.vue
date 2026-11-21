@@ -130,7 +130,8 @@ watch(
     resize.observe(panel.value);
     resize.observe(trigger.value);
     position();
-    emit("ready");
+    await nextTick();
+    if (live) emit("ready");
   },
 );
 </script>
