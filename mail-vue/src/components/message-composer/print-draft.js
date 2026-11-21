@@ -27,6 +27,10 @@ function copyBody(source, target, doc) {
         const value = node.style?.getPropertyValue(prop);
         if (value) element.style.setProperty(prop, value);
       }
+      if (tag === 'td' || tag === 'th') {
+        element.colSpan = node.colSpan;
+        element.rowSpan = node.rowSpan;
+      }
       if (tag === 'ol' && node.hasAttribute('start')) element.start = node.start;
       copyBody(node, element, doc);
     }

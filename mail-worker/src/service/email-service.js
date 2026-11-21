@@ -267,11 +267,12 @@ const emailService = {
 
 		const { r2Domain, send, domainList } = await settingService.query(c);
 
+		const plainText = params.plainText === true;
+		if (plainText && Array.isArray(attachments)) attachments = attachments.filter(file => !file?.contentId);
 		validateAttachmentCount(attachments);
 		if (typeof subject !== 'string' || !subject.trim() || subject.length > 998 || /[\r\n]/.test(subject)) {
 			throw new BizError('Enter a subject of 1 to 998 characters without line breaks.', 400);
 		}
-		const plainText = params.plainText === true;
 		const body = plainText ? text : content;
 		if (typeof body !== 'string' || !body.trim()) throw new BizError('Enter a message body.', 400);
 		if (text !== undefined && typeof text !== 'string') throw new BizError('Message text must be a string.', 400);

@@ -53,7 +53,7 @@
       <p v-if="row.error" role="alert">{{ row.error }}</p>
       <template v-if="detail">
         <ShadowHtml
-          v-if="detail.content"
+          v-if="detail.content && !detail.plainText"
           :key="detail.draftId"
           :html="detail.content"
           :file-key="inlineKey"

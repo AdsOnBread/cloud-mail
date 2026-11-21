@@ -35,6 +35,7 @@ defineExpose({
   clearEditor,
   focus,
   getContent,
+  toPlain: () => plainMarkup(editor.value.getBody().innerHTML),
   ready,
   openLink,
   setSignature,
@@ -121,9 +122,9 @@ watch(
     if (
       isInitialized.value &&
       editor.value &&
-      editor.value.getContent() !== newValue
+      getContent() !== newValue
     ) {
-      editor.value.setContent(newValue);
+      writeContent(editor.value, newValue);
     }
   },
 );
@@ -135,7 +136,7 @@ watch(
     await ready();
     if (disposed || revision !== themeRevision) return;
     const content = isInitialized.value
-      ? editor.value?.getContent()
+      ? getContent()
       : props.defValue;
     destroyEditor();
     await initEditor(content);
@@ -154,10 +155,14 @@ watch(
   },
 );
 
+function writeContent(ed, html) {
+  if (props.plainText) ed.getBody().innerHTML = plainMarkup(html).content;
+  else ed.setContent(html);
+}
 function clearEditor() {
   linkPanel.value?.close();
   if (isInitialized.value && editor.value) {
-    editor.value.setContent("");
+    writeContent(editor.value, "");
   }
 }
 
@@ -188,7 +193,7 @@ function initEditor(initialContent) {
     forced_root_block: "div",
     skin: `${uiStore.dark ? "oxide-dark" : "oxide"}`,
     content_css: `/tinymce/css/index.css,${uiStore.dark ? "dark" : "default"}`,
-    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:14px; } :root {
+    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:14px; ${props.plainText ? "white-space:pre-wrap" : ""} } :root {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
@@ -244,15 +249,15 @@ function initEditor(initialContent) {
       ed.on("init", () => {
         if (disposed) return;
         if (props.plainText) ed.getBody().setAttribute("contenteditable","plaintext-only");
-        ed.setContent(initialContent ?? props.defValue);
+        writeContent(ed, initialContent ?? props.defValue);
         if (props.collapseQuote)
           ed.dom.toggleClass(ed.getBody(), "show-reply-quote", props.showQuote);
         isInitialized.value = true;
-        emit("change", ed.getContent(), messageText());
+        emit("change", getContent(), messageText());
       });
       ed.on("input change undo redo", () => {
         if (disposed) return;
-        const content = ed.getContent();
+        const content = getContent();
         const text = messageText();
         emit("change", content, text);
       });
@@ -305,9 +310,8 @@ function focus(start = false) {
 }
 
 function getContent() {
-  return isInitialized.value
-    ? editor.value?.getContent() || ""
-    : props.defValue;
+  if (!isInitialized.value) return props.defValue;
+  return props.plainText ? plainMarkup(editor.value.getBody().innerHTML).content : editor.value.getContent();
 }
 
 function destroyEditor() {

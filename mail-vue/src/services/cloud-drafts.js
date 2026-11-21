@@ -25,7 +25,7 @@ function savedFingerprint(row) {
   return fingerprint({...row, content:template.innerHTML, attachments});
 }
 async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
-const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','hasFiles','attachments'])delete copy[key];return copy;};
+const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','conflictCopy','hasFiles','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
   const {attachments:ignored,...metadata}=row;
@@ -54,7 +54,7 @@ async function downloadDraft(remote, api) {
   let content=remote.content||'';
   for(const f of attachments.filter(f=>f.contentId))content=content.replaceAll(`cid:${f.contentId.replace(/^<|>$/g,'')}`,f.content);
   return {...remote, ...(remote.ui || {}), content, attachments, draftId:undefined,
-    cloudDraftId:remote.draftId, cloudVersion:remote.version, dirty:false,
+    cloudDraftId:remote.draftId, cloudVersion:remote.version, dirty:false, uploadIntent:undefined,
     syncState:remote.state === 'draft' ? 'saved' : remote.state};
 }
 async function cloudRow(database, remote, localId, api) {
@@ -79,7 +79,7 @@ export async function saveLocalDraft(input) {
       clientId:current?.clientId || input.clientId || crypto.randomUUID(),
       cloudVersion:sameEdit ? current.cloudVersion : input.cloudVersion ?? current?.cloudVersion,
       cloudDraftId:sameEdit ? current.cloudDraftId : input.cloudDraftId ?? current?.cloudDraftId,
-      conflictCopy:current?.conflictCopy, sendAttemptId:current?.sendAttemptId, sendFingerprint:current?.sendFingerprint,
+      uploadIntent:sameEdit ? current.uploadIntent : undefined, conflictCopy:current?.conflictCopy, sendAttemptId:current?.sendAttemptId, sendFingerprint:current?.sendFingerprint,
       syncState:navigator.onLine ? 'saving' : 'offline', localRevision:(current?.localRevision || 0) + 1,
     });
   });
@@ -91,23 +91,36 @@ export async function saveLocalDraft(input) {
 }
 async function push(database,row,api) {
   const value=await withFiles(database,row);
+  // Every edit attempted from this base revision shares a private nonce. It lets
+  // us identify our own earlier write even if the author has kept typing offline.
+  const uploadId = await database.transaction('rw', database.draft, async () => {
+    const current=await database.draft.get(row.draftId);
+    if (!current || current.editToken !== row.editToken) return;
+    const base=row.cloudVersion || 0;
+    if(current.uploadIntent?.base===base) return current.uploadIntent.id;
+    const intent={base,id:crypto.randomUUID()};
+    await database.draft.put({...current,uploadIntent:intent});
+    return intent.id;
+  });
+  if (!uploadId) return;
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
     const attachments=value.attachments.map(({attachmentId,...f})=>f);
-    const payload={...strip(value),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken}};
+    const payload={...strip(value),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};
     await database.transaction('rw', database.draft, database.att, async () => {
       const latest = await database.draft.get(row.draftId);
       if (!latest) return;
       const acknowledged = latest.editToken === row.editToken;
+      if (!acknowledged && latest.uploadIntent?.id !== uploadId) return;
       if (['deleted','sent'].includes(remote.state)) {
         if (!acknowledged) throw {code:409, current:remote};
         await database.draft.delete(row.draftId);
         await database.att.delete(row.draftId);
         return;
       }
-      await database.draft.put({...latest, cloudDraftId:remote.draftId, cloudVersion:remote.version,
+      await database.draft.put({...latest, uploadIntent:undefined, cloudDraftId:remote.draftId, cloudVersion:remote.version,
         updatedAt:acknowledged ? remote.updatedAt || latest.updatedAt : latest.updatedAt,
         dirty:!acknowledged, syncState:acknowledged ? (latest.conflictCopy ? 'conflict' : 'saved') : 'saving'});
     });
@@ -115,25 +128,30 @@ async function push(database,row,api) {
     const error=apiError(raw);
     if(error.code===409||(error.code===404&&row.cloudDraftId)) {
       const other = error.current?.state === 'draft' ? await downloadDraft(error.current, api) : null;
-      return database.transaction('rw', database.draft, database.att, async () => {
+      const result = await database.transaction('rw', database.draft, database.att, async () => {
         const current = await database.draft.get(row.draftId);
-        if (!current) return;
-        // Reloading after the server committed an update can lose its response. A retry
-        // then receives a conflict containing the exact revision this browser wrote.
-        if (other && row.editToken && other.editToken === row.editToken &&
-            other.cloudDraftId === row.cloudDraftId && other.cloudVersion === row.cloudVersion + 1 &&
-            (other.name || '') === (value.name || '') && savedFingerprint(other) === savedFingerprint(value)) {
-          const acknowledged = current.editToken === row.editToken;
-          await database.draft.put({...current, cloudVersion:other.cloudVersion, dirty:!acknowledged,
-            syncState:acknowledged ? (current.conflictCopy ? 'conflict' : 'saved') : 'saving'});
-          return;
+        if (!current || (current.editToken !== row.editToken && current.uploadIntent?.id !== uploadId)) return;
+        const sameDraft = row.cloudDraftId ? other?.cloudDraftId === row.cloudDraftId : other?.clientId === row.clientId;
+        const nextVersion = (row.cloudVersion || 0) + 1;
+        if (other && sameDraft && other.cloudVersion === nextVersion) {
+          const exact = row.editToken && other.editToken === row.editToken &&
+            (other.name || '') === (value.name || '') && savedFingerprint(other) === savedFingerprint(value);
+          const ownEarlierEdit = other.uploadId === uploadId && other.editToken !== row.editToken;
+          if (exact || ownEarlierEdit) {
+            const dirty = current.editToken !== other.editToken;
+            const recovered = {...current, uploadIntent:undefined, cloudDraftId:other.cloudDraftId, cloudVersion:nextVersion,
+              dirty, syncState:dirty ? 'saving' : current.conflictCopy ? 'conflict' : 'saved'};
+            await database.draft.put(recovered);
+            return dirty ? {retry:recovered} : {};
+          }
         }
         // Keep the open editor attached to its local copy, including any edits made during the upload.
-        const {cloudDraftId, cloudVersion, sendAttemptId, sendFingerprint, ...copy} = current;
+        const {cloudDraftId, cloudVersion, uploadIntent, sendAttemptId, sendFingerprint, ...copy} = current;
         await database.draft.put({...copy, clientId:crypto.randomUUID(), syncState:'conflict', conflictCopy:true, dirty:true});
         if (other) await writeDraft(database, other);
         return {forkId:row.draftId};
       });
+      return result?.retry ? push(database,result.retry,api) : result;
     }
     await database.transaction('rw', database.draft, async () => {
       const latest = await database.draft.get(row.draftId);

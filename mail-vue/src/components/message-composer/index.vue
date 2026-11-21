@@ -359,7 +359,7 @@ import {useUiStore} from "@/store/ui";
 import { inlineDataHTML } from "@/utils/private-files";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
-import {plainMarkup} from "./plain-text";
+import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
 import SchedulePicker from "./schedule.vue";
 import {useMailFeedback} from "@/store/mail-feedback";
@@ -783,7 +783,7 @@ async function moreCommand(command) {
     return;
   }
   const plainText = !form.plainText;
-  let content = editor.value.getContent();
+  const content = editor.value.getContent();
   if (plainText && /<img[\s>]/i.test(content)) {
     try {
       await ElMessageBox.confirm("Plain text removes images from the message body.", "Switch to plain text?", {
@@ -791,12 +791,11 @@ async function moreCommand(command) {
       });
     } catch { return; }
     if (!current()) return;
-    content = editor.value.getContent();
   }
   if (plainText) {
-    Object.assign(form, plainMarkup(content));
+    Object.assign(form, editor.value.toPlain());
     form.attachments = form.attachments.filter(file => !file.contentId);
-  } else form.content = content;
+  } else form.content = richMarkup(content);
   defValue.value = form.content;
   form.plainText = plainText;
   uiPreferences.composeModes[owner] = {...composeMode.value, plainText};

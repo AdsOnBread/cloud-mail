@@ -46,6 +46,33 @@ describe('Cloud draft synchronization',()=>{
   expect([...state.rows.values()]).toMatchObject([{draftId:row.draftId,cloudVersion:2,dirty:false,plainText:true}]);
   expect(state.remote.size).toBe(1);
  });
+ it.each(['create','update'])('keeps newer typing when a cloud %s response is lost',async(kind)=>{
+  let local=await saveLocalDraft(input());
+  if(kind==='update'){
+    await syncCloudDrafts();
+    local=await saveLocalDraft({...await db.value.draft.get(local.draftId),subject:'First edit'});
+  }
+  const method=kind==='update' ? http.put : http.post;
+  const normal=method.getMockImplementation();
+  method.mockImplementationOnce(async(...args)=>{await normal(...args);throw new Error('Response lost');});
+  await expect(syncCloudDrafts()).rejects.toThrow('Response lost');
+  await saveLocalDraft({...local,subject:'Latest typing',attachments:[]});
+  expect((await syncCloudDrafts()).conflicts).toEqual({});
+  expect([...state.rows.values()]).toMatchObject([{dirty:false,subject:'Latest typing'}]);
+  expect([...state.remote.values()]).toMatchObject([{subject:'Latest typing'}]);
+ });
+ it('forks a stale second editor after the first editor loses its upload response',async()=>{
+  const row=await saveLocalDraft(input());
+  await syncCloudDrafts();
+  const original=await db.value.draft.get(row.draftId);
+  await saveLocalDraft({...original,subject:'Editor A',attachments:[]});
+  const normal=http.put.getMockImplementation();
+  http.put.mockImplementationOnce(async(...args)=>{await normal(...args);throw new Error('Response lost');});
+  await expect(syncCloudDrafts()).rejects.toThrow('Response lost');
+  await saveLocalDraft({...original,subject:'Editor B',attachments:[]});
+  expect((await syncCloudDrafts()).conflicts[row.draftId]).toBeTruthy();
+  expect([...state.rows.values()].map(d=>d.subject).sort()).toEqual(['Editor A','Editor B']);
+ });
  it('recognizes an acknowledged inline photo after the server rewrites it as a CID attachment',async()=>{
   const row=await saveLocalDraft(input());
   await syncCloudDrafts();

@@ -35,12 +35,13 @@ describe('Sending with local mailbox storage', () => {
     const send=vi.fn().mockResolvedValue({messageId:'plain-test'});
     const text='Example <tag> & a URL\nhttps://example.org/';
     const [row]=await emailService.send(context({email:{send}}),mail({
-      plainText:true,text,content:'<b>legacy markup</b>',attachments:[{filename:'note.txt',content:'YQ==',contentType:'text/plain'}]
+      plainText:true,text,content:'<b>legacy markup</b>',attachments:[{filename:'note.txt',content:'YQ==',contentType:'text/plain'},
+        {filename:'inline.png',contentId:'picture',content:'YQ==',contentType:'image/png'}]
     }),1);
     const [message]=send.mock.calls[0];
     expect(message.text).toBe(text);
     expect(message).not.toHaveProperty('html');
-    expect(message.attachments[0].filename).toBe('note.txt');
+    expect(message.attachments.map(file=>file.filename)).toEqual(['note.txt']);
     expect(row).toMatchObject({text,content:''});
   });
 	it('sends ordinary and inline attachments and preserves stored MIME metadata', async () => {

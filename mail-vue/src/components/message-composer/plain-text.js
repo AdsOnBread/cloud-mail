@@ -66,3 +66,24 @@ export function plainMarkup(html) {
   append(group);
   return {content:out.innerHTML,text:plainBodyText(out)};
 }
+
+// Rich HTML collapses ordinary whitespace. Preserve visible runs when enabling
+// formatting again, including leading indentation and tab-aligned text.
+export function richMarkup(plain) {
+  const template=document.createElement('template');
+  template.innerHTML=plainMarkup(plain).content;
+  for (const line of template.content.querySelectorAll('div')) {
+    if (line.childNodes.length!==1 || line.firstChild.nodeType!==3) continue;
+    const text=line.textContent;
+    if (text.includes('\t')) {
+      const pre=document.createElement('pre');
+      pre.style.cssText='white-space:pre-wrap;font:inherit;margin:0';
+      pre.textContent=text;
+      line.replaceWith(pre);
+    } else {
+      line.textContent=text.replace(/^ +| +$| {2,}/g, (spaces, offset) =>
+        offset===0 || offset+spaces.length===text.length ? '\u00a0'.repeat(spaces.length) : '\u00a0'.repeat(spaces.length-1)+' ');
+    }
+  }
+  return template.innerHTML;
+}
