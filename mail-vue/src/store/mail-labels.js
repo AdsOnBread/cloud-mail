@@ -26,7 +26,7 @@ export const useMailLabels = defineStore("mail-labels", {
   state: () => ({
     items: [],
     system: {}, systemRequest:0, systemReady:false, systemError:"", moved:null,
-    undoneMove:0, pendingMoves:{},
+    undoneMove:0, returnedToTrash:null, pendingMoves:{},
     recentColors: [],
     optionsAnchor: null,
     colorRequest: 0,
@@ -40,22 +40,32 @@ export const useMailLabels = defineStore("mail-labels", {
     request: 0,
   }),
   actions: {
-    async moveConversations(ids, destination) {
+    moveConversations(ids, destination) {
+      return this.fileMessages(ids,destination,false);
+    },
+    recoverTrash(ids,destination=null) {
+      return this.fileMessages(ids,destination,true);
+    },
+    async fileMessages(ids, destination, trash) {
       const client=labelAPI(this);
-      const name=destination.labelId ? this.items.find(label=>label.id===destination.labelId)?.name : 'Inbox';
-      const key=JSON.stringify([destination.fromLabelId || 0,destination.labelId,[...ids].sort((a,b)=>a-b)]);
+      const name=destination?.labelId ? this.items.find(label=>label.id===destination.labelId)?.name : 'Inbox';
+      const key=JSON.stringify([trash,destination?.fromLabelId || 0,destination?.labelId ?? null,[...ids].sort((a,b)=>a-b)]);
       const pending=this.pendingMoves;
-      const requestId=destination.clientId ? undefined : pending[key] || (pending[key]=crypto.randomUUID());
-      const result=await conversationAction('move', ids, {...destination,undoable:true,requestId}, client);
+      const requestId=destination?.clientId ? undefined : pending[key] || (pending[key]=crypto.randomUUID());
+      const options={...destination,undoable:true,requestId};
+      const result=trash ? await client.post('/v1/messages/'+(destination?'move-from-trash':'restore'),{emailIds:ids,...options})
+        : await conversationAction('move', ids, options, client);
       delete pending[key];
       const feedback=useMailFeedback();
-      feedback.show(result?.alreadyProcessed ? 'This move was already processed.' : (ids.length===1 ? 'Conversation' : ids.length+' conversations')+' moved'+(name?' to '+name:'')+'.');
+      const selection=trash ? (ids.length===1?'Message':ids.length+' messages') : (ids.length===1?'Conversation':ids.length+' conversations');
+      feedback.show(result?.alreadyProcessed ? 'This move was already processed.' : selection+(destination?' moved'+(name?' to '+name:''):' restored')+'.');
       if (result?.undoToken) {
         const notice=feedback.notice;
         notice.undoFiling=async()=>{
           try {
-            await client.post('/email/conversation/undo-move',{token:result.undoToken});
-            this.undoneMove++;
+            await client.post(trash?'/v1/messages/undo-recovery':'/email/conversation/undo-move',{token:result.undoToken});
+            if (trash) this.returnedToTrash={ids:[...ids]};
+            else this.undoneMove++;
             useEmailStore().conversationRevision++;
           } catch (error) {
             if (error.code===409 || error.response?.status===409) delete notice.undoFiling;
@@ -131,7 +141,7 @@ export const useMailLabels = defineStore("mail-labels", {
       if (move) {
         // The label can outlive a failed move. Keep its ID for a retry.
         this.edit = {...this.edit,destination:label,name:label.name,move};
-        if (move.trash) await labelAPI(this).post('/v1/messages/move-from-trash',{emailIds:move.ids,labelId:label.id,clientId:move.clientId});
+        if (move.trash) await this.recoverTrash(move.ids,{labelId:label.id,clientId:move.clientId});
         else await this.moveConversations(move.ids,{labelId:label.id,fromLabelId:move.fromLabelId,clientId:move.clientId});
         if (this.owner===owner) this.moved={...move,labelId:label.id};
       } else if (anchors.length) {

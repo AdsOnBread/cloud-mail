@@ -330,6 +330,19 @@ async function refreshFiling() {
   } finally { if (pendingFilingRead===version) pendingFilingRead=null; }
 }
 watch(()=>labels.undoneMove,refreshFiling);
+watch(()=>labels.returnedToTrash,async change=>{
+  if (!change || route.name!=="content") return;
+  const removed=new Set(change.ids), current=readerCurrent();
+  if (removed.has(Number(route.query.emailId))) { back(); return; }
+  if (removed.has(activeTarget.value) && (!(await save()) || !current())) return;
+  const remaining=messages.value.filter(message=>!removed.has(message.emailId));
+  if (remaining.length!==messages.value.length) {
+    total.value-=messages.value.length-remaining.length;
+    messages.value=remaining;
+  }
+  if (loading.value || !remaining.length) { await load(); return; }
+  await refreshFiling();
+});
 async function load(older = false) {
   if (older && (loading.value || expanding.value)) return;
   expandRun++;expanding.value=false;

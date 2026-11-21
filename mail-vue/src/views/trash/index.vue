@@ -521,6 +521,7 @@ watch(()=>labels.moved,change=>{
   else if(!messageId.value)reloadAfterRemoval(messages.value.findIndex(m=>change.ids.includes(m.emailId)));
 });
 watch(() => useMailFeedback().restored, reload);
+watch(()=>labels.returnedToTrash,change=>{if(change && !messageId.value) reload();});
 watch(messageId, reload, { immediate: true });
 watch([() => search.query, () => search.filters, mailbox], () => {
   history.value = [];
@@ -586,14 +587,18 @@ async function act(action, ids, destination) {
         },
       );
     if (!stillCurrent()) return;
-    for (let i = 0; i < ids.length; i += 50) {
+    const undoableRecovery=action==='move-from-trash' || (action==='restore' && !unsent);
+    if (undoableRecovery) {
+      await labels.recoverTrash(ids,destination ? {labelId:destination.labelId} : null);
+      changed=ids.length;
+    } else for (let i = 0; i < ids.length; i += 50) {
       if (!stillCurrent()) return;
       const batch = ids.slice(i, i + 50);
       await http.post("/v1/messages/" + action, { emailIds: batch, ...(destination ? {labelId:destination.labelId} : {}) }, {headers:{Authorization:token}});
       changed += batch.length;
     }
     if (unsent) import('@/services/cloud-drafts').then(({syncCloudDrafts})=>syncCloudDrafts()).catch(()=>{});
-    if (!disposed && request===revision)
+    if (!undoableRecovery && !disposed && request===revision)
       notify(
         count + (destination ? " moved to " + destination.name + "." : action === "purge" ? " permanently deleted." : " restored."),
       );
@@ -602,6 +607,8 @@ async function act(action, ids, destination) {
       error.value =
         (changed ? changed + " messages updated. " : "") +
         (e.message || "Could not update Trash.");
+    } else if ((action==='restore' || destination) && token===user.authenticatedToken && token===localStorage.getItem("token") && e!=="cancel" && e!=="close") {
+      useMailFeedback().show(e.message || "Could not update Trash.");
     }
   } finally {
     if (changed) {
