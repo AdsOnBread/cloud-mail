@@ -1,3 +1,4 @@
+import {mailboxHref} from '@/utils/mailto';
 import {diffChars, diffWordsWithSpace} from "diff";
 
 // Domains can be entered as displayed, including international characters and
@@ -8,8 +9,8 @@ export function normalizeLinkUrl(value) {
   if (!raw || /[\u0000-\u001f\u007f]/.test(raw)) return "";
   try {
     let candidate = raw;
-    if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@]+@[^\s@/:]+\.[^\s@/:]+$/.test(raw)) candidate = "mailto:" + raw;
-    else if (domainLink.test(raw)) candidate = "https://" + raw;
+    if (domainLink.test(raw)) candidate = "https://" + raw;
+    else if (!/^[a-z][a-z\d+.-]*:/i.test(raw) && /^[^\s@]+@[^\s@/:?#]+\.[^\s@/:?#]+$/.test(raw)) candidate = mailboxHref(raw);
     const url = new URL(candidate);
     return ["https:", "http:", "mailto:", "tel:"].includes(url.protocol)
       ? url.href

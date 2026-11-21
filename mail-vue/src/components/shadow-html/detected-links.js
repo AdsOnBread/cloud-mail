@@ -1,3 +1,4 @@
+import {mailboxHref} from '@/utils/mailto';
 import { LinkifyIt } from 'linkify-it';
 import tlds from 'tlds';
 import { h } from 'vue';
@@ -50,9 +51,7 @@ function linksIn(text) {
     let href = match.url;
     if (!match.schema) href = 'https://' + match.raw;
     if (match.schema === 'mailto:' && !/^mailto:/i.test(match.raw)) {
-      const at = match.raw.lastIndexOf('@');
-      // Encode URI delimiters in the local part, retaining common plus tags.
-      href = 'mailto:' + encodeURIComponent(match.raw.slice(0, at)).replace(/%2B/gi, '+') + match.raw.slice(at);
+      href = mailboxHref(match.raw);
     }
     if (/^(?:https?:\/\/|mailto:)/i.test(href)) links.push({ start: match.index, end: match.lastIndex, href });
   }
