@@ -339,6 +339,7 @@ import {changeQuotedBody,responseSubject,responseFileSignatures,restoreResponseF
 import ResponseMenu from "./response-menu.vue";
 import SendControls from "./send-controls.vue";
 import {sendConfirmation} from "./send-confirmation";
+import {textStyleCSS} from '../../../../shared/mail-text-style';
 import {plainMarkup,richMarkup} from "./plain-text";
 import {printDraft} from "./print-draft";
 import { hasFiles, transferFiles, photoTypes, planFiles } from "./files";
@@ -867,12 +868,23 @@ function focusWindow(){
   else if (lastInput?.isConnected && lastInput.getClientRects().length) lastInput.focus();
   else editor.value?.focus();
 }
+// Only the new writing area gets the account default. Quoted and signed text
+// remain sibling blocks and saved draft HTML keeps its own styles.
+function initialWritingArea(content="") {
+  const css=textStyleCSS(userStore.user.generalSettings?.textStyle);
+  if(form.plainText || !Object.keys(css).length)return content;
+  const template=document.createElement('template');
+  template.innerHTML=content || '<div><br></div>';
+  Object.assign(template.content.firstElementChild.style,css);
+  return template.innerHTML;
+}
 function open(person, sender) {
   if (show.value) return focusWindow();
   if (preparing.value) return;
   resetForm();
   setSender(sender);
   if (person && person.accountId !== form.accountId) return;
+  defValue.value=initialWritingArea();
   if (person) {
     form.receiveEmail = [person.email];
     rememberPerson(person);
@@ -902,7 +914,7 @@ async function openDraft(draft, options) {
       form.content = escapeHTML(form.text).replace(/\r\n?|\n/g, "<br>");
     if (responseHeader.value && form.sendType === "reply")
       form.content = foldLegacyReplyQuote(form.content || "");
-    defValue.value = form.content || "";
+    defValue.value = form.content || initialWritingArea();
     reveal();
     await nextTick();
     await editor.value?.ready?.();
@@ -1001,6 +1013,7 @@ async function prepareMessage(message, mode, all = false) {
       }
     } else if (responseHeader.value) editingRecipients.value = true;
     if (form.plainText) Object.assign(form, plainMarkup(form.content));
+    else form.content=initialWritingArea(form.content);
     defValue.value = form.content;
     reveal();
     await nextTick();
