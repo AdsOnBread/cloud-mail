@@ -1,7 +1,7 @@
 <template>
   <section class="scheduled-view" aria-label="Scheduled messages">
     <FolderFilters v-if="!messageId" folder="scheduled" :account-id="scope" />
-    <div class="mail-toolbar">
+    <div class="mail-toolbar" :class="{'selected-toolbar':selected.length && !messageId}">
       <button
         v-if="messageId"
         class="mail-icon"
@@ -98,6 +98,7 @@
         :disabled="busy || readTargets.some(row=>!canCancel(row))" @click="fileInbox(readTargets, moveIntoInbox)">
         <Icon :icon="moveIntoInbox ? 'material-symbols:move-to-inbox-outline' : 'material-symbols:archive-outline'" width="20"/>
       </button>
+      <div class="scheduled-pager">
       <span class="total">{{ range }}</span>
       <button
         class="mail-icon"
@@ -122,6 +123,7 @@
       >
         <Icon icon="material-symbols:chevron-right" width="20" />
       </button>
+      </div>
     </div>
     <p v-if="listError || error" class="list-status" role="alert">
       {{ listError || error }}
@@ -701,6 +703,11 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex: 1;
   overflow: auto;
+}
+.scheduled-pager {margin-inline-start:auto;display:flex;align-items:center;gap:4px;}
+@media(max-width:420px) {
+  .selected-toolbar {height:auto;min-height:48px;flex-wrap:wrap;padding-block:4px;row-gap:0;}
+  .selected-toolbar .scheduled-pager {margin-inline-start:auto;}
 }
 .select-options {
   width: 18px;
