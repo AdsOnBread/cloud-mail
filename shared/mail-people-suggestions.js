@@ -1,12 +1,13 @@
+import {personSearchKey} from './mail-search-people.js';
 // Rows can come from a stored message or a queued draft. Received Bcc is private.
 export function peopleSuggestions(rows, field, query = '', limit = 8) {
-  const people = new Map(), needle = query.trim().toLowerCase();
+  const people = new Map(), needle = personSearchKey(query.trim());
   function add(value) {
     const email = typeof value === 'string' ? value : value?.address;
     if (typeof email !== 'string' || !email.trim()) return;
-    const address = email.trim(), key = address.toLowerCase();
+    const address = email.trim(), key = personSearchKey(address);
     const name = (typeof value?.name === 'string' && value.name.trim()) || address;
-    if (!key.includes(needle) && !name.toLowerCase().includes(needle)) return;
+    if (!key.includes(needle) && !personSearchKey(name).includes(needle)) return;
     if (!people.has(key) || people.get(key).name === people.get(key).email) people.set(key, {name,email:address});
   }
   function recipients(value) {

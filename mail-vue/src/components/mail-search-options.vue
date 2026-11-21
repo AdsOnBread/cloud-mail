@@ -1,15 +1,4 @@
 <template>
-  <el-popover
-    v-model:visible="open"
-    trigger="click"
-    :placement="chips ? 'bottom-start' : 'bottom-end'"
-    :width="440"
-    :show-arrow="false"
-    popper-class="mail-search-options"
-    @before-enter="reset"
-    @after-enter="focusForm"
-  >
-    <template #reference>
       <button
         ref="trigger"
         v-if="!chips"
@@ -17,6 +6,7 @@
         class="mail-icon"
         aria-label="Show search options"
         data-tip="Show search options"
+        aria-haspopup="dialog" :aria-expanded="open" @click="toggle"
       >
         <Icon icon="material-symbols:tune" width="22" />
       </button>
@@ -25,14 +15,14 @@
         v-else
         type="button"
         class="filter-chip advanced"
-        :aria-expanded="open"
+        aria-haspopup="dialog" :aria-expanded="open" @click="toggle"
       >Advanced search</button>
-    </template>
-    <form
+  <Teleport to="body">
+    <form v-if="open" role="dialog" aria-label="Advanced search" :style="position"
       ref="panel"
       class="options-form"
       @submit.prevent="apply"
-      @keydown.esc.stop.prevent="dismiss"
+      @keydown.esc.stop.prevent="dismiss" @keydown.tab="tabOut" @focusout="focusOut"
     >
       <div class="criteria">
       <label v-for="key in fields" :key="key"
@@ -68,10 +58,11 @@
         ><button type="submit">Search</button>
       </div>
     </form>
-  </el-popover>
+  </Teleport>
 </template>
 <script setup>
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import {positionMailboxPopup} from "./mail-popup-position";
 import { Icon } from "@iconify/vue";
 import {peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {olderChoices,recentChoices,timeCaption,withoutTime} from "./mail-date-time/search-range";
@@ -79,17 +70,43 @@ import { useMailSearchStore } from "@/store/mail-search";
 const props = defineProps({ chips: Boolean, queryText: String });
 const trigger = ref(),
   panel = ref();
-function focusForm() {
-  if (open.value) panel.value?.querySelector("input,select")?.focus();
+const position=ref({});
+function place() {
+  if (open.value && panel.value && trigger.value) position.value=positionMailboxPopup(panel.value,trigger.value,440,trigger.value,!props.chips);
+}
+function toggle() {
+  if (open.value) return dismiss();
+  reset();
+  open.value=true;
+  nextTick(()=>{place();panel.value?.querySelector('input,select')?.focus({preventScroll:true});});
 }
 function dismiss() {
   open.value = false;
-  trigger.value?.focus();
+  trigger.value?.focus({preventScroll:true});
+}
+function tabOut(event) {
+  const controls=panel.value.querySelectorAll('input,select,button');
+  if (event.shiftKey ? event.target===controls[0] : event.target===controls[controls.length-1]) dismiss();
+}
+function focusOut(event) {
+  if (event.relatedTarget && !panel.value?.contains(event.relatedTarget) && event.relatedTarget!==trigger.value) open.value=false;
+}
+function outside(event) {
+  if (!panel.value?.contains(event.target) && !trigger.value?.contains(event.target)) open.value=false;
+}
+function listen(visible) {
+  const method=visible ? 'addEventListener' : 'removeEventListener';
+  document[method]('pointerdown',outside,true);
+  window[method]('resize',place);window[method]('scroll',place,true);
+  window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
 }
 const emit = defineEmits(["applied"]);
 const store = useMailSearchStore(),
   open = ref(false),
   form = ref({});
+watch(open,listen);
+watch(()=>store.folder,()=>{open.value=false});
+onBeforeUnmount(()=>listen(false));
 const names = {
   from: "From",
   to: "To",
@@ -143,7 +160,15 @@ function clear() {
 </script>
 <style scoped>
 .options-form {
-  padding: 10px;
+  position:fixed;
+  z-index:2400;
+  width:440px;
+  max-width:calc(100vw - 16px);
+  padding: 18px;
+  border-radius:10px;
+  background:var(--mail-surface);
+  color:var(--el-text-color-primary);
+  box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
   display:flex;
   flex-direction:column;
   box-sizing:border-box;

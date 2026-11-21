@@ -37,7 +37,7 @@ import http from '@/axios';
 import {useMailSearchStore} from '@/store/mail-search';
 import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
-import {maxPeople,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
+import {maxPeople,peopleTerms,personSearchKey,setPeopleTerms} from '../../../shared/mail-search-people';
 
 const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore(), account=useAccountStore(), user=useUserStore();
@@ -54,7 +54,7 @@ const options=computed(()=>{
   if (selected.value.length>=maxPeople) return [];
   const omit=new Set(selected.value.map(s=>s.toLowerCase())), typed=query.value.trim();
   const matches=contacts.value.filter(p=>!omit.has(p.email.toLowerCase()) &&
-    [p.name,p.email].some(value=>value.toLowerCase().includes(typed.toLowerCase()))).slice(0,8);
+    [p.name,p.email].some(value=>personSearchKey(value).includes(personSearchKey(typed)))).slice(0,8);
   if (typed && !omit.has(typed.toLowerCase()) && !matches.some(p=>p.email.toLowerCase()===typed.toLowerCase()))
     matches.push({name:typed,email:typed,typed:true});
   return matches;

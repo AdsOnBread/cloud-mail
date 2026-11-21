@@ -1,37 +1,49 @@
-import {fullAddress,peopleTerms} from '../../../shared/mail-search-people';
+import {fullAddress,peopleTerms,personSearchKey} from '../../../shared/mail-search-people';
 import {searchDateBounds} from "../../../shared/mail-search-date";
 import { attachedFile } from "./mailbox-attachments";
 
-// SQLite's lower() only folds ASCII. GLOB character classes also work for accented
-// names. Escape GLOB metacharacters so typed names and address punctuation stay literal.
-function peoplePattern(term, partial) {
-  const literal={'[':'[[]','*':'[*]','?':'[?]'};
-  const pattern=Array.from(term,ch=>{
-    if (literal[ch]) return literal[ch];
-    const variants=[...new Set([ch,ch.toLowerCase(),ch.toUpperCase()])].filter(v=>Array.from(v).length===1);
-    return variants.length===1 ? ch : '['+variants.join('')+']';
-  }).join('');
-  return partial ? '*'+pattern+'*' : pattern;
+// SQLite folds ASCII. Apply just the additional Unicode case pairs needed by this search.
+// These titlecase and compatibility letters cannot be recovered by uppercasing their lowercase form.
+const alternateForms='İǅǈǋǲϴẞᾈᾉᾊᾋᾌᾍᾎᾏᾘᾙᾚᾛᾜᾝᾞᾟᾨᾩᾪᾫᾬᾭᾮᾯᾼῌῼΩKÅς';
+function casePairs(needle) {
+  const pairs=new Map();
+  for (const ch of [...needle,...alternateForms]) {
+    const upper=needle.includes(ch) ? ch.toUpperCase() : ch;
+    for (const variant of [ch,upper]) {
+      const folded=personSearchKey(variant);
+      if (variant.codePointAt(0)>127 && variant!==folded && Array.from(variant).length===1 &&
+          (needle.includes(folded) || (folded.length>1 && needle.includes(folded[0])))) pairs.set(variant,folded);
+    }
+  }
+  return [...pairs];
 }
 
 export function addPeopleFilter(params, field, columns, filters, args, suggestions=false) {
   const terms=peopleTerms(params,field);
   if (!terms.length) return;
   const patterns=terms.map(term=>{
-    const partial=suggestions || !fullAddress(term);
-    return {p:peoplePattern(term,partial),partial};
+    const needle=personSearchKey(term);
+    return {needle,pairs:casePairs(needle),partial:suggestions || !fullAddress(term)};
   });
-  const pattern="json_extract(term.value,'$.p')", partial="json_extract(term.value,'$.partial')";
+  const needle="json_extract(term.value,'$.needle')", partial="json_extract(term.value,'$.partial')";
+  function matches(email,name) {
+    const text=`lower(CASE WHEN ${partial} THEN coalesce(${email},'')||char(10)||coalesce(${name},'') ELSE ${email} END)`;
+    // The recursive form also supports long names without exceeding D1's pattern or expression-depth limits.
+    const folded=patterns.some(term=>term.pairs.length) ? `(WITH RECURSIVE folded(step,text) AS (
+      SELECT 0,${text} UNION ALL
+      SELECT step+1,replace(text,json_extract(pair.value,'$[0]'),json_extract(pair.value,'$[1]'))
+      FROM folded JOIN json_each(term.value,'$.pairs') pair ON pair.key=step
+    ) SELECT text FROM folded WHERE step=json_array_length(term.value,'$.pairs'))` : text;
+    return `CASE WHEN ${partial} THEN instr(${folded},${needle})>0 ELSE ${folded}=${needle} END`;
+  }
   let match;
-  if (field==='from') {
-    const [email,name]=columns;
-    match=`${email} GLOB ${pattern} OR (${partial} AND ${name} GLOB ${pattern})`;
-  } else {
+  if (field==='from') match=matches(...columns);
+  else {
     match=columns.map(column=>{
       const list=`CASE WHEN json_valid(${column}) THEN ${column} ELSE json_array(${column}) END`;
       const email="CASE WHEN who.type='object' THEN json_extract(who.value,'$.address') ELSE who.value END";
       const name="CASE WHEN who.type='object' THEN json_extract(who.value,'$.name') END";
-      return `EXISTS (SELECT 1 FROM json_each(${list}) who WHERE ${email} GLOB ${pattern} OR (${partial} AND ${name} GLOB ${pattern}))`;
+      return `EXISTS (SELECT 1 FROM json_each(${list}) who WHERE ${matches(email,name)})`;
     }).join(' OR ');
   }
   filters.push(`EXISTS (SELECT 1 FROM json_each(?) term WHERE ${match})`);
