@@ -253,6 +253,7 @@ defineExpose({
   bottom: 0;
   z-index: 200;
 }
+@media (min-width:768px) { .dock-switcher { bottom:16px; } }
 .more-drafts {
   display: flex;
   align-items: center;

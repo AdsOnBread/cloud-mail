@@ -7,7 +7,7 @@ export function dockLayout(windows, viewport, active, sideInset = 0) {
   const sizes = new Map(
     windows.map((item) => [
       item.key,
-      item.minimized ? 328 : Math.max(510, Math.min(590, viewport * 0.39)),
+      item.minimized ? 328 : 553,
     ]),
   );
   const focused = windows.find((item) => item.key === active);

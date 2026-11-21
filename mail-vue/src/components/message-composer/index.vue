@@ -829,7 +829,9 @@ function open(person) {
     rememberPerson(person);
   }
   reveal();
-  if (person) nextTick(() => composeRoot.value?.querySelector(".subject-input")?.focus());
+  if (person) nextTick(() => {
+    if (props.dockActive) composeRoot.value?.querySelector(".subject-input")?.focus();
+  });
   startSignatureDefault();
 }
 async function openDraft(draft) {
@@ -1737,6 +1739,11 @@ defineExpose({
 .minimized .write-box {
   height: 40px;
   border-radius: 8px 8px 0 0;
+}
+@media (min-width: 768px) {
+  .send:not(.inline):not(.expanded), .send.minimized:not(.inline) { bottom:16px; }
+  .send:not(.inline):not(.expanded) .write-box, .send.minimized:not(.inline) .write-box { border-radius:20px; }
+  .send:not(.inline):not(.expanded):not(.minimized) .compose-container { height:min(479px, calc(100dvh - 100px)); }
 }
 @media (max-width: 767px) {
   .send:not(.inline) {

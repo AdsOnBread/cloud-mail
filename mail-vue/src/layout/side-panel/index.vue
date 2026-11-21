@@ -226,7 +226,8 @@ html.dark .contact-symbol {
   background: var(--mail-surface);
   box-shadow: 0 1px 4px #0003;
 }
-.photo-theme :is(.rail-tool, .rail-toggle):not(.hiddenRail) {
+.photo-theme .rail-tool,
+.photo-theme .rail-toggle:not(.hiddenRail) {
   color: white;
   --mail-hover: #ffffff29;
 }
