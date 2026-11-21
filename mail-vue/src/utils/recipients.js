@@ -1,16 +1,28 @@
+import {cleanRecipientName,recipientName} from '../../../shared/recipient-names';
 import { isEmail } from './verify-utils.js';
 
 export const recipientFields = ['receiveEmail', 'cc', 'bcc'];
-export function splitRecipients(value = '') {
+export function formatRecipient(address,name) {
+  const text=cleanRecipientName(name);
+  if (!isEmail(address) || !text || text.toLowerCase()===address.toLowerCase()) return address;
+  const phrase=/[()<>@,，;:."\\[\]]/u.test(text) ? '"'+text.replace(/["\\]/g,'\\$&')+'"' : text;
+  return phrase+' <'+address+'>';
+}
+export function splitRecipients(value='') { return parseRecipientList(value).map(person=>person.address); }
+export function parseRecipientList(value = '') {
   const tokens = [];
   let token = '', quoted = false, escaped = false;
   function finish() {
     const text = token.trim();
-    const named = text.match(/^([^<>]*)<([^<>]+)>$/);
-    // Only discard a display name. Headers and stray addresses must stay visible for validation.
-    const name = named?.[1].replace(/"(?:[^"\\]|\\.)*"/g, '').trim();
-    const address = named?.[2].trim();
-    if (text) tokens.push(named && !/[":@;,，()\[\]\\]/.test(name) && isEmail(address) ? address : text);
+    const named = text.match(/^((?:[^"<>]|"(?:[^"\\]|\\.)*")*)<([^<>]+)>$/u);
+    // Discard only a valid display name. A copied Bcc header must still fail recipient validation.
+    const phrase=named?.[1].trim() || '';
+    const unquoted=phrase.replace(/"(?:[^"\\]|\\.)*"/g,'');
+    const address=named?.[2].trim();
+    if (named && !/[":@;,，()\[\]\\]/.test(unquoted) && isEmail(address)) {
+      const name=phrase.replace(/"((?:[^"\\]|\\.)*)"/g,(_,part)=>part.replace(/\\(.)/gu,'$1'));
+      tokens.push({address,name:cleanRecipientName(name)});
+    } else if (text) tokens.push({address:text,name:''});
     token = '';
   }
   for (const character of String(value)) {
@@ -96,9 +108,17 @@ export function draftFilingFingerprint(draft) {
   ];
 }
 
+export function draftRecipientNames(draft) {
+  const names=[];
+  for (const field of recipientFields) for (const address of addresses(draft[field])) {
+    const name=recipientName(draft.replyRecipientNames,address);
+    if (name) names.push([address.toLowerCase(),name]);
+  }
+  return names;
+}
 export function draftFingerprint(draft) {
   return JSON.stringify([draft.subject, draft.content, ...recipientFields.map(field => draft[field] || []),
-    (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : []), ...draftFilingFingerprint(draft)]);
+    (draft.attachments || []).map(file => [file.filename, file.content]), ...(draft.plainText ? [true] : []), ...draftFilingFingerprint(draft), ...draftRecipientNames(draft)]);
 }
 
 export function hasReplyAll(message, ownAddresses) {

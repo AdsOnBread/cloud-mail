@@ -1,3 +1,4 @@
+import {recipientName} from '../../../shared/recipient-names';
 import orm from '../entity/orm';
 import email from '../entity/email';
 import { emailListColumns, emailBriefColumns, EMAIL_LIST_TEXT_LEN } from '../lib/email-list-columns';
@@ -367,7 +368,7 @@ const emailService = {
 		validateAttachmentCount(imageDataList, true);
 		attachments = await Promise.all(attachments.map(normalizeAttachment));
 		const message = await buildMessage({
-			name, accountEmail: accountRow.email, receiveEmail: recipients.to, cc: recipients.cc, bcc: recipients.bcc, subject,
+			name, recipientNames:params.recipientNames, accountEmail: accountRow.email, receiveEmail: recipients.to, cc: recipients.cc, bcc: recipients.bcc, subject,
 			text: text || emailUtils.htmlToText(html), html,
 			attachments: [...imageDataList, ...attachments],
 			sendType, messageId: emailRow.messageId, references
@@ -393,16 +394,10 @@ const emailService = {
 		emailData.userId = userId;
 		emailData.providerMessageId = sendResult?.messageId;
 		emailData.messageId = allInternal ? `<${crypto.randomUUID()}@${emailUtils.getDomain(accountRow.email)}>` : '';
-		emailData.cc = JSON.stringify(recipients.cc.map(address => ({address,name:''})));
-		emailData.bcc = JSON.stringify(recipients.bcc.map(address => ({address,name:''})));
-
-		const recipient = [];
-
-		recipients.to.forEach(item => {
-			recipient.push({ address: item, name: '' });
-		});
-
-		emailData.recipient = JSON.stringify(recipient);
+		const storedAddress=address=>({address,name:recipientName(params.recipientNames,address)});
+		emailData.cc = JSON.stringify(recipients.cc.map(storedAddress));
+		emailData.bcc = JSON.stringify(recipients.bcc.map(storedAddress));
+		emailData.recipient = JSON.stringify(recipients.to.map(storedAddress));
 
 		if (sendType === 'reply') {
 			emailData.inReplyTo = emailRow.messageId;

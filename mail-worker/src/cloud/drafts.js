@@ -172,7 +172,7 @@ export async function payload(c,userId,draft) {
       content=content.replaceAll(`cid:${meta.contentId.replace(/^<|>$/g,'')}`,source).replaceAll(`/api/v1/drafts/attachments/${meta.attachmentId}/content`,source);
     } else attachments.push({filename:meta.filename,content:bytes,contentType:meta.mimeType});
   }
-  return {...draft,content,attachments};
+  return {...draft,content,attachments,recipientNames:draft.ui?.replyRecipientNames};
 }
 export function base64(bytes) {
   const array=new Uint8Array(bytes);let text='';for(let i=0;i<array.length;i+=8192)text+=String.fromCharCode(...array.subarray(i,i+8192));return btoa(text);

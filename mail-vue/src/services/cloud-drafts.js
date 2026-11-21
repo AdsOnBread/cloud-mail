@@ -1,6 +1,6 @@
 import {watch} from 'vue';
 import {draftSearchBytes,referencedAttachments} from "../components/message-composer/files";
-import { draftEditBase, draftFilingFingerprint } from '@/utils/recipients';
+import { draftEditBase, draftFilingFingerprint, draftRecipientNames } from '@/utils/recipients';
 import { draftSummary, newestDraft } from '@/utils/draft-summary';
 import { useUserStore } from '@/store/user';
 import db from '@/db/db.js';
@@ -35,7 +35,7 @@ function matchesEditor(current, expected) {
   return current.cloudVersion === expected.cloudVersion && current.localRevision === expected.localRevision;
 }
 const apiError=e=>e.response?.data||e;
-const fingerprint=row=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[])]);
+const fingerprint=(row, legacy=false)=>JSON.stringify([row.accountId,row.subject,row.content,row.text,row.receiveEmail,row.cc,row.bcc,(row.attachments||[]).map(f=>[f.filename,f.contentType||f.mimeType,String(f.content||'').replace(/^data:[^,]*;base64,/,''),f.contentId||'']).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),row.sendType,row.emailId,...(row.plainText?[true]:[]),...(legacy?[]:draftRecipientNames(row))]);
 // The server stores pasted photos as CID attachments. Compare the restored image
 // in the HTML once, while retaining separately attached files in the comparison.
 function savedFingerprint(row) {
@@ -46,7 +46,7 @@ function savedFingerprint(row) {
   // Filing participates in draft conflicts but never changes a delivery receipt.
   return JSON.stringify([fingerprint({...row, content:template.innerHTML, attachments}),draftFilingFingerprint(row)]);
 }
-async function signature(row) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row)))),b=>b.toString(16).padStart(2,'0')).join('');}
+async function signature(row,legacy=false) {return (legacy?'':'v2:')+Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(fingerprint(row,legacy)))),b=>b.toString(16).padStart(2,'0')).join('');}
 const strip=row=>{const copy={...row};for(const key of ['draftId','cloudDraftId','cloudVersion','dirty','clientId','uploadIntent','uploadId','syncState','localRevision','sendAttemptId','sendFingerprint','pendingSchedule','schedulingError','ownerEmail','editToken','starEditBase','conflictCopy','restoredFromDiscard','detachedReply','hasFiles','sizeBytes','attachments'])delete copy[key];return copy;};
 async function withFiles(database,row) {return {...row,attachments:(await database.att.get(row.draftId))?.attachments||[]};}
 async function put(database,row,attachments) {
@@ -482,7 +482,7 @@ async function finishSentAttempt(database, id, attemptId, messages) {
       if (row?.sendAttemptId === attemptId) return withFiles(database, row);
     });
     if (!snapshot) return messages;
-    const changed = snapshot.sendFingerprint && await signature(snapshot) !== snapshot.sendFingerprint;
+    const changed = snapshot.sendFingerprint && await signature(snapshot,!snapshot.sendFingerprint.startsWith('v2:')) !== snapshot.sendFingerprint;
     outcome = await database.transaction('rw', database.draft, database.att, async () => {
       const current = await database.draft.get(id);
       if (current?.sendAttemptId !== attemptId) return 'finished';

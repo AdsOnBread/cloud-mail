@@ -1,3 +1,4 @@
+import {recipientName} from '../../../shared/recipient-names';
 import BizError from '../error/biz-error';
 import { parseHTML } from 'linkedom';
 import verifyUtils from '../utils/verify-utils';
@@ -108,10 +109,14 @@ export async function buildMessage(params) {
 		text: params.text || (params.html ? '' : '\r\n'),
 		attachments: await Promise.all(attachments.map(normalizeAttachment))
 	};
-	if (recipients.to.length) message.to = recipients.to;
+	const namedAddress=email=>{
+		const name=recipientName(params.recipientNames,email);
+		return name ? {email,name} : email;
+	};
+	if (recipients.to.length) message.to = recipients.to.map(namedAddress);
 	if (params.html) message.html = params.html;
-	if (recipients.cc.length) message.cc = recipients.cc;
-	if (recipients.bcc.length) message.bcc = recipients.bcc;
+	if (recipients.cc.length) message.cc = recipients.cc.map(namedAddress);
+	if (recipients.bcc.length) message.bcc = recipients.bcc.map(namedAddress);
 	const ids = message.attachments.filter(item => item.contentId).map(item => item.contentId);
 	if (new Set(ids).size !== ids.length) throw new BizError('Inline image content IDs must be unique.', 400);
 	const { document } = parseHTML(message.html || '');
