@@ -80,6 +80,8 @@ function attributionStart(lines,end,visible) {
   const last=lines[end-1].trim();
   if (!/\bwrote:$/i.test(last)) return end;
   if (/^On\s/i.test(last) && isAttribution(last)) return end-1;
+  if (end-visible>=3 && /^<[^<>\s]+@[^<>\s]+>\s+wrote:$/i.test(last) &&
+    dateLine.test(lines[end-3].trim()) && /^[\p{L}\p{M}][\p{L}\p{M}\d '’.,&()-]{0,200}$/u.test(lines[end-2].trim())) return end-3;
   if (end-visible>=2) {
     const prefix=lines[end-2].trim();
     if (dateLine.test(prefix)) return end-2;

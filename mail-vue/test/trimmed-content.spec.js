@@ -75,7 +75,7 @@ it('recognizes a wrapped reply header after the time or the sender address',()=>
  for(const instruction of ['On Tuesday please update slide 2\n','On Nov 10, please update slide 2\n','On Nov 10, our meeting is at 3 PM\n']){
   expect(messageParts({text:instruction+'Pat <pat@example.org> wrote:\n> Slide deck attached'})[0]).toEqual({text:instruction});
  }
- for(const header of ['On Tue, Nov 10, 2026 at 3:44 PM\nPat <pat@example.org> wrote:', 'On Tue, Nov 10, 2026 at 3:44 PM Pat <pat@example.org>\nwrote:']){
+ for(const header of ['On Tue, Nov 10, 2026 at 3:44 PM,\nAlexandria Jordan-Griffith, Director of International Partnerships\n<alexandria.jordan-griffith@example.org> wrote:', 'On Tue, Nov 10, 2026 at 3:44 PM\nPat <pat@example.org> wrote:', 'On Tue, Nov 10, 2026 at 3:44 PM Pat <pat@example.org>\nwrote:']){
    const parts=messageParts({text:'Answer\n'+header+'\n> Question'});
    expect(parts).toEqual([{text:'Answer\n'},{text:header+'\n> Question',quote:true}]);
  }
