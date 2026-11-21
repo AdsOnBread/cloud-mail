@@ -50,22 +50,28 @@
         </el-menu-item>
         </template>
         <div class="label-heading"><span class="menu-name">Labels</span><button class="mail-icon" aria-label="Create new label" data-tip="Create new label" @click="labels.edit={}"><Icon icon="material-symbols:add" width="20" /></button></div>
-        <template v-for="label in orderedLabels" :key="label.id">
+        <template v-for="{node,depth,label} in orderedLabels" :key="label.id">
           <button v-if="label.id===firstHidden" class="more-labels" type="button"
             :aria-label="showHiddenLabels ? 'Fewer labels' : 'More labels'" :aria-expanded="showHiddenLabels"
             :data-tip="showHiddenLabels ? 'Less' : 'More'" @click="showHiddenLabels=!showHiddenLabels">
             <Icon :icon="showHiddenLabels ? 'material-symbols:expand-less' : 'material-symbols:expand-more'" width="20" />
             <span class="menu-name">{{ showHiddenLabels ? 'Less' : 'More' }}</span>
           </button>
-          <div v-show="showHiddenLabels || !isHiddenLabel(label)" class="label-row" :data-label-id="label.id"
+          <div v-show="showHiddenLabels || !isHiddenLabel(label)" class="label-row" :data-label-id="label.id" :style="{ '--branch-indent': Math.min(depth,5)*12+'px' }"
             :class="{'selected-label':activeLabel===label.id,'unread-label':labelUnread[label.id]}">
-            <router-link :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name"
+            <button v-if="node.children.length" type="button" class="label-disclosure"
+              :aria-expanded="expandedLabels.has(label.id)" :aria-label="(expandedLabels.has(label.id)?'Collapse label: ':'Expand label: ')+label.name"
+              @click="toggleBranch(label.id)">
+              <Icon :icon="expandedLabels.has(label.id)?'material-symbols:arrow-drop-down':'material-symbols:chevron-right'" width="16" />
+            </button>
+            <router-link @keydown.right.prevent="branchKey(node,true)" @keydown.left.prevent="branchKey(node,false)"
+              :to="{name:'label',params:{labelId:label.id}}" :data-tip="label.name" :aria-label="label.name"
               :aria-description="labelUnread[label.id] ? labelUnread[label.id]+' unread' : undefined">
               <Icon :icon="label.background ? 'material-symbols:label' : 'material-symbols:label-outline'" :style="{color:label.background}" width="20" />
-              <span class="menu-name">{{ label.name }}</span>
+              <span class="menu-name">{{ node.text }}</span>
             </router-link>
             <span v-if="labelUnread[label.id]" class="menu-name label-count" aria-hidden="true">{{ labelUnread[label.id] }}</span>
-            <LabelOptions :key="labels.owner+'-'+label.id" :label="label" @display-changed="focusLabelControl" />
+            <LabelOptions :key="labels.owner+'-'+label.id" :label="label" />
           </div>
         </template>
         <button v-if="labels.error" class="labels-error" @click="labels.load()">Retry loading labels</button>
@@ -125,6 +131,7 @@ import { hasPerm } from '@/perm/perm.js';
 import router from "@/router/index.js";
 import { useRoute } from 'vue-router';
 import { computed, ref, watch, nextTick } from 'vue';
+import {labelTree,openLabelRows} from "@/components/mail-labels/tree";
 import LabelOptions from "@/components/mail-labels/options.vue";
 import { useMailLabels } from '@/store/mail-labels';
 import { useUserStore } from '@/store/user';
@@ -149,9 +156,55 @@ const labelUnread=ref({}), countsReady=ref(false), showHiddenLabels=ref(false);
 const isHiddenLabel=label=>label.sidebar==='hide' || (label.sidebar==='unread' && !labelUnread.value[label.id]);
 const hiddenLabels=computed(()=>labels.items.filter(isHiddenLabel));
 watch(()=>hiddenLabels.value.length,count=>{if(!count)showHiddenLabels.value=false;});
-const firstHidden=computed(()=>hiddenLabels.value[0]?.id);
-const orderedLabels=computed(()=>[...labels.items.filter(label=>!isHiddenLabel(label)),...hiddenLabels.value]);
+const mainTree=computed(()=>labelTree(labels.items.filter(label=>!isHiddenLabel(label))));
+const moreTree=computed(()=>labelTree(hiddenLabels.value));
+const firstHidden=computed(()=>moreTree.value.roots[0]?.label.id);
+const expandedLabels=ref(new Set());
+const orderedLabels=computed(()=>[...openLabelRows(mainTree.value,expandedLabels.value),...openLabelRows(moreTree.value,expandedLabels.value)]
+  .map(row=>({...row,label:row.node.label})));
+const expansionKey=owner=>'cloudmail.labelExpansion.'+owner;
+watch(()=>labels.owner, owner=>{
+  let ids=[];
+  try { const saved=JSON.parse(localStorage.getItem(expansionKey(owner))); if(Array.isArray(saved))ids=saved; } catch {}
+  expandedLabels.value=new Set(ids.filter(Number.isSafeInteger));
+},{immediate:true,flush:'sync'});
+function rememberExpansion(ids) {
+  expandedLabels.value=ids;
+  if(labels.owner)try {localStorage.setItem(expansionKey(labels.owner),JSON.stringify([...ids]));} catch {}
+}
+function toggleBranch(id) {
+  const ids=new Set(expandedLabels.value);
+  if(ids.has(id))ids.delete(id);else ids.add(id);
+  rememberExpansion(ids);
+}
+function branchKey(node,right) {
+  if(node.children.length && expandedLabels.value.has(node.label.id)!==right){toggleBranch(node.label.id);return;}
+  const target=right ? node.children[0] : node.parent;
+  if(target)document.querySelector(`.mail-sidebar [data-label-id="${target.label.id}"] a`)?.focus();
+}
+function ancestors(id) {
+  const ids=[];
+  let parent=(mainTree.value.byId.get(id) || moreTree.value.byId.get(id))?.parent;
+  while(parent){ids.push(parent.label.id);parent=parent.parent;}
+  return ids;
+}
+function revealAncestors(id) {
+  const ids=ancestors(id);
+  if(ids.some(parent=>!expandedLabels.value.has(parent)))rememberExpansion(new Set([...expandedLabels.value,...ids]));
+}
+watch(()=>[activeLabel.value,...ancestors(activeLabel.value)].join('/'),()=>revealAncestors(activeLabel.value),{immediate:true});
+watch(()=>labels.revealed,change=>{
+  if(!change)return;
+  if(moreTree.value.byId.has(change.id))showHiddenLabels.value=true;
+  revealAncestors(change.id);
+});
+watch(()=>labels.displayChanged,change=>{if(change)focusLabelControl(change.id);});
 async function focusLabelControl(id) {
+  const focused=document.activeElement;
+  const labelName=labels.items.find(label=>label.id===id)?.name;
+  if(focused && focused!==document.body && !focused.closest(`[data-label-id="${id}"]`) &&
+    focused.closest('[role="menu"]')?.getAttribute('aria-label')!=='Options for '+labelName)return;
+  if(mainTree.value.byId.has(id) || showHiddenLabels.value)revealAncestors(id);
   await nextTick();
   const row=document.querySelector(`.mail-sidebar [data-label-id="${id}"]`);
   const target=row?.getClientRects().length ? row.querySelector('.label-options') : document.querySelector('.mail-sidebar .more-labels');
@@ -218,7 +271,11 @@ const uiStore = useUiStore();
 .label-row { position:relative; display:flex; align-items:center; margin-right:8px; height:32px; border-radius:0 16px 16px 0; }
 .label-row:hover { background:var(--mail-hover); }
 .label-row.selected-label { background:var(--mail-selected); font-weight:600; }
-.label-row a { display:flex; align-items:center; gap:16px; padding-left:24px; min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
+.label-disclosure { position:absolute; left:calc(3px + var(--branch-indent)); display:grid; place-items:center; padding:0; width:20px; height:24px; border-radius:12px; color:inherit; cursor:pointer; }
+.label-disclosure:hover { background:var(--mail-hover); }
+:global(.mail-layout.nav-compact .label-disclosure) { display:none; }
+:global(.mail-layout.nav-compact .label-row a) { padding-left:24px; }
+.label-row a { display:flex; align-items:center; gap:16px; padding-left:calc(24px + var(--branch-indent)); min-width:0; flex:1; height:100%; color:inherit; text-decoration:none; }
 .label-row a svg { flex-shrink:0; }
 .label-row a span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .label-row :deep(.label-options) { opacity:0; }

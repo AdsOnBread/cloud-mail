@@ -120,6 +120,7 @@
         >
           Remove label
         </button>
+        <button class="option" type="button" role="menuitem" @pointerenter="leavePalette" @click="addSublabel">Add sublabel</button>
       </template>
     </div>
   </el-popover>
@@ -181,7 +182,6 @@ import ColorChoices from "./color-choices.vue";
 import ColorGrid from "./color-grid.vue";
 import { customColors, labelStyle } from "./colors";
 
-const emit = defineEmits(["display-changed"]);
 const show = { mode: "show", text: "Show" },
   hide = { mode: "hide", text: "Hide" };
 const displaySections = [
@@ -263,6 +263,10 @@ function back() {
   palette.value = false;
   colorItem.value?.focus();
 }
+function addSublabel() {
+  open.value=false;
+  labels.edit={parentId:props.label.id};
+}
 function edit(remove) {
   open.value = false;
   labels.edit = { ...props.label, remove };
@@ -288,10 +292,7 @@ async function setDisplay(list, mode) {
   error.value = "";
   try {
     await labels.setDisplay(props.label.id, list, mode);
-    if (open.value) {
-      open.value = false;
-      emit("display-changed", props.label.id);
-    }
+    open.value = false;
   } catch (e) {
     error.value = e.message || "Could not change label visibility.";
   } finally {

@@ -1,4 +1,5 @@
 // Isolated visual-test preview. All mail and users below are fictional; sends remain in memory.
+import { inLabelBranch } from '../src/components/mail-labels/tree.js';
 import { groupThreads } from '../../mail-worker/src/mobile/threads.js';
 import { createServer as createHTTPServer } from 'node:http';
 import { createServer, loadConfigFromFile } from 'vite';
@@ -159,8 +160,24 @@ const api=createHTTPServer(async(req,res)=>{
    }
  }else if(path==='/email/conversation/label-colors')data=recentColors;
  else if(path==='/email/conversation/labels' && req.method==='GET')data=[...labels.values()];
- else if(path==='/email/conversation/labels' && req.method==='POST'){
-   data={id:nextLabel++,name:JSON.parse(body).name};labels.set(data.id,data);
+ else if((path==='/email/conversation/labels' && req.method==='POST') || (/^\/email\/conversation\/labels\/\d+$/.test(path) && req.method==='PUT')){
+   const id=req.method==='PUT'?Number(path.split('/').at(-1)):null,previous=labels.get(id);
+   const {name,parentId}=JSON.parse(body),parent=labels.get(parentId), leaf=typeof name==='string'?name.trim():'';
+   const fail=(code,message)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify({code,message}));};
+   if(id && !previous || parentId!=null && !parent){fail(404,'Label not found.');return;}
+   if(!leaf || leaf.length>100 && !(previous?.name===leaf || previous?.name.endsWith('/'+leaf)) || parent && leaf.startsWith('/')){fail(400,'Enter a label name of up to 100 characters.');return;}
+   const destination=parent ? parent.name+'/'+leaf : leaf;
+   const key=path=>path.replace(/[A-Z]/g,c=>c.toLowerCase());
+   const old=previous && key(previous.name);
+   if(old && ((key(destination)!==old && inLabelBranch(destination,previous.name)) || parent && inLabelBranch(parent.name,previous.name))){fail(400,'Choose an existing parent outside this label.');return;}
+   const updated=new Map();
+   for(const label of labels.values())if(old && inLabelBranch(label.name,previous.name))
+     updated.set(label.id,destination+label.name.slice(previous.name.length));
+   if(!previous)updated.set(nextLabel,destination);
+   const names=new Set([...labels.values()].filter(label=>!updated.has(label.id)).map(label=>key(label.name)));
+   if([...updated.values()].some(value=>names.has(key(value)))){fail(409,'A label with that name already exists.');return;}
+   for(const [labelId,value] of updated)labels.set(labelId,{...labels.get(labelId),id:labelId,name:value});
+   data=labels.get(id || nextLabel++);
  }else if(path.startsWith('/email/conversation/labels/') && path.endsWith('/display')){
    const id=Number(path.split('/').at(-2)),label=labels.get(id),{list,mode}=JSON.parse(body);
    if(!label){res.writeHead(404,{'Content-Type':'application/json'});res.end(JSON.stringify({code:404,message:'Label not found.'}));return;}
@@ -178,7 +195,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.startsWith('/email/conversation/labels/')){
    const id=Number(path.split('/').at(-1));
    if(req.method==='DELETE'){labels.delete(id);for(const set of membership.values()) set.delete(id);}
-   else {data={...labels.get(id),id,name:JSON.parse(body).name};labels.set(id,data);}
+
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
    if(operation==='importance'){const revision=++importanceRevision;for(const id of ids)importanceChoices.set(id,{revision,important:p.important});}

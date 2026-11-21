@@ -12,6 +12,8 @@ export const useMailLabels = defineStore("mail-labels", {
     error: "",
     edit: null,
     applied: null,
+    revealed: null,
+    displayChanged: null,
     owner: "",
     request: 0,
   }),
@@ -24,6 +26,8 @@ export const useMailLabels = defineStore("mail-labels", {
         this.colorRequest++;
         this.edit = null;
         this.applied = null;
+        this.revealed = null;
+        this.displayChanged = null;
         this.owner = owner;
       }
       const request = ++this.request;
@@ -37,11 +41,11 @@ export const useMailLabels = defineStore("mail-labels", {
           this.error = e.message || "Could not load labels.";
       }
     },
-    async save(id, name, anchors = []) {
+    async save(id, name, anchors = [], parentId = null) {
       const owner = this.owner;
       const label = id
-        ? await http.put(path + "/" + id, { name }, { noMsg: true })
-        : await http.post(path, { name }, { noMsg: true });
+        ? await http.put(path + "/" + id, { name, parentId }, { noMsg: true })
+        : await http.post(path, { name, parentId }, { noMsg: true });
       if (owner !== this.owner) return;
       ++this.request;
       this.items = [
@@ -60,6 +64,7 @@ export const useMailLabels = defineStore("mail-labels", {
       if (owner !== this.owner) return;
       this.edit = null;
       await this.load(owner);
+      if(owner===this.owner)this.revealed={id:label.id};
     },
     async setDisplay(id, list, mode) {
       const owner = this.owner;
@@ -68,6 +73,7 @@ export const useMailLabels = defineStore("mail-labels", {
       const item = this.items.find(label => label.id === id);
       if (item) item[list] = changed[list];
       await this.load(owner);
+      if (owner===this.owner) this.displayChanged={id};
     },
     async loadRecentColors() {
       const request = ++this.colorRequest;
