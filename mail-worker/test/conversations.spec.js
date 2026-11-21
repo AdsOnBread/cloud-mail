@@ -388,3 +388,35 @@ it('keeps the six most recent distinct custom label pairs in selection order', a
  expect((await recentLabelColors(env.db,1)).map(pair=>pair.background))
    .toEqual([2,6,5,4,3,1].map(i=>backgrounds[i]));
 });
+
+it('counts label folders by unread conversation across aliases and later replies', async () => {
+ const {saveLabel} = await import('../src/service/mailbox-labels');
+ const {labelUnreadCounts} = await import('../src/service/conversation-service');
+ const tag=await saveLabel(env.db,1,'Committee');
+ const root=await insert({subject:'Meeting',message_id:'<meeting@example.com>',unread:1});
+ await action('label',[root.email_id],{add:[tag.id],remove:[]});
+ const later=await insert({account_id:3,in_reply_to:'<meeting@example.com>',unread:0});
+ await insert({account_id:3,in_reply_to:'<meeting@example.com>',unread:0});
+ const counts=(accountId,allReceive=0,userId=1)=>labelUnreadCounts(context(),{accountId,allReceive},userId);
+ expect(await counts(1)).toEqual({[tag.id]:1});
+ expect(await counts(3)).toEqual({});
+ expect(await counts(3,1)).toEqual({[tag.id]:1});
+ expect(await counts(2,1,2)).toEqual({});
+ await action('read',[later.email_id]);
+ expect(await counts(1)).toEqual({});
+ await action('read',[later.email_id],{unread:0});
+ await action('delete',[root.email_id]);
+ expect(await counts(1)).toEqual({});
+});
+
+it('saves each label visibility preference independently for its owner', async () => {
+ const {saveLabel,setLabelDisplay,listLabels}=await import('../src/service/mailbox-labels');
+ const label=await saveLabel(env.db,1,'Dispatch');
+ await setLabelDisplay(env.db,1,label.id,{list:'messages',mode:'hide'});
+ await setLabelDisplay(env.db,1,label.id,{list:'sidebar',mode:'unread'});
+ await expect(setLabelDisplay(env.db,2,label.id,{list:'sidebar',mode:'show'})).rejects.toMatchObject({code:404});
+ await expect(setLabelDisplay(env.db,1,label.id,{list:'messages',mode:'unread'})).rejects.toMatchObject({code:400});
+ expect((await listLabels(env.db,1))[0]).toMatchObject({sidebar:'unread',messages:'hide'});
+ await setLabelDisplay(env.db,1,label.id,{list:'messages',mode:'show'});
+ expect(await listLabels(env.db,1)).toEqual([{...label,sidebar:'unread'}]);
+});

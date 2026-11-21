@@ -37,6 +37,27 @@ function participants(row, folder) {
 	const names = JSON.parse(row.participants).filter(Boolean);
 	return names.map((name) => (names.length > 1 ? name.split(/\s+/)[0] : name)).join(', ');
 }
+// Match a label folder's account-scoped membership and whole-conversation unread state.
+export async function labelUnreadCounts(c, params, userId) {
+	const db = c.env.db;
+	await ensureThreads(db,userId);
+	const combined = Number(params.allReceive) === 1;
+	const {results} = await db.prepare(`WITH labeled AS (
+    SELECT DISTINCT lm.label_id, m.thread_id FROM mailbox_label_members lm
+    JOIN email e ON e.email_id=lm.email_id AND e.user_id=lm.user_id
+    JOIN account a ON a.account_id=e.account_id
+    JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
+    WHERE ${visible} ${combined ? '' : 'AND e.account_id=?'}
+  )
+  SELECT label_id,COUNT(*) count FROM labeled WHERE EXISTS (
+    SELECT 1 FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
+    JOIN account a ON a.account_id=e.account_id
+    WHERE m.thread_id=labeled.thread_id AND ${visible} AND e.type=0 AND e.unread=0
+  ) GROUP BY label_id`)
+		.bind(userId,...(combined ? [] : [Number(params.accountId) || 0]),userId).all();
+	return Object.fromEntries(results.map(row => [row.label_id,row.count]));
+}
+
 export async function conversationList(c, p, userId) {
 	const db = c.env.db;
 	await ensureThreads(db, userId);

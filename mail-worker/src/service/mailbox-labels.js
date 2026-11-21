@@ -13,15 +13,34 @@ export const labelSchema = [
 	`CREATE TABLE IF NOT EXISTS mailbox_custom_colors (
       change_id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, background TEXT NOT NULL,
       foreground TEXT NOT NULL, UNIQUE(user_id,background,foreground))`,
+	`CREATE TABLE IF NOT EXISTS mailbox_label_display (
+      label_id INTEGER PRIMARY KEY REFERENCES mailbox_labels(label_id) ON DELETE CASCADE,
+      sidebar TEXT NOT NULL DEFAULT 'show' CHECK(sidebar IN ('show','unread','hide')),
+      messages TEXT NOT NULL DEFAULT 'show' CHECK(messages IN ('show','hide')))`,
 	'CREATE INDEX IF NOT EXISTS idx_labels_for_email ON mailbox_label_members(user_id,email_id,label_id)',
 ];
-export function listLabels(db, userId) {
-	return db
-		.prepare('SELECT l.label_id AS id,l.name,c.background,c.foreground FROM mailbox_labels l LEFT JOIN mailbox_label_colors c ON c.label_id=l.label_id WHERE l.user_id=? ORDER BY l.name COLLATE NOCASE')
-		.bind(userId)
-		.all()
-		.then(({results}) => results.map(({id,name,background,foreground}) => background ? {id,name,background,foreground} : {id,name}));
+export async function listLabels(db, userId) {
+	const {results} = await db.prepare(`SELECT l.label_id AS id,l.name,c.background,c.foreground,d.sidebar,d.messages
+    FROM mailbox_labels l LEFT JOIN mailbox_label_colors c ON c.label_id=l.label_id
+    LEFT JOIN mailbox_label_display d ON d.label_id=l.label_id
+    WHERE l.user_id=? ORDER BY l.name COLLATE NOCASE`).bind(userId).all();
+	return results.map(({id,name,background,foreground,sidebar,messages}) => ({
+		id, name, ...(background ? {background,foreground} : {}),
+		...(sidebar && sidebar !== 'show' ? {sidebar} : {}), ...(messages === 'hide' ? {messages} : {})
+	}));
 }
+
+export async function setLabelDisplay(db, userId, id, {list, mode} = {}) {
+	if (!['sidebar','messages'].includes(list) || !['show','hide'].includes(mode) && !(list === 'sidebar' && mode === 'unread'))
+		throw new BizError('Invalid label visibility.', 400);
+	const row = await db.prepare(`INSERT INTO mailbox_label_display(label_id,${list})
+    SELECT label_id,? FROM mailbox_labels WHERE user_id=? AND label_id=?
+    ON CONFLICT(label_id) DO UPDATE SET ${list}=excluded.${list} RETURNING label_id AS id,${list}`)
+		.bind(mode,userId,id).first();
+	if (!row) throw new BizError('Label not found.',404);
+	return row;
+}
+
 export async function saveLabel(db, userId, name, id) {
 	if (typeof name !== 'string' || !name.trim() || name.trim().length > 100)
 		throw new BizError('Enter a label name of up to 100 characters.', 400);
