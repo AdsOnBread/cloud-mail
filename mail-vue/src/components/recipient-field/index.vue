@@ -40,9 +40,9 @@
           </span>
         </div>
       </div>
-      <ContactCard v-if="cardIndex!==null && chip(cardIndex)" :key="cardAddress" ref="contactCard"
-        :email="cardAddress" :name="display(cardAddress)" :owner="owner" :account-id="accountId"
-        :anchor="chip(cardIndex).closest('.recipient-chip')" :focused="pinned" @hold="holdCard" @leave="leaveCard" @close="closeCard" @send="composeContact"/>
+      <ContactCard v-if="cardTarget" :key="cardTarget.address" ref="contactCard"
+        :email="cardTarget.address" :name="display(cardTarget.address)" :owner="owner" :account-id="accountId"
+        :anchor="cardTarget.anchor" :focused="pinned" @hold="holdCard" @leave="leaveCard" @close="closeCard" @send="composeContact"/>
       <div v-if="menuIndex !== null" ref="menu" role="menu" :aria-label="`${label} recipient actions`"
         class="recipient-menu compose-format-popup" :style="menuStyle" @keydown="menuKey" @copy="clipboardEvent($event,menuIndex)" @cut="clipboardEvent($event,menuIndex)" @mousedown.prevent @focusout="leaveMenu">
         <button type="button" role="menuitem" @click="clipboardAction(menuIndex,'copy')">Copy <kbd>{{ modifier }}C</kbd></button>
@@ -56,13 +56,10 @@
     </Teleport>
   </div>
 </template>
-<script>
-// Each document has one contact card, including when several drafts are open.
-let activeContactCard=null;
-</script>
 <script setup>
 import ContactCard from './contact-card.vue';
-import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import {useContactCard,dismissContactCard} from './use-contact-card';
+import { nextTick, ref, useId, watch } from 'vue';
 import {useRecipientSuggestions} from './suggestions';
 import {cleanRecipientName} from '../../../../shared/recipient-names';
 import { formatRecipient, parseRecipientList, splitRecipients } from '@/utils/recipients.js';
@@ -91,39 +88,16 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
     commit();
     input.value?.focus();
   });
-const cardIndex=ref(null),cardAddress=ref(""),contactCard=ref(),pinned=ref(false);
-let cardTimer,touchActivated=false;
-function holdCard(){clearTimeout(cardTimer);}
-function closeCard(restore=false){
-  holdCard();
-  const index=cardIndex.value;
-  if (activeContactCard?.close===closeCard) activeContactCard=null;
-  cardIndex.value=null;cardAddress.value="";pinned.value=false;
-  if (restore && index!==null) focusAt(index);
-}
-async function showCard(index,focus=false) {
-  const address=props.modelValue[index];
-  if (!props.owner || !isEmail(address) || !chip(index)?.getClientRects().length) return;
-  if (!focus && document.querySelector(".recipient-menu")) return;
-  if (activeContactCard && activeContactCard.close!==closeCard) {
-    if (!focus && activeContactCard.pinned()) return;
-    activeContactCard.close();
-  }
-  activeContactCard={close:closeCard,pinned:()=>pinned.value};
-  holdCard();
+const {target:cardTarget,card:contactCard,pinned,open:openCard,close:closeCard,hold:holdCard,hover,leave:leaveCard}=useContactCard();
+let touchActivated=false;
+function showCard(index,focus=false) {
+  const address=props.modelValue[index], trigger=chip(index);
+  if (!props.owner || !isEmail(address) || !trigger) return;
   if (menuIndex.value!==null) closeMenu(false);
-  cardIndex.value=index;cardAddress.value=address;pinned.value=focus;
-  if (focus) {await nextTick();contactCard.value?.focus();}
+  return openCard({address,index,trigger,anchor:trigger.closest(".recipient-chip")},focus);
 }
 function hoverChip(event,index) {
-  if (event.pointerType!=="mouse" || pinned.value || menuIndex.value!==null) return;
-  holdCard();cardTimer=setTimeout(()=>showCard(index),500);
-}
-function leaveCard() {
-  holdCard();
-  if (!pinned.value) cardTimer=setTimeout(()=>{
-    if (!document.activeElement?.closest(".person-card")) closeCard();
-  },180);
+  if (menuIndex.value===null) hover(event,()=>showCard(index));
 }
 function touchChip(event,index) {
   if (event.pointerType!=="touch") return;
@@ -140,10 +114,9 @@ function selectChip(event,index) {
 }
 function composeContact(person){closeCard(true);emit("composeContact",person);}
 watch([()=>props.owner,()=>props.accountId],()=>closeCard(),{flush:"sync"});
-watch(()=>props.modelValue[cardIndex.value],value=>{
-  if (cardIndex.value!==null && value!==cardAddress.value) closeCard();
+watch(()=>props.modelValue[cardTarget.value?.index],value=>{
+  if (cardTarget.value && value!==cardTarget.value.address) closeCard();
 });
-onBeforeUnmount(()=>closeCard());
 function clear() {
   closeCard();
   hideSuggestions();
@@ -235,7 +208,7 @@ function moreInfoShortcut(event,index) {
 }
 function chipKey(event,index) {
   if (moreInfoShortcut(event,index)) return;
-  if (event.key==="Escape" && cardIndex.value!==null) {event.preventDefault();event.stopPropagation();closeCard(true);return;}
+  if (event.key==="Escape" && cardTarget.value) {event.preventDefault();event.stopPropagation();closeCard(true);return;}
   if (clipboardShortcut(event,index)) return;
   if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
   switch (event.key) {
@@ -302,7 +275,7 @@ function reposition() {
   }
 }
 async function openMenu(targetIndex) {
-  activeContactCard?.close();
+  dismissContactCard();
   closeCard();
   clipboardVersion++;clipboardError.value='';
   menuStyle.value={};

@@ -7,9 +7,10 @@
       <div class="addresses">
         <strong :title="title">{{ title }}</strong>
         <div class="email-line">
-          <a ref="emailLink" :href="'mailto:'+encodeURIComponent(email)" :aria-label="'Email '+email+' (opens in a new window)'"
+          <span v-if="!canSend" class="readonly-email">{{ email }}</span>
+          <a v-else ref="emailLink" :href="'mailto:'+encodeURIComponent(email)" :aria-label="'Email '+email+' (opens in a new window)'"
             :title="email" @click.prevent="send">{{ email }}</a>
-          <button aria-label="Copy email" data-tip="Copy email" @click="copy"><Icon icon="material-symbols:content-copy" width="18"/></button>
+          <button ref="copyButton" aria-label="Copy email" data-tip="Copy email" @click="copy"><Icon icon="material-symbols:content-copy" width="18"/></button>
         </div>
       </div>
       <button class="save" :aria-label="saveLabel" :data-tip="saveLabel" :disabled="busy || !ready" @click="save">
@@ -17,7 +18,7 @@
       </button>
     </div>
     <div class="actions">
-      <button class="send-mail" aria-label="Send Mail (opens in a new window)" @click="send">
+      <button class="send-mail" :disabled="!canSend" aria-label="Send Mail (opens in a new window)" @click="send">
         <Icon icon="material-symbols:mail-outline" width="20"/>Send Mail
       </button>
       <button disabled aria-label="Message"><Icon icon="material-symbols:chat-bubble-outline" width="19"/></button>
@@ -37,10 +38,10 @@ import http from "@/axios";
 import {useUserStore} from "@/store/user";
 import {useWriterStore} from "@/store/writer";
 import {positionMailboxPopup} from "../mail-popup-position";
-const props=defineProps({email:String,name:String,accountId:Number,owner:String,anchor:Object,focused:Boolean});
+const props=defineProps({email:String,name:String,accountId:Number,owner:String,anchor:Object,focused:Boolean,canSend:{type:Boolean,default:true},pointerOffset:Number});
 const emit=defineEmits(["close","send","hold","leave"]);
 const user=useUserStore(),writer=useWriterStore(),token=user.authenticatedToken;
-const card=ref(),emailLink=ref(),position=ref({}),ready=ref(false),saved=ref(null),busy=ref(false),notice=ref("");
+const card=ref(),emailLink=ref(),copyButton=ref(),position=ref({}),ready=ref(false),saved=ref(null),busy=ref(false),notice=ref("");
 const title=computed(()=>saved.value?.name || props.name || props.email);
 const calendarLink=computed(()=>"https://calendar.google.com/calendar/render?"+new URLSearchParams({action:"TEMPLATE",add:props.email}));
 const saveLabel=computed(()=>saved.value ? "Remove from contacts" : "Add to contacts");
@@ -92,11 +93,11 @@ async function copy() {
   catch {if (current()) notice.value="Couldn’t copy the email address.";}
 }
 function send() {
-  if (current()) emit("send",{email:props.email,name:title.value,accountId:props.accountId});
+  if (props.canSend && current()) emit("send",{email:props.email,name:title.value,accountId:props.accountId});
 }
 function place() {
   if (!props.anchor?.isConnected || !props.anchor.getClientRects().length) return emit("close");
-  if (card.value) position.value=positionMailboxPopup(card.value,props.anchor,340,undefined,false,1,15);
+  if (card.value) position.value=positionMailboxPopup(card.value,props.anchor,340,undefined,false,1,15+(props.pointerOffset || 0));
 }
 function outside(event) {
   if (!card.value?.contains(event.target) && !props.anchor.contains(event.target)) emit("close");
@@ -111,8 +112,8 @@ function tab(event) {
   if (event.shiftKey ? document.activeElement!==actions[0] : document.activeElement!==actions.at(-1)) return;
   event.preventDefault();emit("close",true);
 }
-function focus() {emailLink.value?.focus({preventScroll:true});}
-defineExpose({focus});
+function focus() {(emailLink.value || copyButton.value)?.focus({preventScroll:true});}
+defineExpose({focus,containsFocus:()=>card.value?.contains(document.activeElement)});
 let observer;
 onMounted(async()=>{
   place();read();
@@ -144,7 +145,7 @@ onBeforeUnmount(()=>{
 .photo {display:grid;place-items:end center;overflow:hidden;flex:none;width:80px;height:80px;border-radius:50%;background:#adc6ff;color:#5276cf;}
 .photo svg {transform:translateY(9px);}
 .addresses {min-width:0;flex:1;}
-.addresses strong,.email-line a {overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.addresses strong,.email-line a,.readonly-email {overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
 .addresses strong {display:block;font:400 22px/28px Arial,sans-serif;padding-right:32px;}
 .email-line {gap:3px;}
 .email-line a,.email-line button {color:#315da8;}
