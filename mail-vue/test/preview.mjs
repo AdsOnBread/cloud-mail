@@ -94,6 +94,15 @@ function threadLabels(members) {
  return [...new Set(members.flatMap(row=>[...(membership.get(row.emailId)||[])]))];
 }
 const filing = new Map(), moveUndos = new Map(), moveRequests = new Map();
+function replayMove(res,request,intent){
+  if(!request || !moveRequests.has(request))return false;
+  const prior=moveRequests.get(request), same=prior.intent===intent;
+  const result=moveUndos.get(prior.token)?.members.size ? {undoToken:prior.token} : {alreadyProcessed:true};
+  res.writeHead(same?200:409,{'Content-Type':'application/json'});
+  res.end(JSON.stringify(same?{code:200,data:result}:{code:409,message:'This request is for a different move.'}));
+  return true;
+}
+
 function filingAnchor(members) {
  const received=members.filter(row=>row.type===0 && row.status===0);
  return received.length ? Math.max(...received.map(row=>row.emailId)) : Math.min(...members.map(row=>row.emailId));
@@ -295,12 +304,34 @@ const api=createHTTPServer(async(req,res)=>{
  else if(path==='/v1/messages/trash-read'){
    const {emailIds,read}=JSON.parse(body);rows.filter(row=>emailIds.includes(row.emailId)&&row.trashedAt).forEach(row=>row.unread=Number(read));
    data={messageCount:emailIds.length};
- }else if(path==='/v1/messages/move-from-trash'){
-   const {emailIds,labelId}=JSON.parse(body);
-   for(const id of emailIds){const row=rows.find(m=>m.emailId===id);if(!row?.trashedAt)continue;row.trashedAt=null;
-     if(labelId){const applied=membership.get(id)||new Set();applied.add(labelId);membership.set(id,applied);}
-     filing.set(id,labelId?null:0);}
-   data={messageCount:emailIds.length};
+ }else if(path==='/email/conversation/undo-move' || path==='/v1/messages/undo-recovery'){
+   const move=moveUndos.get(JSON.parse(body).token);
+   if(!move || Boolean(move.trash)!==path.endsWith('/undo-recovery')){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({code:409,message:'This move can no longer be undone.'}));return;}
+   for(const [id,prior] of move.members){
+     if(move.trash)rows.find(r=>r.emailId===id).trashedAt=prior.trashedAt;
+     if(prior.wakeAt===undefined)filing.delete(id);else filing.set(id,prior.wakeAt);
+     const set=membership.get(id)||new Set();
+     if(prior.source)set.add(move.source);
+     if(!prior.destination)set.delete(move.destination);
+     membership.set(id,set);
+   }
+   move.members.clear(); data={restored:true};
+ }else if(path==='/v1/messages/move-from-trash' || (path==='/v1/messages/restore' && JSON.parse(body).undoable)){
+   const {emailIds,labelId,undoable,requestId,clientId}=JSON.parse(body);
+   const request=requestId||clientId, intent=JSON.stringify([path,labelId,[...emailIds].sort((a,b)=>a-b)]);
+   if(replayMove(res,request,intent))return;
+   const selected=emailIds.map(id=>rows.find(m=>m.emailId===id));
+   if(selected.some(r=>!r?.trashedAt || r.scheduledDraftId)){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({code:409,message:'Trash changed.'}));return;}
+   const members=new Map();
+   for(const row of selected){
+     const id=row.emailId, applied=membership.get(id)||new Set();
+     members.set(id,{trashedAt:row.trashedAt,wakeAt:filing.get(id),destination:applied.has(labelId)});
+     row.trashedAt=null;
+     if(labelId){applied.add(labelId);membership.set(id,applied);}
+     if(path.endsWith('move-from-trash'))filing.set(id,labelId?null:0);
+   }
+   data={messageCount:selected.length};
+   if(undoable){data.undoToken=crypto.randomUUID();moveUndos.set(data.undoToken,{members,trash:true,destination:labelId});if(request)moveRequests.set(request,{token:data.undoToken,intent});}
  }
  else if(['/v1/messages/restore','/v1/messages/trash','/v1/messages/purge'].includes(path)){const ids=JSON.parse(body).emailIds;for(let i=rows.length-1;i>=0;i--)if(ids.includes(rows[i].emailId)){if(rows[i].scheduledDraftId && !path.endsWith('/trash')){
    const d=cloudDrafts.get(rows[i].scheduledDraftId);d.state=path.endsWith('/purge')?'deleted':'draft';d.version++;delete d.trashEdit;delete d.trashSendAt;d.labelIds=[...(membership.get(rows[i].emailId)||[])];recordDraft(d);rows.splice(i,1);
@@ -397,28 +428,11 @@ const api=createHTTPServer(async(req,res)=>{
    const id=Number(path.split('/').at(-1));
    if(req.method==='DELETE'){labels.delete(id);for(const set of membership.values()) set.delete(id);}
 
- }else if(path==='/email/conversation/undo-move'){
-   const move=moveUndos.get(JSON.parse(body).token);
-   if(!move){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({code:409,message:'This move can no longer be undone.'}));return;}
-   for(const [id,prior] of move.members){
-     if(prior.wakeAt===undefined)filing.delete(id);else filing.set(id,prior.wakeAt);
-     const set=membership.get(id)||new Set();
-     if(prior.source)set.add(move.source);
-     if(!prior.destination)set.delete(move.destination);
-     membership.set(id,set);
-   }
-   move.members.clear(); data={restored:true};
  }else if(path.startsWith('/email/conversation/')){
    const p=JSON.parse(body),ids=new Set(p.emailIds.flatMap(id=>threadFor(id).map(row=>row.emailId))),operation=path.split('/').at(-1);
    const request=operation==='move' && (p.requestId || p.clientId);
    const intent=request && JSON.stringify([p.fromLabelId||0,p.labelId,[...p.emailIds].sort((a,b)=>a-b)]);
-   if(request && moveRequests.has(request)){
-     const prior=moveRequests.get(request);
-     const same=prior.intent===intent;
-     const result=moveUndos.get(prior.token)?.members.size ? {undoToken:prior.token} : {alreadyProcessed:true};
-     res.writeHead(same?200:409,{'Content-Type':'application/json'});
-     res.end(JSON.stringify(same?{code:200,data:result}:{code:409,message:'This request is for a different move.'}));return;
-   }
+   if(replayMove(res,request,intent))return;
    for(const [token,move] of moveUndos){
      const touchesLabel=operation==='label' && [...p.add,...p.remove].some(id=>id===move.source || id===move.destination);
      if((touchesLabel || ['move','inbox','archive','snooze','delete'].includes(operation)) && [...ids].some(id=>move.members.has(id)))moveUndos.delete(token);
