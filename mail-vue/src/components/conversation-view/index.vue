@@ -20,7 +20,7 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <MovePicker :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
+      <MovePicker :show-categories="route.query.folder==='inbox' && ui.inboxTabs" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
       <LabelPicker :rows="[{lastEmailId:Number(route.query.emailId),labelIds}]" :disabled="busy || !messages.length" @apply="ops=>mutate('label',ops)" />
       <button
         v-if="threadDrafts.length"
@@ -389,6 +389,7 @@ function back() {
   else
     router.push(
       {
+        inbox: {name:"email",query:route.query.category?{category:route.query.category}:{}},
         all: "/all",
         label: route.query.labelId ? "/label/"+route.query.labelId : "/all",
         sent: "/sent",
@@ -409,7 +410,7 @@ async function mutate(action, extra = {}) {
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;
-    if (["delete","archive","inbox","move"].includes(action)) back();
+    if (["delete","archive","inbox","move","category"].includes(action)) back();
     else if (action === "label") labelIds.value=[...new Set([...labelIds.value,...extra.add])].filter(id=>!extra.remove.includes(id));
     else {
       unreadCount.value=extra.unread===0?incoming.value:0;

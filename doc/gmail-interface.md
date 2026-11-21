@@ -31,7 +31,9 @@ References include [Gmail formatting and links](https://support.google.com/mail/
 | Move to | Moved a selection to a label, opened the conversation there and moved it back to Inbox. |
 | Scheduled send | Compared Gmail’s Send dropdown and recipient validation. In Cloudmail, chose a custom time, checked the timezone and past-date validation, downloaded an attached file from Scheduled and canceled back to an editable draft. Delivery and interruption tests used fictional mailboxes. |
 
-Cloudmail offers its own photos and supports choosing a personal image. Gmail’s category tabs and Google Workspace side panel remain visible differences. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.
+Cloudmail offers its own photos and supports choosing a personal image. Cloudmail uses sender and subject rules plus manual filing for category placement. Gmail uses a different classification service. The Google Workspace side panel remains a visible difference. The comparison covered the web mail workflows above. It is a behavioral and visual review rather than a pixel-by-pixel certification of all Gmail screens.
 
+
+The inbox comparison covered Primary, Promotions, Social, Updates and Forums, the active underline, unread counts and keyboard switching. Checked manual filing from search and from a tab, returning from the reader, paging and the single-inbox setting. Cloudmail’s tab badges count unread conversations.
 
 The bundled photographs come from NASA’s public image library. [Orbital sunset](https://images.nasa.gov/details/iss067e124176) · [Aurora, photographed by Terry Virts](https://images.nasa.gov/details/iss043e125565) · [Himalayas](https://images.nasa.gov/details/iss068e047346)

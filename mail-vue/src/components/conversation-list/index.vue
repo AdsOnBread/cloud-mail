@@ -117,7 +117,7 @@
         >
           <Icon icon="material-symbols:schedule-outline" width="20" />
         </button>
-        <MovePicker :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
+        <MovePicker :show-categories="folder==='inbox' && uiPreferences.inboxTabs" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
           <LabelPicker :rows="rows.filter(row=>selected.includes(row.lastEmailId))" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
       </template>
       <span class="total">{{
@@ -144,10 +144,11 @@
         <Icon icon="material-symbols:chevron-right" width="20" />
       </button>
     </div>
+    <InboxTabs v-if="category" :value="category" :panel-id="panelId" :unread="categoryUnread" @select="selectCategory"/>
     <p v-if="error" role="alert" class="list-status">
       {{ error }} <button @click="refresh">Retry</button>
     </p>
-    <div v-bind="containerProps" class="conversation-scroll">
+    <div v-bind="containerProps" class="conversation-scroll" :id="category?panelId:undefined" :role="category?'tabpanel':undefined" :aria-labelledby="category?panelId+'-'+category:undefined">
       <div v-bind="wrapperProps">
         <MailRow
           v-for="{ data: row } in virtualRows"
@@ -271,7 +272,7 @@
         {{
           search.query
             ? "No conversations match your search."
-            : "No conversations here."
+            : category ? "Your "+inboxCategories.find(item=>item.id===category).name+" tab is empty." : "No conversations here."
         }}
       </p>
     </div>
@@ -337,6 +338,7 @@ import {
   ref,
   computed,
   watch,
+  useId,
   onActivated,
   onDeactivated,
   onUnmounted,
@@ -346,12 +348,15 @@ import { useVirtualList, useWindowSize } from "@vueuse/core";
 import { Icon } from "@iconify/vue";
 import { useRouter, useRoute } from "vue-router";
 
+import { useUserStore } from "@/store/user";
 import { useAccountStore } from "@/store/account";
 import { useEmailStore } from "@/store/email";
 import { useMailSearchStore } from "@/store/mail-search";
 import { useSettingStore } from "@/store/setting";
 import { conversationList, conversationAction } from "@/request/conversation";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
+import InboxTabs from "@/components/inbox-tabs.vue";
+import {inboxCategories} from "@/utils/inbox-categories";
 import MailRow from "@/components/mail-row/index.vue";
 import { userDraftStore } from "@/store/draft";
 const drafts = userDraftStore();
@@ -375,6 +380,17 @@ const rows = ref([]),
   contextDropdown = ref();
 import {useUiStore} from "@/store/ui";
 const uiPreferences=useUiStore();
+const categoryUnread=ref({}), panelId=useId(), owner=useUserStore();
+watch([()=>owner.user.email,()=>account.currentAccountId,()=>account.currentAccount.allReceive],()=>{categoryUnread.value={};},{flush:"sync"});
+const category=computed(()=>{
+ if(props.folder!=='inbox' || !uiPreferences.inboxTabs || search.query || Object.keys(search.filters).length)return null;
+ return inboxCategories.find(item=>item.id===route.query?.category)?.id || 'primary';
+});
+function selectCategory(id){
+ if(category.value===id)return;
+ const query={...route.query};if(id==='primary')delete query.category;else query.category=id;
+ router.replace({name:'email',query});
+}
 const { width } = useWindowSize();
 const {
   list: virtualRows,
@@ -390,7 +406,7 @@ let generation = 0,
   wakeTimer;
 const key = computed(() =>
   [
-    props.folder, props.labelId,
+    owner.user.email,props.folder, props.labelId, category.value,
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
     ascending.value,
@@ -413,7 +429,7 @@ function deliveryState(status) {
 function params() {
   return {
     folder: props.folder,
-    labelId: props.labelId,
+    labelId: props.labelId, category:category.value||undefined,
     accountId: account.currentAccountId,
     allReceive: account.currentAccount.allReceive ? 1 : 0,
     timeSort: ascending.value ? 1 : 0,
@@ -526,10 +542,11 @@ async function load(
       return await load(prior.at(-1), prior.slice(0, -1));
     if (target.cursor !== pageCursor.value)
       containerProps.ref.value?.scrollTo?.(0, 0);
+    if(category.value)categoryUnread.value=data.categoryUnread||{};
     rows.value = data.threads;
     total.value = data.total;
     if(props.folder==="inbox" && !search.query && !Object.keys(search.filters).length)
-      emailStore.inboxUnread={accountId:account.currentAccountId,allReceive:Boolean(account.currentAccount.allReceive),count:data.unreadThreads};
+      emailStore.inboxUnread={accountId:account.currentAccountId,allReceive:Boolean(account.currentAccount.allReceive),count:data.categoryUnread?Object.values(data.categoryUnread).reduce((acc,n)=>acc+n,0):data.unreadThreads};
     clearTimeout(wakeTimer);
     if (data.nextWakeAt && ["inbox", "snoozed"].includes(props.folder)) {
       const delay = Math.min(
@@ -629,7 +646,7 @@ async function open(row, reply) {
   if (draft && !reply) {
     try {
       const { openSavedDraft } = await import("@/services/draft-list");
-      await openSavedDraft(draft.draftId, router, props.folder, props.labelId);
+      await openSavedDraft(draft.draftId, router, props.folder, props.labelId, route.query?.category);
     } catch (e) {
       error.value = e.message || "Could not open draft.";
     }
@@ -641,6 +658,7 @@ async function open(row, reply) {
       emailId: row.lastEmailId,
       folder: props.folder,
       ...(props.labelId ? {labelId:props.labelId} : {}),
+      ...(props.folder==="inbox" && route.query?.category ? {category:route.query.category} : {}),
       ...(reply ? { reply } : {}),
     },
   });
@@ -699,6 +717,7 @@ defineExpose({ refresh });
 </script>
 <style scoped>
 .conversation-list {
+  container-type:inline-size;
   height: 100%;
   display: flex;
   flex-direction: column;

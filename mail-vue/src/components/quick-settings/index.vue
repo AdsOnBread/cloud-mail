@@ -73,6 +73,10 @@
       </div>
       <p v-if="error" role="alert">{{ error }}</p>
     </fieldset>
+    <fieldset>
+      <legend>Inbox type</legend>
+      <label><input type="checkbox" v-model="ui.inboxTabs"/> Show inbox categories</label>
+    </fieldset>
   </dialog>
   <ThemePicker ref="picker" @closed="afterPicker" />
 </template>

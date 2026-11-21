@@ -6,6 +6,7 @@ export const useUiStore = defineStore('ui', {
         accountShow: false,
         quickSettings:false,
         density:"default",
+        inboxTabs:true,
         backgroundLoading: true,
         changeNotice: 0,
         writerRef: null,
@@ -38,6 +39,6 @@ export const useUiStore = defineStore('ui', {
         }
     },
     persist: {
-        pick: ['dark','composeFormatting','density'],
+        pick: ['dark','composeFormatting','density','inboxTabs'],
     },
 })

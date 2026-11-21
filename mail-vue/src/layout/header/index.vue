@@ -102,7 +102,7 @@ function submitSearch() {
   returnToResults();
 }
 function returnToResults() {
-  if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder});
+  if (route.name === 'content') router.push(mailSearch.folder === "label" && route.query.labelId ? {name:"label",params:{labelId:route.query.labelId}} : {name:mailSearch.folder === "label" ? "all" : mailSearch.folder,query:mailSearch.folder==="email" && route.query.category?{category:route.query.category}:{}});
 }
 function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
 

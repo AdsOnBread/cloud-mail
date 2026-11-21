@@ -2,8 +2,8 @@ import BizError from '../error/biz-error.js';
 
 const categories = new Set(['primary', 'promotions', 'social', 'updates', 'forums']);
 export function checkCategory(value) {
-  if (!categories.has(value)) throw new BizError('Choose an inbox category.', 400);
-  return value;
+	if (!categories.has(value)) throw new BizError('Choose an inbox category.', 400);
+	return value;
 }
 
 // Classify the first received message once per conversation. Explicit filing always wins.
@@ -24,19 +24,25 @@ export const categoryQuery = `, categorized AS (
       OR sender.subject LIKE 'security alert%' THEN 'updates'
     ELSE 'primary' END) AS category
     FROM grouped g LEFT JOIN email sender ON sender.email_id=g.category_source
-    LEFT JOIN mailbox_categories manual ON manual.rowid=g.category_override)`;
+    LEFT JOIN mailbox_categories manual ON manual.change_id=g.category_override)`;
 
 export const categorySchema = `CREATE TABLE IF NOT EXISTS mailbox_categories (
-  user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, category TEXT NOT NULL,
+  change_id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, category TEXT NOT NULL,
   UNIQUE(user_id,email_id))`;
 
-export async function fileCategory(db,userId,ids,category) {
-  checkCategory(category);
-  const changes=[];
-  for(let offset=0;offset<ids.length;offset+=30) {
-    const batch=ids.slice(offset,offset+30);
-    changes.push(db.prepare(`INSERT OR REPLACE INTO mailbox_categories(user_id,email_id,category)
-      VALUES ${batch.map(()=>'(?,?,?)').join(',')}`).bind(...batch.flatMap(id=>[userId,id,category])));
-  }
-  await db.batch(changes);
+export async function fileCategory(db, userId, ids, category) {
+	checkCategory(category);
+	const changes = [];
+	for (let offset = 0; offset < ids.length; offset += 30) {
+		const batch = ids.slice(offset, offset + 30);
+		changes.push(
+			db
+				.prepare(
+					`INSERT OR REPLACE INTO mailbox_categories(user_id,email_id,category)
+      VALUES ${batch.map(() => '(?,?,?)').join(',')}`,
+				)
+				.bind(...batch.flatMap((id) => [userId, id, category])),
+		);
+	}
+	await db.batch(changes);
 }

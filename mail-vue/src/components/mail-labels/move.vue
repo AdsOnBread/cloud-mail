@@ -45,20 +45,26 @@
           width="18"
         />{{ item.name }}
       </button>
-      <span v-if="!destinations.length">No matching labels</span>
+      <div v-if="categoryOptions.length" class="category-destinations">
+        <span>Categories</span>
+        <button v-for="item in categoryOptions" :key="item.id" @click="chooseCategory(item.id)"><Icon :icon="'material-symbols:'+item.icon" width="18"/>{{item.name}}</button>
+      </div>
+      <span v-if="!destinations.length && !categoryOptions.length">No matching labels</span>
     </div>
   </el-popover>
 </template>
 <script setup>
 import { ref, computed, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import {inboxCategories} from "@/utils/inbox-categories";
 import { useMailLabels } from "@/store/mail-labels";
 const props = defineProps({
   ids: { type: Array, required: true },
   fromLabelId: Number,
+  showCategories:Boolean,
   disabled: Boolean,
 });
-const emit = defineEmits(["move"]);
+const emit = defineEmits(["move","category"]);
 const labels = useMailLabels(),
   open = ref(false),
   query = ref(""),
@@ -88,12 +94,15 @@ function dismiss() {
   open.value = false;
   trigger.value?.focus();
 }
+const categoryOptions=computed(()=>props.showCategories?inboxCategories.filter(c=>c.name.toLowerCase().includes(query.value.trim().toLowerCase())):[]);
+function chooseCategory(id){dismiss();emit('category',id,anchors);}
 function choose(id) {
   dismiss();
   emit("move", { labelId: id, fromLabelId: props.fromLabelId || 0 }, anchors);
 }
 </script>
 <style scoped>
+.category-destinations{border-top:1px solid var(--light-border-color);margin-top:4px}.category-destinations span{font-size:12px;color:var(--secondary-text-color)}
 .move-picker {
   max-height: 320px;
   overflow: auto;

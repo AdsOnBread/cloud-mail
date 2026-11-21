@@ -77,7 +77,7 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    grouped AS (SELECT m.thread_id,${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.rowid) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    grouped AS (SELECT m.thread_id,${category?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred,
       JSON_GROUP_ARRAY(DISTINCT CASE WHEN e.type=1 THEN 'me' ELSE COALESCE(NULLIF(e.name,''),e.send_email) END) participants
