@@ -2,12 +2,13 @@
   <div>
     <button v-if="hasRemoteImages && !remote" class="remote-toggle" @click="remote = true">Load remote images</button>
     <p v-if="error" role="status">{{ error }}</p>
-    <div v-if="paragraphs" class="plain-paragraphs"><p v-for="(line,index) in paragraphs" :key="index">{{ line }}</p></div>
+    <div v-if="paragraphs" class="plain-paragraphs"><p v-for="(line,index) in paragraphs" :key="index"><MessageText :text="line"/></p></div>
     <div v-else-if="flow" class="natural-flow"><Flow/></div>
     <iframe v-else-if="documentHTML" :key="documentHTML" :srcdoc="documentHTML" title="Email message" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" />
   </div>
 </template>
 <script setup>
+import {MessageText, detectDocumentLinks} from './detected-links';
 import {naturalFlow} from './natural-flow';
 import { ref, shallowRef, watch, onUnmounted } from 'vue'
 import { useUiStore } from '@/store/ui.js'
@@ -40,6 +41,7 @@ watch(() => [props.html, props.naturalFlow, props.fileKey, props.resolveFileUrl,
   const files = images
   const doc = new DOMParser().parseFromString(props.html, 'text/html')
   const plain=plainParagraphs(doc);
+  if (!plain) detectDocumentLinks(doc);
   const safeFlow=props.naturalFlow && !plain ? naturalFlow(doc) : null;
   doc.querySelectorAll('script,iframe,object,embed,form,meta,base,link,svg,math').forEach(e => e.remove())
   doc.querySelectorAll('*').forEach(e => Array.from(e.attributes).forEach(a => {
@@ -67,7 +69,7 @@ watch(() => [props.html, props.naturalFlow, props.fileKey, props.resolveFileUrl,
   const lang=doc.body.lang || doc.documentElement.lang
   const direction=['rtl','ltr','auto'].includes(dir) ? ` dir="${dir}"` : ''
   const language=/^[a-z0-9-]{1,63}$/i.test(lang) ? ` lang="${lang}"` : ''
-  documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:#007aff}</style></head><body>${doc.body.innerHTML}</body></html>`
+  documentHTML.value=`<!doctype html><html${direction}${language}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob: data: ${sources}; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"><style>body{font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;margin:0;background:${uiStore.dark ? '#242529' : '#fff'};color:${uiStore.dark ? '#e3e3e3' : '#1f1f1f'}}img{max-width:100%;height:auto}pre{white-space:pre-wrap}a{color:${uiStore.dark ? '#8ab4f8' : '#1155cc'}}</style></head><body>${doc.body.innerHTML}</body></html>`
 }, {immediate:true})
 onUnmounted(() => { generation++;images.clear() })
 </script>
@@ -75,7 +77,7 @@ onUnmounted(() => { generation++;images.clear() })
 .natural-flow {font:14px/1.6 Arial,Helvetica,sans-serif;overflow-wrap:anywhere}
 .natural-flow :deep(p) {margin:0 0 1em}
 .natural-flow :deep(p:last-child) {margin-bottom:0}
-.natural-flow :deep(a) {color:var(--el-color-primary);text-decoration:underline}
+.natural-flow :deep(a), .plain-paragraphs :deep(a) {color:var(--mail-reader-link,#1155cc);text-decoration:underline}
 .natural-flow :deep(blockquote) {margin:0 0 0 .8ex;border-inline-start:1px solid var(--light-border-color);padding-inline-start:1ex}
 .plain-paragraphs { font:14px/1.6 Arial,Helvetica,sans-serif; overflow-wrap:anywhere; }
 .plain-paragraphs p { margin:0 0 1em; white-space:pre-line; }
