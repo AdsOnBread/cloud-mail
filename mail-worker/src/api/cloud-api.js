@@ -12,7 +12,7 @@ import {schedule,scheduledList,snoozeScheduled,setScheduledLabels,setScheduledIn
 import { send, dispatchHeld, undoSend } from '../cloud/send';
 import {readGeneralSettings,saveGeneralSettings} from '../cloud/general-settings';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
-import { moveFromTrash,setTrashRead,setTrashLabels } from '../cloud/trash-actions';
+import { moveFromTrash,setTrashRead,setTrashImportance,setTrashLabels } from '../cloud/trash-actions';
 import {systemLabels,setSystemLabel} from '../cloud/system-labels';
 const root='/v1';const uid=c=>userContext.getUserId(c);
 app.use(root+'/*',async(c,next)=>{await activeUser(c,uid(c));await next();c.header('Cache-Control','private, no-store');});
@@ -77,6 +77,10 @@ app.post(root+'/messages/undo-recovery',async c=>{
 app.post(root+'/messages/trash-labels',async c=>{
   const {emailIds,add,remove}=await c.req.json();
   return c.json(result.ok(await setTrashLabels(c.env.db,uid(c),emailIds,add,remove)));
+});
+app.post(root+'/messages/:id/trash-importance',async c=>{
+  const {important}=await c.req.json();
+  return c.json(result.ok(await setTrashImportance(c.env.db,uid(c),c.req.param('id'),important)));
 });
 app.post(root+'/messages/trash-read',async c=>{
   const {emailIds,read}=await c.req.json();

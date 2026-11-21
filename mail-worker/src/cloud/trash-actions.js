@@ -24,6 +24,25 @@ export async function setTrashRead(db,userId,ids,read) {
   return {messageCount:selected.length};
 }
 
+// Scheduled mail in Trash still belongs to its editable draft. Mark the
+// underlying record so Undo, restoration and eventual delivery retain the choice.
+export async function setTrashImportance(db,userId,rawId,important) {
+  const id=positive(rawId);
+  if (typeof important!=='boolean') throw new BizError('Choose an importance status.',400);
+  const eligible=`FROM email e JOIN account a ON a.account_id=e.account_id
+    WHERE ${owned} AND e.email_id=? AND e.trashed_at IS NOT NULL`;
+  const [message,draft]=await db.batch([
+    db.prepare(`INSERT OR REPLACE INTO mailbox_importance(user_id,email_id,important)
+      SELECT e.user_id,e.email_id,? ${eligible} AND e.scheduled_draft_id IS NULL RETURNING email_id`)
+      .bind(Number(important),userId,id),
+    db.prepare(`UPDATE cloud_drafts SET data=json_set(data,'$.mailboxImportant',?)
+      WHERE user_id=? AND state='trashed' AND draft_id=(SELECT e.scheduled_draft_id ${eligible}) RETURNING draft_id`)
+      .bind(Number(important),userId,userId,id),
+  ]);
+  if (!message.results.length && !draft.results.length) throw new BizError('This message is no longer in Trash.',409);
+  return {importanceReason:important ? 'user' : null};
+}
+
 export async function setTrashLabels(db,userId,ids,add,remove) {
   const selected=selectedIds(ids);
   validateLabelChange(add,remove);

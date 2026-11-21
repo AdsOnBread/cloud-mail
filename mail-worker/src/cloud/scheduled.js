@@ -1,3 +1,4 @@
+import {scheduledImportanceReason} from '../service/mail-importance';
 import {validateLabelChange} from '../service/mailbox-labels';
 import {blankMailText} from '../service/mail-word-schema';
 import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-words';
@@ -152,17 +153,13 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   }
   const from = 'FROM cloud_drafts d JOIN account a ON a.user_id=d.user_id AND a.account_id=d.account_id AND a.is_del=0';
   const starred = "COALESCE(json_extract(d.data,'$.mailboxStarred'),0)";
-  const important = "json_extract(d.data,'$.mailboxImportant')";
-  const reason = `CASE WHEN ${important}=1 THEN 'user' WHEN ${important}=0 THEN NULL
-    WHEN json_extract(d.data,'$.sendType')='reply' AND json_extract(d.data,'$.emailId')>0 THEN 'reply'
-    WHEN EXISTS (SELECT 1 FROM json_each(d.data,'$.receiveEmail') address WHERE address.value=a.email COLLATE NOCASE) THEN 'direct' END`;
   const wake="coalesce(json_extract(d.data,'$.scheduledWakeAt'),0)";
   const inbox=`(coalesce(json_extract(d.data,'$.scheduledInbox'),0)=1 AND ${wake}<=unixepoch())`;
   if (filters.mark==='snoozed') conditions.push(wake+'>unixepoch()');
   const unread="COALESCE(json_extract(d.data,'$.scheduledUnread'),0)";
   if (filters.mark==='inbox') conditions.push(inbox+'=1');
   if (filters.mark==='starred') conditions.push(starred+'=1');
-  if (filters.mark==='important') conditions.push('('+reason+') IS NOT NULL');
+  if (filters.mark==='important') conditions.push('('+scheduledImportanceReason+') IS NOT NULL');
   if (filters.countOnly === '1') {
     const extra=filters.includeInboxUnread==='1' ? `,COUNT(CASE WHEN ${inbox}=1 AND ${unread}=1 THEN 1 END) inboxUnread` : '';
     const next=filters.includeNextWake==='1' ? `,min(CASE WHEN ${wake}>unixepoch() THEN ${wake} END) nextWakeAt` : '';
@@ -201,7 +198,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    ${wake} AS wakeAt,${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${c.mailScopes ? '' : 'a.name AS mailboxName,'}${senderName} AS senderName,${blankMailText(text)} AS html_only,
+    ${wake} AS wakeAt,${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${scheduledImportanceReason} AS importanceReason,a.email AS senderEmail,${c.mailScopes ? '' : 'a.name AS mailboxName,'}${senderName} AS senderName,${blankMailText(text)} AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.labelIds') AS labelIds,
