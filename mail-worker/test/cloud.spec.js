@@ -98,6 +98,27 @@ describe('Recoverable Trash',()=>{
    await mail.trash(c(),1,[original.email_id],'restore');expect((await mobile.bootstrap(env.db,1)).unreadTotal).toBe(1);
    await expect(mail.trash(c(),1,[original.email_id],'purge')).rejects.toMatchObject({code:400});
  });
+ it('files recovered mail atomically and preserves the folder of a surviving sibling',async()=>{
+   const {moveFromTrash,setTrashRead}=await import('../src/cloud/trash-actions');
+   const first=await message(), second=await message({message_id:'<reply@local>',in_reply_to:'<original@example.net>'});
+   const ids=[first.email_id,second.email_id];
+   const label=(await env.db.prepare("INSERT INTO mailbox_labels(user_id,name) VALUES(1,'Keep') RETURNING label_id").first()).label_id;
+   await mail.trash(c(),1,ids);
+   await setTrashRead(env.db,1,ids,true);
+   expect((await mail.list(c(),1,{folder:'trash'})).messages.map(m=>m.unread)).toEqual([1,1]);
+   await expect(moveFromTrash(env.db,2,ids,0)).rejects.toMatchObject({code:409});
+   await expect(moveFromTrash(env.db,1,ids,9999)).rejects.toMatchObject({code:404});
+   await moveFromTrash(env.db,1,[first.email_id],label);
+   expect((await mail.list(c(),1,{folder:'inbox'})).messages).toHaveLength(0);
+   await expect(setTrashRead(env.db,1,ids,false)).rejects.toMatchObject({code:409});
+   expect((await mail.detail(c(),1,second.email_id)).unread).toBe(1);
+   await moveFromTrash(env.db,1,[second.email_id],0);
+   expect((await mail.list(c(),1,{folder:'inbox'})).messages).toHaveLength(2);
+   await mail.trash(c(),1,[second.email_id]);
+   await moveFromTrash(env.db,1,[second.email_id],label);
+   expect((await mail.list(c(),1,{folder:'inbox'})).messages).toHaveLength(0);
+   expect((await env.db.prepare('SELECT COUNT(*) n FROM mailbox_label_members WHERE label_id=?').bind(label).first()).n).toBe(2);
+ });
  it('purges only after 30 days and age-based cleanup enters Trash first',async()=>{
    const old=await message({create_time:'2020-01-01 00:00:00'});
    await env.db.prepare('UPDATE setting SET auto_clean_days=1').run();await settingService.refresh(c());

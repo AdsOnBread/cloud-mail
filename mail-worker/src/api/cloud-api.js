@@ -7,6 +7,7 @@ import * as mail from '../cloud/mail';
 import {schedule,scheduledList,setScheduledMark,cancel} from '../cloud/scheduled';
 import { send } from '../cloud/send';
 import {readSignatures,saveSignatures} from '../cloud/signatures';
+import { moveFromTrash,setTrashRead } from '../cloud/trash-actions';
 const root='/v1';const uid=c=>userContext.getUserId(c);
 app.use(root+'/*',async(c,next)=>{await activeUser(c,uid(c));await next();c.header('Cache-Control','private, no-store');});
 app.get(root+'/signatures',async c=>c.json(result.ok(await readSignatures(c.env.db,uid(c)))));
@@ -31,6 +32,15 @@ app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,u
 app.get(root+'/messages',async c=>c.json(result.ok(await mail.list(c,uid(c),c.req.query()))));
 app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c),c.req.param('id')))));
 app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
+app.post(root+'/messages/move-from-trash',async c=>{
+  await permission(c,uid(c),'email:delete');
+  const {emailIds,labelId}=await c.req.json();
+  return c.json(result.ok(await moveFromTrash(c.env.db,uid(c),emailIds,labelId)));
+});
+app.post(root+'/messages/trash-read',async c=>{
+  const {emailIds,read}=await c.req.json();
+  return c.json(result.ok(await setTrashRead(c.env.db,uid(c),emailIds,read)));
+});
 for(const action of ['trash','restore','purge']) app.post(root+'/messages/'+action,async c=>{
   await permission(c,uid(c),'email:delete');return c.json(result.ok(await mail.trash(c,uid(c),(await c.req.json()).emailIds,action)));
 });
