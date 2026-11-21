@@ -613,6 +613,7 @@ function toggleFullScreen() {
   } else setFullScreen(!expanded.value);
 }
 function collapseAddresses() {
+  commitRecipients();
   if (!props.inline) addressExpanded.value = false;
 }
 function focusRecipients(field,address,focus=true) {

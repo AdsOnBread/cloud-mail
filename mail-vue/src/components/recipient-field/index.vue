@@ -9,7 +9,7 @@
         <span v-if="editing !== index" class="recipient-chip" :style="{order:index}"
           :class="{ invalid: !isEmail(address), chosen: menuIndex === index, 'drop-before':dropIndex===index }">
           <button type="button" class="chip-address" :draggable="!!session && mouseChip"
-            @dragstart="startDrag($event,index)" @dragend="endRecipientDrag(dragField)" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
+            @dragstart="startDrag($event,index)" @dragend="finishDrag" :data-index="index" :aria-label="address" :title="isEmail(address) ? undefined : address"
             aria-haspopup="menu" :aria-expanded="menuIndex === index" tabindex="-1"
             @pointerdown="chipPointerDown($event,index)" @pointerup="touchChip($event,index)" @click="selectChip($event,index)" @contextmenu.prevent="openMenu(index)"
             @pointerenter="mouseChip=$event.pointerType!=='touch';hoverChip($event,index)" @pointerleave="leaveCard"
@@ -93,7 +93,7 @@ const {panel,position,typing,options,active,keys,close:hideSuggestions,pick,high
     input.value?.focus();
   });
 const {target:cardTarget,card:contactCard,pinned,open:openCard,close:closeCard,hold:holdCard,hover,leave:leaveCard}=useContactCard();
-let touchActivated=false, pressedChip=null;
+let touchActivated=false, pressedChip=null, deferredBlur=false;
 const root=ref(), mouseChip=ref(false), session=inject(recipientDragSession,null);
 const dragField={
   session:()=>root.value?.closest("fieldset:disabled,[inert]") ? null : session?.(),
@@ -114,9 +114,10 @@ function blurEntry(event) {
   // or drop resolve the edit before changing the index underneath the pointer.
   if (pressedChip?.fromInput && (!event.relatedTarget || entry.value?.contains(event.relatedTarget))) {
     pressedChip.fromInput=false;
+    deferredBlur=true;
     return;
   }
-  if (event.relatedTarget?.closest?.(".chip-address") && entry.value?.contains(event.relatedTarget)) return;
+  if (event.relatedTarget?.closest?.(".chip-address") && entry.value?.contains(event.relatedTarget)) { deferredBlur=true; return; }
   commit();
 }
 function chipPointerDown(event,index) {
@@ -129,9 +130,17 @@ function chipPointerDown(event,index) {
 function startDrag(event,index) {
   const pressed=pressedChip;
   pressedChip=null;
-  if (!pressed || pressed.element!==event.currentTarget || props.modelValue[index]!==pressed.address) return event.preventDefault();
+  if (!pressed || pressed.element!==event.currentTarget || props.modelValue[index]!==pressed.address) {
+    event.preventDefault();
+    finishDrag();
+    return;
+  }
   closeCard(); closeMenu(false); hideSuggestions();
   startRecipientDrag(event,dragField,index);
+}
+function finishDrag() {
+  endRecipientDrag(dragField);
+  if (deferredBlur) commit();
 }
 function insertion(event) {
   const address=event.target.closest?.(".recipient-chip")?.querySelector(".chip-address");
@@ -188,6 +197,7 @@ watch(()=>props.modelValue[cardTarget.value?.index],value=>{
   if (cardTarget.value && value!==cardTarget.value.address) closeCard();
 });
 function clear() {
+  deferredBlur=false;
   pressedChip=null;
   endRecipientDrag(dragField);
   closeCard();
@@ -207,6 +217,7 @@ function pendingChange() {
   return {source:editing.value, people:parseRecipientList(pending.value)};
 }
 function resolveInput(targetIndex) {
+  deferredBlur=false;
   hideSuggestions();
   const updated = [...props.modelValue];
   const change = pendingChange();
