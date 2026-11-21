@@ -6,7 +6,7 @@
       </button>
     </div>
     <div class="group">
-      <el-dropdown v-for="picker in selectors" :key="picker.label" trigger="click" placement="top-start" :show-arrow="false" popper-class="mail-action-menu" @command="value => apply(picker.command,value)">
+      <el-dropdown v-for="picker in selectors" :key="picker.label" trigger="click" placement="top-start" :show-arrow="false" popper-class="mail-action-menu compose-format-popup" @command="value => apply(picker.command,value)">
         <button :aria-label="picker.label" :data-tip="picker.label" @mousedown.prevent>
           <span v-if="picker.command==='FontName'" class="font-name">{{ fontName }}</span>
           <Icon v-else icon="material-symbols:format-size" width="18" />
@@ -21,7 +21,7 @@
       <button v-for="action in styles" :key="action.command" :aria-label="action.label" :data-tip="action.label" :aria-pressed="Boolean(active[action.command])" @mousedown.prevent @click="apply(action.command)">
         <Icon :icon="'material-symbols:'+action.icon" width="19" />
       </button>
-      <el-popover v-model:visible="colorOpen" trigger="click" placement="top" :show-arrow="false" :width="300" popper-class="format-palette">
+      <el-popover v-model:visible="colorOpen" trigger="click" placement="top" :show-arrow="false" :width="300" popper-class="format-palette compose-format-popup">
         <template #reference><button aria-label="Text color" data-tip="Text color" :aria-expanded="colorOpen" @mousedown.prevent>
           <Icon icon="material-symbols:format-color-text" width="19" /><Icon icon="material-symbols:arrow-drop-down" width="14" />
         </button></template>
@@ -41,7 +41,7 @@
         <Icon :icon="'material-symbols:'+action.icon" width="18" />
       </button>
     </div>
-    <el-dropdown trigger="click" placement="top-end" :show-arrow="false" popper-class="mail-action-menu" @command="more">
+    <el-dropdown trigger="click" placement="top-end" :show-arrow="false" popper-class="mail-action-menu compose-format-popup" @command="more">
       <button aria-label="More formatting options" data-tip="More formatting options" @mousedown.prevent><Icon icon="material-symbols:more-horiz" width="18" /></button>
       <template #dropdown><el-dropdown-menu>
         <el-dropdown-item v-for="action in paragraph" :key="action.command" :command="action">

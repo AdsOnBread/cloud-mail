@@ -873,6 +873,7 @@ async function deleteContact() {
   } catch {}
 }
 function keydown(event) {
+  if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
   if (
     event.key === "Tab" &&
     modal.value &&
@@ -934,7 +935,7 @@ function containFocus(event) {
   if (
     modal.value &&
     !composeRoot.value?.contains(event.target) &&
-    !event.target.closest(".el-overlay, .tox-tinymce-aux")
+    !event.target.closest(".el-overlay, .tox-tinymce-aux, .compose-format-popup")
   )
     composeRoot.value?.querySelector("button")?.focus();
 }

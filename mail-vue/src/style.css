@@ -177,46 +177,6 @@ button, input, select, textarea {
     --el-input-text-color: var(--el-text-color-primary) !important;
 }
 
-/* View transitions using radial clipping */
-html.dark,
-html:not(.dark) {
-    view-transition-name: root;
-}
-
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
-}
-
-/* Keep the active transition animation above the other view */
-html[data-theme-to="dark"]::view-transition-new(root) { z-index: 2; }
-html[data-theme-to="dark"]::view-transition-old(root) { z-index: 1; }
-html[data-theme-to="light"]::view-transition-old(root) { z-index: 2; }
-html[data-theme-to="light"]::view-transition-new(root) { z-index: 1; }
-
-/* Dark mode: expand the new view from the click position */
-html[data-theme-to="dark"]::view-transition-new(root) {
-    clip-path: circle(0px at var(--vt-x) var(--vt-y));
-    animation: vt-radial-in var(--vt-duration) var(--vt-easing) forwards;
-}
-
-/* Light mode: contract the old view toward the click position */
-html[data-theme-to="light"]::view-transition-old(root) {
-    clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y));
-    animation: vt-radial-out var(--vt-duration) var(--vt-easing) forwards;
-}
-
-@keyframes vt-radial-in {
-    from { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
-    to   { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
-}
-
-@keyframes vt-radial-out {
-    from { clip-path: circle(var(--vt-end-radius, 0px) at var(--vt-x) var(--vt-y)); }
-    to   { clip-path: circle(0px at var(--vt-x) var(--vt-y)); }
-}
-
 /* Shared Gmail-inspired surfaces and controls. */
 html:not(.dark) {
     --mail-canvas: #f6f8fc;
@@ -346,3 +306,21 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 .snooze-menu .snooze-heading { padding:12px 18px 8px; font-weight:500; }
 .snooze-menu .el-dropdown-menu__item { justify-content:space-between; gap:24px; }
 .snooze-menu small { color:var(--regular-text-color); font-size:12px; }
+
+.label-picker.el-popover { padding:6px 0; border:0; border-radius:8px; background:var(--mail-surface); box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d; }
+.dialog-actions { display:flex; justify-content:flex-end; align-items:center; gap:8px; padding-top:24px; }
+.dialog-actions button { border-radius:20px; padding:9px 18px; color:var(--el-color-primary); font-weight:500; cursor:pointer; }
+.dialog-actions button:hover { background:var(--mail-read); }
+.dialog-actions button.primary { color:var(--mail-surface); background:var(--el-color-primary); }
+
+.recipient-popper.el-popper, .label-picker.el-popper, .format-palette.el-popper, .detail-dropdown.el-popper {
+    max-width:calc(100vw - 16px); border:0; border-radius:8px;
+    color:var(--el-text-color-primary); background:var(--mail-surface); box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
+}
+.check-target input { appearance:none; box-sizing:border-box; border:2px solid currentColor; color:var(--regular-text-color); border-radius:2px; opacity:.75; display:grid; place-items:center; }
+.conversation-row .check-target input:not(:checked) { opacity:.52; }
+.conversation-row:is(:hover,:focus-within) .check-target input, .check-target:hover input { opacity:1; }
+.check-target input:is(:checked,:indeterminate) { background:currentColor; opacity:1; }
+.check-target input:checked::after { content:""; width:7px; height:4px; border:solid var(--mail-surface); border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
+.check-target input:indeterminate::after { content:""; width:8px; height:2px; background:var(--mail-surface); }
+@media (forced-colors:active) { .check-target input { appearance:auto; } }
