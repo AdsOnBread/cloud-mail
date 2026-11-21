@@ -26,6 +26,7 @@ import {
 } from "vue";
 import {replaceSignature,signatureId} from "../mail-signatures/content";
 import {plainBodyText, plainMarkup} from "../message-composer/plain-text";
+import {fonts, formattingShortcut} from "./format-options";
 import ComposeFormat from "./compose-format.vue";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
@@ -193,7 +194,7 @@ function initEditor(initialContent) {
     forced_root_block: "div",
     skin: `${uiStore.dark ? "oxide-dark" : "oxide"}`,
     content_css: `/tinymce/css/index.css,${uiStore.dark ? "dark" : "default"}`,
-    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:14px; ${props.plainText ? "white-space:pre-wrap" : ""} } :root {
+    content_style: `body { background: ${uiStore.dark ? "#242529" : "#ffffff"}; color: ${uiStore.dark ? "#e3e3e3" : "#1f1f1f"}; font-family: Arial, Helvetica, sans-serif; font-size:${props.mailCompose && !props.plainText ? "13px" : "14px"}; ${props.plainText ? "white-space:pre-wrap" : ""} } :root {
          --scrollbar-track-color: ${uiStore.dark ? "#141414" : "#FFFFFF"};
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
@@ -210,7 +211,7 @@ function initEditor(initialContent) {
     toolbar_location: "bottom",
     toolbar_mode: props.mailCompose ? "floating" : "sliding",
     ...(props.mailCompose ? {
-      font_family_formats: "Sans Serif=arial,helvetica,sans-serif;Serif=georgia,serif;Fixed Width=monospace;Wide=verdana,sans-serif;Narrow=arial narrow,sans-serif;Comic Sans MS=comic sans ms,sans-serif;Garamond=garamond,serif;Tahoma=tahoma,sans-serif;Trebuchet MS=trebuchet ms,sans-serif",
+      font_family_formats: fonts.map(([name,family]) => name+"="+family).join(";"),
       relative_urls: false, remove_script_host:false
     } : {}),
     font_size_formats: "8px 10px 12px 14px 16px 18px 24px 36px",
@@ -222,6 +223,7 @@ function initEditor(initialContent) {
     noneditable_class: "mceNonEditable",
     setup: (ed) => {
       editor.value = ed;
+      if (props.mailCompose && !props.plainText) ed.on("keydown", event => formattingShortcut(ed,event), true);
       if (props.signatureEditor) {
         ed.ui.registry.addButton("signaturelink",{icon:"link", tooltip:"Insert link", onAction:openLink});
       }
