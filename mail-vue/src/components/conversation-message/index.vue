@@ -5,12 +5,16 @@
     :aria-label="`Message from ${message.name || message.sendEmail}`"
   >
     <div class="message-header">
-      <SenderAvatar :name="message.name" :address="message.sendEmail"/>
+      <ReaderContact v-if="expanded" v-bind="contact" tabindex="-1" class="sender-photo"><SenderAvatar :name="message.name" :address="message.sendEmail"/></ReaderContact>
+      <SenderAvatar v-else :name="message.name" :address="message.sendEmail"/>
       <button type="button" class="message-toggle" :aria-expanded="expanded" :aria-describedby="description"
         :aria-label="(expanded ? 'Collapse' : 'Expand')+' message from '+sender" @click="$emit('toggle')">
-        <strong dir="auto">{{sender}}</strong>
-        <span v-if="expanded && message.name && message.sendEmail && message.name!==message.sendEmail" class="address" dir="ltr">&lt;{{message.sendEmail}}&gt;</span>
+        <strong v-if="!expanded" dir="auto">{{sender}}</strong>
       </button>
+      <div v-if="expanded" class="sender-line">
+        <ReaderContact v-bind="contact" class="sender-person"><strong dir="auto">{{sender}}</strong></ReaderContact>
+        <span v-if="expanded && message.name && message.sendEmail && message.name!==message.sendEmail" class="address" dir="ltr">&lt;{{message.sendEmail}}&gt;</span>
+      </div>
       <div v-if="expanded" class="conversation-recipients"><MessageRecipients :message="email"/></div>
       <div v-else :id="snippetId" class="snippet" dir="auto">{{message.listText}}</div>
       <div class="message-actions" @click.self="$emit('toggle')">
@@ -79,6 +83,7 @@ const feedback = useMailFeedback();
 import { ref, computed, watch, useId } from "vue";
 import { Icon } from "@iconify/vue";
 import { ElMessage } from "element-plus";
+import ReaderContact from "@/components/reader-contact.vue";
 import SenderAvatar from "@/components/sender-avatar.vue";
 import {useMessageFilters} from '@/store/message-filters';
 const filters=useMessageFilters();
@@ -111,6 +116,8 @@ const detail = ref(null),
   busy = ref(false);
 function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
+const contact=computed(()=>({address:email.value.sendEmail,name:email.value.name,accountId:email.value.accountId,
+  userId:email.value.userId,mailboxEmail:email.value.mailboxEmail || props.message.mailboxEmail,mailboxName:email.value.mailboxName || props.message.mailboxName}));
 const sender=computed(()=>props.message.name || props.message.sendEmail || 'Unknown sender');
 const stamp=computed(()=>readerTimestamp(props.message.createTime,props.now));
 const dateId=useId(),snippetId=useId();
@@ -198,7 +205,11 @@ async function remove() {
   min-width:0;
   font-family:Arial,Helvetica,sans-serif;
 }
-.avatar {grid-area:1 / 1 / 3 / 2}
+.avatar,.sender-photo {grid-area:1 / 1 / 3 / 2}
+.sender-photo {position:relative;z-index:2;width:var(--avatar-size);height:var(--avatar-size);border-radius:50%;}
+.sender-line {grid-area:1 / 2;display:flex;align-items:baseline;gap:4px;min-width:0;pointer-events:none;font:14px/20px Arial,sans-serif;}
+.sender-person {position:relative;z-index:2;pointer-events:auto;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;}
+
 .message-toggle {
   grid-area:1 / 2;height:20px;
   display:flex;align-items:baseline;gap:4px;min-width:0;

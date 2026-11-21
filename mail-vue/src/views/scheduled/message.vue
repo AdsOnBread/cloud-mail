@@ -12,11 +12,11 @@
       <button type="button" :disabled="busy || !canCancel" @click="$emit('unsnooze')">Unsnooze</button>
     </div>
     <div class="sender">
-      <span class="avatar" aria-hidden="true">{{
+      <ReaderContact v-bind="senderContact" tabindex="-1" class="avatar">{{
         sender.charAt(0).toUpperCase()
-      }}</span>
+      }}</ReaderContact>
       <div class="sender-info">
-        <strong>{{ sender }}</strong>
+        <ReaderContact v-bind="senderContact"><strong>{{ sender }}</strong></ReaderContact>
         <span class="address">&lt;{{ row.senderEmail }}&gt;</span>
         <el-popover
           trigger="click"
@@ -70,6 +70,7 @@
   </article>
 </template>
 <script setup>
+import ReaderContact from "@/components/reader-contact.vue";
 import {labelStyle} from "@/components/mail-labels/colors";
 import {formatDetailDate} from "@/utils/day";
 import { computed } from "vue";
@@ -92,6 +93,8 @@ defineEmits(["cancel", "unsnooze", "error", "star", "importance"]);
 const files = computed(
   () => props.detail?.attachments?.filter((f) => !f.contentId) || [],
 );
+const senderContact=computed(()=>({address:props.row.senderEmail,name:props.row.senderName,accountId:props.row.accountId,
+  mailboxEmail:props.row.senderEmail,mailboxName:props.row.senderName}));
 const sender = computed(
   () => props.row.senderName || props.row.senderEmail || "me",
 );

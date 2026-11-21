@@ -119,9 +119,9 @@
           </div>
         </div>
         <div class="sender">
-          <SenderAvatar :name="detail.name" :address="detail.sendEmail"/>
+          <ReaderContact v-bind="senderContact" tabindex="-1" class="sender-photo"><SenderAvatar :name="detail.name" :address="detail.sendEmail"/></ReaderContact>
           <div class="sender-info">
-            <div class="sender-name"><strong>{{detail.name || detail.sendEmail}}</strong>
+            <div class="sender-name"><ReaderContact v-bind="senderContact"><strong>{{detail.name || detail.sendEmail}}</strong></ReaderContact>
               <span v-if="detail.name && detail.name!==detail.sendEmail">&lt;{{detail.sendEmail}}&gt;</span>
             </div>
             <MessageRecipients :message="detail"/>
@@ -254,6 +254,7 @@ import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import {downloadablePart,inlineImageURL,storedKey} from "@/utils/private-files";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import { mailboxDate, formatDetailDate, readerTimestamp } from "@/utils/day";
+import ReaderContact from "@/components/reader-contact.vue";
 import MessageRecipients from "@/components/message-recipients.vue";
 import { hasPerm } from "@/perm/perm";
 import { useMailSearchStore } from "@/store/mail-search";
@@ -270,6 +271,8 @@ const root=ref();
 const account = useAccountStore();
 const labels = useMailLabels();
 const separateWindow = computed(() => route.query.window === "1");
+const senderContact=computed(()=>({address:detail.value?.sendEmail,name:detail.value?.name,accountId:detail.value?.accountId,
+  userId:detail.value?.userId,mailboxEmail:detail.value?.mailboxEmail,mailboxName:detail.value?.mailboxName}));
 const windowAccount = computed(() => separateWindow.value ? Number(route.query.sender) || undefined : undefined);
 const mailbox = computed(() => windowAccount.value || (account.currentAccount.allReceive ? undefined : account.currentAccountId));
 const canDelete = computed(() => hasPerm("email:delete"));
@@ -708,6 +711,7 @@ h1 { margin:0 6px 0 0; min-width:0; font:400 22px/28px Arial,sans-serif; overflo
 .trash-folder-chip button+button { padding:0 3px; }
 .trash-folder-chip button:is(:hover,:focus-visible) { background:var(--mail-hover); color:var(--el-text-color-primary); }
 .sender { display:flex; gap:16px; align-items:flex-start; min-width:0; color:var(--regular-text-color); }
+.sender-photo {flex:none;border-radius:50%;}
 .sender-info { flex:1; min-width:0; }
 .sender-name { font:12px/20px Arial,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sender-name strong { font-size:14px; }

@@ -113,7 +113,7 @@ export async function list(c,userId,p={}) {
   return {messages:page.map(row=>({...messageFields(row),...files.get(row.email_id)})),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
 }
 export async function detail(c,userId,emailId) {
-  const row=await c.env.db.prepare(`SELECT e.*,CASE WHEN e.trashed_at IS NOT NULL THEN ${messageLabels} END AS label_ids,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
+  const row=await c.env.db.prepare(`SELECT e.*,${c.mailScopes ? '' : 'a.email AS mailbox_email,a.name AS mailbox_name,'}CASE WHEN e.trashed_at IS NOT NULL THEN ${messageLabels} END AS label_ids,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visibleMail(c)} AND e.email_id=?`).bind(userId,positive(emailId)).first();
   if(!row) throw new BizError('Message not found.',404);
   if(row.type!==1) row.bcc='[]';
