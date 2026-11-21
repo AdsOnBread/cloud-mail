@@ -17,6 +17,13 @@ it('checks the new message and skips signatures, earlier conversations and image
   expect(sendConfirmation(draft('I sometimes feel attached to the neighborhood.'))).toBe('');
 });
 
+it('recognizes text-only signature and message-history separators in imported replies', () => {
+  for (const divider of ['-- ', 'On Wed, 18 Nov 2026, Pat wrote:', '---------- Forwarded message ---------', '-----Original Message-----']) {
+    expect(sendConfirmation(draft('', {text:'Thanks!\n'+divider+'\nPlease see attached.', plainText:true}))).toBe('');
+    expect(sendConfirmation(draft('', {text:'Please see attached.\n'+divider+'\nOld message', plainText:true}))).toContain('"see attached"');
+  }
+});
+
 it('distinguishes files and uploaded photos from removed images and signature artwork', () => {
   const content = '<b>See attached.</b>';
   const inline = {contentId:'<part>', attachmentId:23};

@@ -23,6 +23,9 @@ export function sendConfirmation(form) {
 
   const authored = form.content ? plainBodyText(body) : form.text;
   for (const line of authored.split(/\r?\n/)) {
+    // Pasted and imported mail can retain only the visible reply/signature separator.
+    if (/^--[ \u00a0]+$/.test(line) || /^On .+ wrote:\s*$/i.test(line.trim()) ||
+        /^-{2,}\s*(?:Original Message|Forwarded message)\s*-{2,}$/i.test(line.trim())) break;
     if (/^\s*>/.test(line)) continue;
     const phrase = line.replace(/\s+/g, ' ').match(attachmentPhrase)?.[0];
     if (phrase) return 'It seems like you forgot to attach a file.\n\nYou wrote "' + phrase + '" in your message, but there are no files attached. Send anyway?';
