@@ -55,11 +55,10 @@
 <script setup>
 import SettingsTabs from "./tabs.vue";
 import ConnectedApps from "@/components/connected-apps/index.vue";
-import {reactive, ref, defineOptions} from 'vue'
+import {reactive, ref, defineOptions, watchEffect} from 'vue'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
-import {watchEffect} from 'vue';
 const connections=ref();
 watchEffect(()=>{
   if(router.currentRoute.value.hash==='#connected-apps' && connections.value?.$el) {

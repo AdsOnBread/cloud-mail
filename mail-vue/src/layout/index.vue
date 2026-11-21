@@ -53,7 +53,7 @@ const labels=useMailLabels(), filters=useMessageFilters(), filterAccount=useAcco
 watch(()=>[user.authenticatedToken,user.user.userId,filterAccount.currentAccountId],()=>{filters.editor=null;filters.senderRequest=null},{flush:'sync'});
 function filterStorage(event){
   if((event.key===null || event.key==='token') && localStorage.getItem('token')!==user.authenticatedToken){
-    filters.editor=null;filters.senderRequest=null;
+    filters.editor=null;filters.senderRequest=null;contactsOpen.value=false;
   }
 }
 onMounted(()=>window.addEventListener('storage',filterStorage));
@@ -76,7 +76,7 @@ const sideAvailable = computed(()=>wideEnough.value && !conversationWindow.value
 const contactsOpen = ref(false);
 const sideAccountId = computed(()=>filterAccount.currentAccount?.accountId || user.user.account?.accountId || 0);
 const sideDockInset = computed(()=>sideAvailable.value && !uiStore.sideRailHidden ? 56 + (contactsOpen.value ? 320 : 0) : 0);
-watch([sideAccountId, ()=>user.authenticatedToken,sideAvailable,()=>uiStore.sideRailHidden,()=>uiStore.quickSettings],()=>{
+watch([sideAccountId, ()=>user.user.email, ()=>user.authenticatedToken,sideAvailable,()=>uiStore.sideRailHidden,()=>uiStore.quickSettings],()=>{
   contactsOpen.value=false;
 },{flush:'sync'});
 const sessionEnded = ref(false);
