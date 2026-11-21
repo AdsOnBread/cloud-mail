@@ -8,9 +8,10 @@ const userStore = useUserStore();
 let db =  shallowRef({})
 
 function createDB() {
-    db.value = new Dexie(userStore.user.email);
-    db.value.version(1).stores({draft: '++draftId,createTime',att: 'draftId'});
-    db.value.version(2).stores({draft:'++draftId,createTime,cloudDraftId',att:'draftId',meta:'key'});
+    const database = new Dexie(userStore.user.email);
+    database.version(1).stores({draft: '++draftId,createTime',att: 'draftId'});
+    database.version(2).stores({draft:'++draftId,createTime,cloudDraftId',att:'draftId',meta:'key'});
+    db.value = database;
 
 }
 

@@ -80,6 +80,7 @@ import SearchOptions from "@/components/mail-search-options.vue";
 import router from "@/router";
 import {logout} from "@/request/login.js";
 import {Icon} from "@iconify/vue";
+import { useMailTheme } from '@/store/mail-theme';
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
 import {useRoute} from "vue-router";
@@ -107,7 +108,7 @@ function clearSearch() { searchText.value = ''; mailSearch.query = ''; mailSearc
 
 const settingStore = useSettingStore();
 const userStore = useUserStore();
-const uiStore = useUiStore();
+const uiStore = useUiStore(), theme=useMailTheme();
 const logoutLoading = ref(false)
 
 
@@ -195,7 +196,10 @@ function openNotice() {
   uiStore.showNotice()
 }
 
-function openDark() { uiStore.setDark(!uiStore.dark); }
+async function openDark() {
+  try { await theme.apply(uiStore.dark?'light':'dark'); }
+  catch(e){ ElMessage.error(e.message || 'Could not save this theme.'); }
+}
 
 function changeAside() {
   uiStore.asideShow = !uiStore.asideShow
