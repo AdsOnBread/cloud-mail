@@ -11,7 +11,7 @@ export const themes = [
   },
   { id: "aurora", name: "Aurora", image: "/themes/aurora.jpg" },
   { id: "himalayas", name: "Himalayas", image: "/themes/himalayas.jpg" },
-  { id: "light", name: "Default", color: "#f6f8fc" },
+  { id: "light", name: "Default", color: "#f5f6ee" },
   { id: "dark", name: "Dark", color: "#1b1b1f" },
   { id: "blue", name: "Blue", color: "#bfd9f2" },
   { id: "soft-gray", name: "Soft Gray", color: "#dce0e2" },

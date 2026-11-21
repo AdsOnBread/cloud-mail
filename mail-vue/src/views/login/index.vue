@@ -3,7 +3,7 @@
     <div v-if="settingStore.settings.background" :style="background"></div>
     <div class="form-wrapper">
       <div class="container">
-        <div class="login-wordmark"><MailBrand :title="settingStore.settings.title"/></div>
+        <div class="login-wordmark" :class="{'over-photo': background && settingStore.settings.loginOpacity < 1}"><MailBrand :title="settingStore.settings.title"/></div>
         <span class="form-desc" v-if="show === 'login'">{{ $t('loginTitle') }}</span>
         <span class="form-desc" v-else>{{ $t('regTitle') }}</span>
         <div v-show="show === 'login'">
@@ -806,5 +806,6 @@ function submitRegister() {
 
 .form-wrapper{inset:0;width:100%;background:transparent}
 .container{box-sizing:border-box;width:min(420px,calc(100% - 32px));height:auto;margin:0;max-height:100dvh;overflow:auto;padding:32px;border:1px solid var(--light-border-color);border-radius:12px;background:v-bind(loginOpacity);box-shadow:0 10px 34px #173c3514}
+.login-wordmark.over-photo > :first-child{max-width:100%;padding:4px 8px;border-radius:6px;background:var(--mail-surface)}
 .login-wordmark{display:flex;align-items:center;justify-content:center;padding-block:15px;color:var(--el-text-color-primary);margin-bottom:16px}
 </style>

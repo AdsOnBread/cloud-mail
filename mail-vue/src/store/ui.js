@@ -30,7 +30,6 @@ export const useUiStore = defineStore('ui', {
     actions: {
         setDark(dark) {
             document.documentElement.classList.toggle("dark",dark);
-            document.getElementById("theme-color-meta")?.setAttribute("content",dark?"#1b1b1f":"#f5f6ee");
             this.dark=dark;
         },
         showNotice() {

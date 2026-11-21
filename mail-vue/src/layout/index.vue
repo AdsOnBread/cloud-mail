@@ -39,6 +39,11 @@ import { useMailTheme } from '@/store/mail-theme';
 import {advancedSearchOpenerKey} from '@/store/mail-search';
 provide(advancedSearchOpenerKey,shallowRef(null));
 const theme=useMailTheme(),uiStore = useUiStore();
+// Browser chrome accepts a solid color. Photo themes use the dark tint above the image.
+const browserColor = computed(()=>theme.active.image ? "#20242a" : theme.active.color);
+const setBrowserColor = color => document.getElementById("theme-color-meta")?.setAttribute("content",color);
+watch(browserColor,setBrowserColor,{immediate:true});
+onBeforeUnmount(()=>setBrowserColor(uiStore.dark ? "#1b1b1f" : "#f5f6ee"));
 const shellStyle=computed(()=>{
   const active=theme.active;
   return {'--side-rail':sideAvailable.value && !uiStore.sideRailHidden ? '56px' : '0px',
