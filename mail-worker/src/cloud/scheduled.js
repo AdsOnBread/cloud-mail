@@ -1,3 +1,4 @@
+import {blankMailText} from '../service/mail-word-schema';
 import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-words';
 import {addPeopleFilter,addSearchDates,addSizeFilter} from '../service/mail-search-filters';
 import emailUtils from '../utils/email-utils';
@@ -137,7 +138,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     if (!term) continue;
     const matches = choices.map(column => `instr(lower(${column}),lower(?))>0`);
     // HTML-only drafts need their visible text extracted before a body search.
-    if (field==='q') matches.push(`COALESCE(trim(${text}),'')=''`);
+    if (field==='q') matches.push(`${blankMailText(text)}`);
     conditions.push('(' + matches.join(' OR ') + ')');
     args.push(...choices.map(() => term));
   }
@@ -148,7 +149,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   });
   addSearchDates(filters, 'd.created_at', conditions, args);
   const {results} = await c.env.db.prepare(`SELECT d.draft_id AS draftId,d.version,d.account_id AS accountId,
-    ${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,COALESCE(trim(${text}),'')='' AS html_only,
+    ${inbox} AS inbox,${unread} AS unread,${starred} AS starred,${reason} AS importanceReason,a.email AS senderEmail,${senderName} AS senderName,${blankMailText(text)} AS html_only,
     CASE WHEN d.state='sending' AND d.updated_at < datetime('now','-15 minutes') THEN 'uncertain' ELSE d.state END AS state,
     json_extract(d.data,'$.subject') AS subject,json_extract(d.data,'$.receiveEmail') AS recipients,
     json_extract(d.data,'$.labelIds') AS labelIds,
@@ -172,7 +173,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
   for(let i=0;i<missingText.length;i+=4){
     const batch=missingText.slice(i,i+4);
     const {results:bodies}=await c.env.db.prepare(`SELECT d.draft_id,d.version,${text} AS text,
-      CASE WHEN coalesce(trim(${text}),'')='' THEN json_extract(d.data,'$.content') END AS html
+      CASE WHEN ${blankMailText(text)} THEN json_extract(d.data,'$.content') END AS html
       FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
       WHERE d.user_id=? AND d.draft_id IN (${batch.map(()=>'?').join(',')}) AND json_extract(d.data,'$.scheduledAt') IS NOT NULL`)
       .bind(userId,...batch.map(({message})=>message.draftId)).all();

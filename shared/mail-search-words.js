@@ -17,7 +17,10 @@ export function containsExcluded(fields, phrases) {
 }
 
 export function searchBarText(query, excluded) {
-  const terms=String(excluded || '').trim().match(clauses) || [];
+  const terms=(String(excluded || '').trim().match(clauses) || []).map(part=>{
+    if (part.startsWith('"')) return '"'+part.slice(1).replace(/"$/u,'')+'"';
+    return /[{}]/u.test(part) ? '"'+part+'"' : part;
+  });
   if (!terms.length) return query || '';
   return [query, terms.length===1 ? '-'+terms[0] : '-{'+terms.join(' ')+'}'].filter(Boolean).join(' ');
 }

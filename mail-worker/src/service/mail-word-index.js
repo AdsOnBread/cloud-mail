@@ -6,7 +6,13 @@ import {indexedHeaders,seedWordIndex,wordIndexProgress} from './mail-word-schema
 // SQLite indexes plain text in the same transaction as each message. HTML-only
 // messages need DOM text extraction. The revision fences concurrent edits/deletes.
 export async function indexWordBatch(db,userId,accountId) {
-  const progress=await db.prepare(wordIndexProgress).first();
+  let progress=await db.prepare(wordIndexProgress()).first();
+  if (progress && userId) {
+    accountId=Number(accountId) || 0;
+    await db.prepare(`INSERT OR IGNORE INTO mail_word_setup(user_id,account_id,cursor,through_id)
+      SELECT ?,?,cursor,through_id FROM mail_word_setup WHERE user_id=0 AND account_id=0 AND cursor<through_id`).bind(userId,accountId).run();
+    progress=await db.prepare(wordIndexProgress(userId,accountId)).first();
+  }
   if (progress) await db.batch(seedWordIndex(progress).map(sql=>db.prepare(sql)));
   const scope=[],args=[];
   if (userId) {scope.push('p.user_id=?');args.push(userId);}

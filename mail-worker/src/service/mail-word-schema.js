@@ -13,7 +13,9 @@ export function indexedHeaders(row) {
     .join('||'+boundary+'||');
 }
 const visible = row => `${row}.user_id>0 AND ${row}.is_del=0`;
-const htmlOnly = row => `trim(coalesce(${row}.text,''))='' AND length(${row}.content)>0`;
+// Match the whitespace recognized by JavaScript trim() for MIME plain alternatives.
+export const blankMailText = column => `trim(coalesce(${column},''),char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))=''`;
+const htmlOnly = row => `${blankMailText(row+'.text')} AND length(${row}.content)>0`;
 const indexRow = (source,row,where) => `INSERT OR REPLACE INTO mail_word_index(rowid,headers,body)
   SELECT ${row}.email_id,${indexedHeaders(row)},coalesce(${row}.text,'') ${source} WHERE ${where}`;
 const enqueue = (source,row,where) => `INSERT OR REPLACE INTO mail_word_pending(email_id,user_id,revision)
@@ -27,25 +29,30 @@ export function mailWordSchema() {
       tokenize="unicode61 remove_diacritics 2 categories 'L* N* M* Co'")`,
     'CREATE TABLE IF NOT EXISTS mail_word_pending(email_id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,revision BLOB NOT NULL)',
     'CREATE INDEX IF NOT EXISTS idx_mail_word_pending ON mail_word_pending(user_id,email_id)',
-    'CREATE TABLE IF NOT EXISTS mail_word_setup(version INTEGER PRIMARY KEY,cursor INTEGER NOT NULL,through_id INTEGER NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS mail_word_setup(user_id INTEGER NOT NULL,account_id INTEGER NOT NULL,cursor INTEGER NOT NULL,through_id INTEGER NOT NULL,PRIMARY KEY(user_id,account_id))',
     `CREATE TRIGGER IF NOT EXISTS mail_words_insert AFTER INSERT ON email BEGIN ${add} END`,
     `CREATE TRIGGER IF NOT EXISTS mail_words_update AFTER UPDATE OF email_id,user_id,is_del,type,name,send_email,recipient,cc,bcc,subject,text,content
       ON email BEGIN ${remove} ${add} END`,
     `CREATE TRIGGER IF NOT EXISTS mail_words_delete AFTER DELETE ON email BEGIN ${remove} END`,
-    'INSERT OR IGNORE INTO mail_word_setup SELECT 1,0,coalesce(max(email_id),0) FROM email',
+    'INSERT OR IGNORE INTO mail_word_setup SELECT 0,0,0,coalesce(max(email_id),0) FROM email',
   ];
 }
 
 
 // Keep the installation upgrade restartable and each database write bounded.
-export const wordIndexProgress = `SELECT cursor,through_id,coalesce((SELECT max(email_id) FROM
-  (SELECT email_id FROM email WHERE email_id>cursor AND email_id<=through_id ORDER BY email_id LIMIT 32)),through_id) AS next
-  FROM mail_word_setup WHERE version=1 AND cursor<through_id`;
+export function wordIndexProgress(userId=0,accountId=0) {
+  if (![userId,accountId].every(id=>Number.isSafeInteger(id) && id>=0)) throw new Error('Invalid search index scope');
+  const scope=(userId ? ' AND e.user_id='+userId : '')+(accountId ? ' AND e.account_id='+accountId : '');
+  return `SELECT user_id,account_id,cursor,through_id,coalesce((SELECT max(email_id) FROM
+    (SELECT email_id FROM email e WHERE email_id>cursor AND email_id<=through_id ${scope} ORDER BY email_id LIMIT 32)),through_id) AS next
+    FROM mail_word_setup WHERE user_id=${userId} AND account_id=${accountId} AND cursor<through_id`;
+}
 
-export function seedWordIndex({cursor,next}) {
-  if (!Number.isSafeInteger(cursor) || !Number.isSafeInteger(next) || next<=cursor) throw new Error('Invalid search index position');
-  const where=`e.email_id>${cursor} AND e.email_id<=${next} AND ${visible('e')} AND NOT EXISTS
+export function seedWordIndex({user_id,account_id,cursor,next}) {
+  if (![user_id,account_id,cursor,next].every(id=>Number.isSafeInteger(id) && id>=0) || next<=cursor) throw new Error('Invalid search index position');
+  const scope=(user_id ? ' AND e.user_id='+user_id : '')+(account_id ? ' AND e.account_id='+account_id : '');
+  const where=`e.email_id>${cursor} AND e.email_id<=${next} ${scope} AND ${visible('e')} AND NOT EXISTS
     (SELECT 1 FROM mail_word_index WHERE rowid=e.email_id)`;
   return [enqueue('FROM email e','e',where),indexRow('FROM email e','e',where),
-    `UPDATE mail_word_setup SET cursor=${next} WHERE version=1 AND cursor=${cursor}`];
+    `UPDATE mail_word_setup SET cursor=${next} WHERE user_id=${user_id} AND account_id=${account_id} AND cursor=${cursor}`];
 }

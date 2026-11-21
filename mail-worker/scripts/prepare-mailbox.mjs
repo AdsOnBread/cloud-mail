@@ -16,8 +16,8 @@ const existing = new Set(schema.results.map(row => row.name));
 if (existing.has('email')) await ensureRawSizeColumn(()=>execute('PRAGMA table_info(email)')[0].results,execute);
 if (existing.has('email')) {
   execute(mailWordSchema().join(';\n'));
-  for (;;) {
-    const [progress]=execute(wordIndexProgress)[0].results;
+  for (let batch=0;batch<8;batch++) {
+    const [progress]=execute(wordIndexProgress())[0].results;
     if (!progress) break;
     execute(seedWordIndex(progress).join(';\n'));
   }

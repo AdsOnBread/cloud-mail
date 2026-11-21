@@ -10,11 +10,11 @@ function draftText(draft) {
   const template=document.createElement('template');
   template.innerHTML=draft.content;
   const root=template.content;
-  for (const node of root.querySelectorAll('script,style')) node.remove();
+  for (const node of root.querySelectorAll('script,style,title')) node.remove();
   for (const br of root.querySelectorAll('br')) br.replaceWith(' ');
   for (const block of root.querySelectorAll('p,div,li')) block.append(' ');
   const text=()=>root.textContent.replace(/\s+/g,' ').trim();
-  const body=draft.text || text();
+  const body=draft.text?.trim() ? draft.text : text();
   for (const quote of root.querySelectorAll('.cloudmail-reply-quote,blockquote')) quote.remove();
   return {body,snippet:text()};
 }

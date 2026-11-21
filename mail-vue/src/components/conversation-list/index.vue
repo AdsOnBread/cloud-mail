@@ -627,7 +627,7 @@ async function load(
     const includeScheduled = !target.cursor && (["starred","important","label"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
       && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
-      searchPage(()=>conversationList({ ...params(), cursor: target.cursor }),()=>request===generation,()=>{preparingSearch.value=true;}),
+      searchPage(()=>conversationList({ ...params(), cursor: target.cursor }),()=>active && request===generation,()=>{preparingSearch.value=true;}),
       includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
         accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
         noMsg:true}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
