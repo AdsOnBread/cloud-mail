@@ -8,9 +8,9 @@
   <Teleport to="body">
     <div v-if="open" ref="panel" :id="id" tabindex="-1" class="search-date-popup" :class="{custom}"
       :role="custom ? 'dialog' : 'menu'" :aria-label="custom ? 'Custom date range' : 'Any time'" :style="panelStyle"
-      @keydown.esc.stop.prevent="escape" @focusout="focusOut">
+      @keydown.esc.stop.prevent="escape" @keydown.tab="tabOut" @focusout="focusOut">
       <template v-if="!custom">
-        <button v-for="[key,label] in choices" :key="key" role="menuitemradio" :aria-checked="checked(key)"
+        <button v-for="[key,label] in choices" :key="key" role="menuitemradio" tabindex="-1" :aria-checked="checked(key)"
           @click="choose(key)" @keydown="menuKeys"><Icon v-if="checked(key)" icon="material-symbols:check" width="18"/>{{ label }}</button>
       </template>
       <form v-else novalidate @submit.prevent="applyRange">
@@ -156,6 +156,12 @@ function gridKeys(event) {
   else return;
   event.preventDefault();
   if (next.getFullYear()>=1000 && next.getFullYear()<=9999) {cursor.value=next;focusDay();}
+}
+function tabOut(event) {
+  // Follow the chip's place in the mailbox tab order when leaving the teleported panel.
+  if (!custom.value) { close(); return; }
+  const stops=Array.from(panel.value.querySelectorAll('input,button')).filter(el=>!el.disabled && el.tabIndex>=0);
+  if (event.shiftKey ? event.target===panel.value || event.target===stops[0] : event.target===stops.at(-1)) close();
 }
 function menuKeys(event) {
   const keys=Array.from(panel.value.querySelectorAll('[role=menuitemradio]')), at=keys.indexOf(event.target);
