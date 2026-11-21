@@ -197,6 +197,7 @@ async function submit() {
   color: color-mix(in srgb,var(--el-text-color-primary) 38%,transparent);
   background: var(--base-fill);
 }
+.label-name-dialog .parent-anchor { display: block; }
 .label-name-dialog [role="combobox"] { justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; }
 .label-name-dialog [role="combobox"] > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .parent-caret { border: 5px solid transparent; border-top-color: currentColor; border-bottom: 0; }

@@ -4,12 +4,14 @@
       :width="width" :offset="0" :show-arrow="false" placement="bottom-start"
       popper-class="label-parent-options" :popper-style="{padding:0}">
       <template #reference>
-        <button ref="trigger" type="button" role="combobox" aria-label="Nest label under:" aria-haspopup="listbox"
+        <span class="parent-anchor">
+          <button ref="trigger" type="button" role="combobox" aria-label="Nest label under:" aria-haspopup="listbox"
           :aria-expanded="open" :aria-controls="open ? listId : undefined" :disabled="disabled"
           @click="open ? close() : show()" @keydown="keydown">
           <span>{{ labels.find(label => label.id === modelValue)?.name }}</span>
           <span class="parent-caret" aria-hidden="true"></span>
-        </button>
+          </button>
+        </span>
       </template>
       <ul v-if="open" ref="list" :id="listId" role="listbox" aria-label="Nest label under:" @keydown="keydown">
         <li role="option" aria-disabled="true" :aria-selected="modelValue == null" tabindex="-1">Please select a parent...</li>
@@ -50,7 +52,9 @@ function keydown(event) {
   const { key } = event;
   if (event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
   const rows = props.labels;
-  const index = list.value ? Array.from(list.value.children).indexOf(event.target) : -1;
+  const index = open.value && list.value
+    ? Array.from(list.value.children).indexOf(event.target)
+    : rows.findIndex(label => label.id === props.modelValue) + 1;
   if (key === 'Tab') {
     if (open.value) { close(); trigger.value?.focus(); }
     return;
@@ -82,7 +86,7 @@ function keydown(event) {
       const i = (start + offset) % rows.length;
       if (!rows[i].name.toLocaleLowerCase().startsWith(repeat ? letter : prefix)) continue;
       if (open.value) focusRow(i + 1);
-      else show(i + 1);
+      else emit('update:modelValue', rows[i].id);
       break;
     }
   } else return;
