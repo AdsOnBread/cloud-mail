@@ -484,7 +484,7 @@ const filedDrafts = computed(() => {
     if (props.folder==="label" && !account.currentAccount.allReceive && draft.accountId!==account.currentAccountId) return false;
     if (f.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
     const sender=draft.sender || account.accounts.find(a=>a.accountId===draft.accountId)?.email;
-    return matchesPeople([sender],from) && matchesPeople([draft.recipients],to) && includes(draft.subject,f.subject) &&
+    return matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) && includes(draft.subject,f.subject) &&
       [draft.subject,draft.searchBody,sender,draft.recipients].some(text=>includes(text,search.query));
   });
 });

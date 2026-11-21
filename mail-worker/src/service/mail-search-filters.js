@@ -1,18 +1,41 @@
-import {peopleTerms} from '../../../shared/mail-search-people';
+import {fullAddress,peopleTerms} from '../../../shared/mail-search-people';
 import {searchDateBounds} from "../../../shared/mail-search-date";
 import { attachedFile } from "./mailbox-attachments";
 
-export function addPeopleFilter(params, field, columns, filters, args) {
-  const terms = peopleTerms(params, field);
+// SQLite's lower() only folds ASCII. GLOB character classes also work for accented
+// names. Escape GLOB metacharacters so typed names and address punctuation stay literal.
+function peoplePattern(term, partial) {
+  const literal={'[':'[[]','*':'[*]','?':'[?]'};
+  const pattern=Array.from(term,ch=>{
+    if (literal[ch]) return literal[ch];
+    const variants=[...new Set([ch,ch.toLowerCase(),ch.toUpperCase()])].filter(v=>Array.from(v).length===1);
+    return variants.length===1 ? ch : '['+variants.join('')+']';
+  }).join('');
+  return partial ? '*'+pattern+'*' : pattern;
+}
+
+export function addPeopleFilter(params, field, columns, filters, args, suggestions=false) {
+  const terms=peopleTerms(params,field);
   if (!terms.length) return;
-  if (terms.length === 1) {
-    filters.push('(' + columns.map(column => `instr(lower(${column}),lower(?))>0`).join(' OR ') + ')');
-    args.push(...columns.map(() => terms[0]));
-    return;
+  const patterns=terms.map(term=>{
+    const partial=suggestions || !fullAddress(term);
+    return {p:peoplePattern(term,partial),partial};
+  });
+  const pattern="json_extract(term.value,'$.p')", partial="json_extract(term.value,'$.partial')";
+  let match;
+  if (field==='from') {
+    const [email,name]=columns;
+    match=`${email} GLOB ${pattern} OR (${partial} AND ${name} GLOB ${pattern})`;
+  } else {
+    match=columns.map(column=>{
+      const list=`CASE WHEN json_valid(${column}) THEN ${column} ELSE json_array(${column}) END`;
+      const email="CASE WHEN who.type='object' THEN json_extract(who.value,'$.address') ELSE who.value END";
+      const name="CASE WHEN who.type='object' THEN json_extract(who.value,'$.name') END";
+      return `EXISTS (SELECT 1 FROM json_each(${list}) who WHERE ${email} GLOB ${pattern} OR (${partial} AND ${name} GLOB ${pattern}))`;
+    }).join(' OR ');
   }
-  const matches = columns.map(column => `instr(lower(${column}),lower(person.value))>0`).join(' OR ');
-  filters.push(`EXISTS (SELECT 1 FROM json_each(?) person WHERE ${matches})`);
-  args.push(JSON.stringify(terms));
+  filters.push(`EXISTS (SELECT 1 FROM json_each(?) term WHERE ${match})`);
+  args.push(JSON.stringify(patterns));
 }
 
 // Both the conversation and message lists use "e" for the owned, visible email.

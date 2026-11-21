@@ -79,7 +79,7 @@ function matchesDate(created,p) {
 }
 function matchesFilters(row,p) {
  const matches=(values,value)=>!value || values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
- return matchesPeople([row.name,row.sendEmail],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])],peopleTerms(p,'to')) &&
+ return matchesPeople([{name:row.name,address:row.sendEmail}],peopleTerms(p,'from')) && matchesPeople([row.recipient,row.cc,...(row.type===1?[row.bcc]:[])].flatMap(v=>typeof v==='string'?JSON.parse(v||'[]'):v||[]),peopleTerms(p,'to')) &&
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p);
 }
@@ -129,7 +129,7 @@ const api=createHTTPServer(async(req,res)=>{
    }).filter(row=>{
      const matches=(values,value)=>!value||values.some(v=>String(v||'').toLowerCase().includes(value.toLowerCase()));
      const recipients=[...row.recipients,...row.cc,...row.bcc];
-     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([row.senderEmail,row.senderName],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
+     return (p.mark!=='starred'||row.starred) && (p.mark!=='important'||row.importanceReason) && matchesPeople([{address:row.senderEmail,name:row.senderName}],peopleTerms(p,'from'))&&matchesPeople(recipients,peopleTerms(p,'to'))&&matches([row.subject],p.subject)&&
        matches([row.senderEmail,row.senderName,row.subject,row.preview,...recipients],p.q)&&(!p.hasAttachment||row.attachmentCount);
    }).sort((a,b)=>a.sendAt-b.sendAt||a.draftId-b.draftId);
  }else if(path.startsWith('/v1/scheduled/')){

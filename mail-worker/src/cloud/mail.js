@@ -19,19 +19,19 @@ export async function searchPeople(c,userId,params) {
   const filters=[owned], args=[userId], term=params.q?.trim().slice(0,200) || '';
   if (accountId) { filters.push('e.account_id=?'); args.push(positive(accountId)); }
   const to=['e.recipient','e.cc',"CASE WHEN e.type=1 THEN e.bcc ELSE '' END"];
-  addPeopleFilter({[field]:term}, field, field==='from' ? ['e.name','e.send_email'] : to, filters, args);
+  addPeopleFilter({[field]:term}, field, field==='from' ? ['e.send_email','e.name'] : to, filters, args, true);
   const projection=field==='from' ? 'e.name,e.send_email sendEmail' : `e.type,e.recipient,e.cc,${to[2]} bcc`;
   const query=`SELECT ${projection} FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${filters.join(' AND ')}`;
   const read=async condition=>(await c.env.db.prepare(query+condition+' ORDER BY e.email_id DESC LIMIT 80').bind(...args).all()).results;
   let recent;
   if (folder==='scheduled') {
     const sender="COALESCE(NULLIF(json_extract(d.data,'$.name'),''),NULLIF(a.name,''),a.email)";
-    const draftColumns=field==='from' ? [sender,'a.email'] : ['receiveEmail','cc','bcc'].map(key=>`json_extract(d.data,'$.${key}')`);
+    const draftColumns=field==='from' ? ['a.email',sender] : ['receiveEmail','cc','bcc'].map(key=>`json_extract(d.data,'$.${key}')`);
     const project=field==='from' ? `${sender} senderName,a.email senderEmail` :
       `d.draft_id draftId,${draftColumns[0]} recipients,${draftColumns[1]} cc,${draftColumns[2]} bcc`;
     const conditions=["d.user_id=?", "json_extract(d.data,'$.scheduledAt') IS NOT NULL"], values=[userId];
     if (accountId) {conditions.push('d.account_id=?');values.push(positive(accountId));}
-    addPeopleFilter({[field]:term},field,draftColumns,conditions,values);
+    addPeopleFilter({[field]:term},field,draftColumns,conditions,values,true);
     recent=(await c.env.db.prepare(`SELECT ${project} FROM cloud_drafts d JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id AND a.is_del=0
       WHERE ${conditions.join(' AND ')} ORDER BY d.updated_at DESC,d.draft_id LIMIT 100`).bind(...values).all()).results;
   } else recent=await read(' AND e.trashed_at IS NOT NULL');

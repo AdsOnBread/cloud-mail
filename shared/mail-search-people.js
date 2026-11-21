@@ -32,7 +32,14 @@ export function setPeopleTerms(params, field, values) {
   if (extra.length) params[field + 'Any'] = JSON.stringify(extra);
 }
 
+export const fullAddress = term => /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/u.test(term);
+
 export function matchesPeople(values, terms) {
-  return !terms.length || terms.some(term => values.some(value =>
-    String(value ?? '').toLowerCase().includes(term.toLowerCase())));
+  return !terms.length || terms.some(term => {
+    const needle=term.toLowerCase(), exact=fullAddress(term);
+    return values.some(person=>{
+      const email=(typeof person==='string' ? person : person?.address)?.toLowerCase() || '';
+      return exact ? email===needle : email.includes(needle) || (person?.name || '').toLowerCase().includes(needle);
+    });
+  });
 }

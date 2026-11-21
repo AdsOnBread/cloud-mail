@@ -34,6 +34,7 @@
       @submit.prevent="apply"
       @keydown.esc.stop.prevent="dismiss"
     >
+      <div class="criteria">
       <label v-for="key in fields" :key="key"
         >{{ names[key] }}
         <select v-if="key === 'days'" v-model="form.days">
@@ -61,6 +62,7 @@
         <label v-if="store.folder!=='scheduled'" class="check"
           ><input v-model="form.isUnread" type="checkbox" /> Is unread</label
         >
+      </div>
       <div class="option-actions">
         <button type="button" @click="clear">Clear</button
         ><button type="submit">Search</button>
@@ -142,8 +144,17 @@ function clear() {
 <style scoped>
 .options-form {
   padding: 10px;
-  display: grid;
-  gap: 14px;
+  display:flex;
+  flex-direction:column;
+  box-sizing:border-box;
+  max-height:min(70dvh,575px);
+}
+.criteria {
+  display:grid;
+  gap:14px;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
 }
 .options-form label {
   display: grid;
@@ -173,6 +184,8 @@ function clear() {
   display: flex;
 }
 .option-actions {
+  flex-shrink:0;
+  padding-top:12px;
   display: flex;
   justify-content: flex-end;
   align-items: center;

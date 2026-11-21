@@ -1,15 +1,12 @@
 <template>
-  <el-popover :visible="open" :persistent="false" placement="bottom-start" :offset="4"
-    :show-arrow="false" :width="300" popper-class="mail-people-popper" @after-enter="focusInput">
-    <template #reference>
       <button ref="trigger" type="button" class="filter-chip people-chip" aria-haspopup="dialog"
         :aria-expanded="open" :aria-pressed="Boolean(selected.length)" :aria-label="caption"
         @click="open ? close(true) : show()" @keydown.down.prevent="show">
         <Icon v-if="selected.length" icon="material-symbols:check" width="16"/>
         <span>{{ caption }}</span><Icon icon="material-symbols:arrow-drop-down" width="16"/>
       </button>
-    </template>
-    <div v-if="open" ref="panel" role="dialog" :aria-label="label+' filter'" class="people-panel"
+  <Teleport to="body">
+    <div v-if="open" ref="panel" role="dialog" :aria-label="label+' filter'" class="people-panel" :style="position"
       @keydown.esc.stop.prevent="close(true)" @keydown.tab="tabOut" @focusout="focusOut">
       <div class="people-entry">
         <button v-for="person in selected" :key="person" class="person-token" type="button"
@@ -30,10 +27,11 @@
       </div>
       <small v-if="selected.length>=maxPeople" role="status" class="people-limit">Remove a person to add another.</small>
     </div>
-  </el-popover>
+  </Teleport>
 </template>
 <script setup>
 import {computed,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
+import {positionMailboxPopup} from './mail-popup-position';
 import {Icon} from '@iconify/vue';
 import http from '@/axios';
 import {useMailSearchStore} from '@/store/mail-search';
@@ -44,10 +42,14 @@ import {maxPeople,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-
 const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore(), account=useAccountStore(), user=useUserStore();
 const trigger=ref(), panel=ref(), input=ref(), id=useId();
+const position=ref({});
 const open=ref(false),query=ref(''),index=ref(-1),contacts=ref([]);
 const label=computed(()=>props.field==='from' ? 'From' : 'To');
 const selected=computed(()=>peopleTerms(store.filters,props.field));
-const caption=computed(()=>selected.value.length ? label.value+' '+selected.value.join(', ') : label.value);
+const caption=computed(()=>{
+  const [first,...rest]=selected.value;
+  return first ? label.value+' '+first+(rest.length ? ' +'+rest.length : '') : label.value;
+});
 const options=computed(()=>{
   if (selected.value.length>=maxPeople) return [];
   const omit=new Set(selected.value.map(s=>s.toLowerCase())), typed=query.value.trim();
@@ -58,7 +60,10 @@ const options=computed(()=>{
   return matches;
 });
 function focusInput() { if (open.value) input.value?.focus({preventScroll:true}); }
-function show() { open.value=true;nextTick(focusInput); }
+function place() {
+  if (open.value && panel.value && trigger.value) position.value=positionMailboxPopup(panel.value,trigger.value,300,trigger.value);
+}
+function show() { open.value=true;nextTick(()=>{place();focusInput()}); }
 function close(restore=false) {
   open.value=false;query.value='';index.value=-1;
   if (restore) trigger.value?.focus({preventScroll:true});
@@ -100,9 +105,14 @@ function focusOut(event) {
 function outside(event) {
   if (!panel.value?.contains(event.target) && !trigger.value?.contains(event.target)) close();
 }
-watch(open,visible=>{
-  document[visible?'addEventListener':'removeEventListener']('pointerdown',outside,true);
-});
+function listen(visible) {
+  const method=visible ? 'addEventListener' : 'removeEventListener';
+  document[method]('pointerdown',outside,true);
+  window[method]('resize',place);window[method]('scroll',place,true);
+  window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
+}
+watch(open,listen);
+watch([options,selected],()=>nextTick(place));
 watch([()=>props.folder,()=>props.accountId,()=>account.currentAccountId,()=>user.user.email],()=>close(),{flush:'sync'});
 watch([open,query],([visible,text],_,cleanup)=>{
   index.value=-1;
@@ -120,15 +130,15 @@ watch([open,query],([visible,text],_,cleanup)=>{
   },text ? 120 : 0);
   cleanup(()=>{current=false;clearTimeout(timer)});
 });
-onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside,true));
+onBeforeUnmount(()=>listen(false));
 </script>
 <style scoped>
 .people-chip span,.person-token span,.person-lines strong,.person-lines small {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .people-chip svg,.person-token svg {flex-shrink:0;}
-.people-panel {display:flex;flex-direction:column;max-height:min(580px,65dvh);font:14px/20px Arial,sans-serif;color:var(--el-text-color-primary);}
+.people-panel {position:fixed;z-index:2400;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;width:300px;border-radius:4px;background:var(--mail-surface);box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;font:14px/20px Arial,sans-serif;color:var(--el-text-color-primary);}
 .people-entry {display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px 10px;overflow:auto;flex-shrink:0;max-height:26dvh;}
 .people-entry input {border:0;background:transparent;color:inherit;font:16px/24px Arial,sans-serif;flex:1 0 min(125px,100%);min-width:0;height:40px;padding:0;outline:none;}
-.person-token {display:inline-flex;gap:6px;align-items:center;max-width:100%;padding:3px 8px 3px 10px;border:1px solid var(--light-border-color);border-radius:16px;background:var(--mail-surface);color:inherit;font:inherit;cursor:pointer;}
+.person-token {display:inline-flex;gap:6px;align-items:center;min-height:32px;max-width:100%;padding:3px 8px 3px 10px;border:1px solid var(--light-border-color);border-radius:16px;background:var(--mail-surface);color:inherit;font:inherit;cursor:pointer;}
 .people-list {overflow:auto;overscroll-behavior:contain;}
 .person-option {height:64px;display:flex;align-items:center;gap:16px;padding:0 16px;cursor:pointer;}
 .person-option:hover,.person-option[aria-selected=true],.person-token:hover {background:var(--mail-hover);}
@@ -137,7 +147,4 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside,true));
 .person-lines strong {font-size:16px;font-weight:500;line-height:24px;}
 .person-lines small,.people-limit {color:var(--regular-text-color);font-size:14px;}
 .people-limit {padding:8px 12px;}
-</style>
-<style>
-.mail-people-popper.el-popper {padding:0;max-width:calc(100vw - 16px);border:0;border-radius:4px;background:var(--mail-surface);box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;}
 </style>

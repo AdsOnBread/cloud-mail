@@ -48,6 +48,7 @@
 </template>
 <script setup>
 import {computed,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
+import {positionMailboxPopup} from '../mail-popup-position';
 import {Icon} from '@iconify/vue';
 import {useMailSearchStore} from '@/store/mail-search';
 import {calendarDate,calendarWeeks,moveMonth} from './dates';
@@ -71,23 +72,11 @@ function checked(key) {
   if (key==='custom') return store.filters.dateAfter!=null || store.filters.dateBefore!=null;
   return store.filters.olderThan===key || activeRecent.value?.[0]===key;
 }
-function position(element,anchor,width,avoid) {
-  const view=window.visualViewport;
-  const x=view?.offsetLeft||0,y=view?.offsetTop||0,w=view?.width||document.documentElement.clientWidth,h=view?.height||document.documentElement.clientHeight;
-  const size=Math.min(width,Math.max(0,w-16));
-  const bounds=anchor.getBoundingClientRect(), vertical=avoid?.getBoundingClientRect() || bounds;
-  const below=y+h-8-vertical.bottom-4, above=vertical.top-y-12;
-  const desired=Math.min(element.scrollHeight,h-16);
-  const down=below>=desired || below>=above;
-  const maxHeight=avoid ? Math.max(0,down ? below : above) : Math.max(0,h-16);
-  const top=down ? Math.min(vertical.bottom+4,y+h-8-Math.min(maxHeight,desired)) : Math.max(y+8,vertical.top-4-Math.min(maxHeight,desired));
-  return {width:size+'px',maxHeight:maxHeight+'px',left:Math.max(x+8,Math.min(bounds.left,x+w-size-8))+'px',top:top+'px'};
-}
 function place() {
   if (!open.value || !panel.value) return;
-  panelStyle.value=position(panel.value,trigger.value,custom.value ? 302 : 220);
+  panelStyle.value=positionMailboxPopup(panel.value,trigger.value,custom.value ? 302 : 220);
   if (calendar.value && active.value!==null) nextTick(()=>{
-    if (calendar.value && fields[active.value]) calendarStyle.value=position(calendar.value,fields[active.value],270,panel.value);
+    if (calendar.value && fields[active.value]) calendarStyle.value=positionMailboxPopup(calendar.value,fields[active.value],270,panel.value);
   });
 }
 async function show() {
