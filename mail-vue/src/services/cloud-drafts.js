@@ -141,7 +141,7 @@ async function push(database,row,api) {
   try {
     // IDs belong to a particular cloud draft; send binary data when importing a conflict copy.
     const attachments=referencedAttachments(value).map(({attachmentId,...f})=>f);
-    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
+    const payload={...strip(value),composeStarred:value.mailboxStarred == null ? undefined : Boolean(value.mailboxStarred),accountId:value.accountId,clientId:value.clientId,version:value.cloudVersion,attachments,ui:{uploadId,...(value.trashSource ? {trashSource:value.trashSource} : {}),inlineReply:value.inlineReply||false,replyRecipientNames:value.replyRecipientNames||{},localRevision:value.localRevision,editToken:value.editToken,starEditBase:value.starEditBase}};
     let remote=await (row.cloudDraftId?api.put(`/v1/drafts/${row.cloudDraftId}`,payload,{noMsg:true}):api.post('/v1/drafts',payload,{noMsg:true}));
     if(!row.cloudDraftId && remote.state==='draft' && remote.ui?.editToken!==value.editToken)throw {code:409,current:remote};
     await database.transaction('rw', database.draft, database.att, async () => {

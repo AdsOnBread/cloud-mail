@@ -126,7 +126,7 @@ export async function openSavedDraft(draftId, router, folder, labelId, category,
   if (canOpen && !canOpen()) return;
   if (
     draftKey(draft) &&
-    draft.sendType === "reply" &&
+    draft.sendType === "reply" && !draft.trashSource &&
     draft.emailId &&
     (draft.inlineReply || folder !== "draft")
   ) {

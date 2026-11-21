@@ -19,13 +19,13 @@
         <button
           type="button"
           class="inline-recipients"
-          aria-label="Edit reply recipients"
+          :aria-label="form.sendType === 'forward' ? 'Edit forward recipients' : 'Edit reply recipients'"
           :aria-expanded="editingRecipients"
           :data-tip="replyRecipientTitle"
           :disabled="sending || attaching"
           @click="editReplyRecipients"
         >
-          <Icon icon="material-symbols:reply" width="22" />
+          <Icon :icon="form.sendType === 'forward' ? 'material-symbols:forward' : 'material-symbols:reply'" width="22" />
           <Icon
             :icon="
               editingRecipients
@@ -349,7 +349,8 @@
 <script setup>
 import { draftSession, discardDrafts, saveLocalDraft, removeLocalDraft, syncCloudDrafts, sendCloudDraft, scheduleCloudDraft, cancelScheduledReceipt } from "@/services/cloud-drafts";
 import {useUiStore} from "@/store/ui";
-import { inlineDataHTML } from "@/utils/private-files";
+import http from "@/axios";
+import {quotedMessage} from "./quoted-message";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import ContactPicker from './contact-picker.vue';
@@ -883,17 +884,23 @@ const escapeHTML = (value) =>
         char
       ],
   );
+let sourceController;
 async function prepareMessage(message, mode, all = false) {
-  if (!available()) return;
+  if (!available()) return false;
   preparing.value = true;
+  const controller = sourceController = new AbortController();
   try {
     const owner=userStore.user.email, token=userStore.authenticatedToken;
-    const email = await emailStore.ensureDetail(message);
+    const current = () => mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
+    const email = message.trashedAt
+      ? await http.get("/v1/messages/" + message.emailId,{signal:controller.signal,headers:{Authorization:token}})
+      : await emailStore.ensureDetail(message);
+    if (!current()) return false;
+    if (message.trashedAt && (!token || email.userId!==userStore.user.userId || email.scheduledDraftId)) throw new Error("This message is no longer available.");
     if (hasPerm("account:query")) await accountStore.loadAll();
-    const html =
-      (await inlineDataHTML(email.content)) ||
-      `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHTML(email.text)}</pre>`;
-    if (!mounted || owner!==userStore.user.email || token!==userStore.authenticatedToken || token!==localStorage.getItem('token')) return;
+    if (!current()) return false;
+    const quote = await quotedMessage(email, mode, controller.signal, token);
+    if (!current()) return false;
     resetForm();
     setSender();
     const originalAccount =
@@ -915,16 +922,15 @@ async function prepareMessage(message, mode, all = false) {
       form.accountId = originalAccount.accountId;
       form.name = originalAccount.name || userStore.user.name || "";
     }
-    form.subject =
-      mode === "reply" && !/^re:/i.test(email.subject || "")
-        ? `Re: ${email.subject || ""}`
-        : email.subject || "";
+    const subject = email.subject || "";
+    const hasPrefix = mode === "reply" ? /^re:/i.test(subject) : /^fwd:/i.test(subject);
+    form.subject = hasPrefix ? subject : (mode === "reply" ? "Re: " : "Fwd: ") + subject;
     form.sendType = mode;
     form.emailId = mode === "reply" ? email.emailId : 0;
+    if (email.trashedAt) form.trashSource = email.emailId;
+    Object.assign(form,quote);
     if (mode === "reply") {
       Object.assign(form, replyRecipients(email, accountStore.ownAddresses, all));
-      const quote = `<div>${escapeHTML(formatDetailDate(email.createTime))} ${escapeHTML(email.name)} &lt;${escapeHTML(email.sendEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${html}</blockquote>`;
-      form.content = `<div><br></div><div class="cloudmail-reply-quote">${quote}</div>`;
       if (props.inline) {
         form.replyRecipientNames = {};
         for (const list of [email.recipient, email.cc]) {
@@ -943,7 +949,7 @@ async function prepareMessage(message, mode, all = false) {
         if (email.sendEmail && email.name)
           form.replyRecipientNames[email.sendEmail.toLowerCase()] = email.name;
       }
-    } else form.content = `<div><br></div><div class="cloudmail-reply-quote">${html}</div>`;
+    } else if (props.inline) editingRecipients.value = true;
     if (form.plainText) Object.assign(form, plainMarkup(form.content));
     defValue.value = form.content;
     reveal();
@@ -953,16 +959,16 @@ async function prepareMessage(message, mode, all = false) {
     baseline = draftFingerprint(form);
     startSignatureDefault();
   } catch (error) {
-    ElMessage.error(
-      error.message || "Could not load the message. Please try again.",
-    );
+    if (!controller.signal.aborted) ElMessage.error(error.message || "Could not load the message. Please try again.");
+    return false;
   } finally {
     preparing.value = false;
   }
   await nextTick();
   if (!mounted || !props.dockActive) return;
-  if (props.inline) editor.value?.focus?.(true);
+  if (props.inline && mode === "reply") editor.value?.focus?.(true);
   else toField.value?.focus();
+  return true;
 }
 function openReply(email) {
   return prepareMessage(email, "reply");
@@ -1444,6 +1450,7 @@ onMounted(() => {
   document.addEventListener("focusin", containFocus);
 });
 onUnmounted(() => {
+  sourceController?.abort();
   clearFormatCaption();
   stopStarActions?.();
   mounted = false;

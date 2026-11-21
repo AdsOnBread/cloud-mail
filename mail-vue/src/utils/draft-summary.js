@@ -32,6 +32,7 @@ export function draftSummary(draft) {
     cloudDraftId: draft.cloudDraftId,
     clientId: draft.clientId,
     emailId: Number(draft.emailId),
+    trashSource: Number(draft.trashSource) || undefined,
     hasFiles: Boolean(draft.hasFiles),
     sizeBytes:draft.sizeBytes ?? storedMessageBytes(draft),
     accountId: draft.accountId,

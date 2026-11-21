@@ -27,12 +27,3 @@ export function inlineImageURL(blob) {
   });
 }
 export async function privateImageURL(key) { return inlineImageURL(await privateFile(key)); }
-export async function inlineDataHTML(html) {
-  const doc = new DOMParser().parseFromString(html || '', 'text/html');
-  await Promise.all(Array.from(doc.images).map(async image => {
-    const key = storedKey(image.getAttribute('src'));
-    if (!key) return;
-    image.src = await privateImageURL(key);
-  }));
-  return doc.body.innerHTML;
-}
