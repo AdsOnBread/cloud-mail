@@ -1244,7 +1244,8 @@ function recordSent(messages) {
 async function followDelivery(delivery, recent, replyTo, subject, quiet=false) {
   const session=draftSession();
   if (!delivery.begin()) return;
-  const notice=quiet ? {} : (feedback.show("Sending…"),feedback.notice);
+  if (!quiet) feedback.show("Sending…");
+  const notice=quiet ? {} : feedback.notice;
   notice.subject=subject;
   notice.holding=true;
   if (!quiet && delivery.delay>0) attachUndo(delivery.cancel,session);

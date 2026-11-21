@@ -449,3 +449,23 @@ it('uses only the acknowledged cloud revision and original owner for schedule Un
   await expect(cancelScheduledReceipt(scheduled, session)).rejects.toThrow(/user changed/);
   expect(http.post.mock.calls.filter(([path]) => path.endsWith('/cancel'))).toHaveLength(1);
 });
+
+it.each(['holding','sending'])('recovers a lost send response while the server is %s', async status => {
+  const row = await saveLocalDraft(input());
+  const post = http.post.getMockImplementation();
+  const get = http.get.getMockImplementation();
+  let receipt;
+  http.post.mockImplementation(async (path, payload, ...rest) => {
+    if (!path.endsWith('/send')) return post(path,payload,...rest);
+    receipt = {state:status, attemptId:payload.idempotencyKey, draftId:1, version:2,
+      undoUntil:Date.now()+5000, remainingMs:4800};
+    throw new Error('Connection interrupted');
+  });
+  http.get.mockImplementation((path,...rest) => path.startsWith('/v1/send-attempts/') ? receipt : get(path,...rest));
+  const delivery = await sendCloudDraft(row.draftId,row.editToken,5);
+  expect(delivery.delay).toBe(status==='holding' ? 4800 : 0);
+  expect(await db.value.meta.get('ordinary-send/'+receipt.attemptId)).toMatchObject({localId:row.draftId,undoSeconds:5});
+  const retry = await sendCloudDraft(row.draftId,row.editToken,5);
+  expect(retry.delay).toBe(delivery.delay);
+  expect(http.post.mock.calls.filter(([path])=>path.endsWith('/send'))).toHaveLength(1);
+});
