@@ -254,6 +254,7 @@ watch([extraCount, showIndent, showLists, showHistory], async () => {
   await nextTick();
   if (
     row.value?.isConnected &&
+    !popupOwner?.isConnected &&
     !focused.isConnected &&
     document.activeElement === document.body
   )
