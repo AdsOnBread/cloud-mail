@@ -102,6 +102,7 @@ function matchesFilters(row,p) {
     matches([row.subject],p.subject) && (!p.hasAttachment || row.attList?.length>0) && (!p.isUnread || row.type===0 && row.unread===0) &&
     matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
+let generalSettings={version:0,undoSeconds:null,replyAll:false};
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');
@@ -123,6 +124,13 @@ const api=createHTTPServer(async(req,res)=>{
  if(path==='/v1/system-labels')data=systemLabels;
  else if(path.startsWith('/v1/system-labels/') && req.method==='PUT'){
    const folder=path.split('/').at(-1),{mode}=JSON.parse(body);systemLabels[folder]=mode;data={folder,mode};
+ }else if(path==='/v1/general-settings'){
+   if(req.method==='PUT'){
+     const update=JSON.parse(body);
+     if(update.version!==generalSettings.version){res.writeHead(409);res.end(JSON.stringify({code:409,message:'Settings changed elsewhere.'}));return;}
+     generalSettings={...update,version:update.version+1};
+   }
+   data=generalSettings;
  }else if(path==='/v1/signatures'){
    if(req.method==='PUT'){
      const update=JSON.parse(body);
@@ -276,7 +284,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
- else if(path==='/my/loginUserInfo')data=user;
+ else if(path==='/my/loginUserInfo')data={...user,generalSettings};
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;
  else if(path==='/email/conversations'){
    const p=Object.fromEntries(url.searchParams),q=(p.q||'').toLowerCase(),asc=Number(p.timeSort)===1;

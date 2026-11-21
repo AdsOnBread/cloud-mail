@@ -5,8 +5,7 @@
       <button v-perm="'email:delete'" type="button" class="message-action" title="Delete" aria-label="Delete message" @click="handleDelete"><Icon icon="material-symbols:delete-outline" width="22" /></button>
       <button v-if="emailStore.contentData.showStar" type="button" class="message-action" :title="email.isStar ? 'Remove star' : 'Star message'" :aria-label="email.isStar ? 'Remove star' : 'Star message'" @click="changeStar"><Icon :icon="email.isStar ? 'fluent-color:star-16' : 'material-symbols:star-outline'" width="22" /></button>
       <template v-if="emailStore.contentData.showReply">
-        <button v-perm="'email:send'" type="button" class="message-action" title="Reply" aria-label="Reply" @click="openReply"><Icon icon="material-symbols:reply" width="22" /></button>
-        <button v-perm="'email:send'" type="button" class="message-action" title="Reply all" aria-label="Reply all" @click="openReplyAll"><Icon icon="material-symbols:reply-all" width="22" /></button>
+        <button v-for="action in replyChoices" :key="action.title" v-perm="'email:send'" type="button" class="message-action" :title="action.title" :aria-label="action.title" @click="action.open"><Icon :icon="action.icon" width="22" /></button>
         <button v-perm="'email:send'" type="button" class="message-action" title="Forward" aria-label="Forward" @click="openForward"><Icon icon="material-symbols:forward" width="22" /></button>
       </template>
     </div>
@@ -64,8 +63,7 @@
             </div>
           </div>
           <div v-if="emailStore.contentData.showReply" v-perm="'email:send'" class="message-replies">
-            <el-button @click="openReply"><Icon icon="material-symbols:reply" width="20" />Reply</el-button>
-            <el-button @click="openReplyAll"><Icon icon="material-symbols:reply-all" width="20" />Reply all</el-button>
+            <el-button v-for="action in replyChoices" :key="action.title" @click="action.open"><Icon :icon="action.icon" width="20" />{{action.title}}</el-button>
             <el-button @click="openForward"><Icon icon="material-symbols:forward" width="20" />Forward</el-button>
           </div>
         </div>
@@ -83,7 +81,7 @@
 import { useMailFeedback } from "@/store/mail-feedback";
 const feedback = useMailFeedback();
 import { useUserStore } from '@/store/user.js';
-import { addresses } from '@/utils/recipients.js';
+import { addresses, hasReplyAll } from '@/utils/recipients.js';
 import { privateFileURL } from '@/utils/private-files';
 import MessageContent from '@/components/shadow-html/message-content.vue'
 import {computed, reactive, ref, watch, onMounted, onUnmounted} from "vue";
@@ -122,6 +120,10 @@ const recipientDetails = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const userStore = useUserStore()
+const replyAction={title:'Reply',icon:'material-symbols:reply',open:openReply};
+const replyAllAction={title:'Reply all',icon:'material-symbols:reply-all',open:openReplyAll};
+const replyChoices=computed(()=>hasReplyAll(email.value,accountStore.ownAddresses)
+  ? (userStore.defaultReplyAll ? [replyAllAction,replyAction] : [replyAction,replyAllAction]) : [replyAction]);
 const showBcc = computed(() => email.value.type === 1 && email.value.userId === userStore.user.userId && addresses(email.value.bcc).length > 0)
 async function loadDetail() {
   const message = email.value

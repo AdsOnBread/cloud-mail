@@ -1301,7 +1301,7 @@ async function sendEmail(sendAt=null) {
       show.value=false;resetForm();emit("closed");return;
     }
     let preservedNotice = "";
-    const sent = await sendCloudDraft(saved.draftId,saved.editToken,composeMode.value.undoSeconds || 5).catch(error => {
+    const sent = await sendCloudDraft(saved.draftId,saved.editToken,userStore.undoSeconds).catch(error => {
       if (!error.sentMessages) throw error;
       preservedNotice = error.message;
       return error.sentMessages;

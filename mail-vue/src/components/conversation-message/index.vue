@@ -35,7 +35,7 @@
           width="20"
         />
       </button>
-      <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" aria-label="Reply to message" data-tip="Reply" @click="$emit('reply',false)"><Icon icon="material-symbols:reply" width="20" /></button>
+      <button v-if="expanded && !replying" v-perm="'email:send'" class="icon-button" :aria-label="replyAll ? 'Reply all' : 'Reply to message'" :data-tip="replyAll ? 'Reply all' : 'Reply'" @click="$emit('reply',replyAll)"><Icon :icon="replyAll ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20" /></button>
       <el-dropdown v-if="expanded" trigger="click" placement="bottom-end" :offset="0" :show-arrow="false" popper-class="mail-action-menu message-action-menu">
         <button class="icon-button" aria-label="More message options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20" /></button>
         <template #dropdown><el-dropdown-menu>
@@ -82,6 +82,7 @@ import { ElMessage } from "element-plus";
 import AttachmentTiles from "@/components/mail-attachments/tiles.vue";
 import MessageContent from "@/components/shadow-html/message-content.vue";
 import { useEmailStore } from "@/store/email";
+import {useUserStore} from '@/store/user';
 import {hasReplyAll} from '@/utils/recipients';
 import {useAccountStore} from '@/store/account';
 import MessageRecipients from "@/components/message-recipients.vue";
@@ -105,6 +106,8 @@ const detail = ref(null),
   busy = ref(false);
 function showFileError(message) { ElMessage.error(message); }
 const email = computed(() => detail.value || props.message);
+const user=useUserStore();
+const replyAll=computed(()=>user.defaultReplyAll && hasReplyAll(email.value,account.ownAddresses));
 const attachedFiles=computed(()=>(email.value.attList||[]).filter(downloadablePart));
 async function load() {
   if (loading.value) return;

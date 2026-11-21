@@ -4,6 +4,7 @@
     <nav aria-label="Settings sections">
       <router-link to="/settings" exact-active-class="current">General</router-link>
       <router-link to="/settings/labels" exact-active-class="current">Labels</router-link>
+      <router-link to="/settings/accounts" exact-active-class="current">Accounts</router-link>
     </nav>
   </header>
 </template>

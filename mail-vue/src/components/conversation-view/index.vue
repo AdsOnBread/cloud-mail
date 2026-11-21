@@ -99,20 +99,9 @@
         />
       </ConversationMessage>
       <div v-if="messages.length && !activeTarget" class="bottom-replies">
-        <el-button
-          v-perm="'email:send'"
-          round
-          @click="reply(messages.at(-1), false)"
-          ><Icon icon="material-symbols:reply" width="20" />Reply</el-button
-        >
-        <el-button
-          v-perm="'email:send'"
-          round
-          v-if="hasReplyAll(messages.at(-1),accountStore.ownAddresses)"
-          @click="reply(messages.at(-1), true)"
-          ><Icon icon="material-symbols:reply-all" width="20" />Reply
-          all</el-button
-        >
+        <el-button v-for="all in replyChoices" :key="String(all)" v-perm="'email:send'" round @click="reply(messages.at(-1),all)">
+          <Icon :icon="all ? 'material-symbols:reply-all' : 'material-symbols:reply'" width="20"/>{{all ? 'Reply all' : 'Reply'}}
+        </el-button>
         <el-button v-perm="'email:send'" round @click="ui.writerRef.openForward(messages.at(-1))"><Icon icon="material-symbols:forward" width="20"/>Forward</el-button>
       </div>
     </div>
@@ -217,6 +206,7 @@ let viewEpoch = 0,
 const currentComposer = () =>
   Array.isArray(composer.value) ? composer.value[0] : composer.value;
 const user=useUserStore(),printing=ref(false),expanding=ref(false);
+const replyChoices=computed(()=>hasReplyAll(messages.value.at(-1),accountStore.ownAddresses) ? [user.defaultReplyAll,!user.defaultReplyAll] : [false]);
 let printRun=0,expandRun=0,printController;
 const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expanded.value.has(m.emailId)));
 const expansionTitle=computed(()=>allExpanded.value || expanding.value ? 'Collapse all' : 'Expand all');
