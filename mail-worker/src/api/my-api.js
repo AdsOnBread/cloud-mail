@@ -11,6 +11,10 @@ app.get('/my/loginUserInfo', async (c) => {
 	return c.json(result.ok({...user, generalSettings,lastSchedule:recentSchedule}));
 });
 
+app.get('/my/lastSchedule', async (c) => {
+	return c.json(result.ok(await lastSchedule(c.env.db, userContext.getUserId(c))));
+});
+
 app.put('/my/resetPassword', async (c) => {
 	await userService.resetPassword(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());

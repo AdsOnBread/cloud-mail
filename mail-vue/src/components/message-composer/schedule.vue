@@ -59,10 +59,11 @@
   </el-dialog>
 </template>
 <script setup>
-import { nextTick, ref } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import MailDateTime from "@/components/mail-date-time/index.vue";
 import { suggestions } from "@/components/mail-date-time/dates";
+import { refreshLastSchedule } from "@/services/cloud-drafts";
 import { useUserStore } from "@/store/user";
 
 const visible = defineModel({ type: Boolean }),
@@ -110,7 +111,28 @@ function open(trigger) {
   custom.value = false;
   error.value = "";
   visible.value = true;
+  // Cached presets remain available when the mailbox is offline.
+  refreshLastSchedule().catch(() => {});
 }
+watch(
+  () => user.user.lastSchedule?.version,
+  () => {
+    if (!visible.value || custom.value) return;
+    const buttons = menu.value?.children;
+    const focused = buttons && buttons[active.value] === document.activeElement;
+    const label = options.value[active.value]?.label;
+    setOptions(new Date());
+    if (!focused) {
+      active.value = 0;
+      return;
+    }
+    const index = label
+      ? options.value.findIndex((option) => option.label === label)
+      : options.value.length;
+    active.value = Math.max(0, index);
+    if (index < 0) nextTick(() => menu.value?.firstElementChild?.focus());
+  },
+);
 function focusInitial() {
   if (!visible.value || custom.value || !menu.value) return;
   const focused = document.activeElement,

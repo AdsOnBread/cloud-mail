@@ -215,7 +215,7 @@ function checkFormat(field) {
 }
 function clearError(field) {
   formatErrors.value[field] = "";
-  if (props.scheduling && invalid.value !== field) return;
+  // A submitted instant depends on both fields. Format errors stay on their own field.
   error.value = "";
   invalid.value = "";
 }

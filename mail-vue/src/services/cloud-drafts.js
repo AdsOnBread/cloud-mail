@@ -385,18 +385,27 @@ export async function removeLocalDraft(id,{sent=false,database:providedDatabase}
   else {await database.draft.put({...row,deleted:true,dirty:false});await syncCloudDrafts();}
   userDraftStore().refreshList++;
 }
+function rememberSchedule(database, history) {
+  const user = useUserStore();
+  if (history && database === db.value && database.name === user.user.email &&
+      history.version > (user.user.lastSchedule?.version || 0)) {
+    user.user.lastSchedule = history;
+  }
+}
+
+export async function refreshLastSchedule() {
+  const database = db.value;
+  const history = await sessionAPI(database).get('/my/lastSchedule', {noMsg:true});
+  rememberSchedule(database, history);
+}
+
 async function reconcileSchedule(database,api,row) {
   const {sendAt,version}=row.pendingSchedule;
   const path=`/v1/drafts/${row.cloudDraftId}/schedule`;
   let scheduled;
   try {
     scheduled=await api.post(path,{version,sendAt},{noMsg:true});
-    const user = useUserStore();
-    if (scheduled.lastSchedule && database === db.value && database.name === user.user.email &&
-        scheduled.lastSchedule.version > (user.user.lastSchedule?.version || 0)) {
-      user.user.lastSchedule = scheduled.lastSchedule;
-    }
-
+    rememberSchedule(database,scheduled.lastSchedule);
   } catch(raw) {
     const err=apiError(raw), code=Number(err.code);
     // The server returns its current revision on conflict, including a completed send.

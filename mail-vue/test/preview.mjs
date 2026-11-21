@@ -298,6 +298,7 @@ const api=createHTTPServer(async(req,res)=>{
  }else if(path.endsWith('purge'))rows.splice(i,1);else rows[i].trashedAt=path.endsWith('restore')?null:new Date().toISOString();}}
  else if(path.startsWith('/v1/messages/')){const row=rows.find(r=>r.emailId===Number(path.split('/').at(-1)));data=row&&{...row,labelIds:[...(membership.get(row.emailId)||[])]};}
  else if(path==='/setting/websiteConfig')data=settings;
+ else if(path==='/my/lastSchedule')data=lastSchedule;
  else if(path==='/my/loginUserInfo')data={...user,generalSettings,lastSchedule};
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;
  else if(path==='/email/conversations'){
