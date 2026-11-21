@@ -1,6 +1,7 @@
 <template>
   <div class="recipient-field" :class="{ 'has-error': error }">
-    <label :for="inputId">{{ label }}</label>
+    <button type="button" class="field-label" :aria-label="`Choose ${label} contacts`"
+      :data-tip="`${label} - Select contacts`" @click="$emit('contacts')">{{ label }}</button>
     <div class="recipient-entry" @click="input?.focus()">
       <span v-for="(address, index) in modelValue" :key="index" class="recipient-chip" :class="{ invalid: !isEmail(address) }">
         <span :title="address">{{ address }}</span>
@@ -14,15 +15,11 @@
       </datalist>
     </div>
     <slot />
-    <button type="button" class="contact-button" :aria-label="`Choose ${label} contacts`" title="Recent contacts" @click="$emit('contacts')">
-      <Icon icon="material-symbols:person-add-outline" width="18" />
-    </button>
     <p v-if="error" :id="`${inputId}-error`" class="recipient-error" role="alert">{{ error }}</p>
   </div>
 </template>
 <script setup>
 import { computed, ref, useId } from 'vue';
-import { Icon } from '@iconify/vue';
 import { splitRecipients } from '@/utils/recipients.js';
 import { isEmail } from '@/utils/verify-utils.js';
 const props = defineProps({ modelValue: { type: Array, default: () => [] }, label: String,
@@ -53,14 +50,14 @@ defineExpose({ commit, focus: () => input.value?.focus(), clear: () => { pending
 </script>
 <style scoped>
 .recipient-field { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-height:40px; border-bottom:1px solid var(--compose-divider, var(--light-border-color)); padding:5px 0; }
-label { width:35px; flex-shrink:0; color:var(--regular-text-color); font-size:13px; }
+.field-label { cursor:pointer; text-align:left; width:auto; flex-shrink:0; color:var(--regular-text-color); font-size:13px; }
 .recipient-entry { flex:1; min-width:100px; display:flex; align-items:center; flex-wrap:wrap; gap:4px; cursor:text; }
 input { appearance:none; border:0; border-radius:0; outline:none; background:transparent; font:inherit; flex:1; width:100px; min-width:80px; padding:4px 0; color:inherit; }
 .recipient-chip { display:inline-flex; align-items:center; border:1px solid var(--compose-divider, var(--light-border-color)); border-radius:16px; padding:1px 6px 1px 10px; font-size:12px; max-width:100%; gap:4px; }
 .recipient-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .recipient-chip button { width:20px; height:24px; cursor:pointer; color:var(--regular-text-color); border-radius:50%; }
 .invalid { border-color:var(--el-color-danger); }
-.contact-button { display:flex; padding:6px; border-radius:50%; color:var(--regular-text-color); cursor:pointer; }
-button:hover { background:var(--base-fill); }
+.field-label:hover { text-decoration:underline; }
+.recipient-chip button:hover { background:var(--base-fill); }
 .recipient-error { width:100%; font-size:12px; color:var(--el-color-danger); padding-left:40px; }
 </style>

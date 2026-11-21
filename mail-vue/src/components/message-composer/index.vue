@@ -47,25 +47,19 @@
         <button
           type="button"
           class="compose-caption"
-          @click="minimized = false"
-        >
-          {{
-            form.sendType === "reply"
-              ? "Reply"
-              : form.sendType === "forward"
-                ? "Forward"
-                : "New Message"
-          }}
-        </button>
+          :title="caption"
+          :aria-expanded="!minimized"
+          @click="toggleMinimized"
+        >{{ caption }}</button>
         <div class="window-actions">
           <button
             v-if="!inline"
             type="button"
             :aria-label="minimized ? 'Restore compose' : 'Minimize compose'"
-            :data-tip="minimized ? 'Restore' : 'Minimize'"
-            @click="minimized = !minimized"
+            :data-tip="minimized ? 'Maximize' : 'Minimize'"
+            @click="toggleMinimized"
           >
-            <Icon icon="material-symbols:remove" width="18" />
+            <Icon :icon="minimized ? 'material-symbols:crop-square' : 'material-symbols:remove'" width="18" />
           </button>
           <button
             v-if="!inline"
@@ -103,66 +97,74 @@
           :disabled="sending || attaching"
           class="compose-fields"
         >
-          <div v-if="!inline" class="from-row">
-            <span>From</span
-            ><span :title="form.sendEmail"
-              >{{ form.name }} &lt;{{ form.sendEmail }}&gt;</span
+          <button
+            v-if="!inline && !addressExpanded"
+            type="button"
+            class="recipient-summary"
+            aria-label="Edit recipients"
+            :title="replyRecipientTitle || 'Recipients'"
+            @click="focusRecipients('receiveEmail')"
+          >{{ replyRecipientTitle || "Recipients" }}</button>
+          <div v-show="inline || addressExpanded">
+            <div v-if="!inline && showSender" class="from-row">
+              <span>From</span
+              ><span :title="form.sendEmail"
+                >{{ form.name }} &lt;{{ form.sendEmail }}&gt;</span
+              >
+            </div>
+            <RecipientField
+              ref="toField"
+              v-model="form.receiveEmail"
+              label="To"
+              :contacts="writerStore.sendRecipientRecord"
+              :error="recipientErrors.receiveEmail"
+              @contacts="openContacts('receiveEmail')"
             >
+              <button
+                v-if="!showCc"
+                type="button"
+                class="reveal-recipient"
+                :data-tip="copyShortcutHint('Cc')"
+                @click="focusRecipients('cc')"
+              >
+                Cc
+              </button>
+              <button
+                v-if="!showBcc"
+                type="button"
+                class="reveal-recipient"
+                :data-tip="copyShortcutHint('Bcc')"
+                @click="focusRecipients('bcc')"
+              >
+                Bcc
+              </button>
+            </RecipientField>
+            <RecipientField
+              v-if="showCc"
+              ref="ccField"
+              v-model="form.cc"
+              label="Cc"
+              :contacts="writerStore.sendRecipientRecord"
+              :error="recipientErrors.cc"
+              @contacts="openContacts('cc')"
+            />
+            <RecipientField
+              v-if="showBcc"
+              ref="bccField"
+              v-model="form.bcc"
+              label="Bcc"
+              :contacts="writerStore.sendRecipientRecord"
+              :error="recipientErrors.bcc"
+              @contacts="openContacts('bcc')"
+            />
           </div>
-          <RecipientField
-            ref="toField"
-            v-model="form.receiveEmail"
-            label="To"
-            :contacts="writerStore.sendRecipientRecord"
-            :error="recipientErrors.receiveEmail"
-            @contacts="openContacts('receiveEmail')"
-          >
-            <button
-              v-if="!showCc"
-              type="button"
-              class="reveal-recipient"
-              @click="
-                showCc = true;
-                nextTick(() => ccField?.focus());
-              "
-            >
-              Cc
-            </button>
-            <button
-              v-if="!showBcc"
-              type="button"
-              class="reveal-recipient"
-              @click="
-                showBcc = true;
-                nextTick(() => bccField?.focus());
-              "
-            >
-              Bcc
-            </button>
-          </RecipientField>
-          <RecipientField
-            v-if="showCc"
-            ref="ccField"
-            v-model="form.cc"
-            label="Cc"
-            :contacts="writerStore.sendRecipientRecord"
-            :error="recipientErrors.cc"
-            @contacts="openContacts('cc')"
-          />
-          <RecipientField
-            v-if="showBcc"
-            ref="bccField"
-            v-model="form.bcc"
-            label="Bcc"
-            :contacts="writerStore.sendRecipientRecord"
-            :error="recipientErrors.bcc"
-            @contacts="openContacts('bcc')"
-          />
           <input
             v-if="!inline"
             v-model="form.subject"
             class="subject-input"
             aria-label="Subject"
+            @focus="collapseAddresses"
+            @blur="subjectCaption = form.subject.trim()"
             placeholder="Subject"
             maxlength="998"
           />
@@ -184,6 +186,8 @@
             :collapse-quote="inline"
             :show-quote="quoteExpanded"
             ref="editor"
+            @focus="collapseAddresses"
+            @compose-keydown="addressShortcut"
             @change="change"
           />
         </div>
@@ -447,6 +451,42 @@ const ccField = ref();
 const bccField = ref();
 const show = ref(false);
 const editingRecipients = ref(false);
+const addressExpanded = ref(true);
+const subjectCaption = ref("");
+const caption = computed(() => subjectCaption.value || ({reply: "Reply", forward: "Forward"}[form.sendType] || "New Message"));
+const showSender = computed(() => !accountStore.loaded || accountStore.accounts.length > 1 ||
+  form.sendEmail?.toLowerCase() !== userStore.user.email?.toLowerCase());
+
+function toggleMinimized() {
+  subjectCaption.value = form.subject.trim();
+  minimized.value = !minimized.value;
+  if (minimized.value) nextTick(() => composeRoot.value?.querySelector(".compose-caption")?.focus());
+}
+function collapseAddresses() {
+  if (!props.inline) addressExpanded.value = false;
+}
+function focusRecipients(field) {
+  if (props.inline) editingRecipients.value = true;
+  else addressExpanded.value = true;
+  if (field === "cc") showCc.value = true;
+  if (field === "bcc") showBcc.value = true;
+  const input = {receiveEmail: toField, cc: ccField, bcc: bccField}[field];
+  nextTick(() => input?.value?.focus());
+}
+function copyShortcutHint(label) {
+  const keys = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘⇧" : "Ctrl+Shift+";
+  return "Add " + label + " recipients (" + keys + label[0].toUpperCase() + ")";
+}
+function addressShortcut(event) {
+  if (event.defaultPrevented || event.isComposing || event.altKey || !event.shiftKey ||
+      !(event.metaKey || event.ctrlKey) || sending.value || preparing.value || attaching.value ||
+      showContacts.value || managingSignatures.value || scheduling.value) return;
+  const field = {c: "cc", b: "bcc"}[event.key?.toLowerCase()];
+  if (!field) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  focusRecipients(field);
+}
 const uiPreferences=useUiStore();
 const composeMode = computed(() => uiPreferences.composeModes[userStore.user.email] || {});
 const showFormatting=computed({get:()=>uiPreferences.composeFormatting,set:value=>{uiPreferences.composeFormatting=value;}});
@@ -589,6 +629,8 @@ function setSender() {
   form.name = account.name || userStore.user.name || "";
 }
 function reveal() {
+  subjectCaption.value = form.subject.trim();
+  addressExpanded.value = true;
   expanded.value = desktop.value && !props.inline && Boolean(composeMode.value.fullScreen);
   showCc.value = form.cc.length > 0;
   showBcc.value = form.bcc.length > 0;
@@ -636,8 +678,10 @@ async function openDraft(draft) {
     preparing.value = false;
   }
   await nextTick();
-  if (props.inline) editor.value?.focus?.(true);
-  else toField.value?.focus();
+  if (props.inline || replyRecipientTitle.value) {
+    collapseAddresses();
+    editor.value?.focus?.(true);
+  } else toField.value?.focus();
 }
 // Older reply drafts stored the generated quote directly after the editable body.
 function foldLegacyReplyQuote(content) {
@@ -922,10 +966,7 @@ function validForSend() {
   if (!recipients.receiveEmail.length)
     recipientErrors.value.receiveEmail = "Enter at least one To recipient.";
   if (Object.keys(recipientErrors.value).length) {
-    if (props.inline) {
-      editingRecipients.value = true;
-      nextTick(() => toField.value?.focus());
-    }
+    focusRecipients(recipientFields.find(field => recipientErrors.value[field]));
     return false;
   }
   recipientFields.forEach((field) => {
@@ -1066,6 +1107,7 @@ async function deleteContact() {
 function keydown(event) {
   if(managingSignatures.value || scheduling.value || event.target.closest?.(".schedule-dialog,.signature-dialog,.signature-name-dialog"))return;
   if (event.target.closest?.(".compose-format-popup") || [...document.querySelectorAll(".compose-format-popup")].some(menu=>menu.getClientRects().length)) return;
+  if (show.value && !minimized.value && composeRoot.value?.contains(event.target)) addressShortcut(event);
   if (
     event.key === "Tab" &&
     modal.value &&
@@ -1204,8 +1246,13 @@ defineExpose({
   cursor: pointer;
   flex: 1;
   text-align: left;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .window-actions {
+  flex: none;
   display: flex;
   gap: 2px;
 }
@@ -1236,6 +1283,18 @@ defineExpose({
   max-height: 40%;
   overflow: auto;
   flex-shrink: 0;
+}
+.recipient-summary {
+  display: block;
+  width: 100%;
+  height: 40px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  color: var(--regular-text-color);
+  border-bottom: 1px solid var(--compose-divider);
 }
 .from-row {
   display: flex;
@@ -1381,7 +1440,7 @@ defineExpose({
   top: auto;
   bottom: 0;
   left: auto;
-  width: 300px;
+  width: 328px;
 }
 .minimized .write-box {
   height: 40px;
@@ -1414,12 +1473,12 @@ defineExpose({
     height: calc(100dvh - 56px);
     padding: 0 16px;
   }
-  .minimized {
+  .send.minimized:not(.inline) {
     top: auto;
     left: auto;
     right: 8px;
     bottom: 0;
-    width: 280px;
+    width: min(328px, calc(100% - 16px));
   }
   .minimized .write-box,
   .minimized .compose-title {

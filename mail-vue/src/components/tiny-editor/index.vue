@@ -63,7 +63,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["change", "focus"]);
+const emit = defineEmits(["change", "focus", "compose-keydown"]);
 let pendingInit = Promise.resolve();
 let themeRevision = 0,
   disposed = false;
@@ -247,6 +247,7 @@ function initEditor(initialContent) {
           }
         });
       }
+      if (props.mailCompose) ed.on("keydown", event => emit("compose-keydown", event), true);
       const messageText = () => props.plainText ? plainBodyText(ed.getBody()) : ed.getContent({format:"text"});
       ed.on("init", () => {
         if (disposed) return;
