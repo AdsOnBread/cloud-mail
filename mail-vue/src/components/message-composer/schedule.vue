@@ -90,7 +90,7 @@ function open(trigger) {
 function focusInitial() {
   if (
     !custom.value &&
-    firstOption.value?.closest(".el-dialog") === document.activeElement
+    (firstOption.value?.closest(".el-dialog") === document.activeElement || opener===document.activeElement || document.activeElement?.closest(".compose-format-popup"))
   )
     firstOption.value.focus();
 }
@@ -100,8 +100,8 @@ function showCalendar() {
   nextTick(() => picker.value?.focus());
 }
 async function restoreFocus() {
-  // The dialog emits closed before updating v-model on Escape and the close button.
-  await nextTick();
+  // Element Plus releases its focus trap and commits v-model after its closed event.
+  await new Promise(requestAnimationFrame);
   if (
     !visible.value &&
     opener?.isConnected &&
