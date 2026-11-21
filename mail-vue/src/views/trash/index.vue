@@ -285,7 +285,11 @@ async function setLabels(ops,ids) {
     if (!disposed && revision===request) { updateLabels(ids,ops); notify("Labels updated."); }
   } catch(e) {
     if (!disposed && revision===request) error.value=e.message || "Could not update labels.";
-  } finally { busy.value=false; }
+  } finally {
+    busy.value=false;
+    await nextTick();
+    if (!disposed && revision===request && document.activeElement===document.body) moreButton.value?.focus();
+  }
 }
 watch(()=>labels.applied, change=>{
   if (change?.trash) updateLabels(change.anchors,{add:[change.labelId],remove:[]});
