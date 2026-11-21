@@ -10,6 +10,7 @@
       :id="editorId"
       ref="editorRef"
     ></textarea>
+    <ComposeFormat v-if="mailCompose && showToolbar && isInitialized" :editor="editor" />
     <ComposeLink v-if="mailCompose" ref="linkPanel" :editor="editor" />
   </div>
 </template>
@@ -23,6 +24,7 @@ import {
   nextTick,
   shallowRef,
 } from "vue";
+import ComposeFormat from "./compose-format.vue";
 import ComposeLink from "./compose-link.vue";
 import loading from "@/components/loading/index.vue";
 import { useUiStore } from "@/store/ui.js";
@@ -175,8 +177,7 @@ function initEditor(initialContent) {
          --scrollbar-thumb-color: ${uiStore.dark ? "#8D9095" : "#A8ABB2"};
     } ${props.collapseQuote ? ".cloudmail-reply-quote { display:none; } body.show-reply-quote .cloudmail-reply-quote { display:block; }" : ""}`,
     plugins: "link image advlist lists emoticons fullscreen table preview code",
-    toolbar: props.mailCompose ?
-      "undo redo | fontfamily fontsize | bold italic underline | forecolor backcolor | align bullist numlist outdent indent blockquote strikethrough removeformat" :
+    toolbar: props.mailCompose ? false :
       "undo redo | bold italic underline | fontsize | forecolor backcolor | alignleft aligncenter alignright alignjustify | outdent indent | bullist numlist | link image emoticons | table code preview fullscreen | removeformat",
     toolbar_location: "bottom",
     toolbar_mode: props.mailCompose ? "floating" : "sliding",
@@ -336,11 +337,8 @@ function destroyEditor() {
 :deep(.tox .tox-edit-area::before) {
   display: none;
 }
-.compose-rich-editor :deep(.tox .tox-editor-header) { align-self:flex-start; max-width:100%; padding:2px 4px; border-radius:6px; background:var(--mail-surface); border:1px solid var(--light-border-color); box-shadow:0 1px 3px #3c404326; }
-.compose-rich-editor :deep(.tox .tox-toolbar__group) { padding:0 3px !important; border-right:1px solid var(--light-border-color); }
-.compose-rich-editor :deep(.tox .tox-tbtn) { height:26px; min-width:26px; width:26px; border-radius:4px; }
-.compose-rich-editor :deep(.tox .tox-tbtn svg) { width:18px; height:18px; }
-.compose-rich-editor :deep(.tox .tox-tbtn--select) { width:auto; }
+.compose-rich-editor { display:flex; flex-direction:column; gap:4px; container-type:inline-size; container-name:compose-editor; }
+.compose-rich-editor :deep(.tox-tinymce) { flex:1; min-height:0; width:100%; }
 </style>
 
 <style scoped>
