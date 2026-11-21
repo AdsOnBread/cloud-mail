@@ -432,6 +432,7 @@ describe('Recoverable Trash',()=>{
    await expect(undoConversationMove(env.db,2,a.undoToken,true)).rejects.toMatchObject({code:409});
    await undoConversationMove(env.db,1,a.undoToken,true);
    await undoConversationMove(env.db,1,a.undoToken,true);
+   await expect(undoConversationMove(env.db,1,a.undoToken)).rejects.toMatchObject({code:409});
    expect(await env.db.prepare('SELECT trashed_at FROM email WHERE email_id=?').bind(first).first('trashed_at')).toBe(date);
    expect(await env.db.prepare('SELECT trashed_at FROM email WHERE email_id=?').bind(sibling).first()).toEqual({trashed_at:null});
    expect((await env.db.prepare('SELECT email_id,wake_at,notified FROM conversation_filing WHERE user_id=1').all()).results)

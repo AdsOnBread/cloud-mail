@@ -91,6 +91,7 @@ export function captureMove(db, userId, token, source, destination, ids, guard='
 
 export async function undoConversationMove(db, userId, token, trash=false) {
   if (typeof token !== 'string' || !/^[a-f\d-]{36}$/i.test(token)) throw new BizError('Invalid move.',400);
+  const completed=trash ? "trash-done" : "done";
   const query = sql => db.prepare(sql).bind(token,userId);
   const restoring = `FROM conversation_move_prior p JOIN conversation_move_undo u ON u.token=p.token
     WHERE u.token=?1 AND u.user_id=?2 AND u.state='restoring'`;
@@ -116,11 +117,11 @@ export async function undoConversationMove(db, userId, token, trash=false) {
       WHERE t.token=?1 AND t.email_id=email.email_id) WHERE user_id=?2 AND email_id IN
       (SELECT t.email_id FROM trash_recovery_prior t JOIN conversation_move_undo u ON u.token=t.token
        WHERE u.token=?1 AND u.user_id=?2 AND u.state='restoring')`)] : []),
-    query("UPDATE conversation_move_undo SET state='done' WHERE token=?1 AND user_id=?2 AND state='restoring'"),
-    query("DELETE FROM conversation_move_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='done')"),
-    query("DELETE FROM trash_recovery_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='done')"),
+    query(`UPDATE conversation_move_undo SET state='${completed}' WHERE token=?1 AND user_id=?2 AND state='restoring'`),
+    query(`DELETE FROM conversation_move_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='${completed}')`),
+    query("DELETE FROM trash_recovery_prior WHERE token IN (SELECT token FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='trash-done')"),
     query('SELECT state FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND expires>unixepoch()')
   ]);
-  if (changes.at(-1).results[0]?.state !== 'done') throw new BizError('This move can no longer be undone.',409);
+  if (changes.at(-1).results[0]?.state !== completed) throw new BizError('This move can no longer be undone.',409);
   return {restored:true};
 }
