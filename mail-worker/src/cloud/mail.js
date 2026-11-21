@@ -83,11 +83,11 @@ export async function detail(c,userId,emailId) {
   const files=(await c.env.db.prepare('SELECT * FROM attachments WHERE email_id=? AND user_id=?').bind(row.email_id,userId).all()).results;
   return {...messageFields(row),text:row.text||emailUtils.htmlToText(row.content||''),attList:files.map(camel)};
 }
-export async function attachment(c,userId,id) {
+export async function attachment(c,userId,id,textSample=false) {
   const row=await c.env.db.prepare(`SELECT att.* FROM attachments att JOIN email e ON e.email_id=att.email_id JOIN account a ON a.account_id=e.account_id
     WHERE ${owned} AND att.user_id=? AND att.att_id=?`).bind(userId,userId,positive(id)).first();
   if(!row) throw new BizError('Attachment not found.',404);
-  const object=await r2Service.getObj(c,row.key);
+  const object=await r2Service.getObj(c,row.key,textSample && row.size!==0 ? Math.min(1024,row.size || 1024) : undefined);
   if(!object) throw new BizError('Attachment unavailable.',404);
   return {row,object};
 }

@@ -18,6 +18,7 @@
 import {computed,ref,onMounted,onBeforeUnmount} from "vue";
 import {Icon} from "@iconify/vue";
 import {formatBytes} from "@/utils/file-utils";
+import {queueThumbnail} from "./thumbnail-queue";
 import {attachmentBlob,previewKind,previewMime,saveAttachment} from "./content";
 const props=defineProps({file:{type:Object,required:true}});
 const emit=defineEmits(["preview","error"]);
@@ -25,13 +26,11 @@ const tile=ref(),image=ref(""),sample=ref("");
 const filename=computed(()=>props.file.filename || "Attachment");
 const kind=computed(()=>previewKind(props.file.mimeType || props.file.contentType || "",filename.value));
 const icon=computed(()=>kind.value==="image" ? "material-symbols:image-outline" : "material-symbols:description-outline");
-const controller=new AbortController();
-let observer;
+let controller,observer;
 function clearImage(){if(image.value) URL.revokeObjectURL(image.value);image.value="";}
-async function thumbnail(){
-  const {signal}=controller;
+async function thumbnail(signal){
   try {
-    const data=await attachmentBlob(props.file,signal);
+    const data=await attachmentBlob(props.file,signal,kind.value==="text");
     const mime=await previewMime(data);
     const type=previewKind(mime,filename.value);
     signal.throwIfAborted();
@@ -49,16 +48,26 @@ async function thumbnail(){
 }
 onMounted(()=>{
   const file=props.file;
-  if (!window.IntersectionObserver || file.size==null || file.size>5*1024*1024 ||
+  const canSampleText=kind.value==="text" && (file.attId || file.attachmentId);
+  if (!window.IntersectionObserver || (!canSampleText && (file.size==null || file.size>(kind.value==="text" ? 16384 : 5*1024*1024))) ||
       (kind.value==="other" && !/\.(png|jpe?g|gif|webp|bmp)$/i.test(filename.value))) return;
   observer=new IntersectionObserver(entries=>{
-    if (!entries.some(entry=>entry.isIntersecting)) return;
-    observer.disconnect();
-    thumbnail();
-  });
+    if (entries.at(-1)?.isIntersecting) {
+      if (!controller) {
+        controller=new AbortController();
+        queueThumbnail(thumbnail,controller.signal);
+      }
+    } else stopThumbnail();
+  },{rootMargin:"48px"});
   observer.observe(tile.value);
 });
-onBeforeUnmount(()=>{controller.abort();observer?.disconnect();clearImage();});
+function stopThumbnail() {
+  controller?.abort();
+  controller=null;
+  clearImage();
+  sample.value="";
+}
+onBeforeUnmount(()=>{observer?.disconnect();stopThumbnail();});
 async function download() {
   try {saveAttachment(await attachmentBlob(props.file),filename.value);}
   catch(e){emit("error",e.message || "Could not download attachment.");}

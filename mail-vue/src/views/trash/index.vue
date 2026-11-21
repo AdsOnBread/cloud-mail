@@ -150,6 +150,7 @@
       <MailRow
         v-for="message in messages"
         :key="message.emailId"
+        :data-message-id="message.emailId"
         hide-star
         trash
         :participants="message.name || message.sendEmail"
@@ -332,6 +333,7 @@ function selectGroup(option) {
   selected.value=messages.value.filter(m=>option==='All' || (option==='Read' && m.unread!==0) || (option==='Unread' && m.unread===0)).map(m=>m.emailId);
 }
 const offset = computed(() => history.value.length * 50);
+let returnFocus;
 let revision = 0,
   noticeTimer,
   disposed = false;
@@ -361,6 +363,17 @@ async function load(pages = history.value) {
     messages.value = page.messages;
     nextCursor.value = page.nextCursor;
     selected.value = [];
+    if (returnFocus) {
+      await nextTick();
+      if (request===revision && !messageId.value && returnFocus) {
+        const {id,scope}=returnFocus;
+        returnFocus=null;
+        if (scope===mailbox.value && (!document.activeElement || document.activeElement===document.body)) {
+          const row=root.value?.querySelector('[data-message-id="'+id+'"] .conversation-open');
+          (row || root.value?.querySelector('.select-options'))?.focus();
+        }
+      }
+    }
   } catch (e) {
     if (request === revision)
       error.value = e.message || "Could not load Trash.";
@@ -381,6 +394,7 @@ function toggle(id) {
     : [...selected.value, id];
 }
 function open(message) {
+  returnFocus=null;
   router.push({ path: route.path, query: { message: message.emailId } });
 }
 function showTrash() {
@@ -389,6 +403,7 @@ function showTrash() {
   else back();
 }
 function back() {
+  if (messageId.value) returnFocus={id:messageId.value,scope:mailbox.value};
   if (window.history.state.back === route.path) router.back();
   else router.replace({ path: route.path });
 }

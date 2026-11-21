@@ -1,11 +1,11 @@
 import http from "@/axios";
 import {privateFile} from "@/utils/private-files";
 
-export function attachmentBlob(file,signal) {
+export function attachmentBlob(file,signal,textSample=false) {
   if (!file.attachmentId && !file.attId && file.key) return privateFile(file.key,signal);
   const path=file.attachmentId ? "/v1/drafts/attachments/"+encodeURIComponent(file.attachmentId)
     : "/v1/attachments/"+encodeURIComponent(file.attId);
-  return http.get(path+"/content",{responseType:"blob",signal,noMsg:true});
+  return http.get(path+"/content",{params:textSample ? {preview:"text"} : undefined,responseType:"blob",signal,noMsg:true});
 }
 export function saveAttachment(blob,filename) {
   const url=URL.createObjectURL(blob),link=document.createElement("a");

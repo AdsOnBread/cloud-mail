@@ -17,7 +17,7 @@ app.get(root+'/signatures',async c=>c.json(result.ok(await readSignatures(c.env.
 app.put(root+'/signatures',async c=>c.json(result.ok(await saveSignatures(c.env.db,uid(c),await c.req.json()))));
 app.get(root+'/drafts',async c=>c.json(result.ok(await drafts.list(c,uid(c),c.req.query()))));
 app.get(root+'/drafts/changes',async c=>c.json(result.ok(await drafts.changes(c,uid(c),c.req.query()))));
-app.get(root+'/drafts/attachments/:id/content',async c=>{const {row,object}=await drafts.file(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
+app.get(root+'/drafts/attachments/:id/content',async c=>{const {row,object}=await drafts.file(c,uid(c),c.req.param('id'),c.req.query('preview')==='text');return mail.fileResponse(object,row);});
 app.get(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.get(c,uid(c),c.req.param('id')))));
 app.post(root+'/drafts',async c=>c.json(result.ok(await drafts.save(c,uid(c),await c.req.json()))));
 app.put(root+'/drafts/:id',async c=>c.json(result.ok(await drafts.save(c,uid(c),await c.req.json(),c.req.param('id')))));
@@ -37,7 +37,7 @@ app.post(root+'/scheduled/:id/cancel',async c=>c.json(result.ok(await cancel(c,u
 app.get(root+'/search/people',async c=>c.json(result.ok(await mail.searchPeople(c,uid(c),c.req.query()))));
 app.get(root+'/messages',async c=>c.json(result.ok(await mail.list(c,uid(c),c.req.query()))));
 app.get(root+'/messages/:id',async c=>c.json(result.ok(await mail.detail(c,uid(c),c.req.param('id')))));
-app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'));return mail.fileResponse(object,row);});
+app.get(root+'/attachments/:id/content',async c=>{const {row,object}=await mail.attachment(c,uid(c),c.req.param('id'),c.req.query('preview')==='text');return mail.fileResponse(object,row);});
 app.post(root+'/messages/move-from-trash',async c=>{
   await permission(c,uid(c),'email:delete');
   const {emailIds,labelId,clientId}=await c.req.json();

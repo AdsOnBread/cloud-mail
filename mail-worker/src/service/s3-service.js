@@ -75,12 +75,13 @@ const s3Service = {
 		);
 	},
 
-	async getObj(c, key) {
+	async getObj(c, key, prefixBytes) {
 		const client = await this.client(c);
 		const { bucket } = await settingService.query(c);
 		const result = await client.send(new GetObjectCommand({
 			Bucket: bucket,
-			Key: key
+			Key: key,
+			...(prefixBytes ? {Range: "bytes=0-"+(prefixBytes-1)} : {})
 		}));
 
 		return new Response(result.Body, {

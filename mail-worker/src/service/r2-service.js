@@ -40,19 +40,19 @@ const r2Service = {
 
 	},
 
-	async getObj(c, key) {
+	async getObj(c, key, prefixBytes) {
 		const storageType = await this.storageType(c);
 
 		if (storageType === 'KV') {
-			return await kvObjService.getObj(c, key);
+			return await kvObjService.getObj(c, key, prefixBytes);
 		}
 
 		if (storageType === 'R2') {
-			return await c.env.r2.get(key);
+			return await c.env.r2.get(key, prefixBytes ? {range:{offset:0,length:prefixBytes}} : undefined);
 		}
 
 		if (storageType === 'S3') {
-			return await s3Service.getObj(c, key);
+			return await s3Service.getObj(c, key, prefixBytes);
 		}
 	},
 

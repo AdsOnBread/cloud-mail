@@ -15,8 +15,9 @@ export async function firstPageThumbnail(blob,signal) {
   const data=await blob.arrayBuffer();
   signal.throwIfAborted();
   const task=openPdf(data);
-  let rendering;
-  const abort=()=>{rendering?.cancel();task.destroy().catch(()=>{});};
+  let rendering,closing;
+  const destroy=()=>closing ||= task.destroy();
+  const abort=()=>{rendering?.cancel();destroy().catch(()=>{});};
   signal.addEventListener("abort",abort,{once:true});
   try {
     const pdf=await task.promise;
@@ -32,6 +33,6 @@ export async function firstPageThumbnail(blob,signal) {
     return await new Promise(resolve=>canvas.toBlob(resolve));
   } finally {
     signal.removeEventListener("abort",abort);
-    await task.destroy();
+    await destroy();
   }
 }

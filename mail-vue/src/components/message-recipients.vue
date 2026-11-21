@@ -1,13 +1,13 @@
 <template>
-  <el-popover v-model:visible="open" trigger="click" role="dialog" placement="bottom-start" :offset="4"
+  <el-popover v-model:visible="open" trigger="click" :trigger-keys="[]" @after-enter="enterDetails" role="dialog" placement="bottom-start" :offset="4"
     :show-arrow="false" width="max-content" popper-class="message-details-popper">
     <template #reference>
       <button ref="trigger" type="button" class="recipient-toggle" aria-label="Show details" data-tip="Show details"
-        aria-haspopup="dialog" :aria-expanded="open" :aria-description="summary" @keydown.esc="escape">
+        aria-haspopup="dialog" :aria-expanded="open" :aria-description="summary" @keydown.esc="escape" @keydown.enter.stop.prevent="toggleKeyboard" @keydown.space.stop.prevent="toggleKeyboard" @keydown.tab="tabFromTrigger">
         <span>{{summary}}</span><Icon icon="material-symbols:arrow-drop-down" width="14" aria-hidden="true"/>
       </button>
     </template>
-    <dl class="recipient-details" aria-label="Message details">
+    <dl ref="panel" class="recipient-details" aria-label="Message details" tabindex="0" @keydown.esc="escape" @keydown.tab="tabFromPanel">
       <template v-for="[label,value] in fields" :key="label"><dt>{{label}}:</dt><dd>{{value}}</dd></template>
     </dl>
   </el-popover>
@@ -21,7 +21,8 @@ import {recipientEntries} from "@/utils/recipients";
 import {formatDetailDate} from "@/utils/day";
 const props=defineProps({message:{type:Object,required:true}});
 const account=useAccountStore(),user=useUserStore();
-const trigger=ref(),open=ref(false);
+const trigger=ref(),panel=ref(),open=ref(false);
+let keyboard=false;
 const groups=computed(()=>{
   const m=props.message;
   return [["to",recipientEntries(m.recipient)],["cc",recipientEntries(m.cc)],
@@ -47,6 +48,25 @@ const fields=computed(()=>{
     ["subject",m.subject || "(no subject)"]
   ].filter(([,value])=>value);
 });
+function toggleKeyboard(){
+  keyboard=!open.value;
+  open.value=!open.value;
+}
+function enterDetails(){
+  if (keyboard && open.value && document.activeElement===trigger.value) panel.value?.focus({preventScroll:true});
+  keyboard=false;
+}
+function tabFromTrigger(event){
+  if (!open.value) return;
+  if (event.shiftKey) { open.value=false; return; }
+  event.preventDefault();
+  panel.value?.focus({preventScroll:true});
+}
+function tabFromPanel(event){
+  open.value=false;
+  trigger.value?.focus();
+  if (event.shiftKey) event.preventDefault();
+}
 function escape(event) {
   if (!open.value) return;
   event.stopPropagation();
@@ -60,9 +80,9 @@ function escape(event) {
 .recipient-toggle span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recipient-toggle svg {flex:none;border-radius:2px}
 .recipient-toggle:is(:hover,:focus-visible) svg {background:var(--mail-hover)}
-.recipient-details {display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:baseline;column-gap:16px;margin:0;font:14px/20px Arial,sans-serif}
+.recipient-details {max-height:min(365px,calc(65dvh - 32px));overflow:auto;display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:baseline;column-gap:16px;margin:0;font:14px/20px Arial,sans-serif}
 dt,dd {padding:2px 0;margin:0}
 dt {text-align:right;color:var(--secondary-text-color)}
 dd {overflow-wrap:anywhere;color:var(--el-text-color-primary)}
-:global(.message-details-popper.el-popover.el-popper) {box-sizing:border-box;width:max-content;max-width:min(468px,calc(100vw - 16px));max-height:min(400px,65dvh);overflow:auto;padding:13px 21px 17px;background:var(--mail-surface);border:1px solid var(--light-border-color);border-radius:0;box-shadow:0 2px 4px #0003}
+:global(.message-details-popper.el-popover.el-popper) {box-sizing:border-box;width:max-content;max-width:min(468px,calc(100vw - 16px));max-height:min(400px,65dvh);overflow:hidden;padding:13px 21px 17px;background:var(--mail-surface);border:1px solid var(--light-border-color);border-radius:0;box-shadow:0 2px 4px #0003}
 </style>

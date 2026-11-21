@@ -154,10 +154,10 @@ export async function cleanFiles(c,userId,id) {
   const rows=(await c.env.db.prepare('SELECT key FROM draft_files WHERE draft_id=? AND user_id=?').bind(id,userId).all()).results;
   await c.env.db.prepare('DELETE FROM draft_files WHERE draft_id=? AND user_id=?').bind(id,userId).run();await removeObjects(c,rows);
 }
-export async function file(c,userId,attachmentId) {
+export async function file(c,userId,attachmentId,textSample=false) {
   const row=await c.env.db.prepare("SELECT f.* FROM draft_files f JOIN cloud_drafts d ON d.draft_id=f.draft_id JOIN account a ON a.account_id=d.account_id AND a.user_id=d.user_id WHERE f.user_id=? AND f.attachment_id=? AND d.state NOT IN ('deleted','sent') AND a.is_del=0").bind(userId,attachmentId).first();
   if(!row)throw new BizError('Draft attachment not found.',404);
-  const object=await r2Service.getObj(c,row.key);if(!object)throw new BizError('Draft file unavailable.',404);
+  const object=await r2Service.getObj(c,row.key,textSample && row.size!==0 ? Math.min(1024,row.size || 1024) : undefined);if(!object)throw new BizError('Draft file unavailable.',404);
   return {row,object};
 }
 export async function payload(c,userId,draft) {
