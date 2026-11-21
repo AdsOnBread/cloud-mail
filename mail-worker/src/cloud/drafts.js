@@ -180,6 +180,6 @@ export async function deleteUserData(c,userIds) {
   for(const userId of userIds) {
     const rows=(await c.env.db.prepare('SELECT draft_id FROM cloud_drafts WHERE user_id=?').bind(userId).all()).results;
     for(const row of rows)await cleanFiles(c,userId,row.draft_id);
-    await c.env.db.batch(['cloud_drafts','draft_changes','send_attempts','connected_apps'].map(table=>c.env.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(userId)));
+    await c.env.db.batch(['cloud_drafts','draft_changes','send_attempts','connected_apps','mail_signatures'].map(table=>c.env.db.prepare(`DELETE FROM ${table} WHERE user_id=?`).bind(userId)));
   }
 }

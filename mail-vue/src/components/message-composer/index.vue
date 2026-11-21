@@ -789,6 +789,7 @@ async function saveAndClose() {
   try {
     await editor.value?.ready?.();
     commitRecipients();
+    if(hasDraftContent(form))await pendingDefault;
     clearTimeout(cloudSaveTimer);
     if (!restoredUntouched || draftFingerprint(form) !== baseline) {
       if (hasDraftContent(form) && draftFingerprint(form)!==automaticBaseline && (form.draftId || draftFingerprint(form) !== baseline))

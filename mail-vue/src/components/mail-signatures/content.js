@@ -16,10 +16,14 @@ export function replaceSignature(body,item,beforeQuote,reply) {
   const content=doc.createElement('div');
   content.innerHTML=item.html;
   block.append(content);
-  if(previous){previous.replaceWith(block);return;}
+  const quote=reply && Array.from(body.children).find(node=>node.classList.contains('cloudmail-reply-quote'));
+  if(previous){
+    const precedingQuote=quote && Boolean(previous.compareDocumentPosition(quote) & 4);
+    if(!quote || precedingQuote===beforeQuote){previous.replaceWith(block);return;}
+    previous.remove();
+  }
   if(!body.textContent.trim() && !body.querySelector('img') && !body.children.length){
     const blank=doc.createElement('div');blank.append(doc.createElement('br'));body.append(blank);
   }
-  const quote=reply && beforeQuote && Array.from(body.children).find(node=>node.classList.contains('cloudmail-reply-quote'));
-  body.insertBefore(block,quote || null);
+  body.insertBefore(block,beforeQuote && quote || null);
 }

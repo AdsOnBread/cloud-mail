@@ -3,7 +3,7 @@
     title="Signatures" @closed="$emit('closed')" width="min(660px, calc(100% - 24px))" :before-close="closeDialog">
     <p v-if="error" role="alert">{{error}} <button type="button" class="text-action" :disabled="saving" @click="load">Reload saved settings</button></p>
     <p v-if="loading" role="status">Loading signatures…</p>
-    <template v-if="form && !loading">
+    <div v-if="form && !loading" :inert="saving || undefined" :aria-busy="saving">
       <div v-if="form.items.length" class="signature-grid">
         <div class="names" aria-label="Saved signatures">
           <div v-for="item in form.items" :key="item.id" :class="{chosen:item.id===selected}">
@@ -37,7 +37,7 @@
         </div>
         <label class="placement"><input type="checkbox" v-model="form.beforeQuote" />Insert signature before quoted text in replies and remove the “--” line that precedes it.</label>
       </section>
-    </template>
+    </div>
     <template #footer>
       <button type="button" class="sig-button" :disabled="saving" @click="open=false">Cancel</button>
       <button type="button" class="sig-button primary" :disabled="saving || loading || !form || conflict" @click="save">Save changes</button>

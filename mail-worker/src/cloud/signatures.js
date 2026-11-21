@@ -1,7 +1,6 @@
 import {parseHTML} from 'linkedom';
 import BizError from '../error/biz-error';
 
-export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 const empty = () => ({items:[],defaults:{},beforeQuote:false});
 const safeTags = new Set('div p br strong b em i u s span a ul ol li blockquote sub sup'.split(' '));
 const skipTags = new Set(['script','style','iframe','template','svg','math','object']);
@@ -57,7 +56,9 @@ export async function saveSignatures(db,userId,input) {
       typeof item.name!=='string' || !item.name.trim() || item.name.length>320 || typeof item.html!=='string' || item.html.length>10000)
       throw new BizError('Give every signature a name and keep it under 10,000 characters.',400);
     ids.add(item.id);
-    return {id:item.id,name:item.name.trim(),html:cleanHTML(item.html)};
+    const html=cleanHTML(item.html);
+    if(html.length>10000)throw new BizError('Keep each formatted signature under 10,000 characters.',400);
+    return {id:item.id,name:item.name.trim(),html};
   });
   const defaults={};
   for(const [accountId,pair] of Object.entries(input.defaults)){

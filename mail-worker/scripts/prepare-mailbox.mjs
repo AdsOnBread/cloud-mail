@@ -2,6 +2,8 @@
 import { execFileSync } from 'node:child_process';
 import { filingSchema } from '../src/service/conversation-filing.js';
 
+import { signatureSchema } from '../src/cloud/schema.js';
+
 const config = process.argv[2] || 'wrangler.toml';
 const command = ['exec','wrangler','d1','execute','db','--remote','--config',config,'--json','--command'];
 function execute(sql) {
@@ -10,5 +12,5 @@ function execute(sql) {
 const [schema] = execute("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('email','cloud_drafts')");
 const existing = new Set(schema.results.map(row => row.name));
 // A new installation creates these two tables during its normal initializer.
-for (const statement of filingSchema(existing)) execute(statement);
+for (const statement of [...filingSchema(existing), signatureSchema]) execute(statement);
 console.log('Mailbox filing schema is ready.');

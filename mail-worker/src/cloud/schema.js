@@ -1,4 +1,4 @@
-import {signatureSchema} from './signatures';
+export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
 export async function migrateCloud(db) {
   const columns = (await db.prepare('PRAGMA table_info(email)').all()).results;

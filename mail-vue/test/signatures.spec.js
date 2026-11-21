@@ -19,3 +19,14 @@ it('keeps a writing line ahead of the signature and uses the default delimiter',
  expect(body.firstChild.innerHTML).toBe('<br>');
  expect(body.lastChild.textContent).toBe('-- Team');
 });
+it('moves the active signature when quote placement changes on a saved reply',()=>{
+ const body=document.createElement('div');
+ body.innerHTML='<div>Reply</div><div class="cloudmail-reply-quote">Original</div>';
+ const signature={id:'work',html:'Team'};
+ replaceSignature(body,signature,false,true);
+ expect(body.lastChild.textContent).toBe('-- Team');
+ replaceSignature(body,signature,true,true);
+ expect(body.children[1].textContent).toBe('Team');
+ replaceSignature(body,signature,false,true);
+ expect(body.lastChild.textContent).toBe('-- Team');
+});
