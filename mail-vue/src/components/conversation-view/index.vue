@@ -224,7 +224,10 @@ const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expande
 const expansionTitle=computed(()=>allExpanded.value || expanding.value ? 'Collapse all' : 'Expand all');
 const windowHref=computed(()=>{
   const {emailId,folder,labelId,category}=route.query;
-  return router.resolve({path:'/mail',query:{emailId,folder,labelId,category,window:'1'}}).href;
+  const draft=threadDrafts.value.find(item=>item.draftId===activeDraft.value);
+  const requested=draft && draftKey(draft);
+  return router.resolve({path:'/mail',query:{emailId:requested ? draft.emailId : emailId,folder,labelId,category,
+    ...(requested ? {draft:requested} : {}),window:'1'}}).href;
 });
 function openWindow(event) {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -426,29 +429,29 @@ async function editSavedDraft(summary) {
 async function reply(message, all, draft) {
   if (switching) return;
   if (!draft) { draftRun++;draftFailure.value=null; }
-  const request = viewEpoch;
+  const request = viewEpoch, current=readerCurrent();
   switching = true;
   try {
-    if (!(await save()) || request !== viewEpoch) return;
+    if (!(await save()) || !current()) return;
     // A restored draft may target a message older than the currently loaded page.
     if (!messages.value.some((item) => item.emailId === message.emailId)) {
       const detail = await store.ensureDetail(message);
-      if (request !== viewEpoch) return;
+      if (!current()) return;
       messages.value.push(detail);
       messages.value.sort((a, b) => a.emailId - b.emailId);
     }
     expanded.value = new Set([...expanded.value, message.emailId]);
     activeTarget.value = message.emailId;
     await nextTick();
-    if (request !== viewEpoch) return;
+    if (!current()) return;
     const editor = currentComposer();
     if (draft) {
       try { await editor.openDraft(draft); }
-      catch (e) { if (request===viewEpoch) closed(); throw e; }
+      catch (e) { if (current()) closed(); throw e; }
     }
     else await editor[all ? "openReplyAll" : "openReply"](message);
     await nextTick();
-    if (request !== viewEpoch) return;
+    if (!current()) return;
     activeDraft.value=draft?.draftId ?? null;
     scroll.value
       ?.querySelector(".send.inline")
@@ -574,7 +577,10 @@ function canNavigate(event) {
   if (target!==document.body && target!==document.documentElement && !reader.value?.contains(target)) return false;
   if (event.composedPath().some(node=>node.isContentEditable || node.matches?.(
     'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="menu"],[role="dialog"]'))) return false;
-  return ![...document.querySelectorAll('dialog[open],.el-overlay,.el-dropdown__popper,.compose-format-popup,.send.compose-open:not(.inline)')]
+  return !readerObscured();
+}
+function readerObscured() {
+  return [...document.querySelectorAll('dialog[open],.el-overlay,.el-dropdown__popper,.compose-format-popup,.send[aria-modal="true"]')]
     .some(node=>node.getClientRects().length);
 }
 async function stepMessage(event,step) {
@@ -587,7 +593,7 @@ async function stepMessage(event,step) {
     if (expanding.value) return;
     const current=readerCurrent(), focused=document.activeElement;
     await load(true);
-    if (!current() || document.activeElement!==focused || currentMessage.value!==origin || !canNavigateAfterLoad()) return;
+    if (!current() || document.activeElement!==focused || currentMessage.value!==origin || switching || loading.value || readerObscured()) return;
     index=messages.value.findIndex(message=>message.emailId===origin);
   }
   const next=messages.value[index+step];
@@ -595,9 +601,6 @@ async function stepMessage(event,step) {
   const button=scroll.value?.querySelector('[data-reader-message="'+next.emailId+'"] .message-toggle');
   button?.focus({preventScroll:true});
   button?.scrollIntoView({block:'nearest',inline:'nearest'});
-}
-function canNavigateAfterLoad() {
-  return !switching && !loading.value && !document.querySelector('dialog[open]');
 }
 function keydown(event) {
   if (event.key==="n" || event.key==="p") return stepMessage(event,event.key==="n" ? 1 : -1);
