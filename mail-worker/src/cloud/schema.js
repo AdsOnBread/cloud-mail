@@ -3,8 +3,18 @@ export const systemLabelSchema = `CREATE TABLE IF NOT EXISTS system_label_displa
   PRIMARY KEY(user_id,folder))`;
 export const signatureSchema = 'CREATE TABLE IF NOT EXISTS mail_signatures (user_id INTEGER PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL)';
 
+// Recheck after a concurrent initializer adds the same column.
+export async function ensureRawSizeColumn(readColumns, addColumn) {
+  const exists=async()=>(await readColumns()).some(column=>column.name==='raw_size');
+  if (await exists()) return;
+  try { await addColumn('ALTER TABLE email ADD COLUMN raw_size INTEGER'); }
+  catch(error) { if (!(await exists())) throw error; }
+}
+
 export async function migrateCloud(db) {
-  const columns = (await db.prepare('PRAGMA table_info(email)').all()).results;
+  const readColumns=async()=>(await db.prepare('PRAGMA table_info(email)').all()).results;
+  await ensureRawSizeColumn(readColumns,sql=>db.prepare(sql).run());
+  const columns = await readColumns();
   if (!columns.some(c => c.name === 'trashed_at')) await db.prepare('ALTER TABLE email ADD COLUMN trashed_at TEXT').run();
   await db.batch([
     db.prepare(signatureSchema),

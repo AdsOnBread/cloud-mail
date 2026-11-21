@@ -44,15 +44,17 @@ export async function email(message, env, ctx) {
 		}
 
 		const reader = message.raw.getReader();
-		let content = '';
+		const decoder = new TextDecoder();
+		let rawSize = 0, content = '';
 
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			content += new TextDecoder().decode(value);
+			rawSize += value.byteLength;
+			content += decoder.decode(value, {stream:true});
 		}
 
-		const email = await PostalMime.parse(content);
+		const email = await PostalMime.parse(content + decoder.decode());
 
 
 		const blockFlag = checkBlock(blackSubject, blackContent, blackFrom, email);
@@ -107,6 +109,7 @@ export async function email(message, env, ctx) {
 		const code = await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter });
 
 		const params = {
+			rawSize,
 			toEmail: message.to,
 			toName: toName,
 			sendEmail: email.from.address,
