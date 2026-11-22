@@ -523,10 +523,11 @@ async function load(target = currentPage) {
 async function navigate(target, selector) {
   if (busy.value || loading.value) return;
   const request=revision+1, path=route.fullPath, token=user.authenticatedToken;
+  const closingMenu=document.activeElement?.closest('[role="menu"]');
   await load(target);
   await nextTick();
   if (disposed || revision!==request || route.fullPath!==path || token!==localStorage.getItem("token") ||
-      document.activeElement!==document.body) return;
+      document.activeElement!==document.body && !closingMenu?.contains(document.activeElement)) return;
   const bar=root.value?.querySelector(".mail-toolbar");
   const preferred=bar?.querySelector(selector);
   const fallback=bar?.querySelector(".range-trigger:not(:disabled)");
