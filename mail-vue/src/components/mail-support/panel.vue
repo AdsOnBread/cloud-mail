@@ -174,6 +174,7 @@ article a{color:#0b57d0;text-decoration:underline}
 @media(forced-colors:active){.mail-help-panel,.help-search{border:1px solid CanvasText}}
 </style>
 <style>
+.mail-header[inert] .mail-help-panel{visibility:hidden}
 html.dark .mail-help-panel{background:var(--mail-surface);color:var(--el-text-color-primary)}
 html.dark .mail-help-panel :is(.help-search,li button:hover,li button:focus-visible,.panel-icon:hover,.panel-icon:focus-visible,.more-help button:hover){background:var(--mail-hover)}
 html.dark .mail-help-panel .more-help{border-color:var(--light-border-color)}
