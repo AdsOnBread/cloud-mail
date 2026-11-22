@@ -247,9 +247,17 @@ watch([pendingFocus, page, busy], () => {
     pendingFocus.value = null;
     return;
   }
-  const rows = page.value;
   if (target.restored ? !drafts.items.some(d => target.ids.includes(d.draftId)) : drafts.items.some(d => target.ids.includes(d.draftId))) return;
-  const draft = target.restored ? rows.find(d => target.ids.includes(d.draftId)) : rows[Math.min(target.index, rows.length - 1)];
+  const index = target.restored
+    ? filtered.value.findIndex(d => target.ids.includes(d.draftId))
+    : Math.min(target.index, filtered.value.length - 1);
+  const start = Math.floor(index / pageSize) * pageSize;
+  if (index >= 0 && offset.value !== start) {
+    offset.value = start;
+    resetScroll();
+    return;
+  }
+  const draft = filtered.value[index];
   const control = draft && root.value.querySelector('[data-draft-id="' + draft.draftId + '"] .conversation-open');
   (control || root.value.querySelector(".check-target input"))?.focus();
   pendingFocus.value = null;
@@ -262,7 +270,7 @@ async function discard(ids, trigger) {
     const current = [...ids];
     const session = draftSession();
     const epoch = ++focusEpoch, token = localStorage.getItem("token");
-    const index = page.value.findIndex(d => current.includes(d.draftId));
+    const index = filtered.value.findIndex(d => current.includes(d.draftId));
     const onRestore = async restored => {
       await nextTick();
       if (epoch === focusEpoch) pendingFocus.value = {epoch, token, ids:restored, restored:true};
