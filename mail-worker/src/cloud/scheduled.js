@@ -191,6 +191,7 @@ export async function scheduledList(c, userId, accountId, filters = {}) {
     conditions.push('(' + matches.join(' OR ') + ')');
     args.push(...choices.map(() => term));
   }
+  if (String(filters.isMuted)==='1') conditions.push('0');
   if (filters.hasAttachment === '1') conditions.push(fileCount + '>0');
   addSizeFilter(filters,conditions,args,{
     columns:["json_extract(d.data,'$.subject')",text,"json_extract(d.data,'$.content')"],

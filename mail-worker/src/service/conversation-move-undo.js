@@ -103,10 +103,14 @@ export async function undoConversationMove(db, userId, token, trash=false) {
         (SELECT 1 FROM email e JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id
          WHERE e.user_id=?2 AND e.email_id=p.email_id AND e.is_del=0 AND a.is_del=0
            AND e.trashed_at IS NULL AND e.status NOT IN (6,7)))`),
-    query(`DELETE FROM conversation_mutes WHERE user_id=?2 AND origin=?1
+    query(`UPDATE mobile_thread_state SET revision=revision+1 WHERE user_id=?2 AND EXISTS
+      (SELECT 1 FROM conversation_mute_prior p JOIN conversation_move_undo u ON u.token=p.token
+       WHERE u.token=?1 AND u.user_id=?2 AND u.state='restoring')`),
+    query(`DELETE FROM conversation_mutes WHERE user_id=?2 AND origin>=?1||':' AND origin<?1||';'
       AND EXISTS(SELECT 1 FROM conversation_move_undo WHERE token=?1 AND user_id=?2 AND state='restoring')`),
     query(`INSERT OR REPLACE INTO conversation_mutes(user_id,email_id,origin,quiet)
       SELECT ?2,p.email_id,p.origin,p.quiet FROM conversation_mute_prior p JOIN conversation_move_undo u ON u.token=p.token
+      JOIN email e ON e.email_id=p.email_id AND e.user_id=u.user_id
       WHERE u.token=?1 AND u.user_id=?2 AND u.state='restoring' AND p.origin IS NOT NULL`),
     query(`DELETE FROM mailbox_label_members WHERE user_id=?2 AND (email_id,label_id) IN
       (SELECT p.email_id,u.destination ${restoring} AND p.had_destination=0 AND u.destination IS NOT NULL)`),

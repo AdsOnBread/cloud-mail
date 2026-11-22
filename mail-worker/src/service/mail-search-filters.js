@@ -25,6 +25,7 @@ export function addSizeFilter(params, filters, args, {columns,files,raw}) {
 
 // Both the conversation and message lists use "e" for the owned, visible email.
 export function addMailFilters(params, filters, args, {conversation = false} = {}) {
+  if (String(params.isMuted)==='1') filters.push('EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id)');
   addExcludedFilter(params,filters,args);
   addPeopleFilter(params, 'from', ['e.send_email', 'e.name'], filters, args);
   addPeopleFilter(params, 'to', ['e.recipient', 'e.cc', "CASE WHEN e.type=1 THEN e.bcc ELSE '' END"], filters, args);

@@ -109,7 +109,6 @@ export async function conversationList(c, p, userId) {
     args.push(Number(p.labelId));
   }
   if (p.folder === 'inbox') filters.push(inboxMember);
-  if (String(p.isMuted)==='1') filters.push('EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id)');
 	if (p.folder === 'archived') filters.push('f.email_id IS NOT NULL AND f.wake_at IS NULL');
 	if (p.folder === 'snoozed') filters.push('f.wake_at>unixepoch()');
 	if (p.folder === 'sent') filters.push('e.type=1');
@@ -246,7 +245,7 @@ export async function draftThreads(c, ids, userId) {
       JOIN account a ON a.account_id=e.account_id
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM targets)
       GROUP BY m.thread_id
-    ) SELECT t.email_id,t.thread_id,first.subject,s.has_unread,
+    ) SELECT t.email_id,t.thread_id,first.subject,s.has_unread,(mute.email_id IS NOT NULL) muted,
       CASE WHEN f.email_id IS NULL AND coalesce(mute.quiet,0)=0 THEN s.received ELSE coalesce(f.wake_at<=unixepoch(),0) END inbox
     FROM targets t JOIN summaries s ON s.thread_id=t.thread_id JOIN email first ON first.email_id=s.first_id
     LEFT JOIN conversation_filing f ON f.user_id=? AND f.email_id=s.filing_id
@@ -328,27 +327,38 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 	const threads = new Set();
 	for (const id of anchors) threads.add(await resolve(db, userId, id));
 	const ids = [];
+	const muteGroups=[];
 	const stars = [];
 	const latest = [];
 
 	for (const threadId of threads) {
 		const { results } = await db
 			.prepare(
-				`SELECT e.email_id,e.type,e.status,s.star_id FROM email e JOIN account a ON a.account_id=e.account_id
+				`SELECT e.email_id,e.type,e.status,s.star_id,EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id) muted FROM email e JOIN account a ON a.account_id=e.account_id
       JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       WHERE ${visible} AND m.thread_id=? ORDER BY e.email_id DESC`,
 			)
 			.bind(userId, threadId)
 			.all();
 		if (!results.length) throw new BizError('Conversation not found.', 404);
-		ids.push(...results.map((r) => r.email_id));
+		if (action==='mute' || action==='unmute') {
+      if ((action==='unmute')!==results.some(row=>row.muted)) continue;
+      muteGroups.push(results.map(row=>row.email_id));
+    }
+    ids.push(...results.map((r) => r.email_id));
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
 	if(action==='mute' || action==='unmute') {
+    if (!muteGroups.length) {
+      const result={conversationCount:0,messageCount:0};
+      if (record) await record(result).run();
+      return result;
+    }
     const token=crypto.randomUUID();
-    const result={conversationCount:threads.size,messageCount:ids.length,undoToken:token};
-    const statements=[...captureMove(db,userId,token,null,null,ids),...changeMuteStatements(db,userId,ids,action==='mute',token),
+    const result={conversationCount:muteGroups.length,messageCount:ids.length,undoToken:token};
+    const statements=[...captureMove(db,userId,token,null,null,ids),...muteGroups.flatMap(group=>changeMuteStatements(db,userId,group,action==='mute',token,token+':'+group[0])),
+      db.prepare('UPDATE mobile_thread_state SET revision=revision+1 WHERE user_id=?').bind(userId),
       db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) SELECT ?,'message',value,'upsert' FROM json_each(?)").bind(userId,JSON.stringify(anchors)),
       db.prepare("UPDATE conversation_move_undo SET state='ready' WHERE token=?").bind(token)];
     if(record) statements.push(record(result));

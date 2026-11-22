@@ -88,8 +88,12 @@ async function indexThreads(db,userId,revision) {
 	]);
 	const groups = groupThreads(rows.results, accounts.results.map(a => a.email));
 	for (let i=0; i<groups.length; i+=80) {
-		await db.batch(groups.slice(i,i+80).map(m => db.prepare(`INSERT INTO mobile_thread_members(email_id,user_id,thread_id) VALUES (?,?,?)
-			ON CONFLICT(email_id) DO UPDATE SET thread_id=excluded.thread_id,user_id=excluded.user_id WHERE thread_id!=excluded.thread_id OR user_id!=excluded.user_id`).bind(m.emailId,m.userId,m.threadId)));
+		await db.prepare(`INSERT INTO mobile_thread_members(email_id,user_id,thread_id)
+      SELECT json_extract(value,'$.emailId'),?,json_extract(value,'$.threadId') FROM json_each(?)
+      WHERE EXISTS(SELECT 1 FROM mobile_thread_state WHERE user_id=? AND revision=?)
+      ON CONFLICT(email_id) DO UPDATE SET thread_id=excluded.thread_id,user_id=excluded.user_id
+      WHERE thread_id!=excluded.thread_id OR user_id!=excluded.user_id`)
+      .bind(userId,JSON.stringify(groups.slice(i,i+80)),userId,revision).run();
 	}
 	// Preserve a concurrent writer's newer revision so the next request reindexes it.
 	const updates=inheritedMutes(rows.results,groups,accounts.results.map(a=>a.email));
