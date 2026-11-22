@@ -10,7 +10,7 @@
     <div class="shortcut-content" tabindex="0" role="region" aria-label="Shortcut list">
       <div class="help-columns">
         <div><ShortcutGroup v-if="hasPerm('email:send')" title="Compose" :items="composeActions"/>
-          <ShortcutGroup title="Navigation" :items="[{keys:'p / n',label:'Read previous/next message'}]"/>
+          <ShortcutGroup title="Navigation" :items="alwaysActions"/>
         </div>
         <ShortcutGroup v-if="hasPerm('email:send')" title="Formatting" :items="formatActions"/>
       </div>
@@ -78,7 +78,8 @@ const jumpActions=computed(()=>actions.value.filter(action=>action.keys.startsWi
 const selectionActions=Object.entries(selectionKeys).map(([key,group])=>({
   keys:'* then '+key,label:group==='None' ? 'Deselect all conversations' : 'Select '+group.toLowerCase()+' conversations',
 }));
-const appActions=computed(()=>[...actions.value.filter(action=>['/','c'].includes(action.keys)),{keys:'?',label:'Open keyboard shortcut help'}]);
+const alwaysActions=[{keys:'p / n',label:'Read previous/next message'},{keys:'?',label:'Open keyboard shortcut help'}];
+const appActions=computed(()=>actions.value.filter(action=>['/','c'].includes(action.keys)));
 const saving=ref(false),saveError=ref('');
 let saveRun=0;
 async function toggle(){
@@ -131,7 +132,7 @@ function keydown(event){
   const chord=previous ? previous+' '+event.key : event.key;
   const action=actions.value.find(item=>item.keys===chord);
   if(!showingHelp && !startsSequence && !group && !action) return;
-  if(!inMailContext(event, Boolean(group) || event.key==='*' || action?.keys==='m')) return;
+  if(!inMailContext(event, showingHelp || Boolean(group) || event.key==='*' || action?.keys==='m')) return;
   if(group) {
     const request=new CustomEvent('mail-select-group',{cancelable:true,detail:group});
     if(!window.dispatchEvent(request)) event.preventDefault();
@@ -178,8 +179,9 @@ nav{text-align:end}
 .shortcut-help a,.shortcut-help button{padding:0;color:#dd0;background:none;font:inherit;text-decoration:underline;cursor:pointer}
 .shortcut-help button:disabled{opacity:.6;cursor:wait}
 .shortcut-help :is(a,button):focus-visible,.shortcut-content:focus-visible{outline:2px solid currentColor;outline-offset:-1px}
-.shortcut-content{min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+.shortcut-content{min-height:0;max-height:calc(90dvh - 60px);overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
 .help-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-top:1px solid #999;padding:3px 0 0;gap:12px}
+@media(min-width:701px){.help-columns>.shortcut-group{justify-self:center;max-width:100%}}
 .shortcut-status{text-align:center;margin-top:8px;border-top:1px solid #999;padding:8px 0}
 .shortcut-status p{margin:4px 0;color:#ffc6c6}
 .settings-link{display:block;margin:16px 0 2px;text-align:center}
