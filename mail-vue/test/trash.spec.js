@@ -7,10 +7,8 @@ import { useAccountStore } from "../src/store/account";
 import { useUserStore } from "../src/store/user";
 import { useMailSearchStore } from "../src/store/mail-search";
 import http from "../src/axios";
-import { ElMessageBox } from "element-plus";
 
 vi.mock("../src/axios", () => ({ default: { get: vi.fn(), post: vi.fn() } }));
-vi.mock("element-plus", () => ({ ElMessageBox: { confirm: vi.fn() } }));
 const message = (emailId) => ({
   emailId,
   accountId: 7,
@@ -26,12 +24,15 @@ async function mountTrash(path="/trash") {
   await router.push(path);
   await router.isReady();
   const wrapper = mount(Trash, {
+    attachTo:document.body,
     global: { plugins: [router], stubs: { Icon: true } },
   });
   await flushPromises();
   return wrapper;
 }
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal ??= function () { this.open=true; };
+  HTMLDialogElement.prototype.close ??= function () { this.open=false; this.dispatchEvent(new Event("close")); };
   setActivePinia(createPinia());
   useAccountStore().select({ accountId: 7, email: "one@example.com" });
   useUserStore().user.permKeys = ["email:delete"];
@@ -50,9 +51,13 @@ it("paginates within the selected mailbox and confirms its full Trash before del
   expect(wrapper.get(".conversation-row").text()).toContain("Message 49");
   await wrapper.get(".retention button").trigger("click");
   await flushPromises();
-  expect(ElMessageBox.confirm.mock.calls[0][0]).toContain(
+  const dialog=wrapper.get('dialog[open]');
+  expect(http.post).not.toHaveBeenCalled();
+  expect(dialog.text()).toContain(
     "51 messages and any attachments from one@example.com",
   );
+  await dialog.get(".confirm").trigger("click");
+  await flushPromises();
   expect(
     http.get.mock.calls.every(([, { params }]) => params.accountId === 7),
   ).toBe(true);
@@ -64,19 +69,13 @@ it("paginates within the selected mailbox and confirms its full Trash before del
 });
 it("leaves messages in Trash when the mailbox changes while confirmation is open", async () => {
   http.get.mockResolvedValue({ messages: [message(1)], nextCursor: null });
-  let confirm;
-  ElMessageBox.confirm.mockReturnValue(
-    new Promise((resolve) => {
-      confirm = resolve;
-    }),
-  );
   const wrapper = await mountTrash();
   await wrapper.get(".retention button").trigger("click");
   await flushPromises();
+  expect(wrapper.find("dialog[open]").exists()).toBe(true);
   useAccountStore().select({ accountId: 8, email: "two@example.com" });
   await flushPromises();
-  confirm();
-  await flushPromises();
+  expect(wrapper.find("dialog[open]").exists()).toBe(false);
   expect(http.post).not.toHaveBeenCalled();
   wrapper.unmount();
 });
@@ -106,5 +105,23 @@ it("replaces filters within a pinned Trash window when finding a sender", async 
     await flushPromises();
     expect(search.filters).toEqual({from:"alex@example.test"});
     expect(http.get.mock.calls.at(-1)[1].params).toMatchObject({folder:"trash",accountId:7,from:"alex@example.test"});
+  } finally { wrapper.unmount(); }
+});
+
+it("cancels selection deletion without changing the checked messages",async()=>{
+  http.get.mockResolvedValue({messages:[message(2),message(1)],nextCursor:null});
+  const wrapper=await mountTrash();
+  try {
+    await wrapper.get('[data-message-id="2"] input').setValue(true);
+    const opener=wrapper.get(".mail-toolbar .toolbar-text");
+    await opener.trigger("click");
+    await flushPromises();
+    const dialog=wrapper.get("dialog[open]");
+    expect(dialog.text()).toContain("1 message and any attachments from one@example.com");
+    await dialog.trigger("cancel");
+    await flushPromises();
+    expect(document.activeElement).toBe(opener.element);
+    expect(wrapper.get('[data-message-id="2"] input').element.checked).toBe(true);
+    expect(http.post).not.toHaveBeenCalled();
   } finally { wrapper.unmount(); }
 });

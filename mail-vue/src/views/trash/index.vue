@@ -624,7 +624,7 @@ async function act(action, ids, destination, opener) {
     const unsent=action==='restore' && [detail.value,...messages.value].some(row=>row?.scheduledDraftId && ids.includes(row.emailId));
     const count = ids.length === 1 ? "1 message" : ids.length + " messages";
     if (action === "purge") {
-      const message="This will permanently delete "+(wholeFolder ? "all " : "")+count+" and any attachments from "+scopeLabel+".";
+      const message="This will permanently delete "+(wholeFolder && ids.length>1 ? "all " : "")+count+" and any attachments from "+scopeLabel+".";
       if (!await confirmation.value?.ask("Confirm deleting messages",message,wholeFolder ? "OK" : "Delete forever")) {
         canceled=true;
         return;
@@ -667,7 +667,7 @@ async function act(action, ids, destination, opener) {
     busy.value = false;
     if (canceled && stillCurrent()) {
       await nextTick();
-      if (stillCurrent() && opener?.isConnected && document.activeElement===document.body) opener.focus({preventScroll:true});
+      if (stillCurrent() && opener?.isConnected) opener.focus({preventScroll:true});
     }
   }
 }

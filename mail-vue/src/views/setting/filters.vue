@@ -2,7 +2,7 @@
   <section class="filter-settings" aria-label="Filter settings">
     <SettingsTabs />
     <MailConfirmation ref="confirmation"/>
-    <div class="rules">
+    <div class="rules" ref="rules">
       <p>The following filters are applied to all incoming mail:</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load">Retry</button>
@@ -17,17 +17,17 @@
             </td>
             <td class="row-actions">
               <button @click="store.open(r.criteria, r)">edit</button
-              ><button @click="remove(r)">delete</button>
+              ><button class="delete-filter" :disabled="deleting" @click="remove(r,$event.currentTarget)">delete</button>
             </td>
           </tr>
         </tbody>
       </table>
-      <button @click="store.open()">Create a new filter</button>
+      <button ref="createButton" @click="store.open()">Create a new filter</button>
     </div>
   </section>
 </template>
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import MailConfirmation from "@/components/mail-confirmation.vue";
 import http from "@/axios";
 import { filterSession, useMessageFilters } from "@/store/message-filters";
@@ -37,10 +37,10 @@ import SettingsTabs from "./tabs.vue";
 const store = useMessageFilters(),
   labels = useMailLabels(),
   user = useUserStore(),
-  rows = ref([]), confirmation=ref(),
+  rows = ref([]), confirmation=ref(), rules=ref(), createButton=ref(), deleting=ref(false),
   loading = ref(false),
   error = ref("");
-let generation = 0;
+let generation = 0, returnIndex;
 function describe(c) {
   return [
     ["from", "from:"],
@@ -73,6 +73,8 @@ function actionText(a) {
 }
 async function load() {
   confirmation.value?.cancel();
+  const focusIndex=returnIndex;
+  returnIndex=undefined;
   const run = ++generation,
     s = filterSession();
   rows.value = [];
@@ -86,24 +88,43 @@ async function load() {
     if (run === generation && s.current())
       error.value = e.message || "Could not load filters.";
   } finally {
-    if (run === generation) loading.value = false;
+    if (run === generation) {
+      loading.value=false;
+      if (focusIndex!=null && s.current()) {
+        await nextTick();
+        if (run===generation && s.current() && document.activeElement===document.body) {
+          const buttons=rules.value?.querySelectorAll(".delete-filter");
+          (buttons?.[Math.min(focusIndex,buttons.length-1)] || createButton.value)?.focus({preventScroll:true});
+        }
+      }
+    }
   }
 }
-async function remove(r) {
+async function remove(r,opener) {
+  if (deleting.value) return;
   const run = generation,
     s = filterSession();
-  if (!await confirmation.value?.ask("Confirm filter deletion","Delete this filter?","Delete")) return;
+  if (!s.current()) return;
+  if (!await confirmation.value?.ask("Confirm filter deletion","Delete this filter?","Delete")) {
+    if (run===generation && s.current() && opener.isConnected) opener.focus({preventScroll:true});
+    return;
+  }
   if (run !== generation || !s.current()) return;
+  deleting.value=true;
   try {
     await http.delete("/v1/filters/" + r.id, {
       ...s.config,
       params: { version: r.version },
     });
-    if (s.current()) store.revision++;
+    if (s.current()) {
+      if (run===generation && (document.activeElement===document.body || document.activeElement===opener))
+        returnIndex=rows.value.findIndex(row=>row.id===r.id);
+      store.revision++;
+    }
   } catch (e) {
     if (run === generation && s.current())
       error.value = e.message || "Could not delete the filter.";
-  }
+  } finally { deleting.value=false; }
 }
 watch(() => [store.revision, user.user.userId, user.authenticatedToken], load, {
   immediate: true,
