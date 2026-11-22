@@ -9,7 +9,7 @@
     <div v-if="open" ref="panel" role="dialog" :aria-label="label+' filter'" class="people-panel" :style="position"
       @keydown.esc.stop.prevent="close(true)" @keydown.tab="tabOut" @focusout="focusOut">
       <div class="people-entry">
-        <button v-for="person in selected" :key="person" class="person-token" type="button"
+        <button v-for="person in editedTerms" :key="person" class="person-token" type="button"
           :aria-label="'Remove '+person" @click="remove(person)">
           <span>{{ person }}</span><Icon icon="material-symbols:close" width="14"/>
         </button>
@@ -25,7 +25,7 @@
           <span class="person-lines"><strong>{{ person.name }}</strong><small v-if="!person.typed">{{ person.email }}</small></span>
         </div>
       </div>
-      <small v-if="selected.length>=maxPeople" role="status" class="people-limit">Remove a person to add another.</small>
+      <small v-if="editedTerms.length>=maxPeople" role="status" class="people-limit">Remove a person to add another.</small>
     </div>
   </Teleport>
 </template>
@@ -46,13 +46,14 @@ const position=ref({});
 const open=ref(false),query=ref(''),index=ref(-1),contacts=ref([]);
 const label=computed(()=>props.field==='from' ? 'From' : 'To');
 const selected=computed(()=>peopleTerms(store.filters,props.field));
+const editedTerms=computed(()=>peopleTerms(store.inputCriteria.filters,props.field));
 const caption=computed(()=>{
   const [first,...rest]=selected.value;
   return first ? label.value+' '+first+(rest.length ? ' +'+rest.length : '') : label.value;
 });
 const options=computed(()=>{
-  if (selected.value.length>=maxPeople) return [];
-  const omit=new Set(selected.value.map(s=>s.toLowerCase())), typed=query.value.trim();
+  if (editedTerms.value.length>=maxPeople) return [];
+  const omit=new Set(editedTerms.value.map(s=>s.toLowerCase())), typed=query.value.trim();
   const matches=contacts.value.filter(p=>!omit.has(p.email.toLowerCase()) &&
     [p.name,p.email].some(value=>personSearchKey(value).includes(personSearchKey(typed)))).slice(0,8);
   if (typed && !omit.has(typed.toLowerCase()) && !matches.some(p=>p.email.toLowerCase()===typed.toLowerCase()))
@@ -68,7 +69,6 @@ function close(restore=false) {
   open.value=false;query.value='';index.value=-1;
   if (restore) trigger.value?.focus({preventScroll:true});
 }
-const editedTerms=computed(()=>peopleTerms(store.inputCriteria.filters,props.field));
 function update(terms) {
   const {query,filters}=store.inputCriteria;
   const next={...filters};
@@ -100,8 +100,8 @@ function keys(event) {
   if (event.key==='Enter') {
     event.preventDefault();
     add(options.value[index.value]?.email ?? query.value);
-  } else if (event.key==='Backspace' && !query.value && selected.value.length) {
-    event.preventDefault(); remove(selected.value.at(-1));
+  } else if (event.key==='Backspace' && !query.value && editedTerms.value.length) {
+    event.preventDefault(); remove(editedTerms.value.at(-1));
   } else if (['ArrowDown','ArrowUp'].includes(event.key) && options.value.length) {
     event.preventDefault();
     index.value=event.key==='ArrowDown' ? (index.value+1)%options.value.length :
@@ -126,7 +126,7 @@ function listen(visible) {
   window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
 }
 watch(open,listen);
-watch([options,selected],()=>nextTick(place));
+watch([options,editedTerms],()=>nextTick(place));
 watch([()=>props.folder,()=>props.accountId,()=>account.currentAccountId,()=>user.user.email],()=>close(),{flush:'sync'});
 watch([open,query],([visible,text],_,cleanup)=>{
   index.value=-1;
