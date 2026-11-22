@@ -15,6 +15,10 @@
     <div ref="panel" role="menu" aria-label="More email options" @keydown="navigate">
       <template v-if="!advanced">
         <button role="menuitem" tabindex="-1" @pointerenter="sub=false" @click="command('snooze',trigger)"><Icon icon="material-symbols:schedule-outline"/>Snooze</button>
+      </template>
+      <button v-if="canForwardAll" role="menuitem" tabindex="-1" :disabled="forwarding" @pointerenter="sub=false"
+        @click="command('forward-all')"><Icon icon="material-symbols:forward"/>Forward all</button>
+      <template v-if="!advanced">
         <button ref="labelItem" role="menuitem" tabindex="-1" aria-haspopup="menu" :aria-expanded="sub"
           @pointerenter="$event.pointerType==='mouse' && showLabels()" @click="showLabels" @keydown.right.stop.prevent="showLabels">
           <Icon icon="material-symbols:label-outline"/>Label as<Icon class="arrow" icon="material-symbols:arrow-right"/>
@@ -52,8 +56,8 @@ import {useMessageFilters} from '@/store/message-filters';
 import LabelPicker from '@/components/mail-labels/picker.vue';
 
 const props=defineProps({rows:{type:Array,required:true},label:{type:String,default:'More email options'},
-  scope:String,snoozeAnchor:Object,disabled:Boolean,canAttach:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
-const emit=defineEmits(['snooze','importance','attach','apply','newer','older']);
+  scope:String,snoozeAnchor:Object,disabled:Boolean,canAttach:Boolean,canForwardAll:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
+const emit=defineEmits(['snooze','importance','attach','forward-all','apply','newer','older']);
 const user=useUserStore(),feedback=useMailFeedback(),filters=useMessageFilters(),route=useRoute();
 const advanced=computed(()=>user.user.generalSettings?.advancedToolbar===true);
 const sender=computed(()=>props.rows.length===1 && props.rows[0].lastSenderEmail);

@@ -918,6 +918,7 @@ async function openDraft(draft, options) {
       form.content = escapeHTML(form.text).replace(/\r\n?|\n/g, "<br>");
     if (responseHeader.value && form.sendType === "reply")
       form.content = foldLegacyReplyQuote(form.content || "");
+    quoteExpanded.value = /\bcloudmail-forwarded-conversation\b/.test(form.content);
     defValue.value = form.content || initialWritingArea();
     reveal();
     await nextTick();
@@ -964,17 +965,17 @@ const escapeHTML = (value) =>
       ],
   );
 let sourceController;
-async function prepareMessage(message, mode, all = false, rowView) {
+async function prepareMessage(message, mode, all = false, rowView, conversation) {
   if (!available()) return false;
   preparing.value = true;
   const controller = sourceController = new AbortController();
   const owner=userStore.user.email, token=userStore.authenticatedToken;
-  const current = () => (!rowView || rowView.current()) && mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
+  const current = () => (!rowView || rowView.current()) && (!conversation || conversation.current()) && mounted && !controller.signal.aborted && owner===userStore.user.email && token===userStore.authenticatedToken && token===localStorage.getItem("token");
   const cancel=()=>controller.abort();
   rowView?.signal.addEventListener("abort",cancel,{once:true});
   try {
     if (!current()) return false;
-    const email = (rowView || message.trashedAt)
+    const email = conversation ? message : (rowView || message.trashedAt)
       ? await http.get("/v1/messages/" + message.emailId,{signal:controller.signal,noMsg:true,headers:{Authorization:token}})
       : await emailStore.ensureDetail(message);
     if (!current()) return false;
@@ -984,7 +985,7 @@ async function prepareMessage(message, mode, all = false, rowView) {
     if (message.trashedAt && (!token || email.userId!==userStore.user.userId || email.scheduledDraftId)) throw new Error("This message is no longer available.");
     if (hasPerm("account:query")) await accountStore.loadAll();
     if (!current()) return false;
-    const quote = await quotedMessage(email, mode, controller.signal, token);
+    const quote = conversation?.quote || await quotedMessage(email, mode, controller.signal, token);
     if (!current()) return false;
     resetForm();
     setSender();
@@ -1011,7 +1012,8 @@ async function prepareMessage(message, mode, all = false, rowView) {
       form.accountId = originalAccount.accountId;
       form.name = originalAccount.name || userStore.user.name || "";
     }
-    form.subject = responseSubject(email.subject,mode);
+    form.subject = responseSubject(conversation?.subject ?? email.subject,mode);
+    quoteExpanded.value = Boolean(conversation);
     form.sendType = mode;
     form.emailId = mode === "reply" ? email.emailId : 0;
     if (email.trashedAt) form.trashSource = email.emailId;
@@ -1180,8 +1182,8 @@ function openReply(email) {
 function openReplyAll(email) {
   return prepareMessage(email, "reply", true);
 }
-function openForward(email) {
-  return prepareMessage(email, "forward");
+function openForward(email, conversation) {
+  return prepareMessage(email, "forward",false,undefined,conversation);
 }
 async function useRichCommand(command, value, selection) {
   if (!form.plainText || !show.value || sending.value) return;

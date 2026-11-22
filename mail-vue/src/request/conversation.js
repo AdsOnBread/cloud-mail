@@ -2,8 +2,8 @@ import {useUserStore} from "@/store/user";
 import http from "@/axios/index.js";
 export const conversationList = (params, token) =>
   http.get("/email/conversations", { params, ...(token ? {headers:{Authorization:token}} : {}) });
-export const conversationMessages = (params) =>
-  http.get("/email/conversation/messages", { params });
+export const conversationMessages = (params, config) =>
+  http.get("/email/conversation/messages", { ...config, params });
 export async function conversationAction(action,emailIds,extra={},client=http,config) {
   if (client===http) {
     const token=useUserStore().authenticatedToken;

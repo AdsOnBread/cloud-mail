@@ -21,7 +21,8 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
+      <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="toolbarRows" :scope="route.fullPath"
+        :can-forward-all="total>1 && hasPerm('email:send')" :forwarding="forwarding" @forward-all="forwardAll" :disabled="busy || loading || !messages.length"
         @snooze="opener=>snoozePicker?.show(opener,[Number(route.query.emailId)])" @apply="ops=>mutate('label',ops)"
         @importance="important=>mutate('importance',{important})">
         <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
@@ -50,6 +51,7 @@
           <ReaderWindowLink v-if="route.query.window!=='1'" :href="windowHref"/>
         </div>
       </div>
+      <p v-if="forwarding" role="status">Preparing forwarded conversation…</p>
       <p v-if="printing || expanding" role="status">{{printing ? 'Preparing to print…' : 'Expanding messages…'}}</p>
       <p v-if="error" role="alert">
         {{ error }} <button @click="load()">Retry</button>
@@ -108,6 +110,9 @@ import {hasReplyAll} from '@/utils/recipients';
 import {useUserStore} from '@/store/user';
 import {emailDetail} from '@/request/email';
 import {printMessages} from './print';
+import {quotedConversation} from '@/components/message-composer/quoted-message';
+import http from '@/axios';
+import {hasPerm} from '@/perm/perm';
 import { useMailFeedback } from "@/store/mail-feedback";
 import {categoryFolders} from "@/utils/inbox-categories";
 const feedback = useMailFeedback();
@@ -243,7 +248,8 @@ const currentComposer = () =>
 const user=useUserStore(),printing=ref(false),expanding=ref(false);
 watch([()=>route.fullPath,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>snoozePicker.value?.close(),{flush:"sync"});
 const replyChoices=computed(()=>hasReplyAll(messages.value.at(-1),accountStore.ownAddresses) ? [user.defaultReplyAll,!user.defaultReplyAll] : [false]);
-let printRun=0,expandRun=0,printController;
+let printRun=0,expandRun=0,printController,forwardController;
+const forwarding=ref(false);
 const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expanded.value.has(m.emailId)));
 const expansionTitle=computed(()=>allExpanded.value || expanding.value ? 'Collapse all' : 'Expand all');
 const windowHref=computed(()=>{
@@ -257,17 +263,64 @@ function readerCurrent() {
   const session=sessionEpoch,epoch=viewEpoch,token=localStorage.getItem('token'),owner=user.user.userId,account=accountStore.currentAccountId;
   return ()=>session===sessionEpoch && epoch===viewEpoch && token===localStorage.getItem('token') && owner===user.user.userId && account===accountStore.currentAccountId;
 }
-async function allRows(current) {
-  const ids=new Map(messages.value.map(m=>[m.emailId,m]));
-  let before=hasMore.value ? cursor.value : null;
+async function allRows(current, firstPage, config) {
+  const ids=new Map((firstPage?.messages ?? messages.value).map(m=>[m.emailId,m]));
+  let before=firstPage ? firstPage.nextCursor : hasMore.value ? cursor.value : null;
   while (before && current()) {
-    const page=await conversationMessages({emailId:Number(route.query.emailId),before,limit:100});
+    const page=await conversationMessages({emailId:Number(route.query.emailId),before,limit:100},config);
     if (!current()) return [];
     if (page.threadId!==threadId.value || (page.hasMore && !(page.nextCursor>0 && page.nextCursor<before))) throw new Error('Conversation changed. Reopen it and try again.');
     for (const m of page.messages) ids.set(m.emailId,m);
     before=page.hasMore ? page.nextCursor : null;
   }
   return [...ids.values()].sort((a,b)=>a.emailId-b.emailId);
+}
+function cancelForward() {
+  forwardController?.abort();
+  forwardController=undefined;
+  forwarding.value=false;
+}
+watch([()=>route.fullPath,()=>user.authenticatedToken,()=>user.user.userId,()=>accountStore.currentAccountId],cancelForward,{flush:"sync"});
+
+async function forwardAll() {
+  if (forwarding.value || switching || loading.value || total.value<2 || !hasPerm('email:send')) return;
+  const valid=readerCurrent(), token=user.authenticatedToken, owner=user.user.userId, expectedThread=threadId.value;
+  if (!token || token!==localStorage.getItem('token')) return;
+  const controller=forwardController=new AbortController(), signal=controller.signal;
+  const current=()=>!signal.aborted && valid() && threadId.value===expectedThread && hasPerm('email:send');
+  const config={signal,headers:{Authorization:token},noMsg:true};
+  forwarding.value=true;
+  try {
+    // Refresh membership before reading private originals. Drafts and removed
+    // messages never enter the quote, even when the reader was left open.
+    const page=await conversationMessages({emailId:Number(route.query.emailId),limit:100},config);
+    if (!current()) return;
+    if (page.threadId!==expectedThread || page.total<2 || page.messages.at(-1)?.emailId!==messages.value.at(-1)?.emailId)
+      throw new Error('Conversation changed. Reopen it and try again.');
+    const rows=await allRows(current,page,config);
+    if (!current()) return;
+    if (rows.length!==page.total) throw new Error('Conversation changed. Reopen it and try again.');
+    let latest;
+    async function* originals() {
+      for (const row of rows) {
+        if (!current()) return;
+        const message=await http.get('/v1/messages/'+row.emailId,config);
+        if (!current()) return;
+        if (!message || message.emailId!==row.emailId || message.userId!==owner ||
+            message.accountId!==row.accountId || message.trashedAt || message.scheduledDraftId)
+          throw new Error('A message is no longer available in this conversation.');
+        latest=message;
+        yield message;
+      }
+    }
+    const subject=page.subject ?? threadSubject.value;
+    const quote=await quotedConversation(subject,originals(),signal,token);
+    if (current() && latest) await reply(latest,false,null,true,{subject,quote,current});
+  } catch(e) {
+    if(current()) feedback.show(e.message || 'Could not forward the conversation.');
+  } finally {
+    if (forwardController===controller) cancelForward();
+  }
 }
 async function printMail(message) {
   if (printing.value) return;
@@ -543,8 +596,9 @@ function retryDraft() {
       (!failure.summary.cloudDraftId || item.cloudDraftId===failure.summary.cloudDraftId) &&
       (!failure.summary.clientId || item.clientId===failure.summary.clientId)) editSavedDraft(item);
 }
-async function reply(message, all, draft, forward=false) {
+async function reply(message, all, draft, forward=false, conversation) {
   if (switching) return;
+  if (!conversation) cancelForward();
   if (!draft) { draftRun++;draftFailure.value=null; }
   const request = viewEpoch, current=readerCurrent();
   switching = true;
@@ -575,7 +629,7 @@ async function reply(message, all, draft, forward=false) {
       try { await editor.openDraft(draft); }
       catch (e) { if (current()) closed(); throw e; }
     }
-    else if (await editor[forward ? "openForward" : all ? "openReplyAll" : "openReply"](message) === false) {
+    else if (await editor[forward ? "openForward" : all ? "openReplyAll" : "openReply"](message,conversation) === false) {
       if (current()) closed();
       return;
     }
@@ -769,6 +823,7 @@ onMounted(() => {
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
+  cancelForward();
   printController?.abort();
   viewEpoch++;
   generation++;
