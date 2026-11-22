@@ -65,12 +65,17 @@ function fieldTerm(token) {
     if (subject && subject.length<=200) return {key,subject};
     return;
   }
-  const groups=[[]];
+  const values=[];
+  let groupStart=0, cursor=0;
   for (const word of splitTerms(value)) {
-    if (word==='OR') groups.push([]);
-    else groups.at(-1).push(word);
+    const start=value.indexOf(word,cursor);
+    cursor=start+word.length;
+    if (word==='OR') {
+      values.push(decodeValue(value.slice(groupStart,start)));
+      groupStart=cursor;
+    }
   }
-  const values=groups.map(group=>decodeValue(group.join(' ')));
+  values.push(decodeValue(value.slice(groupStart)));
   if (values.length<=maxPeople && values.every(v=>v && v.length<=maxPersonTerm)) return {key,values};
 }
 

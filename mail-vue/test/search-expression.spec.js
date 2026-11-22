@@ -20,6 +20,10 @@ describe('mailbox search expressions',()=>{
     expect(readSearchExpression(query)).toEqual({query,filters:{}});
   });
 
+  it('preserves the spelling of each typed name in an address group',()=>{
+    expect(readSearchExpression('from:(Alex  Li OR Kim  West)').filters).toEqual({from:'Alex  Li',fromAny:'["Kim  West"]'});
+  });
+
   it('keeps literal advanced words, punctuation and significant spaces when editing a generated expression',()=>{
     const filters={from:'Alice  Jones',fromAny:JSON.stringify(['Names (West)','Lee OR Kay','A "quote"']),subject:'Q4 (review)',hasAttachment:1};
     for (const body of ['from:alice','subject:(old)','has:attachment','report (open','"quoted" phrase','first   second','OR','-{old new}']) {
