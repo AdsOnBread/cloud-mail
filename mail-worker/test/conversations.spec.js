@@ -583,6 +583,30 @@ it('filters Trash by message date across an inclusive local day before paginatio
  expect((await cloudMail.list(context(),1,{folder:'trash',...bounds,limit:1})).messages).toHaveLength(1);
 });
 
+it('jumps directly to filtered Trash pages and clamps a page after its last item leaves',async()=>{
+ const trash={folder:'trash',accountId:'1',subject:'Page fixture',limit:2};
+ const fixture={subject:'Page fixture',trashed_at:'2026-11-20'};
+ const ids=[];
+ for(let i=0;i<5;i++) ids.push((await insert(fixture)).email_id);
+ await insert({...fixture,account_id:3});
+ await insert({...fixture,user_id:2,account_id:2});
+ await insert({...fixture,subject:'Other subject'});
+ const read=async page=>{
+   const {total,offset,messages,hasMore,nextCursor}=await cloudMail.list(context(),1,{...trash,page});
+   return [total,offset,messages.map(m=>m.emailId),hasMore,nextCursor];
+ };
+ expect(await read(1)).toEqual([5,0,[ids[4],ids[3]],true,ids[3]]);
+ expect(await read(2)).toEqual([5,2,[ids[2],ids[1]],true,ids[1]]);
+ expect(await read('last')).toEqual([5,4,[ids[0]],false,null]);
+ await cloudMail.trash(context(),1,[ids[0]],'restore');
+ expect(await read(3)).toEqual([4,2,[ids[2],ids[1]],false,null]);
+ expect(await read('last')).toEqual(await read(3));
+ expect((await cloudMail.list(context(),1,{...trash,cursor:ids[3]})).messages.map(m=>m.emailId)).toEqual([ids[2],ids[1]]);
+ await expect(read(0)).rejects.toMatchObject({code:400});
+ await expect(cloudMail.list(context(),1,{...trash,page:1,cursor:ids[3]})).rejects.toMatchObject({code:400});
+ expect(await cloudMail.list(context(),1,{...trash,subject:'no such fixture',page:'last'})).toMatchObject({total:0,offset:0,messages:[]});
+});
+
 it('finds compose correspondents only in the sending mailbox and omits received blind copies',async()=>{
  await insert({name:'Arden Hart',send_email:'arden@example.net',recipient:'[{"name":"Arden Lee","address":"lee@example.net"}]',bcc:'[{"address":"arden-hidden@example.net"}]'});
  await insert({type:1,status:2,bcc:'[{"name":"Arden Ray","address":"ray@example.net"}]'});

@@ -106,17 +106,38 @@ export async function list(c,userId,p={}) {
   }
   const limit=pageSize(p.limit);
   const trashMarkers=folder==='trash' && !c.mailScopes;
-  const rows=(await c.env.db.prepare(`${folder==='inbox' ? `WITH ${filedConversations}` : ''} SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
+  const fields=`e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
     ${trashMarkers ? `CASE WHEN e.scheduled_draft_id IS NULL THEN ${messageImportanceReason} ELSE ${scheduledImportanceReason} END AS importance_reason,
       CASE WHEN e.scheduled_draft_id IS NULL THEN s.star_id IS NOT NULL ELSE coalesce(json_extract(d.data,'$.mailboxStarred'),0) END AS is_star,` : ''}
-    ${folder==='trash' ? 'e.scheduled_draft_id,'+messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
-    FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
+    ${folder==='trash' ? 'e.scheduled_draft_id,'+messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview`;
+  const joins=`FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
     ${trashMarkers ? importanceJoin+" LEFT JOIN cloud_drafts d ON d.draft_id=e.scheduled_draft_id AND d.user_id=e.user_id AND d.state='trashed'" : ''}
-    ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}
-    WHERE ${filters.join(' AND ')} ORDER BY e.email_id DESC LIMIT ?`).bind(...args,limit+1).all()).results;
+    ${folder==='inbox' ? 'JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id' : ''}`;
+  const where=filters.join(' AND ');
+  let rows, bounds;
+  if (folder==='trash' && p.page!=null) {
+    if (p.cursor) throw new BizError('Choose a page or a cursor.',400);
+    const requested=p.page==='last' ? Number.MAX_SAFE_INTEGER : positive(p.page,'page');
+    // Count and select from the same snapshot. Only the displayed IDs need message metadata.
+    const query=`WITH matches AS MATERIALIZED (
+      SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${where}
+    ), size AS (SELECT count(*) total FROM matches),
+    window AS (SELECT total, min(?, max(0,total-1)/?) * ? AS start FROM size),
+    page_ids AS (SELECT email_id FROM matches ORDER BY email_id DESC LIMIT ? OFFSET (SELECT start FROM window))
+    SELECT ${fields},window.total AS page_total,window.start AS page_start ${joins}
+    CROSS JOIN window WHERE e.email_id IN (SELECT email_id FROM page_ids) ORDER BY e.email_id DESC`;
+    rows=(await c.env.db.prepare(query).bind(...args,requested-1,limit,limit,limit).all()).results;
+    bounds={total:rows[0]?.page_total ?? 0,offset:rows[0]?.page_start ?? 0};
+  } else {
+    const prefix=folder==='inbox' ? `WITH ${filedConversations}` : '';
+    rows=(await c.env.db.prepare(`${prefix} SELECT ${fields} ${joins} WHERE ${where} ORDER BY e.email_id DESC LIMIT ?`)
+      .bind(...args,limit+1).all()).results;
+  }
   const page=rows.slice(0,limit);
   const files=folder==='trash' ? await mailboxAttachments(c.env.db,userId,page,'trash') : new Map();
-  return {messages:page.map(row=>({...messageFields(row),...files.get(row.email_id)})),hasMore:rows.length>limit,nextCursor:rows.length>limit?rows[limit-1].email_id:null};
+  const hasMore=bounds ? bounds.offset+page.length<bounds.total : rows.length>limit;
+  const messages=page.map(({page_total,page_start,...row})=>({...messageFields(row),...files.get(row.email_id)}));
+  return {...bounds,messages,hasMore,nextCursor:hasMore ? page.at(-1).email_id : null};
 }
 export async function detail(c,userId,emailId) {
   const row=await c.env.db.prepare(`SELECT e.*,${c.mailScopes ? '' : 'a.email AS mailbox_email,a.name AS mailbox_name,'}CASE WHEN e.trashed_at IS NOT NULL THEN ${messageLabels} END AS label_ids,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star FROM email e JOIN account a ON a.account_id=e.account_id
