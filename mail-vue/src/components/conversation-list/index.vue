@@ -103,7 +103,7 @@
     </div>
     <InboxTabs v-if="category" :value="category" :panel-id="panelId" :unread="{...categoryUnread,primary:(categoryUnread.primary || 0)+drafts.scheduledInboxUnread}" @select="selectCategory"/>
     <p v-if="error" role="alert" class="list-status">
-      {{ error }} <button @click="retry">Retry</button>
+      {{ error }} <button class="retry-list" @click="retry">Retry</button>
     </p>
     <details v-if="filedDrafts.length" class="marked-scheduled" open>
       <summary>Drafts ({{ filedDrafts.length }})</summary>
@@ -514,10 +514,12 @@ async function load(target=currentPage) {
     selected.value = selected.value.filter((id) =>
       rows.value.some((row) => row.lastEmailId === id),
     );
+    return "loaded";
   } catch (e) {
     if (current()) {
       failedPage=target;
       error.value = e.message || "Could not load conversations.";
+      return "failed";
     }
   } finally {
     if (request === generation) loading.value = false;
@@ -527,16 +529,20 @@ function refresh() {
   emailStore.conversationListRefresh++;
   return load();
 }
-function retry() { return load(failedPage ?? currentPage); }
+function retry() { return navigate(failedPage ?? currentPage,".range-trigger"); }
 async function navigate(target,selector) {
   if (busy.value || loading.value) return;
   const scope=key.value, path=route.fullPath, token=owner.authenticatedToken;
   const menu=document.activeElement?.closest('[role="menu"]');
-  await load(target);
+  const status=await load(target);
   await nextTick();
-  if (!active || !root.value?.isConnected || key.value!==scope || path!==route.fullPath ||
+  if (!status || !active || !root.value?.isConnected || key.value!==scope || path!==route.fullPath ||
       token!==localStorage.getItem("token") || loading.value ||
       document.activeElement!==document.body && !menu?.contains(document.activeElement)) return;
+  if (status==="failed") {
+    root.value.querySelector(".retry-list")?.focus();
+    return;
+  }
   const bar=root.value.querySelector(".mail-toolbar");
   for (const control of [selector,".range-trigger",".select-options"]) {
     const button=bar?.querySelector(control);
