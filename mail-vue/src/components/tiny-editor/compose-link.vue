@@ -66,13 +66,21 @@ function position() {
   const bottom = top + (viewport?.height || document.documentElement.clientHeight);
   const clip = visibleFrame(frame, {left:Math.max(rect.left,left), right:Math.min(rect.right,right),
     top:Math.max(rect.top,top), bottom:Math.min(rect.bottom,bottom)});
+  // Scrolling a reader or Settings can move the entire editor out of view.
+  // Keep a partly edited URL available when the writer scrolls back.
+  if (clip.left >= clip.right || clip.top >= clip.bottom) {
+    if (panel.value.preview) close();
+    else card.style.visibility = "hidden";
+    return;
+  }
+  card.style.visibility = "";
   const lines = Array.from((fragment == null ? range : anchor).getClientRects());
   const line = (fragment == null ? lines.find(rect => rect.bottom > 0 && rect.top < frame.clientHeight)
     : lines[Math.min(fragment, lines.length - 1)]) || lines[0] || owner.selection.getNode().getBoundingClientRect();
   const startX = rect.left + frame.clientLeft + line.left;
   const startY = rect.top + frame.clientTop + line.top;
   const endY = startY + line.height;
-  if (panel.value.preview && (endY <= clip.top || startY >= clip.bottom || clip.left >= clip.right ||
+  if (panel.value.preview && (endY <= clip.top || startY >= clip.bottom ||
       startX + line.width < clip.left || startX > clip.right)) {
     close(card.contains(document.activeElement));
     return;
