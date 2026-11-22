@@ -64,7 +64,8 @@ it('retries the displayed page and ignores a sign-in change in another tab',asyn
   });
   const router=createRouter({history:createMemoryHistory(),routes:[{name:'scheduled',path:'/scheduled',component:Scheduled}]});
   await router.push('/scheduled');
-  const wrapper=shallowMount(Scheduled,{global:{plugins:[pinia,router]}});
+  const wrapper=shallowMount(Scheduled,{global:{plugins:[pinia,router],stubs:{MailSnoozePicker:false}}});
+  wrapper.get(".scroll").element.scrollTo=vi.fn();
   try {
     await flushPromises();
     await wrapper.get('[aria-label="Next"]').trigger('click');

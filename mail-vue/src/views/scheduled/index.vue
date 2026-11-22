@@ -479,7 +479,10 @@ const pageReadDisabled=computed(()=>busy.value || loading.value || Boolean(listE
   unreadPage.value.some(row=>!canCancel(row) || reading.value.has(row.draftId)));
 function markPageRead() {
   if (pageReadDisabled.value || selected.value.length || messageId.value) return;
-  if (!unreadPage.value.length) return feedback.show("No unread conversations.");
+  if (!unreadPage.value.length) {
+    error.value="";
+    return feedback.show("No unread conversations.");
+  }
   return setRead(unreadPage.value,false,false,true);
 }
 async function setRead(batch,unread,leaveReader=false,announce=false) {
