@@ -370,7 +370,6 @@ const key = computed(() =>
     owner.user.email,props.folder, props.labelId, category.value, showCategoryChips.value,
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
-    owner.authenticatedToken,
     search.query, JSON.stringify(search.filters),
   ].join("|"),
 );
@@ -554,7 +553,7 @@ function previousPage() {
   if (offset.value) return navigate({backward:true,cursor:firstCursor.value},'[aria-label="Newer"]');
 }
 watch(
-  key,
+  [key,()=>owner.authenticatedToken],
   () => {
     generation++;
     snoozePicker.value?.close();

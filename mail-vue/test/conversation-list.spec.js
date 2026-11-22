@@ -10,6 +10,8 @@ import { useMailSearchStore } from "../src/store/mail-search";
 import { useAccountStore } from "../src/store/account";
 import MovePicker from "../src/components/mail-labels/move.vue";
 import {useMailLabels} from "../src/store/mail-labels";
+import {useMailFeedback} from "../src/store/mail-feedback";
+import http from "../src/axios";
 import { useUserStore } from "../src/store/user";
 import { draggingConversations } from "../src/components/mail-labels/conversation-drag";
 const push = vi.hoisted(() => vi.fn());
@@ -178,6 +180,28 @@ describe("conversation lists", () => {
     );
     expect(conversationList.mock.calls.at(-1)[0].cursor).toBe(null);
     wrapper.unmount();
+  });
+  it("marks only the displayed page read, including queued mail, under its original session",async()=>{
+    const visible=[row(22,"Unread"),{...row(21,"Read"),unreadCount:0}];
+    const queued={draftId:5,version:3,state:"scheduled",subject:"Queued",unread:1};
+    useUserStore().user.email="preview@example.com";
+    const get=vi.spyOn(http,"get").mockResolvedValue([queued]);
+    const post=vi.spyOn(http,"post").mockResolvedValue({updated:1});
+    conversationList.mockResolvedValue(page(visible,{total:100,hasMore:true,nextCursor:21}));
+    const wrapper=mountList();
+    try {
+      await flushPromises();
+      wrapper.getComponent({name:"MailPageActions"}).vm.$emit("mark-read");
+      await vi.waitFor(()=>expect(post).toHaveBeenCalledTimes(1));
+      expect(conversationAction.mock.calls[0].slice(0,3)).toEqual(["read",[22],{}]);
+      expect(post).toHaveBeenCalledWith("/v1/scheduled/read",{messages:[{draftId:5,version:3}],unread:false},
+        {noMsg:true,headers:{Authorization:"fixture-token"}});
+      expect(useMailFeedback().notice.message).toBe("2 conversations marked as read.");
+      localStorage.setItem("token","different-user");
+      wrapper.getComponent({name:"MailPageActions"}).vm.$emit("mark-read");
+      await flushPromises();
+      expect(conversationAction).toHaveBeenCalledTimes(1);
+    } finally {wrapper.unmount();get.mockRestore();post.mockRestore();localStorage.removeItem("token");}
   });
   it("opens stable message anchors and sends only anchors for whole conversation actions", async () => {
     conversationList.mockResolvedValue(page([row(22, "Report")]));
