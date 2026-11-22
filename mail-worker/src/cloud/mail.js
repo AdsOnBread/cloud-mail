@@ -107,7 +107,8 @@ export async function list(c,userId,p={}) {
   const limit=pageSize(p.limit);
   const trashMarkers=folder==='trash' && !c.mailScopes;
   const rows=(await c.env.db.prepare(`${folder==='inbox' ? `WITH ${filedConversations}` : ''} SELECT e.email_id,e.account_id,e.subject,e.send_email,e.name,e.type,e.status,e.unread,e.create_time,e.trashed_at,
-    ${trashMarkers ? `CASE WHEN e.scheduled_draft_id IS NULL THEN ${messageImportanceReason} ELSE ${scheduledImportanceReason} END AS importance_reason,` : ''}
+    ${trashMarkers ? `CASE WHEN e.scheduled_draft_id IS NULL THEN ${messageImportanceReason} ELSE ${scheduledImportanceReason} END AS importance_reason,
+      CASE WHEN e.scheduled_draft_id IS NULL THEN s.star_id IS NOT NULL ELSE coalesce(json_extract(d.data,'$.mailboxStarred'),0) END AS is_star,` : ''}
     ${folder==='trash' ? 'e.scheduled_draft_id,'+messageLabels+' AS label_ids,' : ''} e.recipient,e.cc,CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,SUBSTR(COALESCE(e.text,''),1,180) preview
     FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
     ${trashMarkers ? importanceJoin+" LEFT JOIN cloud_drafts d ON d.draft_id=e.scheduled_draft_id AND d.user_id=e.user_id AND d.state='trashed'" : ''}

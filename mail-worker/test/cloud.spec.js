@@ -1380,6 +1380,20 @@ describe('Scheduled Trash',()=>{
    expect((await mail.list(c(),1,{folder:'sent'})).messages).toEqual([]);
    await expect(undoScheduledTrash(c(),1,second)).rejects.toMatchObject({code:409});
  });
+ it('reports each Trash message’s own star, including the star saved on an unsent draft', async()=>{
+   const {setScheduledMark,scheduledList}=await import('../src/cloud/scheduled');
+   const {trashScheduled}=await import('../src/cloud/scheduled-trash');
+   const starred=await message(), plain=await message({message_id:'<plain@local>'});
+   await env.db.prepare('INSERT INTO star(user_id,email_id) VALUES(1,?)').bind(starred.email_id).run();
+   await mail.trash(c(),1,[starred.email_id,plain.email_id]);
+   const scheduled=await queue();
+   await setScheduledMark(c(),1,scheduled.draftId,{version:scheduled.version,field:'starred',value:true});
+   const [updated]=await scheduledList(c(),1);
+   await trashScheduled(c(),1,{messages:[updated]});
+   expect((await mail.list(c(),1,{folder:'trash'})).messages).toMatchObject([
+     {scheduledDraftId:scheduled.draftId,isStar:1},{emailId:plain.email_id,isStar:0},{emailId:starred.email_id,isStar:1},
+   ]);
+ });
  it('retains the importance choice through Trash, Undo and restoring the unsent draft',async()=>{
    const {setTrashImportance}=await import('../src/cloud/trash-actions');
    const {trashScheduled,undoScheduledTrash}=await import('../src/cloud/scheduled-trash');

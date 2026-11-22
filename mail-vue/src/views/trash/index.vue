@@ -27,9 +27,9 @@
           "
         />
       </label>
-      <el-dropdown v-if="!messageId" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu" @command="selectGroup">
+      <el-dropdown v-if="!messageId" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu trash-selection-menu" :popper-options="selectionPlacement" :offset="0" @command="selectGroup">
         <button class="mail-icon select-options" aria-label="Selection options" data-tip="Select"><Icon icon="material-symbols:arrow-drop-down" width="16"/></button>
-        <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in ['All','None','Read','Unread']" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
+        <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in Object.keys(selectionGroups)" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
       </el-dropdown>
       <template v-if="targets.length">
         <button v-if="canDelete" class="toolbar-text" :disabled="busy" @click="act('purge', targets, null, $event.currentTarget)">Delete forever</button>
@@ -156,11 +156,10 @@
     </div>
     <div v-else class="trash-list">
       <div class="retention">
-        Messages that have been in Trash more than 30 days will be automatically
-        deleted.
+        <span>Messages that have been in Trash more than 30 days will be automatically deleted.</span>
         <button
           v-if="canDelete && messages.length && !search.query && !filtered"
-          class="text-button"
+          class="retention-action"
           :disabled="busy || loading"
           @click="act('purge', null, null, $event.currentTarget)"
         >
@@ -450,9 +449,15 @@ function moveTo({labelId},ids) {
   if (name) return act('move-from-trash',ids,{labelId,name});
 }
 const filtered=computed(()=>Object.keys(search.filters).length>0);
+const selectionPlacement = {modifiers:[{name:'offset',options:{offset:[-24,0]}}]};
+const selectionGroups = {
+  All: () => true, None: () => false,
+  Read: message => message.unread !== 0, Unread: message => message.unread === 0,
+  Starred: message => Boolean(message.isStar), Unstarred: message => !message.isStar,
+};
 function selectGroup(option) {
   if (busy.value || loading.value) return;
-  selected.value=messages.value.filter(m=>option==='All' || (option==='Read' && m.unread!==0) || (option==='Unread' && m.unread===0)).map(m=>m.emailId);
+  selected.value=messages.value.filter(selectionGroups[option]).map(m=>m.emailId);
 }
 const offset = computed(() => history.value.length * 50);
 let returnFocus;
@@ -717,7 +722,6 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
 }
-.retention,
 .empty {
   padding: 14px 16px;
   text-align: center;
@@ -725,33 +729,84 @@ onBeforeUnmount(() => {
   line-height: 20px;
 }
 .retention {
-  box-shadow: inset 0 -1px var(--light-border-color);
-  color: var(--regular-text-color);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  box-sizing:border-box;
+  min-height:48px;
+  margin:4px 0;
+  padding:6px 16px;
+  border-radius:4px;
+  background:var(--mail-folder-notice);
+  color:var(--secondary-text-color);
+  text-align:center;
+  font:14px/20px Arial,sans-serif;
 }
-.empty {
-  margin: 0;
+.empty { margin:0; }
+.text-button {
+  color:var(--el-color-primary);
+  font:500 14px/20px Arial,sans-serif;
+  cursor:pointer;
 }
-.text-button,
+.text-button:hover { text-decoration:underline; }
+.retention-action,.toolbar-text {
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  height:36px;
+  padding:0 8px;
+  border-radius:4px;
+  background:transparent;
+  font:500 14px/18px Arial,sans-serif;
+  cursor:pointer;
+}
+.retention-action {
+  margin-inline-start:4px;
+  min-width:80px;
+  color:var(--trash-action);
+  --action-hover:rgb(66 133 244 / 3%);
+  --action-focus:rgb(66 133 244 / 6%);
+}
 .toolbar-text {
-  color: var(--el-color-primary);
-  font:
-    500 14px/20px Arial,
-    sans-serif;
-  cursor: pointer;
+  color:var(--regular-text-color);
+  --action-hover:var(--format-hover);
+  --action-focus:var(--format-active);
 }
-.text-button:hover {
-  text-decoration: underline;
+.retention-action::before,.toolbar-text::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  border-radius:inherit;
+  transform:scale(0);
+  opacity:0;
+  transition:transform .15s cubic-bezier(.4,0,.2,1),opacity .15s cubic-bezier(.4,0,.2,1);
 }
-.retention .text-button {
-  margin-left: 8px;
+:is(.retention-action,.toolbar-text):hover:not(:disabled)::before {
+  background:var(--action-hover);
+  opacity:1;
+  transform:scale(1);
 }
-.toolbar-text {
-  color: var(--regular-text-color);
-  padding: 8px 12px;
-  border-radius: 18px;
+:is(.retention-action,.toolbar-text):is(:focus-visible,:active):not(:disabled)::before {
+  background:var(--action-focus);
+  box-shadow:inset 0 0 0 1px currentColor;
+  opacity:1;
+  transform:scale(1);
 }
-.toolbar-text:hover {
-  background: var(--mail-hover);
+@media (prefers-reduced-motion:reduce) {
+  .retention-action::before,.toolbar-text::before {transition:none}
+}
+:global(.trash-selection-menu .el-dropdown-menu) { min-width:160px; padding:6px 0; }
+:global(.trash-selection-menu .el-dropdown-menu__item) { padding:6px 48px; }
+@media (min-width:768px) {
+  .mail-toolbar {gap:0;padding-inline:12px 6px}
+  .mail-toolbar .mail-icon {width:40px;height:40px}
+  .mail-toolbar .check-target {width:28px;height:36px;border-radius:4px}
+  .mail-toolbar .select-options {width:18px;height:36px;margin-inline-end:8px;border-radius:4px}
+  .mail-toolbar .toolbar-text {margin-inline-start:2px}
 }
 .trash-detail {
   padding: 16px 24px;
@@ -813,9 +868,6 @@ pre {
   .trash-heading,
   .message-body {
     margin-left: 0;
-  }
-  .retention {
-    padding: 10px 16px;
   }
   .snackbar {
     bottom: 16px;

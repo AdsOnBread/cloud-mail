@@ -812,7 +812,7 @@ onBeforeUnmount(() => {
   box-sizing:border-box;
   padding:6px 16px;
   text-align:start;
-  background:var(--scheduled-notice);
+  background:var(--mail-folder-notice);
   color:var(--secondary-text-color);
   border-radius:4px;
 }

@@ -204,7 +204,7 @@ const api=createHTTPServer(async(req,res)=>{
      const recipient=key=>JSON.stringify((d[key]||[]).map(address=>({address})));
      const row={emailId:Math.max(0,...rows.map(r=>r.emailId))+1,scheduledDraftId:d.draftId,userId:1,accountId:d.accountId,
        subject:d.subject,name:d.name,sendEmail:accounts.find(a=>a.accountId===d.accountId).email,text:d.text,content:d.content,
-       type:1,status:0,unread:1-(d.scheduledUnread||0),createTime:d.createTime,trashedAt:new Date().toISOString(),
+       type:1,status:0,isStar:Number(!!d.mailboxStarred),unread:1-(d.scheduledUnread||0),createTime:d.createTime,trashedAt:new Date().toISOString(),
        recipient:recipient('receiveEmail'),cc:recipient('cc'),bcc:recipient('bcc'),attList:[]};
      rows.unshift(row);membership.set(row.emailId,new Set(d.labelIds||[]));
      d.trashEdit=edit;d.trashSendAt=d.scheduledAt;delete d.scheduledAt;d.state='trashed';d.version++;recordDraft(d);
