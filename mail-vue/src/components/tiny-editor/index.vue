@@ -117,7 +117,11 @@ const spelling = ref(false), spellLanguage = ref("auto");
 watch(() => props.spellActive, active => { if (!active) spelling.value = false; });
 const editor = shallowRef(null);
 const linkPanel = ref(), photoPanel = ref();
-function openLink() { photoPanel.value?.close(); linkPanel.value?.open(); }
+function openLink() {
+  photoPanel.value?.close();
+  if (props.mailCompose) linkPanel.value?.insert();
+  else linkPanel.value?.open();
+}
 function setSignature(item, beforeQuote, reply, manual = true) {
   const ed = editor.value;
   if (!ed?.initialized || ed.removed) return;
@@ -365,7 +369,7 @@ function initEditor(initialContent) {
       }
       if (props.mailCompose || props.signatureEditor) {
         ed.on("keydown", event => {
-          if (!props.plainText && (event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "k") {
+          if (!props.plainText && !event.isComposing && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
             event.preventDefault(); event.stopImmediatePropagation(); openLink();
           }
         }, true);

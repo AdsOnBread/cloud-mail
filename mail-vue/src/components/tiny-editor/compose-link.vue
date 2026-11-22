@@ -189,6 +189,29 @@ function focusField() {
   field?.focus({preventScroll:true});
   if (anchor && field === textField.value) field?.select();
 }
+function insert() {
+  const ed=props.editor;
+  if (!ed?.initialized || ed.removed) return;
+  const selection=ed.selection.getRng();
+  const container=selection.commonAncestorContainer;
+  // A browser can select an entire link by its offsets in the parent block.
+  const singleChild=selection.startContainer===selection.endContainer && selection.endOffset===selection.startOffset+1
+    && container.childNodes[selection.startOffset];
+  const link=ed.dom.getParent(container,"a[href]") || (singleChild?.nodeType===1 && singleChild.matches("a[href]") && singleChild);
+  if (!link || !link.textContent.trim() || link.closest('[contenteditable="false"]') ||
+      ed.selection.getNode()?.nodeName==="IMG") return open();
+  close();
+  ed.focus();
+  ed.undoManager.transact(()=>{
+    const after=ed.dom.createRng();
+    after.setStartAfter(link);
+    after.collapse(true);
+    ed.dom.remove(link,true);
+    ed.selection.setRng(after);
+  });
+  ed.nodeChanged();
+  ed.dispatch("change");
+}
 async function open(existing = null, preview = false, pointer = null, photoAction = false) {
   close(false);
   const ed = props.editor;
@@ -330,7 +353,7 @@ watch(() => props.editor, (ed, _, cleanup) => {
   });
 }, {immediate:true});
 onBeforeUnmount(() => close());
-defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
+defineExpose({ open, insert, close, openPhoto: link => open(link, false, null, true) });
 </script>
 <style scoped>
 .link-card {
