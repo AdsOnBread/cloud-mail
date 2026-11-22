@@ -27,7 +27,8 @@ function quoteValue(value) {
   return /[()"{}\\]|\s{2}|[^\S ]|(?:^|\s)OR(?:$|\s)/u.test(value) ? JSON.stringify(value) : value;
 }
 function decodeValue(value) {
-  if (!value.startsWith('"')) return value.trim();
+  value=value.trim();
+  if (!value.startsWith('"')) return value;
   try { const parsed=JSON.parse(value); return typeof parsed==='string' ? parsed.trim() : ''; }
   catch { return ''; }
 }
