@@ -598,7 +598,7 @@ async function act(action, ids, destination, opener) {
   if (busy.value || !canDelete.value) return;
   busy.value = true;
   error.value = "";
-  let changed = 0, canceled=false;
+  let changed = 0, canceled=false, retryDelete=false;
   const wholeFolder=ids===null, path=route.fullPath, owner=user.user.userId;
   const scope = mailbox.value;
   const scopeLabel = scope
@@ -648,6 +648,7 @@ async function act(action, ids, destination, opener) {
       );
   } catch (e) {
     if (!disposed && request===revision && e !== "cancel" && e !== "close") {
+      retryDelete=action==="purge" && !changed;
       error.value =
         (changed ? changed + " messages updated. " : "") +
         (e.message || "Could not update Trash.");
@@ -665,9 +666,9 @@ async function act(action, ids, destination, opener) {
       }
     }
     busy.value = false;
-    if (canceled && stillCurrent()) {
+    if ((canceled || retryDelete) && stillCurrent()) {
       await nextTick();
-      if (stillCurrent() && opener?.isConnected) opener.focus({preventScroll:true});
+      if (stillCurrent() && opener?.isConnected && (canceled || document.activeElement===document.body)) opener.focus({preventScroll:true});
     }
   }
 }

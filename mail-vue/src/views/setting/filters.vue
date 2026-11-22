@@ -5,7 +5,7 @@
     <div class="rules" ref="rules">
       <p>The following filters are applied to all incoming mail:</p>
       <p v-if="error" role="alert">
-        {{ error }} <button @click="load">Retry</button>
+        {{ error }} <button ref="retryButton" @click="load">Retry</button>
       </p>
       <p v-else-if="loading" role="status">Loading filters…</p>
       <table v-else-if="rows.length" aria-label="Saved filters">
@@ -37,7 +37,7 @@ import SettingsTabs from "./tabs.vue";
 const store = useMessageFilters(),
   labels = useMailLabels(),
   user = useUserStore(),
-  rows = ref([]), confirmation=ref(), rules=ref(), createButton=ref(), deleting=ref(false),
+  rows = ref([]), confirmation=ref(), rules=ref(), createButton=ref(), retryButton=ref(), deleting=ref(false),
   loading = ref(false),
   error = ref("");
 let generation = 0, returnIndex;
@@ -94,7 +94,7 @@ async function load() {
         await nextTick();
         if (run===generation && s.current() && document.activeElement===document.body) {
           const buttons=rules.value?.querySelectorAll(".delete-filter");
-          (buttons?.[Math.min(focusIndex,buttons.length-1)] || createButton.value)?.focus({preventScroll:true});
+          (retryButton.value || buttons?.[Math.min(focusIndex,buttons.length-1)] || createButton.value)?.focus({preventScroll:true});
         }
       }
     }
@@ -122,8 +122,11 @@ async function remove(r,opener) {
       store.revision++;
     }
   } catch (e) {
-    if (run === generation && s.current())
+    if (run === generation && s.current()) {
       error.value = e.message || "Could not delete the filter.";
+      await nextTick();
+      if (run===generation && s.current() && document.activeElement===document.body) retryButton.value?.focus({preventScroll:true});
+    }
   } finally { deleting.value=false; }
 }
 watch(() => [store.revision, user.user.userId, user.authenticatedToken], load, {
