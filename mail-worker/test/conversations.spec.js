@@ -93,7 +93,7 @@ describe('Web conversations', () => {
     expect(row.participants).toBe('Taylor, Casey, me');
     expect(row.messageCount).toBe(4);
     expect(await draftThreads(context(),[second.email_id,own.email_id],1)).toEqual([second,own].map(r=>({
-      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,
+      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,subject:first.subject,inbox:1,
     })));
     expect(await draftThreads(context(),[second.email_id],2)).toEqual([]);
   });

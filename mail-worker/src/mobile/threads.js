@@ -1,12 +1,11 @@
+import {normalizedSubject} from '../../../shared/mail-subject.js';
+export {normalizedSubject};
 const parseAddresses = value => {
 	try { return JSON.parse(value || '[]').map(a => a.address || a.email || a).filter(a => typeof a === 'string'); }
 	catch { return []; }
 };
 export function referenceIds(value) {
 	return typeof value === 'string' ? (value.match(/<[^<>\s]+>/g) || []) : [];
-}
-export function normalizedSubject(value) {
-	return (value || '').replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 // Pure grouping algorithm, shared by backfill and incremental reindexing. Ownership is a hard boundary.

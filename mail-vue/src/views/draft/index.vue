@@ -1,5 +1,6 @@
 <template>
   <section class="draft-list" aria-label="Drafts">
+    <FolderFilters folder="draft" :local-people="draftPeople"/>
     <div class="mail-toolbar">
       <label class="check-target" data-tip="Select"
         ><input
@@ -60,20 +61,20 @@
     </p>
     <div class="draft-scroll">
       <MailRow
-        v-for="draft in page"
+        v-for="{draft,thread,subject,rowLabels} in displayed"
         :key="draft.draftId"
         draft-only can-star-draft
         :starred="draft.starred" :busy="busy" @star="toggleStar(draft)"
         :draft-count="1"
-        :senders="threadSummary(draft)?.senders"
-        :count="threadSummary(draft)?.messageCount"
-        :subject="draft.subject"
-        :labels="labels.items.filter(label=>draft.labelIds?.includes(label.id) && label.messages!=='hide')"
+        :senders="thread?.senders"
+        :count="thread?.messageCount"
+        :subject="subject"
+        :labels="rowLabels"
         :attachment-count="draft.hasFiles ? 1 : 0"
         :preview="draft.preview"
         :date="mailboxDate(draft.lastDate)"
         :date-title="formatDetailDate(draft.lastDate)"
-        :open-label="`Open draft: ${draft.subject || '(no subject)'}`"
+        :open-label="`Open draft: ${subject || '(no subject)'}`"
         :selected="selected.includes(draft.draftId)"
         @select="toggle(draft.draftId)"
         @open="open(draft.draftId)"
@@ -96,7 +97,7 @@
   </section>
 </template>
 <script setup>
-import {draftSearchMatcher} from '@/utils/draft-summary';
+import {draftRowSubject,draftSearchMatcher} from '@/utils/draft-summary';
 import {useAccountStore} from '@/store/account';
 import {useMailLabels} from "@/store/mail-labels";
 import { computed, onActivated, ref, watch } from "vue";
@@ -109,6 +110,8 @@ import { useMailSearchStore } from "@/store/mail-search";
 import { draftSession, discardDrafts, saveLocalDraft, syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft, readSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
+import FolderFilters from "@/components/mail-folder-filters.vue";
+import {peopleSuggestions} from "../../../../shared/mail-people-suggestions";
 import MailRow from "@/components/mail-row/index.vue";
 defineOptions({ name: "draft" });
 const feedback = useMailFeedback(), ui = useUiStore();
@@ -140,9 +143,13 @@ watch(page, (rows) => {
     rows.some((d) => d.draftId === id),
   );
 });
-function threadSummary(draft) {
-  return draft.reply && !draft.trashSource ? drafts.threadSummaries[drafts.threads[draft.emailId]] : null;
-}
+const inboxLabel={id:"inbox",name:"Inbox"};
+const displayed=computed(()=>page.value.map(draft=>{
+  const thread=draft.reply && !draft.trashSource ? drafts.threadSummaries[drafts.threads[draft.emailId]] : null;
+  const custom=labels.items.filter(label=>draft.labelIds?.includes(label.id) && label.messages!=="hide");
+  return {draft,thread,subject:draftRowSubject(draft,thread),rowLabels:thread?.inbox ? [inboxLabel,...custom] : custom};
+}));
+const draftPeople=computed(()=>peopleSuggestions(drafts.items.map(draft=>({recipients:draft.recipientPeople})), "to", "", Infinity));
 function toggle(id) {
   selected.value = selected.value.includes(id)
     ? selected.value.filter((old) => old !== id)
@@ -163,12 +170,15 @@ async function refresh() {
 onActivated(() => {
   syncCloudDrafts().catch(() => {});
 });
+let openRequest=0;
 async function open(id) {
+  const request=++openRequest, origin=router.currentRoute.value.fullPath;
+  const current=()=>request===openRequest && router.currentRoute.value.fullPath===origin && page.value.some(draft=>draft.draftId===id);
   try {
     error.value = "";
-    await openSavedDraft(id, router, "draft");
+    await openSavedDraft(id,router,"draft",undefined,undefined,current);
   } catch (e) {
-    error.value = e.message || "Could not open draft.";
+    if (current()) error.value = e.message || "Could not open draft.";
   }
 }
 async function toggleStar(item) {

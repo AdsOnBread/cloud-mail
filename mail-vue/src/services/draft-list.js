@@ -1,3 +1,4 @@
+import {mailboxSession} from './mailbox-session';
 import {draftSearchBytes} from '@/components/message-composer/files';
 import { watch } from "vue";
 import db from "@/db/db";
@@ -96,7 +97,7 @@ export function startDraftList() {
           if (!active || db.value !== database) return;
           for (const row of rows) {
             threads[row.emailId] = row.threadId;
-            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount};
+            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount, subject:row.subject, inbox:Boolean(row.inbox)};
           }
         }
         store.threads = threads;
@@ -143,15 +144,19 @@ export async function readSavedDraft(draftId) {
 }
 
 export async function openSavedDraft(draftId, router, folder, labelId, category, canOpen) {
+  const session=mailboxSession(), origin=router.currentRoute.value.fullPath;
+  const current=()=>router.currentRoute.value.fullPath===origin && (!canOpen || canOpen());
+  session.check();
   const draft = await readSavedDraft(draftId);
-  if (canOpen && !canOpen()) return;
+  session.check();
+  if (!current()) return;
   if (await useUiStore().writerRef?.focusDraft?.(draft.draftId)) return;
-  if (canOpen && !canOpen()) return;
+  session.check();
+  if (!current()) return;
   if (
     draftKey(draft) &&
     !draft.responseView && !draft.trashSource && responseAnchor(draft) &&
-    (draft.sendType === "reply" || draft.inlineReply) &&
-    (draft.inlineReply || folder !== "draft")
+    (draft.sendType === "reply" || draft.inlineReply)
   ) {
     await router.push({
       path: "/mail",

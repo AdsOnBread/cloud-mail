@@ -399,7 +399,14 @@ const api=createHTTPServer(async(req,res)=>{
    data={importanceReason:importanceReason(members),filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
-   data=[...grouped()].flatMap(([threadId,members])=>members.filter(row=>ids.includes(row.emailId)).map(row=>({emailId:row.emailId,threadId,messageCount:members.length,senders:previewSenders(members)})));
+   data=[...grouped()].flatMap(([threadId,members])=>{
+     const requested=members.filter(row=>ids.includes(row.emailId));
+     if (!requested.length) return [];
+     const state=filing.get(filingAnchor(members));
+     const inbox=state===undefined ? members.some(row=>row.type===0 && row.status===0) : state!==null && state<=Date.now()/1000;
+     const subject=members.toSorted((a,b)=>a.emailId-b.emailId)[0].subject;
+     return requested.map(row=>({emailId:row.emailId,threadId,subject,inbox:Number(inbox),messageCount:members.length,senders:previewSenders(members)}));
+   });
  }else if(path==='/email/conversation/label-unread'){
    const accountId=Number(url.searchParams.get('accountId')),combined=url.searchParams.get('allReceive')==='1';
    data={};

@@ -38,9 +38,10 @@ export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 }
 
 // Bind the signed-in user first. Only threads that have a filing need their anchor recomputed.
+export const filingAnchor = 'COALESCE(MAX(CASE WHEN e.type=0 AND e.status=0 THEN e.email_id END),MIN(e.email_id))';
 export const filedConversations = `filing_anchors AS (
   SELECT m.thread_id,m.user_id,
-    COALESCE(MAX(CASE WHEN e.type=0 AND e.status=0 THEN e.email_id END),MIN(e.email_id)) AS anchor
+    ${filingAnchor} AS anchor
   FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
   JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id
   WHERE m.user_id=? AND a.is_del=0 AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)

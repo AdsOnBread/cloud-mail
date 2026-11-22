@@ -2,7 +2,9 @@ import {containsExcluded,excludedPhrases} from '../../../shared/mail-search-word
 import {matchesSize,sizeCriterion,storedMessageBytes} from '../../../shared/mail-search-size';
 import {searchDateBounds,withinDateBounds} from '../../../shared/mail-search-date';
 import {matchesPeople,peopleTerms} from '../../../shared/mail-search-people';
-import { addresses } from "./recipients";
+import {recipientFields,recipientEntries} from "./recipients";
+import {recipientName} from '../../../shared/recipient-names';
+import {normalizedSubject} from '../../../shared/mail-subject';
 import { tzDayjs } from "./day";
 
 function draftText(draft) {
@@ -33,6 +35,9 @@ export function responseAnchor(draft) {
 
 export function draftSummary(draft) {
   const {body,snippet}=draftText(draft);
+  const recipientPeople=recipientFields.flatMap(field=>recipientEntries(draft[field])).map(person=>({
+    address:person.address,name:recipientName(draft.replyRecipientNames,person.address) || person.name || "",
+  }));
   return {
     draftId: draft.draftId,
     cloudDraftId: draft.cloudDraftId,
@@ -51,12 +56,12 @@ export function draftSummary(draft) {
     subject: draft.subject || "",
     preview: draft.pendingSchedule ? 'Awaiting scheduling confirmation' : draft.schedulingError ? 'Scheduling failed. '+draft.schedulingError : draft.deliveryError ? 'Send status: '+draft.deliveryError : snippet.slice(0,180),
     lastDate: tzDayjs(draft.updatedAt || draft.createTime).valueOf(),
-    recipients: [
-      ...addresses(draft.receiveEmail),
-      ...addresses(draft.cc),
-      ...addresses(draft.bcc),
-    ].join(", "),
+    recipientPeople,
+    recipients:recipientPeople.map(person=>person.address).join(", "),
   };
+}
+export function draftRowSubject(draft,thread) {
+  return thread?.subject!=null && normalizedSubject(draft.subject)===normalizedSubject(thread.subject) ? thread.subject : draft.subject;
 }
 export const newestDraft = (a, b) =>
   b.lastDate - a.lastDate || b.draftId - a.draftId;
@@ -71,9 +76,10 @@ export function draftSearchMatcher(query, filters, accounts) {
     if (!matchesSize(draft.sizeBytes,size) || filters.isUnread || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
     const account=accounts.find(mailbox=>mailbox.accountId===draft.accountId);
     const sender={address:draft.sender || account?.email,name:draft.senderName || account?.name};
-    const fields=[draft.subject,draft.searchBody,sender.address,sender.name,...(draft.recipients || '').split(', ')];
-    return !containsExcluded(fields,excluded) && matchesPeople([sender],from) && matchesPeople((draft.recipients || '').split(', '),to) &&
+    const people=draft.recipientPeople || (draft.recipients || '').split(', ').map(address=>({address}));
+    const fields=[draft.subject,draft.searchBody,sender.address,sender.name,...people.flatMap(p=>[p.address,p.name])];
+    return !containsExcluded(fields,excluded) && matchesPeople([sender],from) && matchesPeople(people,to) &&
       (draft.subject || '').toLowerCase().includes(subject) && (!words ||
-        [draft.subject,draft.searchBody,draft.preview,sender.address,sender.name,draft.recipients].some(value=>value?.toLowerCase().includes(words)));
+        [...fields,draft.preview].some(value=>value?.toLowerCase().includes(words)));
   };
 }

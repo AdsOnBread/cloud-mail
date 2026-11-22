@@ -7,7 +7,7 @@ import { addMailFilters } from '../service/mail-search-filters';
 import { importanceFields, importanceJoin, importanceReason, setImportance } from "./mail-importance";
 import { checkCategory, categoryQuery, fileCategory, categoryFolders, purchaseMessage } from './inbox-categories';
 import { changeLabels } from './mailbox-labels';
-import { filedConversations, inboxMember } from './conversation-filing';
+import { filedConversations, filingAnchor, inboxMember } from './conversation-filing';
 import { ensureThreads } from '../mobile/threads';
 import { camel } from '../mobile/service';
 import BizError from '../error/biz-error';
@@ -223,14 +223,22 @@ export async function draftThreads(c, ids, userId) {
 	if (!ids.length) return [];
 	const db = c.env.db;
 	await ensureThreads(db, userId);
-	const { results } = await db
-		.prepare(
-			`SELECT e.email_id, m.thread_id FROM email e JOIN account a ON a.account_id=e.account_id
-		JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
-		WHERE ${visible} AND e.email_id IN (${ids.map(() => '?').join(',')})`,
-		)
-		.bind(userId, ...ids)
-		.all();
+  const {results}=await db.prepare(`WITH targets AS MATERIALIZED (
+      SELECT e.email_id,m.thread_id FROM email e JOIN account a ON a.account_id=e.account_id
+      JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
+      WHERE ${visible} AND e.email_id IN (SELECT value FROM json_each(?))
+    ), summaries AS (
+      SELECT m.thread_id,MIN(e.email_id) first_id,${filingAnchor} filing_id,
+        MAX(e.type=0 AND e.status=0) received
+      FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
+      JOIN account a ON a.account_id=e.account_id
+      WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM targets)
+      GROUP BY m.thread_id
+    ) SELECT t.email_id,t.thread_id,first.subject,
+      CASE WHEN f.email_id IS NULL THEN s.received ELSE coalesce(f.wake_at<=unixepoch(),0) END inbox
+    FROM targets t JOIN summaries s ON s.thread_id=t.thread_id JOIN email first ON first.email_id=s.first_id
+    LEFT JOIN conversation_filing f ON f.user_id=? AND f.email_id=s.filing_id
+    ORDER BY t.email_id`).bind(userId,JSON.stringify(ids.map(Number)),userId,userId).all();
 	const authors = await conversationSenders(db,userId,[...new Set(results.map(row => row.thread_id))]);
   return results.map(row => ({...camel(row),...authors.get(row.thread_id)}));
 }

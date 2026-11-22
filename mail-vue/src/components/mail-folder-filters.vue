@@ -1,10 +1,10 @@
 <template>
-  <div ref="row" class="filter-row" role="group" :aria-label="folder === 'trash' ? 'Filter Trash' : 'Filter Scheduled'">
+  <div ref="row" class="filter-row" role="group" :aria-label="'Filter '+({trash:'Trash',draft:'Drafts',scheduled:'Scheduled'}[folder])">
     <template v-for="key in ordered" :key="key">
       <button v-if="flags[key]" type="button" class="filter-chip" :aria-pressed="active(key)" @click="toggle(key)">
         <Icon v-if="active(key)" icon="material-symbols:check" width="16" />{{ flags[key] }}
       </button>
-      <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" />
+      <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" :local-people="localPeople" />
       <SearchDateChip v-else />
     </template>
     <button type="button" ref="advanced" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
@@ -22,7 +22,7 @@ import PeopleFilter from './mail-people-filter.vue';
 import SearchDateChip from './mail-date-time/search-chip.vue';
 import {timeCaption} from './mail-date-time/search-range';
 
-const props=defineProps({folder:{type:String,required:true},accountId:Number});
+const props=defineProps({folder:{type:String,required:true},accountId:Number,localPeople:Array});
 const store=useMailSearchStore();
 const row=ref(), opener=inject(advancedSearchOpenerKey);
 const advanced=ref();
@@ -34,7 +34,8 @@ async function clearFilters(event) {
 }
 const flags={hasAttachment:'Has attachment',isUnread:'Is unread'};
 const ordered=computed(()=>{
-  const keys=['from','days','hasAttachment','to'];
+  const keys=['days','hasAttachment','to'];
+  if (props.folder!=='draft') keys.unshift('from');
   if (props.folder==='trash') keys.push('isUnread');
   return keys.sort((a,b)=>Number(active(b))-Number(active(a)));
 });

@@ -39,7 +39,7 @@ import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
 import {fullAddress,maxPeople,maxPersonTerm,peopleTerms,personSearchKey,setPeopleTerms} from '../../../shared/mail-search-people';
 
-const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number});
+const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number,localPeople:Array});
 const store=useMailSearchStore(), account=useAccountStore(), user=useUserStore();
 const trigger=ref(), panel=ref(), input=ref(), id=useId();
 const position=ref({});
@@ -54,7 +54,7 @@ const caption=computed(()=>{
 const options=computed(()=>{
   if (editedTerms.value.length>=maxPeople) return [];
   const omit=new Set(editedTerms.value.map(s=>s.toLowerCase())), typed=query.value.trim();
-  const matches=contacts.value.filter(p=>!omit.has(p.email.toLowerCase()) &&
+  const matches=(props.localPeople ?? contacts.value).filter(p=>!omit.has(p.email.toLowerCase()) &&
     [p.name,p.email].some(value=>personSearchKey(value).includes(personSearchKey(typed)))).slice(0,8);
   if (typed && !omit.has(typed.toLowerCase()) && !matches.some(p=>p.email.toLowerCase()===typed.toLowerCase()))
     matches.push({name:typed,email:typed,typed:true});
@@ -130,7 +130,7 @@ watch([options,editedTerms],()=>nextTick(place));
 watch([()=>props.folder,()=>props.accountId,()=>account.currentAccountId,()=>user.user.email],()=>close(),{flush:'sync'});
 watch([open,query],([visible,text],_,cleanup)=>{
   index.value=-1;
-  if (!visible) { contacts.value=[];return; }
+  if (!visible || props.localPeople) { contacts.value=[];return; }
   let current=true;
   const timer=setTimeout(async()=>{
     try {
