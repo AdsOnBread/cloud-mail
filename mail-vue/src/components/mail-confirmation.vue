@@ -1,14 +1,14 @@
 <template>
   <dialog v-if="request" ref="dialog" class="mail-confirmation" role="alertdialog"
     :aria-labelledby="id+'-title'" :aria-describedby="id+'-message'"
-    @cancel.prevent="cancel" @close="closed" @pointerdown="outsideDown=($event.target===dialog)"
+    @keydown.tab="cycle" @cancel.prevent="cancel" @close="closed" @pointerdown="outsideDown=($event.target===dialog)"
     @click.self="outsideDown && cancel()">
     <div class="content">
       <h2 :id="id+'-title'">{{request.title}}</h2>
       <p :id="id+'-message'">{{request.message}}</p>
       <div class="actions">
-        <button autofocus type="button" @click="cancel">Cancel</button>
-        <button class="confirm" type="button" @click="finish(true)">{{request.confirmLabel}}</button>
+        <button ref="cancelButton" autofocus type="button" @click="cancel">Cancel</button>
+        <button ref="confirmButton" class="confirm" type="button" @click="finish(true)">{{request.confirmLabel}}</button>
       </div>
     </div>
   </dialog>
@@ -16,7 +16,7 @@
 <script setup>
 import {nextTick,onBeforeUnmount,ref,shallowRef,useId} from "vue";
 
-const dialog=ref(), request=shallowRef(null), id=useId();
+const dialog=ref(), cancelButton=ref(), confirmButton=ref(), request=shallowRef(null), id=useId();
 let outsideDown=false;
 async function ask(title,message,confirmLabel) {
   if (request.value) return false;
@@ -40,6 +40,13 @@ function finish(accepted) {
   current.resolve(accepted);
 }
 function cancel() { finish(false); }
+function cycle(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  event.preventDefault();
+  const cancel=cancelButton.value, confirm=confirmButton.value;
+  const target=event.target===cancel ? confirm : event.target===confirm ? cancel : event.shiftKey ? confirm : cancel;
+  target.focus({preventScroll:true});
+}
 function closed(event) {
   if (event.target===dialog.value && !event.target.open) cancel();
 }
