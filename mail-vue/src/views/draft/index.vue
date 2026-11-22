@@ -30,17 +30,8 @@
       >
         <Icon icon="material-symbols:refresh" width="20" />
       </button>
-      <div class="draft-range">
-        <el-dropdown v-if="filtered.length" ref="rangeMenu" :disabled="busy" trigger="click" placement="bottom-start"
-          :offset="0" :show-arrow="false" popper-class="mail-action-menu draft-range-menu" @command="goToPage">
-          <button type="button" class="toolbar-text range-trigger" :disabled="busy" aria-label="Show more messages"
-            :aria-description="range" data-tip="Show more messages" @keydown.esc="rangeMenu?.handleClose()">{{ range }}</button>
-          <template #dropdown><el-dropdown-menu>
-            <el-dropdown-item :command="0" :disabled="!offset">Newest</el-dropdown-item>
-            <el-dropdown-item :command="lastOffset" :disabled="offset===lastOffset">Oldest</el-dropdown-item>
-          </el-dropdown-menu></template>
-        </el-dropdown>
-      </div>
+      <MailRangeMenu :offset="offset" :count="page.length" :total="filtered.length" :disabled="busy"
+        @jump="goToPage($event==='oldest' ? lastOffset : 0)"/>
       <button
         class="mail-icon"
         data-tip="Newer"
@@ -116,6 +107,7 @@ import { openSavedDraft, readSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {peopleSuggestions} from "../../../../shared/mail-people-suggestions";
+import MailRangeMenu from "@/components/mail-range-menu.vue";
 import MailSelectionMenu from "@/components/mail-selection-menu.vue";
 import MailRow from "@/components/mail-row/index.vue";
 defineOptions({ name: "draft" });
@@ -129,7 +121,7 @@ const selected = ref([]),
   error = ref(""),
   busy = ref(false);
 const pageSize = 50;
-const root = ref(), rangeMenu = ref();
+const root = ref();
 function threadFor(draft) {
   return draft.reply && !draft.trashSource ? drafts.threadSummaries[drafts.threads[draft.emailId]] : null;
 }
@@ -142,7 +134,6 @@ const filtered = computed(() => drafts.items.filter(draftSearchMatcher(
 )));
 const lastOffset = computed(() => Math.max(0, Math.ceil(filtered.value.length / pageSize) - 1) * pageSize);
 const page = computed(() => filtered.value.slice(offset.value, offset.value + pageSize));
-const range = computed(() => (offset.value + 1) + "–" + (offset.value + page.value.length) + " of " + filtered.value.length);
 let focusEpoch = 0;
 function resetScroll() {
   root.value?.querySelector(".draft-scroll")?.scrollTo(0, 0);
@@ -163,7 +154,6 @@ watch(page, rows => {
 });
 onDeactivated(() => {
   focusEpoch++;
-  rangeMenu.value?.handleClose();
 });
 function selectGroup(group) {
   if (busy.value) return;
@@ -304,10 +294,6 @@ async function discard(ids, trigger) {
   flex: 1;
   min-height: 0;
 }
-.draft-range {margin-inline-start:auto;flex:none}
-.draft-range .range-trigger {margin:0;font:400 12px/16px Arial,sans-serif;color:var(--secondary-text-color);white-space:nowrap}
-:global(.draft-range-menu .el-dropdown-menu__item) {padding:6px 48px;line-height:20px}
-:global(.draft-range-menu .el-dropdown-menu__item.is-disabled) {color:var(--el-text-color-disabled)}
 @media(max-width:420px) {
   .draft-list .mail-toolbar {gap:0;padding-inline:4px}
   .draft-list :deep(.select-options) {width:20px}

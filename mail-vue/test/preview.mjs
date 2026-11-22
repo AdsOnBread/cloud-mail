@@ -304,7 +304,18 @@ const api=createHTTPServer(async(req,res)=>{
      });
    data=peopleSuggestions([...initial,...scoped.filter(r=>!r.trashedAt)],p.field,p.q,p.view==='picker' ? 50 : 8+maxPeople);
  }
- else if(path==='/v1/messages'){const q=(url.searchParams.get('q')||'').toLowerCase();data={messages:rows.filter(r=>r.trashedAt&&matchesFilters(r,Object.fromEntries(url.searchParams))&&(!q||[r.subject,r.sendEmail,r.text].some(v=>v.toLowerCase().includes(q)))).map(r=>({...r,importanceReason:r.scheduledDraftId ? scheduledImportance(cloudDrafts.get(r.scheduledDraftId),r.sendEmail) : importanceReason([r]),...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text})),hasMore:false,nextCursor:null};}
+ else if(path==='/v1/messages'){
+   const params=Object.fromEntries(url.searchParams),q=(params.q||'').toLowerCase(),limit=Number(params.limit)||30;
+   const all=rows.filter(r=>r.trashedAt && (!params.accountId || r.accountId===Number(params.accountId)) &&
+     matchesFilters(r,params) && (!q || [r.subject,r.sendEmail,r.text].some(v=>v?.toLowerCase().includes(q))))
+     .sort((a,b)=>b.emailId-a.emailId);
+   const last=Math.max(0,Math.ceil(all.length/limit)-1);
+   const start=params.page ? Math.min(last,params.page==='last' ? last : Number(params.page)-1)*limit : 0;
+   const remaining=params.cursor ? all.filter(r=>r.emailId<Number(params.cursor)) : all.slice(start);
+   const messages=remaining.slice(0,limit).map(r=>({...r,importanceReason:r.scheduledDraftId ? scheduledImportance(cloudDrafts.get(r.scheduledDraftId),r.sendEmail) : importanceReason([r]),...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text}));
+   const hasMore=remaining.length>limit;
+   data={messages,hasMore,nextCursor:hasMore ? messages.at(-1).emailId : null,...(params.page ? {total:all.length,offset:start} : {})};
+ }
  else if(path==='/v1/messages/trash-labels'){
    const {emailIds,add,remove}=JSON.parse(body);
    for(const row of rows.filter(r=>r.trashedAt&&emailIds.includes(r.emailId))){

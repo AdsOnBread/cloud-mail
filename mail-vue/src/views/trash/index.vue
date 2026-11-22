@@ -45,8 +45,8 @@
             <el-dropdown-item v-if="canDelete" @click="act('restore',targets)">{{restoreLabel}}</el-dropdown-item>
             <el-dropdown-item v-if="hasPerm('email:send') && !hasScheduled" divided :disabled="forwarding" @click="forwardTrash">Forward as attachment</el-dropdown-item>
             <template v-if="!messageId">
-              <el-dropdown-item class="compact-trash-pager" :disabled="!history.length || busy || loading" @click="previous">Previous page</el-dropdown-item>
-              <el-dropdown-item class="compact-trash-pager" :disabled="!nextCursor || busy || loading" @click="next">Next page</el-dropdown-item>
+              <el-dropdown-item class="compact-trash-pager" :disabled="!offset || busy || loading" @click="previous">Newer</el-dropdown-item>
+              <el-dropdown-item class="compact-trash-pager" :disabled="!hasOlder || busy || loading" @click="next">Older</el-dropdown-item>
             </template>
           </el-dropdown-menu></template>
         </el-dropdown>
@@ -67,29 +67,22 @@
         :key="JSON.stringify([mailbox,search.query,search.filters,offset])"
         :disabled="busy || loading || !!error" @mark-read="markPageRead"/>
       <template v-if="!messageId">
-        <span class="total">{{
-          messages.length
-            ? offset +
-              1 +
-              "–" +
-              (offset + messages.length) +
-              (nextCursor ? "" : " of " + (offset + messages.length))
-            : ""
-        }}</span>
+        <MailRangeMenu :offset="offset" :count="messages.length" :total="total" :disabled="busy || loading"
+          @jump="load($event==='oldest' ? 'last' : 1)"/>
         <button
           class="mail-icon pager"
-          aria-label="Previous page"
-          data-tip="Previous page"
-          :disabled="!history.length || busy || loading"
+          aria-label="Newer"
+          data-tip="Newer"
+          :disabled="!offset || busy || loading"
           @click="previous"
         >
           <Icon icon="material-symbols:chevron-left" width="20" />
         </button>
         <button
           class="mail-icon pager"
-          aria-label="Next page"
-          data-tip="Next page"
-          :disabled="!nextCursor || busy || loading"
+          aria-label="Older"
+          data-tip="Older"
+          :disabled="!hasOlder || busy || loading"
           @click="next"
         >
           <Icon icon="material-symbols:chevron-right" width="20" />
@@ -97,7 +90,7 @@
       </template>
     </div>
     <p v-if="error" role="alert">
-      {{ error }} <button class="text-button" @click="reload">Retry</button>
+      {{ error }} <button class="text-button" @click="retry">Retry</button>
     </p>
     <div v-if="messageId" class="trash-detail">
       <article v-if="detail">
@@ -239,6 +232,7 @@ import {searchPage} from '@/services/preparing-search';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
+import MailRangeMenu from "@/components/mail-range-menu.vue";
 import MailSelectionMenu from "@/components/mail-selection-menu.vue";
 import MailPageActions from "@/components/mail-page-actions.vue";
 import MailConfirmation from "@/components/mail-confirmation.vue";
@@ -289,8 +283,8 @@ const mailbox = computed(() => windowAccount.value || (account.currentAccount.al
 const canDelete = computed(() => hasPerm("email:delete"));
 const messages = ref([]),
   selected = ref([]),
-  history = ref([]),
-  nextCursor = ref(null);
+  offset = ref(0),
+  total = ref(0);
 const detail = ref(null),
   busy = ref(false),
   loading = ref(false), preparingSearch=ref(false),
@@ -393,14 +387,14 @@ const targetUnread=computed(()=>messageId.value ? detail.value?.unread===0 : mes
 const readIcon=unread=>unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
 const readLabel=unread=>unread ? 'Mark as read' : 'Mark as unread';
 async function reloadAfterRemoval(index) {
-  const expected=revision+1;
+  const expected=revision+1, position=offset.value+Math.max(0,index);
   await load();
   await nextTick();
   if (disposed || expected!==revision || !root.value) return;
   const active=document.activeElement;
   if (active && active!==document.body && active.getClientRects().length) return;
   const buttons=root.value.querySelectorAll('.conversation-open');
-  const next=buttons[Math.min(Math.max(0,index),buttons.length-1)];
+  const next=buttons[Math.min(Math.max(0,position-offset.value),buttons.length-1)];
   (next || root.value.querySelector('.select-options'))?.focus();
 }
 async function markImportance(message,important) {
@@ -465,41 +459,40 @@ function selectGroup(option) {
   if (busy.value || loading.value) return;
   selected.value=messages.value.filter(selectionGroups[option]).map(m=>m.emailId);
 }
-const offset = computed(() => history.value.length * 50);
+const pageSize = 50;
+const pageNumber = computed(() => Math.floor(offset.value / pageSize) + 1);
+let failedPage;
+const hasOlder = computed(() => offset.value + messages.value.length < total.value);
 let returnFocus;
 let revision = 0,
   noticeTimer,
   disposed = false;
-function list(cursor, q, accountId = mailbox.value, filters = search.filters) {
+function list(paging, q, accountId = mailbox.value, filters = search.filters) {
   return http.get("/v1/messages", {
     params: {
       ...filters, folder: "trash",
       accountId,
-      cursor: cursor || undefined,
-      limit: 50,
+      ...paging,
+      limit: pageSize,
       q,
     },
   });
 }
-async function load(pages = history.value) {
+async function load(target = pageNumber.value) {
+  failedPage=undefined;
   confirmation.value?.cancel();
   const request = ++revision;
   error.value = "";
   loading.value = true;
   try {
     preparingSearch.value=false;
-    const readPage=()=>searchPage(()=>list(pages.at(-1),search.query),()=>!disposed && request===revision,()=>{preparingSearch.value=true;});
-    let page = await readPage();
-    if (!page) return;
-    while (!page.messages.length && pages.length && request === revision) {
-      pages = pages.slice(0, -1);
-      page = await readPage();
-      if (!page) return;
-    }
-    if (request !== revision) return;
-    history.value = pages;
+    const page=await searchPage(()=>list({page:target},search.query),()=>!disposed && request===revision,()=>{preparingSearch.value=true;});
+    if (!page || request!==revision) return;
+    const changedPage=offset.value!==page.offset;
+    offset.value = page.offset;
+    total.value = page.total;
     messages.value = page.messages;
-    nextCursor.value = page.nextCursor;
+    if (changedPage) root.value?.querySelector('.trash-list')?.scrollTo(0,0);
     selected.value = [];
     if (returnFocus) {
       await nextTick();
@@ -513,17 +506,19 @@ async function load(pages = history.value) {
       }
     }
   } catch (e) {
-    if (request === revision)
+    if (request === revision) {
+      failedPage=target;
       error.value = e.message || "Could not load Trash.";
+    }
   } finally {
     if (request === revision) loading.value = false;
   }
 }
 function next() {
-  load([...history.value, nextCursor.value]);
+  if (!busy.value && !loading.value && hasOlder.value) load(pageNumber.value + 1);
 }
 function previous() {
-  load(history.value.slice(0, -1));
+  if (!busy.value && !loading.value && offset.value) load(pageNumber.value - 1);
 }
 function toggle(id) {
   if (busy.value || loading.value) return;
@@ -536,7 +531,7 @@ function open(message) {
   router.push({ path: route.path, query: { ...route.query, message: message.emailId } });
 }
 function showTrash() {
-  history.value=[];
+  offset.value=0;
   if (search.query || filtered.value) search.applySearch("",{});
   else back();
 }
@@ -574,6 +569,9 @@ async function loadDetail(id) {
     if (request === revision) loading.value = false;
   }
 }
+function retry() {
+  return messageId.value ? loadDetail(messageId.value) : load(failedPage ?? pageNumber.value);
+}
 function reload() {
   return messageId.value ? loadDetail(messageId.value) : load();
 }
@@ -586,12 +584,12 @@ watch(() => useMailFeedback().restored, reload);
 watch(()=>labels.returnedToTrash,change=>{if(change && !messageId.value) reload();});
 watch(messageId, reload, { immediate: true });
 watch([() => search.query, () => search.filters, mailbox], () => {
-  history.value = [];
+  offset.value = 0;
   messages.value = [];
   selected.value = [];
-  nextCursor.value = null;
+  total.value = 0;
   if (messageId.value) back();
-  else load([]);
+  else load(1);
 });
 function notify(message) {
   clearTimeout(noticeTimer);
@@ -625,7 +623,7 @@ async function act(action, ids, destination, opener) {
       ids = [];
       let cursor;
       do {
-        const page = await list(cursor, "", scope, {});
+        const page = await list({cursor}, "", scope, {});
         if (!stillCurrent()) return;
         ids.push(...page.messages.map((m) => m.emailId));
         cursor = page.nextCursor;
@@ -719,7 +717,7 @@ onBeforeUnmount(() => {
 .trash-label { display:inline-block; max-width:100%; padding:1px 5px; border-radius:4px; background:var(--mail-hover); font:500 12px/18px Arial,sans-serif; vertical-align:middle; overflow-wrap:anywhere; }
 @media (max-width:600px) {
   :global(.mail-action-menu .compact-trash-pager) { display:flex; }
-  .has-selection .pager,.has-selection .total { display:none; }
+  .has-selection .pager,.has-selection .mail-range { display:none; }
 }
 .toolbar-divider { height:20px; border-left:1px solid var(--light-border-color); margin:0 6px; }
 .trash-list,

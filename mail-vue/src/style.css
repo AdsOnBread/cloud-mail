@@ -366,22 +366,22 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 @media (prefers-reduced-motion:reduce) {
   .trash-view .retention-action::before,.folder-toolbar .toolbar-text::before {transition:none}
 }
-.mail-action-menu:is(.folder-selection-menu,.draft-range-menu).el-popper {
+.mail-action-menu:is(.folder-selection-menu,.folder-range-menu).el-popper {
   border-radius:4px;
   color:#202124;
   background:white;
 }
-html.dark .mail-action-menu:is(.folder-selection-menu,.draft-range-menu).el-popper {
+html.dark .mail-action-menu:is(.folder-selection-menu,.folder-range-menu).el-popper {
   color:var(--el-text-color-primary);
   background:var(--mail-surface);
 }
-:is(.folder-selection-menu,.draft-range-menu) .el-dropdown-menu {color:inherit;background:inherit}
-:is(.folder-selection-menu,.draft-range-menu) .el-dropdown-menu__item:not(.is-disabled) {color:inherit}
-:is(.folder-selection-menu,.draft-range-menu) .el-dropdown-menu__item:not(.is-disabled):is(:hover,:focus) {background:#eee}
-html.dark :is(.folder-selection-menu,.draft-range-menu) .el-dropdown-menu__item:not(.is-disabled):is(:hover,:focus) {background:var(--mail-hover)}
+:is(.folder-selection-menu,.folder-range-menu) .el-dropdown-menu {color:inherit;background:inherit}
+:is(.folder-selection-menu,.folder-range-menu) .el-dropdown-menu__item:not(.is-disabled) {color:inherit}
+:is(.folder-selection-menu,.folder-range-menu) .el-dropdown-menu__item:not(.is-disabled):is(:hover,:focus) {background:#eee}
+html.dark :is(.folder-selection-menu,.folder-range-menu) .el-dropdown-menu__item:not(.is-disabled):is(:hover,:focus) {background:var(--mail-hover)}
 @media (forced-colors:active) {
-  :is(.folder-selection-menu,.draft-range-menu).el-popper {outline:1px solid CanvasText}
-  :is(.folder-selection-menu,.draft-range-menu) .el-dropdown-menu__item:focus-visible {outline:2px solid Highlight;outline-offset:-2px}
+  :is(.folder-selection-menu,.folder-range-menu).el-popper {outline:1px solid CanvasText}
+  :is(.folder-selection-menu,.folder-range-menu) .el-dropdown-menu__item:focus-visible {outline:2px solid Highlight;outline-offset:-2px}
 }
 .folder-selection-menu .el-dropdown-menu { min-width:160px; padding:6px 0; }
 .folder-selection-menu .el-dropdown-menu__item { padding:6px 48px; line-height:20px; }
