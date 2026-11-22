@@ -10,3 +10,14 @@ export function pendingScheduledReads(database,token) {
   }
   return session.pending;
 }
+
+export function holdScheduledReads(operations,messages) {
+  if (messages.some(row=>operations.has(row.draftId))) throw new Error("Wait for the scheduled message to finish updating.");
+  let finish;
+  const pending=new Promise(resolve=>{finish=resolve;});
+  for (const row of messages) operations.set(row.draftId,pending);
+  return ()=>{
+    for (const row of messages) operations.delete(row.draftId);
+    finish();
+  };
+}

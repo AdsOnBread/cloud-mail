@@ -236,7 +236,7 @@ import { useMailFeedback } from "@/store/mail-feedback";
 import { useMailSearchStore } from "@/store/mail-search";
 import {deleteScheduled} from '@/services/scheduled-trash';
 import {fileScheduledMessages} from "@/services/scheduled-filing";
-import {pendingScheduledReads} from "@/services/scheduled-read";
+import {holdScheduledReads,pendingScheduledReads} from "@/services/scheduled-read";
 import { syncCloudDrafts } from "@/services/cloud-drafts";
 import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
@@ -496,9 +496,7 @@ async function setRead(batch,unread,leaveReader=false,announce=false) {
   const sameView=()=>current() && route.fullPath===origin && interaction===actionAtStart;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   error.value="";
-  let finish;
-  const pending=new Promise(resolve=>{finish=resolve});
-  for (const {draftId} of messages) operations.set(draftId,pending);
+  const release=holdScheduledReads(operations,messages);
   try {
     await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true,headers:{Authorization:session}});
     // The user may already be back in a filtered Starred, Important or label list.
@@ -520,8 +518,7 @@ async function setRead(batch,unread,leaveReader=false,announce=false) {
       if (sameView()) error.value=e.message || 'Could not update read status.';
     }
   } finally {
-    for (const {draftId} of messages) operations.delete(draftId);
-    finish();
+    release();
   }
 }
 function toggle(id) {

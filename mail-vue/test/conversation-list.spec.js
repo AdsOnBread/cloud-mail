@@ -79,6 +79,8 @@ function mountList(folder = "inbox") {
 }
 beforeEach(() => {
   setActivePinia(createPinia());
+  localStorage.setItem("token","fixture-token");
+  useUserStore().authenticatedToken="fixture-token";
   useAccountStore().currentAccountId = 1;
   useAccountStore().currentAccount = { allReceive: 0 };
   vi.mocked(conversationList).mockReset();
@@ -228,7 +230,7 @@ describe("conversation lists", () => {
       .mockResolvedValue(page([{ ...row(10, "Second"), starred: 1 }], {total:2}));
     const wrapper = mountList("starred");
     await flushPromises();
-    await wrapper.get('[aria-label="Next page"]').trigger("click");
+    await wrapper.get('[aria-label="Older"]').trigger("click");
     await flushPromises();
     expect(wrapper.text()).not.toContain("First");
     expect(wrapper.text()).toContain("Second");

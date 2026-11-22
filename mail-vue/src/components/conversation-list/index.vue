@@ -1,77 +1,28 @@
 <template>
-  <section class="conversation-list" aria-label="Conversations">
-    <div class="mail-toolbar" :class="{ 'has-selection': selected.length }">
+  <section ref="root" class="conversation-list" aria-label="Conversations">
+    <div class="mail-toolbar folder-toolbar" :class="{ 'has-selection': selected.length }">
       <label class="check-target" data-tip="Select">
         <input
           type="checkbox"
-          aria-label="Select loaded conversations"
+          aria-label="Select loaded conversations" :disabled="busy || loading"
           :checked="rows.length > 0 && selected.length === rows.length"
           :indeterminate="selected.length > 0 && selected.length < rows.length"
           @change="selectAll($event.target.checked)"
         />
       </label>
-      <el-dropdown
-        popper-class="mail-action-menu"
-        :show-arrow="false"
-        trigger="click"
-        placement="bottom-start"
-        @command="selectMatching"
-      >
-        <button
-          class="mail-icon select-options"
-          aria-label="Selection options"
-          data-tip="Select"
-        >
-          <Icon icon="material-symbols:arrow-drop-down" width="16" />
-        </button>
-        <template #dropdown
-          ><el-dropdown-menu
-            ><el-dropdown-item
-              v-for="option in [
-                'All',
-                'None',
-                'Read',
-                'Unread',
-                'Starred',
-                'Unstarred',
-              ]"
-              :key="option"
-              :command="option"
-              >{{ option }}</el-dropdown-item
-            ></el-dropdown-menu
-          ></template
-        >
-      </el-dropdown>
+      <MailSelectionMenu :disabled="busy || loading" @select="selectMatching"/>
       <template v-if="!selected.length">
         <button
           class="mail-icon"
           data-tip="Refresh"
           aria-label="Refresh conversations"
-          :disabled="loading"
+          :disabled="loading || busy"
           @click="refresh"
         >
           <Icon icon="material-symbols:refresh" width="20" />
         </button>
-        <el-dropdown
-          popper-class="mail-action-menu"
-          :show-arrow="false"
-          trigger="click"
-        >
-          <button
-            class="mail-icon"
-            data-tip="More"
-            aria-label="More mailbox options"
-          >
-            <Icon icon="material-symbols:more-vert" width="20" />
-          </button>
-          <template #dropdown
-            ><el-dropdown-menu
-              ><el-dropdown-item @click="ascending = !ascending">{{
-                ascending ? "Sort newest first" : "Sort oldest first"
-              }}</el-dropdown-item></el-dropdown-menu
-            ></template
-          >
-        </el-dropdown>
+        <MailPageActions label="More mailbox options" :disabled="pageReadDisabled"
+          :key="JSON.stringify([key,offset])" @mark-read="markPageRead"/>
       </template>
       <template v-else>
         <button
@@ -125,29 +76,25 @@
             <el-dropdown-item v-if="selectedRows.some(row => !row.importanceReason)" @click="mutate('importance', { important: true })">Mark as important</el-dropdown-item>
             <el-dropdown-item v-if="selectedRows.some(row => row.importanceReason)" @click="mutate('importance', { important: false })">Mark as not important</el-dropdown-item>
             <el-dropdown-item v-if="hasPerm('email:send')" divided :disabled="forwarding" @click="forwardMessages(selectedRows.map(row => row.lastEmailId))">Forward as attachment</el-dropdown-item>
-            <el-dropdown-item v-if="history.length" class="compact-page-action" divided :disabled="loading || busy" @click="previousPage">Previous page</el-dropdown-item>
-            <el-dropdown-item v-if="hasMore" class="compact-page-action" :divided="!history.length" :disabled="loading || busy" @click="nextPage">Next page</el-dropdown-item>
+            <el-dropdown-item v-if="offset" class="compact-page-action" divided :disabled="loading || busy" @click="previousPage">Newer</el-dropdown-item>
+            <el-dropdown-item v-if="hasMore" class="compact-page-action" :divided="!offset" :disabled="loading || busy" @click="nextPage">Older</el-dropdown-item>
           </el-dropdown-menu></template>
         </el-dropdown>
       </template>
-      <span class="total">{{
-        total && rows.length
-          ? offset + 1 + "–" + (offset + rows.length) + " of " + total
-          : ""
-      }}</span>
+      <MailRangeMenu :offset="offset" :count="rows.length" :total="total" :disabled="loading || busy" @jump="jumpPage"/>
       <button
         class="mail-icon pager"
-        data-tip="Previous page"
-        aria-label="Previous page"
-        :disabled="!history.length || loading || busy"
+        data-tip="Newer"
+        aria-label="Newer"
+        :disabled="!offset || loading || busy"
         @click="previousPage"
       >
         <Icon icon="material-symbols:chevron-left" width="20" />
       </button>
       <button
         class="mail-icon pager"
-        data-tip="Next page"
-        aria-label="Next page"
+        data-tip="Older"
+        aria-label="Older"
         :disabled="!hasMore || loading || busy"
         @click="nextPage"
       >
@@ -156,7 +103,7 @@
     </div>
     <InboxTabs v-if="category" :value="category" :panel-id="panelId" :unread="{...categoryUnread,primary:(categoryUnread.primary || 0)+drafts.scheduledInboxUnread}" @select="selectCategory"/>
     <p v-if="error" role="alert" class="list-status">
-      {{ error }} <button @click="refresh">Retry</button>
+      {{ error }} <button @click="retry">Retry</button>
     </p>
     <details v-if="filedDrafts.length" class="marked-scheduled" open>
       <summary>Drafts ({{ filedDrafts.length }})</summary>
@@ -335,6 +282,10 @@ import {searchPage} from '@/services/preparing-search';
 import { conversationList, conversationAction } from "@/request/conversation";
 import {fileScheduledMessages} from "@/services/scheduled-filing";
 import { formatDetailDate, mailboxDate, tzDayjs } from "@/utils/day";
+import MailRangeMenu from "@/components/mail-range-menu.vue";
+import MailSelectionMenu from "@/components/mail-selection-menu.vue";
+import MailPageActions from "@/components/mail-page-actions.vue";
+import {holdScheduledReads,pendingScheduledReads} from "@/services/scheduled-read";
 import InboxTabs from "@/components/inbox-tabs.vue";
 import {inboxCategories,categoryFolders,categoryMessageKey} from "@/utils/inbox-categories";
 import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
@@ -367,9 +318,9 @@ async function archiveQueued(message,button) {
       scheduledError.value=e.message || 'Could not archive the scheduled message.';
   } finally {filingQueue.value=false;}
 }
+const root=ref();
 const rows = ref([]),
   selected = ref([]),
-  ascending = ref(false),
   loading = ref(false), preparingSearch=ref(false),
   busy = ref(false),
   error = ref(""),
@@ -419,7 +370,7 @@ const key = computed(() =>
     owner.user.email,props.folder, props.labelId, category.value, showCategoryChips.value,
     props.folder === "starred" ? "" : account.currentAccountId,
     props.folder === "starred" ? "" : account.currentAccount.allReceive,
-    ascending.value,
+    owner.authenticatedToken,
     search.query, JSON.stringify(search.filters),
   ].join("|"),
 );
@@ -444,12 +395,13 @@ function params() {
     labelId: props.labelId, category:category.value||undefined,
     accountId: account.currentAccountId,
     allReceive: account.currentAccount.allReceive ? 1 : 0,
-    timeSort: ascending.value ? 1 : 0,
+    timeSort: 0,
     q: search.query, ...search.filters,
     limit: 50,
   };
 }
-const history = ref([]);
+const firstPage={cursor:null,offset:0};
+let currentPage=firstPage, failedPage;
 const filedDrafts = computed(() => {
   if (offset.value || !["label","starred"].includes(props.folder) || search.filters.isUnread) return [];
   const matches=draftSearchMatcher(search.query,search.filters,account.accounts);
@@ -465,7 +417,7 @@ async function openFiledDraft(draft) {
     await openSavedDraft(draft.draftId, router, props.folder, props.labelId);
   } catch (e) {error.value=e.message || "Could not open this draft.";}
 }
-const pageCursor = ref(null);
+const firstCursor = ref(null);
 const offset = ref(0);
 const selectedUnread = computed(() =>
   rows.value.some(
@@ -509,30 +461,29 @@ function chooseSnooze(ids,event,row=0) {
   snoozeRow.value=row;
   snoozePicker.value?.show(event.currentTarget,ids);
 }
-async function load(
-  target = { cursor: pageCursor.value, offset: offset.value },
-  prior = history.value,
-) {
-  const request = ++generation;
+async function load(target=currentPage) {
+  const request = ++generation, token=owner.authenticatedToken, scope=key.value;
+  const current=()=>active && generation===request && scope===key.value && token &&
+    token===owner.authenticatedToken && token===localStorage.getItem("token");
+  if (!current()) {loading.value=false;return;}
+  failedPage=undefined;
   preparingSearch.value=false;
   loading.value = true;
   error.value = "";
   try {
-    const includeScheduled = !target.cursor && (["starred","important","label","snoozed"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
+    const includeScheduled = !target.cursor && !target.backward && (["starred","important","label","snoozed"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
       && owner.user.email && (props.folder==="starred" || account.currentAccountId);
     const [data, queue] = await Promise.all([
-      searchPage(()=>conversationList({ ...params(), cursor: target.cursor }),()=>active && request===generation,()=>{preparingSearch.value=true;}),
+      searchPage(()=>conversationList({ ...params(), cursor: target.cursor, pageDirection:target.backward ? "backward" : undefined },token),current,()=>{preparingSearch.value=true;}),
       includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
         accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
-        noMsg:true}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
+        noMsg:true, headers:{Authorization:token}}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
     ]);
-    if (request !== generation || !data) return;
-    if (target.cursor && data.total !== total.value)
-      return await load({ cursor: null, offset: 0 }, []);
-    if (!data.threads.length && prior.length)
-      return await load(prior.at(-1), prior.slice(0, -1));
-    if (target.cursor !== pageCursor.value)
-      containerProps.ref.value?.scrollTo?.(0, 0);
+    if (!data || !current()) return;
+    if ((target.cursor && (data.total !== total.value || !data.threads.length)) ||
+        (target.backward && !target.cursor && data.total<=50)) return load(firstPage);
+    const start=target.backward ? (target.cursor ? target.end : data.total)-data.threads.length : target.offset;
+    if (start!==offset.value && containerProps.ref.value) containerProps.ref.value.scrollTop=0;
     if(category.value)categoryUnread.value=data.categoryUnread||{};
     scheduledMatches.value = queue.messages || [];
     scheduledError.value = queue.error || "";
@@ -552,15 +503,17 @@ async function load(
     }
     hasMore.value = data.hasMore;
     cursor.value = data.nextCursor;
-    pageCursor.value = target.cursor;
-    offset.value = target.offset;
-    history.value = prior;
+    currentPage = target;
+    firstCursor.value = data.firstCursor;
+    offset.value = start;
     selected.value = selected.value.filter((id) =>
       rows.value.some((row) => row.lastEmailId === id),
     );
   } catch (e) {
-    if (request === generation)
+    if (current()) {
+      failedPage=target;
       error.value = e.message || "Could not load conversations.";
+    }
   } finally {
     if (request === generation) loading.value = false;
   }
@@ -569,22 +522,39 @@ function refresh() {
   emailStore.conversationListRefresh++;
   return load();
 }
+function retry() { return load(failedPage ?? currentPage); }
+async function navigate(target,selector) {
+  if (busy.value || loading.value) return;
+  const scope=key.value, path=route.fullPath, token=owner.authenticatedToken;
+  const menu=document.activeElement?.closest('[role="menu"]');
+  await load(target);
+  await nextTick();
+  if (!active || !root.value?.isConnected || key.value!==scope || path!==route.fullPath ||
+      token!==localStorage.getItem("token") || loading.value ||
+      document.activeElement!==document.body && !menu?.contains(document.activeElement)) return;
+  const bar=root.value.querySelector(".mail-toolbar");
+  for (const control of [selector,".range-trigger",".select-options"]) {
+    const button=bar?.querySelector(control);
+    if (button && !button.disabled && button.getClientRects().length) {button.focus();break;}
+  }
+}
+function jumpPage(edge) {
+  return navigate(edge==="oldest" ? {backward:true,cursor:null} : firstPage,".range-trigger");
+}
 function nextPage() {
-  return load(
-    { cursor: cursor.value, offset: offset.value + rows.value.length },
-    [...history.value, { cursor: pageCursor.value, offset: offset.value }],
-  );
+  if (hasMore.value) return navigate({cursor:cursor.value,offset:offset.value+rows.value.length},'[aria-label="Older"]');
 }
 function previousPage() {
-  return load(history.value.at(-1), history.value.slice(0, -1));
+  if (offset.value) return navigate(offset.value<=50 ? firstPage :
+    {backward:true,cursor:firstCursor.value,end:offset.value},'[aria-label="Newer"]');
 }
 watch(
   key,
   () => {
     generation++;
     snoozePicker.value?.close();
-    history.value = [];
-    pageCursor.value = null;
+    currentPage = firstPage;
+    firstCursor.value = null;
     offset.value = 0;
     hasMore.value = false;
     total.value = 0;
@@ -612,9 +582,56 @@ watch(()=>labels.moved,change=>{
     selected.value=selected.value.filter(id=>!change.ids.includes(id));
 });
 function toggle(id) {
+  if (busy.value || loading.value) return;
   if (selected.value.includes(id))
     selected.value = selected.value.filter((value) => value !== id);
   else if (selected.value.length < 95) selected.value.push(id);
+}
+const unreadQueue=computed(()=>scheduledMatches.value.filter(row=>row.unread));
+const pageReadDisabled=computed(()=>busy.value || loading.value || filingQueue.value || !!error.value || !!scheduledError.value ||
+  unreadQueue.value.some(row=>!["scheduled","schedule_failed"].includes(row.state)));
+async function markPageRead() {
+  if (pageReadDisabled.value || selected.value.length) return;
+  const token=owner.authenticatedToken, scope=key.value, path=route.fullPath;
+  const sameSession=()=>token && token===owner.authenticatedToken && token===localStorage.getItem("token");
+  const current=()=>active && scope===key.value && path===route.fullPath && sameSession();
+  if (!current()) return;
+  const ids=rows.value.filter(row=>row.unreadCount).map(row=>row.lastEmailId);
+  const queued=unreadQueue.value.map(({draftId,version})=>({draftId,version}));
+  if (!ids.length && !queued.length) return feedback.show("No unread conversations.");
+  const config={noMsg:true,headers:{Authorization:token}};
+  let release,changed=0;
+  busy.value=true;
+  try {
+    if (queued.length) {
+      const {default:db}=await import("@/db/db");
+      if (!current()) return;
+      release=holdScheduledReads(pendingScheduledReads(db.value,token),queued);
+    }
+    if (ids.length) {
+      await conversationAction("read",ids,{},http,config);
+      if (!sameSession()) return;
+      changed+=ids.length;
+      emailStore.conversationRevision++;
+    }
+    for (let i=0;i<queued.length;i+=50) {
+      if (!sameSession()) return;
+      const messages=queued.slice(i,i+50);
+      await http.post("/v1/scheduled/read",{messages,unread:false},config);
+      if (!sameSession()) return;
+      changed+=messages.length;
+      drafts.scheduledRevision++;
+    }
+    if (current()) {
+      await refresh();
+      if (current()) feedback.show(changed===1 ? "Conversation marked as read." : changed+" conversations marked as read.");
+    }
+  } catch(e) {
+    if (current()) {
+      await refresh();
+      if (current()) feedback.show((changed ? changed+" marked as read. " : "")+(e.message || "Could not mark the page as read."));
+    }
+  } finally {release?.();busy.value=false;}
 }
 function selectMatching(option) {
   const matches = {
@@ -792,26 +809,17 @@ defineExpose({ refresh });
   color: var(--el-color-primary);
   cursor: pointer;
 }
-.select-options {
-  width: 18px;
-  height: 28px;
-  border-radius: 4px;
-  margin-left: -8px;
-  margin-right: 8px;
-}
 .pager:disabled {
   opacity: 0.32;
 }
 :global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:none; }
 @media (max-width: 480px) {
   :global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:flex; }
-  .has-selection .pager, .has-selection .total { display:none; }
+  .has-selection .pager, .has-selection .mail-range { display:none; }
   .mail-toolbar {
     gap: 0;
     padding: 0 4px;
   }
-  .mail-toolbar .total {
-    padding: 0 2px;
-  }
+  .mail-toolbar :deep(.select-options) {width:18px}
 }
 </style>
