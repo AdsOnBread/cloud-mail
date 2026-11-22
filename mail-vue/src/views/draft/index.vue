@@ -299,7 +299,6 @@ async function discard(ids, trigger) {
 }
 .draft-range {margin-inline-start:auto;flex:none}
 .draft-range .range-trigger {margin:0;font:400 12px/16px Arial,sans-serif;color:var(--secondary-text-color);white-space:nowrap}
-:global(.draft-range-menu.el-popper) {border-radius:4px}
 :global(.draft-range-menu .el-dropdown-menu__item) {padding:6px 48px;line-height:20px}
 :global(.draft-range-menu .el-dropdown-menu__item.is-disabled) {color:var(--el-text-color-disabled)}
 @media(max-width:420px) {
