@@ -137,7 +137,7 @@ describe('General mail settings',()=>{
    const execute=sql=>env.db.prepare(sql).run();
    await ensureGeneralPreferenceColumns(columns,execute);
    await ensureGeneralPreferenceColumns(columns,execute);
-   expect(await readGeneralSettings(env.db,1)).toEqual({version:4,undoSeconds:30,replyAll:true,keyboardShortcuts:true,hoverActions:true});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:4,undoSeconds:30,replyAll:true,keyboardShortcuts:true,hoverActions:true,advancedToolbar:false});
  });
  it('commits both forms together and preserves both when either revision is stale',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
@@ -153,7 +153,7 @@ describe('General mail settings',()=>{
    const newer=await saveSignatures(env.db,1,{...second.signatures,beforeQuote:true});
    await expect(saveGeneralSettings(env.db,1,{...second,undoSeconds:30})).rejects.toMatchObject({code:409});
    await expect(saveGeneralSettings(env.db,1,{...first,signatures:newer})).rejects.toMatchObject({code:409});
-   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:true,keyboardShortcuts:true,hoverActions:false});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:true,keyboardShortcuts:true,hoverActions:false,advancedToolbar:false});
    expect(await readSignatures(env.db,1)).toEqual(newer);
    expect((await readSignatures(env.db,2)).version).toBe(0);
  });
@@ -164,7 +164,20 @@ describe('General mail settings',()=>{
    await saveGeneralSettings(env.db,1,{...prefs,version:1,undoSeconds:10});
    await expect(saveGeneralSettings(env.db,1,{...prefs,version:2,keyboardShortcuts:'false'})).rejects.toMatchObject({code:400});
    await expect(saveGeneralSettings(env.db,1,{...prefs,version:2,hoverActions:0})).rejects.toMatchObject({code:400});
-   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:false,keyboardShortcuts:true,hoverActions:false});
+   expect(await readGeneralSettings(env.db,1)).toEqual({version:2,undoSeconds:10,replyAll:false,keyboardShortcuts:true,hoverActions:false,advancedToolbar:false});
+ });
+ it('upgrades the toolbar preference and preserves it through older clients and signature saves',async()=>{
+   const {ensureGeneralPreferenceColumns}=await import('../src/cloud/schema');
+   const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
+   await db.prepare('ALTER TABLE mail_general_settings DROP COLUMN advanced_toolbar').run();
+   await ensureGeneralPreferenceColumns(async()=>(await db.prepare('PRAGMA table_info(mail_general_settings)').all()).results,sql=>db.prepare(sql).run());
+   const update={version:0,undoSeconds:5,replyAll:false};
+   expect((await saveGeneralSettings(db,1,{...update,advancedToolbar:true})).advancedToolbar).toBe(true);
+   const legacy=await saveGeneralSettings(db,1,{...update,version:1,signatures:{version:0,items:[],defaults:{},beforeQuote:false}});
+   expect(legacy.advancedToolbar).toBe(true);
+   expect((await readGeneralSettings(db,2)).advancedToolbar).toBe(false);
+   await expect(saveGeneralSettings(db,1,{...update,version:2,advancedToolbar:1})).rejects.toMatchObject({code:400});
+   expect((await saveGeneralSettings(db,1,{...update,version:2,advancedToolbar:false})).advancedToolbar).toBe(false);
  });
  it('migrates and saves a default writing style, preserves it for older clients and resets it',async()=>{
    const {ensureGeneralPreferenceColumns}=await import('../src/cloud/schema');

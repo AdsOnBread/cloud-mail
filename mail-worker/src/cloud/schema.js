@@ -7,7 +7,8 @@ export const generalSettingsSchema = `CREATE TABLE IF NOT EXISTS mail_general_se
   user_id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1,
   undo_seconds INTEGER NOT NULL CHECK(undo_seconds IN (5,10,20,30)), reply_all INTEGER NOT NULL CHECK(reply_all IN (0,1)),
   keyboard_shortcuts INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1)),
-  hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)), text_style TEXT)`;
+  hover_actions INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1)), text_style TEXT,
+  advanced_toolbar INTEGER NOT NULL DEFAULT 0 CHECK(advanced_toolbar IN (0,1)))`;
 export const lastScheduleSchema = `CREATE TABLE IF NOT EXISTS mail_last_schedule (
   user_id INTEGER PRIMARY KEY, send_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1)`;
 export const contactSchema = `CREATE TABLE IF NOT EXISTS mailbox_contacts (
@@ -34,6 +35,7 @@ export async function ensureGeneralPreferenceColumns(readColumns, execute) {
     keyboard_shortcuts:'INTEGER NOT NULL DEFAULT 0 CHECK(keyboard_shortcuts IN (0,1))',
     hover_actions:'INTEGER NOT NULL DEFAULT 1 CHECK(hover_actions IN (0,1))',
     text_style:'TEXT',
+    advanced_toolbar:'INTEGER NOT NULL DEFAULT 0 CHECK(advanced_toolbar IN (0,1))',
   };
   for (const [name, definition] of Object.entries(definitions)) {
     if (existing.has(name)) continue;
