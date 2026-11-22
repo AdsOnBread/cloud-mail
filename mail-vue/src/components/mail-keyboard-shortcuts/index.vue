@@ -124,6 +124,15 @@ function inMailContext(event, allowSelection=false){
   return ![...document.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[role="listbox"],.el-overlay,.el-dropdown__popper,.compose-format-popup,.nav-overlay,[aria-expanded="true"][aria-haspopup="menu"]')]
     .some(node=>node.getClientRects().length);
 }
+function openHelp(origin=document.activeElement) {
+  if(help.value.open || !user.authenticatedToken || user.authenticatedToken!==localStorage.getItem('token')) return;
+  opener=origin;
+  saveError.value='';
+  origin?.focus?.({preventScroll:true});
+  help.value.showModal();
+  help.value.querySelector('.shortcut-content').scrollTop=0;
+}
+defineExpose({openHelp});
 function keydown(event){
   const previous=sequenceUntil>performance.now() ? prefix : '';
   reset();
@@ -146,10 +155,7 @@ function keydown(event){
   }
   event.preventDefault();
   if(showingHelp){
-    opener=document.activeElement;
-    saveError.value='';
-    help.value.showModal();
-    help.value.querySelector('.shortcut-content').scrollTop=0;
+    openHelp();
     return;
   }
   if(startsSequence){prefix=event.key;sequenceUntil=performance.now()+1500;return;}

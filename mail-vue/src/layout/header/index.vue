@@ -25,7 +25,7 @@
       <SearchOptions :query-text="searchText" @applied="applyAdvanced" />
     </div>
     <div v-else class="page-title">{{ $t(route.meta.title) }}</div>
-    <MailboxShortcuts :available="searchable" @search="focusSearch" />
+    <MailboxShortcuts ref="shortcuts" :available="searchable" @search="focusSearch" />
     <div class="toolbar">
       <button type="button" v-if="uiStore.dark" class="icon-button" aria-label="Switch to light mode" data-tip="Light mode" @click="openDark($event)">
         <Icon icon="material-symbols:light-mode-outline" width="22"/>
@@ -33,7 +33,7 @@
       <button type="button" v-else class="icon-button" aria-label="Switch to dark mode" data-tip="Dark mode" @click="openDark($event)">
         <Icon icon="material-symbols:dark-mode-outline" width="22"/>
       </button>
-      <button type="button" class="icon-button notice" aria-label="Announcements" data-tip="Announcements" @click="openNotice"><Icon icon="material-symbols:campaign-outline" width="22" /></button>
+      <MailSupport @shortcuts="origin=>shortcuts?.openHelp(origin)"/>
       <button type="button" class="icon-button" id="mail-settings-trigger" aria-label="Settings" data-tip="Settings" :aria-expanded="uiStore.quickSettings" @click="uiStore.quickSettings=!uiStore.quickSettings"><Icon icon="material-symbols:settings-outline" width="24" /></button>
       <el-dropdown trigger="click" placement="bottom-end" :show-arrow="false" :teleported="false" popper-class="detail-dropdown">
         <button type="button" class="avatar" aria-label="Your account" data-tip="Your account" >
@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+import MailSupport from '@/components/mail-support/index.vue';
 import MailBrand from '@/components/mail-brand.vue';
 import MailboxShortcuts from "@/components/mail-keyboard-shortcuts/index.vue";
 import {labelSuggestions} from '@/utils/search-labels';
@@ -109,6 +110,7 @@ import {useI18n} from "vue-i18n";
 
 const {t} = useI18n();
 const route = useRoute();
+const shortcuts=ref();
 const mailSearch = useMailSearchStore();
 const appliedText=computed(()=>mailSearch.expression);
 const searchText = computed({
@@ -312,10 +314,6 @@ async function copyEmail(email) {
 }
 
 
-function openNotice() {
-  uiStore.showNotice()
-}
-
 async function openDark() {
   try { await theme.apply(uiStore.dark?'light':'dark'); }
   catch(e){ ElMessage.error(e.message || 'Could not save this theme.'); }
@@ -461,7 +459,7 @@ function formatName(email) {
 .avatar { width:36px; height:36px; border:3px solid var(--mail-surface); border-radius:50%; color:#fff; background:#7c4d79; cursor:pointer; margin-left:8px; display:flex; align-items:center; justify-content:center; font-size:16px; }
 .avatar-text { display:flex; align-items:center; justify-content:center; }
 @media (max-width:1023px) { .header { grid-template-columns:72px minmax(140px,1fr) auto; padding-right:12px; } .brand-name { display:none; } .header-brand { padding-left:16px; } }
-@media (max-width:767px) { .header { grid-template-columns:48px minmax(90px,1fr) auto; padding-right:8px; } .header-brand { padding-left:4px; } .toolbar { gap:0; padding-left:4px; } .toolbar .icon-button { width:32px; height:36px; } .notice { display:none; } .avatar { margin-left:4px; width:34px; height:34px; } .mail-search { height:44px; padding:0 2px; } .mail-search .icon-button { width:32px; } .mail-search input { font-size:14px; padding:0 2px; } }
+@media (max-width:767px) { .header { grid-template-columns:48px minmax(90px,1fr) auto; padding-right:8px; } .header-brand { padding-left:4px; } .toolbar { gap:0; padding-left:4px; } .toolbar .icon-button { width:32px; height:36px; } .avatar { margin-left:4px; width:34px; height:34px; } .mail-search { height:44px; padding:0 2px; } .mail-search .icon-button { width:32px; } .mail-search input { font-size:14px; padding:0 2px; } }
 @media (max-width:600px) {
   .search-folder { display:none; }
   .search-folder + input::placeholder { visibility:visible; }
