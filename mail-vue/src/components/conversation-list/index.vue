@@ -57,29 +57,13 @@
         >
           <Icon :icon="readIcon(selectedUnread)" width="20" />
         </button>
-        <button
-          class="mail-icon"
-          data-tip="Snooze"
-          aria-label="Snooze conversations"
-          :disabled="busy"
-          aria-haspopup="menu"
-          :aria-expanded="Boolean(snoozePicker?.anchor && !snoozeRow)"
-          @click="chooseSnooze(selected, $event)"
-        >
-          <Icon icon="material-symbols:schedule-outline" width="20" />
-        </button>
-        <MovePicker :show-categories="(folder==='inbox' && uiPreferences.inboxTabs) || categoryFolders.some(item=>item.id===folder)" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
-        <LabelPicker :rows="selectedRows" :disabled="busy" @apply="(ops,ids)=>mutate('label',ops,ids)" />
-        <el-dropdown trigger="click" placement="bottom-start" popper-class="mail-action-menu" :show-arrow="false">
-          <button class="mail-icon" data-tip="More" aria-label="More actions for selection" :disabled="busy"><Icon icon="material-symbols:more-vert" width="20" /></button>
-          <template #dropdown><el-dropdown-menu>
-            <el-dropdown-item v-if="selectedRows.some(row => !row.importanceReason)" @click="mutate('importance', { important: true })">Mark as important</el-dropdown-item>
-            <el-dropdown-item v-if="selectedRows.some(row => row.importanceReason)" @click="mutate('importance', { important: false })">Mark as not important</el-dropdown-item>
-            <el-dropdown-item v-if="hasPerm('email:send')" divided :disabled="forwarding" @click="forwardMessages(selectedRows.map(row => row.lastEmailId))">Forward as attachment</el-dropdown-item>
-            <el-dropdown-item v-if="offset" class="compact-page-action" divided :disabled="loading || busy" @click="previousPage">Newer</el-dropdown-item>
-            <el-dropdown-item v-if="hasMore" class="compact-page-action" :divided="!offset" :disabled="loading || busy" @click="nextPage">Older</el-dropdown-item>
-          </el-dropdown-menu></template>
-        </el-dropdown>
+        <ConversationToolbarActions :rows="selectedRows" label="More actions for selection" :scope="key"
+          :disabled="busy || loading" :can-attach="hasPerm('email:send')" :forwarding="forwarding"
+          :newer="offset>0" :older="hasMore" @newer="previousPage" @older="nextPage"
+          @snooze="opener=>chooseSnooze(selected,opener)" @attach="forwardMessages(selected)"
+          @importance="important=>mutate('importance',{important})" @apply="(ops,ids)=>mutate('label',ops,ids)">
+          <MovePicker :show-categories="(folder==='inbox' && uiPreferences.inboxTabs) || categoryFolders.some(item=>item.id===folder)" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
+        </ConversationToolbarActions>
       </template>
       <MailRangeMenu :offset="offset" :count="rows.length" :total="total" :disabled="loading || busy" @jump="jumpPage"/>
       <button
@@ -222,7 +206,7 @@
               :aria-expanded="
                 Boolean(snoozePicker?.anchor) && snoozeRow === row.lastEmailId
               "
-              @click="chooseSnooze([row.lastEmailId], $event, row.lastEmailId)"
+              @click="chooseSnooze([row.lastEmailId], $event.currentTarget, row.lastEmailId)"
             >
               <Icon icon="material-symbols:schedule-outline" width="20" />
             </button>
@@ -254,7 +238,7 @@ import {draftSearchMatcher} from "@/utils/draft-summary";
 import http from "@/axios";
 import {startConversationDrag, endConversationDrag} from "@/components/mail-labels/conversation-drag";
 import MovePicker from "@/components/mail-labels/move.vue";
-import LabelPicker from "@/components/mail-labels/picker.vue";
+import ConversationToolbarActions from "@/components/conversation-toolbar-actions.vue";
 import { useMailLabels } from "@/store/mail-labels";
 const labels = useMailLabels();
 import { useMailFeedback } from "@/store/mail-feedback";
@@ -456,9 +440,9 @@ const replies = (row) =>
   drafts.replies["anchor-" + row.lastEmailId] ||
   [];
 const snoozePicker=ref(),snoozeRow=ref(0);
-function chooseSnooze(ids,event,row=0) {
+function chooseSnooze(ids,opener,row=0) {
   snoozeRow.value=row;
-  snoozePicker.value?.show(event.currentTarget,ids);
+  snoozePicker.value?.show(opener,ids);
 }
 async function load(target=currentPage) {
   const request = ++generation, token=owner.authenticatedToken, scope=key.value;
@@ -823,9 +807,7 @@ defineExpose({ refresh });
 .pager:disabled {
   opacity: 0.32;
 }
-:global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:none; }
 @media (max-width: 480px) {
-  :global(.mail-action-menu .el-dropdown-menu__item.compact-page-action) { display:flex; }
   .has-selection .pager, .has-selection .mail-range { display:none; }
   .mail-toolbar {
     gap: 0;

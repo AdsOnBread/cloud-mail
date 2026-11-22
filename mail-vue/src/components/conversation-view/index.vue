@@ -21,8 +21,11 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
-      <LabelPicker :rows="[{lastEmailId:Number(route.query.emailId),labelIds}]" :disabled="busy || !messages.length" @apply="ops=>mutate('label',ops)" />
+      <ConversationToolbarActions :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
+        @snooze="opener=>snoozePicker?.show(opener,[Number(route.query.emailId)])" @apply="ops=>mutate('label',ops)"
+        @importance="important=>mutate('importance',{important})">
+        <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
+      </ConversationToolbarActions>
       <button
         v-if="threadDrafts.length"
         class="draft-jump"
@@ -36,8 +39,9 @@
             : "Drafts (" + threadDrafts.length + ")"
         }}
       </button>
-      <span>{{ total }} message{{ total === 1 ? "" : "s" }}</span>
+      <span class="thread-total">{{ total }} message{{ total === 1 ? "" : "s" }}</span>
     </div>
+    <MailSnoozePicker ref="snoozePicker" @choose="snooze"/>
     <div ref="scroll" class="conversation-body">
       <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
         <div v-if="messages.length" class="heading-actions">
@@ -131,7 +135,8 @@ import { userDraftStore } from "@/store/draft";
 import { draftKey, responseAnchor } from "@/utils/draft-summary";
 import SavedReplies from './saved-replies.vue';
 import MovePicker from "@/components/mail-labels/move.vue";
-import LabelPicker from "@/components/mail-labels/picker.vue";
+import ConversationToolbarActions from "@/components/conversation-toolbar-actions.vue";
+import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
 import { useMailLabels } from "@/store/mail-labels";
 import { useUiStore } from "@/store/ui";
 const readerNow=useNow({interval:60000});
@@ -145,6 +150,15 @@ watch(()=>labels.applied,change=>{
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
 const importanceReason = ref(null);
 let importanceRevision = 0;
+const snoozePicker=ref();
+const toolbarRows=computed(()=>[{
+  lastEmailId:Number(route.query.emailId),labelIds:labelIds.value,importanceReason:importanceReason.value,
+  lastSenderEmail:messages.value.at(-1)?.sendEmail,
+}]);
+watch([()=>route.fullPath,()=>useUserStore().authenticatedToken,()=>useAccountStore().currentAccountId],()=>snoozePicker.value?.close(),{flush:"sync"});
+function snooze(wakeAt,ids) {
+  if (ids.length===1 && ids[0]===Number(route.query.emailId)) return mutate("snooze",{wakeAt});
+}
 const unreadCount=ref(0), incoming=ref(0), filedAway=ref(false);
 const hasUnread=computed(()=>unreadCount.value>0);
 function updateMessage(message,change) {
@@ -630,7 +644,7 @@ async function mutate(action, extra = {}) {
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;
-    if (["delete","archive","inbox","move","category"].includes(action)) back();
+    if (["delete","archive","inbox","move","category","snooze"].includes(action)) back();
     else if (action === "importance") {
       importanceRevision++;
       importanceReason.value = extra.important ? "user" : null;
@@ -771,14 +785,14 @@ onUnmounted(() => {
   flex-shrink: 0;
   padding: 0 12px;
   display: flex;
-  gap: 8px;
+  gap: 0;
   align-items: center;
 }
 .conversation-toolbar button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   cursor: pointer;
   color: var(--regular-text-color);
@@ -795,7 +809,7 @@ onUnmounted(() => {
     500 14px Arial,
     sans-serif;
 }
-.conversation-toolbar span {
+.conversation-toolbar .thread-total {
   margin-left: auto;
   font-size: 12px;
   color: var(--regular-text-color);
@@ -860,8 +874,10 @@ h1 {
   .bottom-replies {
     margin-left: 0;
   }
-  .conversation-toolbar {
-    gap: 4px;
-  }
+  .conversation-toolbar {padding-inline:4px;gap:0;overflow-x:auto}
+  .conversation-toolbar > button,.conversation-toolbar :deep(.mail-icon) {flex:none;width:32px;height:36px}
+  .conversation-toolbar .draft-jump {width:auto}
+  .conversation-toolbar .thread-total {white-space:nowrap;margin-inline-start:auto}
+
 }
 </style>
