@@ -467,8 +467,9 @@ let returnFocus;
 let revision = 0,
   noticeTimer,
   disposed = false;
-function list(paging, q, accountId = mailbox.value, filters = search.filters) {
+function list(paging, q, accountId, filters, token) {
   return http.get("/v1/messages", {
+    headers:{Authorization:token}, noMsg:true,
     params: {
       ...filters, folder: "trash",
       accountId,
@@ -481,13 +482,16 @@ function list(paging, q, accountId = mailbox.value, filters = search.filters) {
 async function load(target = pageNumber.value) {
   failedPage=undefined;
   confirmation.value?.cancel();
-  const request = ++revision;
+  const request = ++revision, token=user.authenticatedToken, scope=mailbox.value;
+  const current=()=>!disposed && request===revision && scope===mailbox.value &&
+    token && token===user.authenticatedToken && token===localStorage.getItem("token");
+  if (!current()) { loading.value=false; return; }
   error.value = "";
   loading.value = true;
   try {
     preparingSearch.value=false;
-    const page=await searchPage(()=>list({page:target},search.query),()=>!disposed && request===revision,()=>{preparingSearch.value=true;});
-    if (!page || request!==revision) return;
+    const page=await searchPage(()=>list({page:target},search.query,scope,search.filters,token),current,()=>{preparingSearch.value=true;});
+    if (!page || !current()) return;
     const changedPage=offset.value!==page.offset;
     offset.value = page.offset;
     total.value = page.total;
@@ -506,7 +510,7 @@ async function load(target = pageNumber.value) {
       }
     }
   } catch (e) {
-    if (request === revision) {
+    if (current()) {
       failedPage=target;
       error.value = e.message || "Could not load Trash.";
     }
@@ -583,7 +587,7 @@ watch(()=>labels.moved,change=>{
 watch(() => useMailFeedback().restored, reload);
 watch(()=>labels.returnedToTrash,change=>{if(change && !messageId.value) reload();});
 watch(messageId, reload, { immediate: true });
-watch([() => search.query, () => search.filters, mailbox], () => {
+watch([() => search.query, () => search.filters, mailbox, () => user.authenticatedToken], () => {
   offset.value = 0;
   messages.value = [];
   selected.value = [];
@@ -623,7 +627,7 @@ async function act(action, ids, destination, opener) {
       ids = [];
       let cursor;
       do {
-        const page = await list({cursor}, "", scope, {});
+        const page = await list({cursor}, "", scope, {}, token);
         if (!stillCurrent()) return;
         ids.push(...page.messages.map((m) => m.emailId));
         cursor = page.nextCursor;
