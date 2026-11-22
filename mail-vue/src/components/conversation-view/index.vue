@@ -103,6 +103,7 @@
   </section>
 </template>
 <script setup>
+import http from "@/axios";
 import {useNow} from '@vueuse/core';
 import {hasReplyAll} from '@/utils/recipients';
 import {useUserStore} from '@/store/user';
@@ -155,7 +156,6 @@ const toolbarRows=computed(()=>[{
   lastEmailId:Number(route.query.emailId),labelIds:labelIds.value,importanceReason:importanceReason.value,
   lastSenderEmail:messages.value.at(-1)?.sendEmail,
 }]);
-watch([()=>route.fullPath,()=>useUserStore().authenticatedToken,()=>useAccountStore().currentAccountId],()=>snoozePicker.value?.close(),{flush:"sync"});
 function snooze(wakeAt,ids) {
   if (ids.length===1 && ids[0]===Number(route.query.emailId)) return mutate("snooze",{wakeAt});
 }
@@ -242,6 +242,7 @@ let viewEpoch = 0,
 const currentComposer = () =>
   Array.isArray(composer.value) ? composer.value[0] : composer.value;
 const user=useUserStore(),printing=ref(false),expanding=ref(false);
+watch([()=>route.fullPath,()=>user.authenticatedToken,()=>accountStore.currentAccountId],()=>snoozePicker.value?.close(),{flush:"sync"});
 const replyChoices=computed(()=>hasReplyAll(messages.value.at(-1),accountStore.ownAddresses) ? [user.defaultReplyAll,!user.defaultReplyAll] : [false]);
 let printRun=0,expandRun=0,printController;
 const allExpanded=computed(()=>!hasMore.value && messages.value.every(m=>expanded.value.has(m.emailId)));
@@ -637,10 +638,17 @@ function back() {
 async function mutate(action, extra = {}) {
   if (busy.value) return;
   const epoch=viewEpoch, anchor=Number(route.query.emailId), token=user.authenticatedToken;
+  const valid=readerCurrent();
+  const canSnooze=()=>valid() && token && token===user.authenticatedToken && token===localStorage.getItem("token");
+  if(action==="snooze" && !canSnooze())return;
   busy.value = true;
   try {
     if ((!["label", "importance"].includes(action) && !(await save())) || epoch!==viewEpoch) return;
-    const result = action === "move" ? await labels.moveConversations([anchor],extra) : await conversationAction(action, [anchor], extra);
+    if(action==="snooze" && !canSnooze())return;
+    const result = action === "move" ? await labels.moveConversations([anchor],extra)
+      : action==="snooze" ? await conversationAction(action,[anchor],extra,http,{headers:{Authorization:token}})
+      : await conversationAction(action, [anchor], extra);
+    if(action==="snooze" && !canSnooze())return;
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;

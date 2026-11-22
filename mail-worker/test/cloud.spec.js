@@ -169,6 +169,7 @@ describe('General mail settings',()=>{
  it('upgrades the toolbar preference and preserves it through older clients and signature saves',async()=>{
    const {ensureGeneralPreferenceColumns}=await import('../src/cloud/schema');
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
+   const db=env.db;
    await db.prepare('ALTER TABLE mail_general_settings DROP COLUMN advanced_toolbar').run();
    await ensureGeneralPreferenceColumns(async()=>(await db.prepare('PRAGMA table_info(mail_general_settings)').all()).results,sql=>db.prepare(sql).run());
    const update={version:0,undoSeconds:5,replyAll:false};
