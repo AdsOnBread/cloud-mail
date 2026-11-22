@@ -328,20 +328,22 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 	for (const id of anchors) threads.add(await resolve(db, userId, id));
 	const ids = [];
 	const muteGroups=[];
+  const changesMute=action==='mute' || action==='unmute';
+  const muteColumn=changesMute ? ',EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id) muted' : '';
 	const stars = [];
 	const latest = [];
 
 	for (const threadId of threads) {
 		const { results } = await db
 			.prepare(
-				`SELECT e.email_id,e.type,e.status,s.star_id,EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id) muted FROM email e JOIN account a ON a.account_id=e.account_id
+				`SELECT e.email_id,e.type,e.status,s.star_id${muteColumn} FROM email e JOIN account a ON a.account_id=e.account_id
       JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       WHERE ${visible} AND m.thread_id=? ORDER BY e.email_id DESC`,
 			)
 			.bind(userId, threadId)
 			.all();
 		if (!results.length) throw new BizError('Conversation not found.', 404);
-		if (action==='mute' || action==='unmute') {
+		if (changesMute) {
       if ((action==='unmute')!==results.some(row=>row.muted)) continue;
       muteGroups.push(results.map(row=>row.email_id));
     }
@@ -349,7 +351,7 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
-	if(action==='mute' || action==='unmute') {
+	if(changesMute) {
     if (!muteGroups.length) {
       const result={conversationCount:0,messageCount:0};
       if (record) await record(result).run();

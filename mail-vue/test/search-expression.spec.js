@@ -26,7 +26,7 @@ describe('mailbox search expressions',()=>{
 
   it('keeps literal advanced words, punctuation and significant spaces when editing a generated expression',()=>{
     const filters={from:'Alice  Jones',fromAny:JSON.stringify(['Names (West)','Lee OR Kay','A "quote"']),subject:'Q4 (review)',hasAttachment:1};
-    for (const body of ['from:alice','subject:(old)','has:attachment','report (open','"quoted" phrase','first   second','OR','-{old new}']) {
+    for (const body of ['from:alice','subject:(old)','has:attachment','is:muted','report (open','"quoted" phrase','first   second','OR','-{old new}']) {
       const text=formatSearchExpression(body,filters);
       expect(readSearchExpression(text+' invoice')).toEqual({query:body+' invoice',filters});
     }
@@ -34,9 +34,9 @@ describe('mailbox search expressions',()=>{
 
   it('opens typed criteria in their own advanced fields and replaces only the searchable fields',()=>{
     const existing={from:'older',to:'old',subject:'old',days:'7d',sizeValue:'2',sizeUnit:'MB'};
-    const {query,filters}=readSearchExpression('FROM:"Project Team" subject:(Q4) words -{old "closed case"} has:attachment is:unread',existing);
+    const {query,filters}=readSearchExpression('FROM:"Project Team" subject:(Q4) words -{old "closed case"} has:attachment is:unread IS:Muted',existing);
     expect(query).toBe('words');
-    expect(filters).toEqual({from:'Project Team',subject:'Q4',days:'7d',sizeValue:'2',sizeUnit:'MB',excluded:'old "closed case"',hasAttachment:1,isUnread:1});
+    expect(filters).toEqual({from:'Project Team',subject:'Q4',days:'7d',sizeValue:'2',sizeUnit:'MB',excluded:'old "closed case"',hasAttachment:1,isUnread:1,isMuted:1});
     expect(readSearchExpression('revised',filters)).toEqual({query:'revised',filters:{days:'7d',sizeValue:'2',sizeUnit:'MB'}});
   });
 });

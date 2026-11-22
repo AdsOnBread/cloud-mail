@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { dbInit } from '../src/init/init';
 import { conversationList, conversationMessages, conversationAction, draftThreads } from '../src/service/conversation-service';
+import {undoConversationMove} from '../src/service/conversation-move-undo';
 import * as cloudMail from '../src/cloud/mail';
 import emailService from '../src/service/email-service';
 import settingService from '../src/service/setting-service';
@@ -60,6 +61,61 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe('Web conversations', () => {
+  it('archives muted group replies, retains them in search, and delivers a newly addressed alias',async()=>{
+    const recipient=JSON.stringify([{address:'team@example.net'}]);
+    const root=await insert({recipient,message_id:'<muted@example.net>'});
+    const ids=[root.email_id];
+    const mutation=await action('mute',ids,{requestId:crypto.randomUUID()});
+    expect(mutation.conversationCount).toBe(1);
+    const reply=await insert({in_reply_to:root.message_id,recipient});
+    expect((await list()).total).toBe(0);
+    expect((await list({folder:'all',isMuted:1})).threads[0]).toMatchObject({lastEmailId:reply.email_id,muted:1});
+    expect(await messages(reply.email_id)).toMatchObject({muted:true});
+    expect((await draftThreads(context(),ids,1))[0]).toMatchObject({inbox:0,muted:1});
+    const cc=JSON.stringify([{name:'Owners',group:[{address:'ALIAS@example.com'}]}]);
+    const direct=await insert({in_reply_to:root.message_id,recipient,cc});
+    expect((await list()).threads[0]).toMatchObject({lastEmailId:direct.email_id,muted:1});
+    await insert({in_reply_to:root.message_id,recipient,cc});
+    expect((await list()).total).toBe(0);
+    const sole=await insert({in_reply_to:root.message_id});
+    expect((await list()).threads[0].lastEmailId).toBe(sole.email_id);
+    await action('unmute',ids);
+    const notices=(await mobile.changes(env.db,1,{after:0})).changes;
+    expect(notices.filter(change=>change.entityId===reply.email_id).some(change=>change.newMail)).toBe(false);
+    expect(notices.filter(change=>change.entityId===sole.email_id).some(change=>change.newMail)).toBe(true);
+    expect((await list({folder:'all',isMuted:1})).total).toBe(0);
+  });
+  it('undoes a mute across inherited mail and preserves independent archives',async()=>{
+    const root=await insert({message_id:'<restore@example.net>'});
+    const other=await insert({subject:'Archived separately'});
+    await action('archive',[other.email_id]);
+    const result=await action('mute',[root.email_id,other.email_id]);
+    const reply=await insert({in_reply_to:root.message_id,recipient:'[{"address":"group@example.net"}]'});
+    expect((await list()).total).toBe(0);
+    await expect(undoConversationMove(env.db,2,result.undoToken)).rejects.toThrow();
+    await undoConversationMove(env.db,1,result.undoToken);
+    expect((await list()).threads.map(row=>row.lastEmailId)).toEqual([reply.email_id]);
+    expect((await list({folder:'all',isMuted:1})).total).toBe(0);
+  });
+  it('undoes Unmute after a hidden sibling has been permanently deleted',async()=>{
+    const first=await insert({message_id:'<purged@example.net>'});
+    const second=await insert({in_reply_to:first.message_id});
+    await action('mute',[first.email_id]);
+    await cloudMail.trash(context(),1,[first.email_id]);
+    const unmuted=await action('unmute',[second.email_id]);
+    await env.db.prepare('DELETE FROM email WHERE email_id=?').bind(first.email_id).run();
+    await undoConversationMove(env.db,1,unmuted.undoToken);
+    expect(await messages(second.email_id)).toMatchObject({muted:true});
+  });
+  it('replays an already-muted request without overriding a later unmute',async()=>{
+    const root=await insert();
+    const ids=[root.email_id],requestId=crypto.randomUUID();
+    await action('mute',ids);
+    expect((await action('mute',ids,{requestId})).conversationCount).toBe(0);
+    await action('unmute',ids);
+    expect((await action('mute',ids,{requestId})).conversationCount).toBe(0);
+    expect(await messages(root.email_id)).toMatchObject({muted:false,filedAway:true});
+  });
   it('recognizes a received copy of an owned sent message without treating an unrelated incoming address as me',async()=>{
     const root=await insert({type:1,send_email:'admin@example.com',message_id:'<local@local>'});
     await insert({account_id:3,send_email:'admin@example.com',message_id:root.message_id,name:'Alex',unread:0});
@@ -120,7 +176,7 @@ describe('Web conversations', () => {
     expect(row.participants).toBe('Taylor, Casey, me');
     expect(row.messageCount).toBe(4);
     expect(await draftThreads(context(),[second.email_id,own.email_id],1)).toEqual([second,own].map(r=>({
-      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,subject:first.subject,inbox:1,hasUnread:1,
+      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,subject:first.subject,inbox:1,hasUnread:1,muted:0,
     })));
     expect(await draftThreads(context(),[second.email_id],2)).toEqual([]);
   });

@@ -104,6 +104,7 @@ let nextLabel = 1;
 function threadLabels(members) {
  return [...new Set(members.flatMap(row=>[...(membership.get(row.emailId)||[])]))];
 }
+const muted = new Set();
 const filing = new Map(), moveUndos = new Map(), moveRequests = new Map();
 function replayMove(res,request,intent){
   if(!request || !moveRequests.has(request))return false;
@@ -345,6 +346,8 @@ const api=createHTTPServer(async(req,res)=>{
    const move=moveUndos.get(JSON.parse(body).token);
    if(!move || Boolean(move.trash)!==path.endsWith('/undo-recovery')){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({code:409,message:'This move can no longer be undone.'}));return;}
    for(const [id,prior] of move.members){
+     if(prior.muted===true)muted.add(id);
+     if(prior.muted===false)muted.delete(id);
      if(move.trash)rows.find(r=>r.emailId===id).trashedAt=prior.trashedAt;
      if(prior.wakeAt===undefined)filing.delete(id);else filing.set(id,prior.wakeAt);
      const set=membership.get(id)||new Set();
@@ -385,6 +388,7 @@ const api=createHTTPServer(async(req,res)=>{
    for(const [threadId,members] of grouped()) {
      const anchor=filingAnchor(members), state=filing.get(anchor);
      if(p.folder==='inbox' && state!==undefined && (state===null || state>now))continue;
+     if(p.isMuted && !members.some(row=>muted.has(row.emailId)))continue;
      if(p.folder==='important' && !importanceReason(members))continue;
      if(p.folder==='purchases' && !members.some(row=>row.emailId===38))continue;
      if(p.folder==='archived' && state!==null)continue;
@@ -399,7 +403,7 @@ const api=createHTTPServer(async(req,res)=>{
      });
      if(!matches)continue;
      const sorted=members.toSorted((a,b)=>a.emailId-b.emailId), latest=sorted.at(-1);
-     threads.push({threadId,purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,lastSenderEmail:latest.sendEmail,lastSenderName:latest.name,subject:sorted[0].subject,
+     threads.push({threadId,muted:members.some(row=>muted.has(row.emailId)),purchase:members.some(row=>row.emailId===38),...attachmentSummary(members.flatMap(row=>row.attList||[])),importanceReason:importanceReason(members),category:filedCategory.get(threadId)||fixtureCategory.get(sorted.find(r=>r.type===0)?.name)||'primary',filedAway:state===null||state>now,labelIds:threadLabels(members),lastEmailId:latest.emailId,lastSenderEmail:latest.sendEmail,lastSenderName:latest.name,subject:sorted[0].subject,
        ...(p.folder==='sent'?{}:{senders:previewSenders(members)}),participants:[...new Set(sorted.map(row=>row.type===1?'me':row.name))].join(', '),preview:latest.text,lastDate:latest.createTime,
        messageCount:members.length,unreadCount:members.filter(row=>row.type===0&&row.unread===0).length,
        starred:members.some(row=>row.isStar)?1:0,wakeAt:state,status:latest.status});
@@ -419,7 +423,7 @@ const api=createHTTPServer(async(req,res)=>{
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);
    const state=filing.get(filingAnchor(members));
-   data={importanceReason:importanceReason(members),filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
+   data={muted:members.some(row=>muted.has(row.emailId)),importanceReason:importanceReason(members),filedAway:state===null||state>Date.now()/1000,unreadCount:members.filter(r=>r.type===0&&r.unread===0).length,incoming:members.filter(r=>r.type===0).length,labelIds:threadLabels(members),threadId:'t-'+Math.min(...members.map(row=>row.emailId)),subject:members.toSorted((a,b)=>a.emailId-b.emailId)[0]?.subject,ownedAddresses:accounts.map(account=>account.email),messages:filtered.slice(0,limit).reverse().map(({content,text,...row})=>({...row,bcc:row.type===1?row.bcc:'[]'})),total:members.length,hasMore:filtered.length>limit,nextCursor:filtered.length>limit?filtered[limit-1].emailId:null};
  }else if(path==='/email/conversation/draft-threads'){
    const ids=JSON.parse(body).emailIds;
    data=[...grouped()].flatMap(([threadId,members])=>{
@@ -428,7 +432,7 @@ const api=createHTTPServer(async(req,res)=>{
      const state=filing.get(filingAnchor(members));
      const inbox=state===undefined ? members.some(row=>row.type===0 && row.status===0) : state!==null && state<=Date.now()/1000;
      const subject=members.toSorted((a,b)=>a.emailId-b.emailId)[0].subject;
-     return requested.map(row=>({emailId:row.emailId,threadId,subject,inbox:Number(inbox),hasUnread:Number(members.some(m=>m.type===0 && m.unread===0)),messageCount:members.length,senders:previewSenders(members)}));
+     return requested.map(row=>({emailId:row.emailId,threadId,subject,muted:Number(members.some(row=>muted.has(row.emailId))),inbox:Number(inbox),hasUnread:Number(members.some(m=>m.type===0 && m.unread===0)),messageCount:members.length,senders:previewSenders(members)}));
    });
  }else if(path==='/email/conversation/label-unread'){
    const accountId=Number(url.searchParams.get('accountId')),combined=url.searchParams.get('allReceive')==='1';
@@ -489,6 +493,21 @@ const api=createHTTPServer(async(req,res)=>{
    if(operation==='importance'){const revision=++importanceRevision;for(const id of ids)importanceChoices.set(id,{revision,important:p.important});}
    else if(operation==='category'){for(const [threadId,members] of grouped())if(members.some(r=>ids.has(r.emailId)))filedCategory.set(threadId,p.category);}
    else if(['archive','snooze','inbox'].includes(operation))for(const id of ids)filing.set(id,operation==='archive'?null:operation==='inbox'?0:p.wakeAt);
+   else if(operation==='mute' || operation==='unmute'){
+     const members=new Map();
+     let conversationCount=0;
+     for(const group of grouped().values()){
+       if(!group.some(row=>ids.has(row.emailId)) || group.some(row=>muted.has(row.emailId))===(operation==='mute'))continue;
+       conversationCount++;
+       for(const {emailId:id} of group){
+         members.set(id,{wakeAt:filing.get(id),muted:muted.has(id)});
+         if(operation==='mute'){muted.add(id);filing.set(id,null);}else muted.delete(id);
+       }
+     }
+     const undoToken=crypto.randomUUID();
+     if(conversationCount)moveUndos.set(undoToken,{members});
+     data={conversationCount,messageCount:members.size,...(conversationCount?{undoToken}:{})};
+   }
    else if(operation==='move'){
      const members=new Map();
      for(const id of ids){
