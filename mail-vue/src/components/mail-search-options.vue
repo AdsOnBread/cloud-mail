@@ -111,7 +111,7 @@ const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.da
 const filtersEditor=useMessageFilters();
 const ruleCriteria=computed(()=>{
   const f=form.value;
-  if(store.filters.isMuted || f.scope!=='all' || !f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
+  if(f.isMuted || f.scope!=='all' || !f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
     f.from.filter(v=>v.trim()).length>1 || f.to.filter(v=>v.trim()).length>1)return null;
   const result={from:f.from.find(v=>v.trim()) || '',to:f.to.find(v=>v.trim()) || '',subject:f.subject,words:f.q,excluded:f.excluded,hasAttachment:f.hasAttachment};
   return Object.values(result).some(v=>typeof v==='string' ? v.trim() : v) ? result : null;
@@ -125,7 +125,7 @@ function reset() {
   const preset=f.olderThan || f.days;
   form.value={from:f.from ? peopleTerms(f,'from') : [''],to:f.to ? peopleTerms(f,'to') : [''],
     subject:f.subject || '',q:query,excluded:f.excluded || '',
-    scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),
+    scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),isMuted:Boolean(f.isMuted),
     sizeValue:String(f.sizeValue ?? ''),sizeUnit:f.sizeUnit || 'MB',sizeOperator:f.sizeOperator || 'larger',
     date:f.dateCenter || '',
     time:f.dateWindow ? 'center:'+f.dateWindow : preset ? 'relative:'+preset : customRange.value ? 'custom' : 'center:1d'};
@@ -200,6 +200,7 @@ function apply() {
   if (f.subject.trim()) next.subject=f.subject.trim(); else delete next.subject;
   if (f.excluded.trim()) next.excluded=f.excluded.trim(); else delete next.excluded;
   if (f.hasAttachment) next.hasAttachment=1; else delete next.hasAttachment;
+  if (f.isMuted) next.isMuted=1; else delete next.isMuted;
   if (f.isUnread) next.isUnread=1; else delete next.isUnread;
   dismiss();
   emit('applied',{scope:f.scope,query:f.q.trim(),filters:next,stillCurrent,origin});
