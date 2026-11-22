@@ -125,3 +125,23 @@ it("cancels selection deletion without changing the checked messages",async()=>{
     expect(http.post).not.toHaveBeenCalled();
   } finally { wrapper.unmount(); }
 });
+
+it("returns focus to the selected Delete forever action when the server declines deletion",async()=>{
+  http.get.mockResolvedValue({messages:[message(3)],nextCursor:null});
+  http.post.mockRejectedValueOnce(new Error("Could not delete this message."));
+  const wrapper=await mountTrash();
+  try {
+    await wrapper.get('[data-message-id="3"] input').setValue(true);
+    const opener=wrapper.get(".mail-toolbar .toolbar-text");
+    await opener.trigger("click");
+    await flushPromises();
+    const cancel=wrapper.get("dialog button:first-child"), confirm=wrapper.get("dialog .confirm");
+    await cancel.trigger("keydown",{key:"Tab",shiftKey:true});
+    expect(document.activeElement).toBe(confirm.element);
+    await confirm.trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain("Could not delete this message.");
+    expect(document.activeElement).toBe(opener.element);
+    expect(opener.element.disabled).toBe(false);
+  } finally { wrapper.unmount(); }
+});
