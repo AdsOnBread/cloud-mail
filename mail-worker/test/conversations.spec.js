@@ -81,6 +81,24 @@ describe('Web conversations', () => {
     const rest=await list({cursor:first.nextCursor});
     expect(rest.threads.map(row=>row.lastEmailId)).toEqual([recent.email_id,other.email_id]);
   });
+  it('jumps to the partial final conversation page and traverses tied dates in both directions',async()=>{
+    const ids=[];
+    for(let i=0;i<7;i++) ids.push((await insert({subject:'Paged '+i,create_time:'2026-11-01'})).email_id);
+    const delivered=result=>result.threads.map(row=>row.lastEmailId);
+    for(const timeSort of [0,1]) {
+      const ordered=timeSort ? ids : [...ids].reverse();
+      const options={limit:3,timeSort,category:'primary'};
+      const last=await list({...options,pageDirection:'backward'});
+      expect(delivered(last)).toEqual(ordered.slice(6));
+      expect(last.hasMore).toBe(false);
+      const middle=await list({...options,pageDirection:'backward',cursor:last.firstCursor});
+      expect(delivered(middle)).toEqual(ordered.slice(3,6));
+      expect(delivered(await list({...options,cursor:middle.nextCursor}))).toEqual(delivered(last));
+      expect(delivered(await list({...options,pageDirection:'backward',cursor:middle.firstCursor}))).toEqual(ordered.slice(0,3));
+    }
+    expect(delivered(await list({limit:7,pageDirection:'backward'}))).toEqual([...ids].reverse());
+    expect(await list({q:'absent-search',pageDirection:'backward'})).toMatchObject({threads:[],total:0,nextCursor:null,firstCursor:null});
+  });
   it('keeps read state per sender and shares visible thread counts with saved replies',async()=>{
     const first=await insert({message_id:'<first@external.com>',name:'Taylor Ray',unread:1});
     const reply={in_reply_to:first.message_id};

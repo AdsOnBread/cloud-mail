@@ -379,7 +379,7 @@ const api=createHTTPServer(async(req,res)=>{
  else if(path==='/my/loginUserInfo')data={...user,generalSettings,lastSchedule};
  else if(path==='/account/list')data=url.searchParams.get('accountId')!=='0'?[]:accounts;
  else if(path==='/email/conversations'){
-   const p=Object.fromEntries(url.searchParams),q=(p.q||'').toLowerCase(),asc=Number(p.timeSort)===1;
+   const p=Object.fromEntries(url.searchParams),q=(p.q||'').toLowerCase(),asc=(Number(p.timeSort)===1)!==(p.pageDirection==='backward');
    const now=Math.floor(Date.now()/1000);
    let threads=[];
    for(const [threadId,members] of grouped()) {
@@ -409,7 +409,11 @@ const api=createHTTPServer(async(req,res)=>{
    if(folderCategory)threads=threads.filter(t=>t.category===folderCategory);
    if(p.categoryCounts==='1')categoryUnread.purchases=threads.filter(t=>t.purchase && t.unreadCount).length;
    const unreadThreads=threads.filter(row=>row.unreadCount>0).length,total=threads.length;threads=threads.filter(row=>!Number(p.cursor)||(asc?row.lastEmailId>Number(p.cursor):row.lastEmailId<Number(p.cursor))).sort((a,b)=>asc?a.lastEmailId-b.lastEmailId:b.lastEmailId-a.lastEmailId);
-   const limit=Number(p.limit)||30;data={threads:threads.slice(0,limit),total,unreadThreads,categoryUnread:p.category || p.categoryCounts?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore:threads.length>limit,nextCursor:threads.length>limit?threads[limit-1].lastEmailId:null};
+   const limit=Number(p.limit)||30,backward=p.pageDirection==='backward';
+   const page=threads.slice(0,backward && !p.cursor && total ? (total-1)%limit+1 : limit);
+   if(backward)page.reverse();
+   const hasMore=backward ? Boolean(p.cursor && page.length) : threads.length>limit;
+   data={threads:page,total,unreadThreads,categoryUnread:p.category || p.categoryCounts?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore,firstCursor:page[0]?.lastEmailId||null,nextCursor:hasMore?page.at(-1).lastEmailId:null};
  }else if(path==='/email/conversation/messages'){
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);

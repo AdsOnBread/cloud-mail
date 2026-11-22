@@ -153,7 +153,10 @@ export async function conversationList(c, p, userId) {
     const result=await db.prepare(`${base} SELECT COUNT(*) AS unreadThreads FROM ${groupSource} WHERE unread_count>0 ${category?'AND category=?':''}`).bind(...bound,...(category?[category]:[])).first();
     return {unreadThreads:result.unreadThreads};
   }
-  const asc = Number(p.timeSort) === 1;
+  // Read backwards from the first visible conversation (or the end of the folder).
+  // The returned rows always follow the caller's chosen display order.
+  const backward=p.pageDirection==='backward';
+  const asc = (Number(p.timeSort) === 1) !== backward;
 	const limit = limitOf(p.limit);
 	const chronological = ['inbox', 'sent', 'starred','all','label','important','purchases',...categoryFolders].includes(p.folder);
 	// Older clients may submit a numeric cursor. The new opaque cursor also carries reminder time.
@@ -193,12 +196,18 @@ export async function conversationList(c, p, userId) {
         WHERE d.user_id=? AND json_extract(d.data,'$.scheduledAt') IS NOT NULL AND json_extract(d.data,'$.scheduledWakeAt')>unixepoch()
       )`).bind(userId,userId),
 	]);
-	const rows = page.results.slice(0, limit);
+	const totals=category?count.results.find(row=>row.category===category):count.results[0];
+  const total=totals?.total || 0;
+  const pageSize=backward && !cursor && total ? (total-1)%limit+1 : limit;
+  const rows = page.results.slice(0, pageSize);
+  if (backward) rows.reverse();
+  const hasMore=backward ? Boolean(cursor && rows.length) : page.results.length>limit;
+  const cursorOf=row=>chronological ? `${row.activity_time}:${row.last_email_id}` : row.last_email_id;
   const [files, authors] = await Promise.all([
     mailboxAttachments(db, userId, rows, 'threads'),
     conversationSenders(db, userId, rows.map(row => row.thread_id)),
   ]);
-  const totals=category?count.results.find(row=>row.category===category):count.results[0];
+
 	return {
 		threads: rows.map((row) => {
 			const { sent_recipients, sent_cc, sent_bcc, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
@@ -208,14 +217,9 @@ export async function conversationList(c, p, userId) {
 		unreadThreads: totals?.unread_threads||0,
     ...(category?{categoryUnread:Object.fromEntries(count.results.map(row=>[row.category,row.unread_threads]))}:{}),
 		nextWakeAt: nextWake.results[0].wake,
-		total: totals?.total||0,
-		hasMore: page.results.length > limit,
-		nextCursor:
-			page.results.length > limit
-				? chronological
-					? `${rows.at(-1).activity_time}:${rows.at(-1).last_email_id}`
-					: rows.at(-1).last_email_id
-				: null,
+    total, hasMore,
+    firstCursor:rows.length ? cursorOf(rows[0]) : null,
+    nextCursor:hasMore ? cursorOf(rows.at(-1)) : null,
 	};
 }
 export async function draftThreads(c, ids, userId) {
