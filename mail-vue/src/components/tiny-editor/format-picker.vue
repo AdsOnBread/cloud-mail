@@ -17,7 +17,7 @@
         icon="material-symbols:arrow-drop-down"
         width="14"
     /></template>
-    <div ref="menu" class="choices" @keydown="navigate">
+    <div ref="menu" class="choices" :data-tip-placement="actions && iconsOnly ? 'left' : undefined" @keydown="navigate">
       <button
         v-for="(item, i) in choices"
         :key="item.value"
@@ -33,7 +33,10 @@
         @mousedown.prevent
         @click="choose(item.value)"
       >
-        <Icon v-if="iconsOnly" :icon="item.icon" width="20" />
+        <template v-if="iconsOnly">
+          <Icon :icon="item.icon" width="20" />
+          <span v-if="actions" class="command-name">{{item.name}}</span>
+        </template>
         <template v-else
           ><span class="check-slot"
             ><Icon
@@ -187,6 +190,7 @@ function navigate(event) {
   color: var(--el-color-primary);
   background: var(--mail-selected);
 }
+.command-name {display:none;}
 .format-command-menu .choices button {
   position:relative; isolation:isolate; color:var(--regular-text-color); background:transparent;
 }
@@ -196,6 +200,12 @@ function navigate(event) {
 .format-command-menu .choices button:is(:hover,:focus-visible)::before { background:var(--format-hover); }
 .format-command-menu .choices button[aria-checked="true"]::before { background:var(--format-active); }
 .format-command-menu .choices button:focus-visible::before { outline:2px solid var(--send-blue); outline-offset:-2px; }
+@media (hover:none), (pointer:coarse) {
+  :global(.format-popup.format-command-menu) {width:max-content;}
+  .format-command-menu .choices button {height:40px;gap:12px;padding-inline:12px 16px;}
+  .format-command-menu .choices .command-name {display:block;}
+  .format-command-menu .choices button::before {inset:2px 4px;}
+}
 @media (forced-colors:active) {
   .format-command-menu .choices button[aria-checked="true"]::before {border:2px solid ButtonText;}
   .format-command-menu .choices button:focus-visible::before {outline-color:Highlight;}
