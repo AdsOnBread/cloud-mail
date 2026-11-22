@@ -54,7 +54,7 @@
         <span v-if="rowCount > 1" class="thread-count">{{ rowCount }}</span>
       </span>
       <span class="summary"
-        ><span v-for="label in labels" :key="label.id" class="row-label" :style="labelStyle(label)">{{ label.name }}</span><span class="subject">{{ subject || "(no subject)" }}</span
+        ><span v-for="label in labels" :key="label.id" class="row-label" :class="{'muted-label':label.id==='system-muted'}" :title="label.name" :style="labelStyle(label)">{{ label.name }}</span><span class="subject">{{ subject || "(no subject)" }}</span
         ><span v-if="preview" class="preview"
           ><span class="separator"> - </span>{{ preview }}</span
         ></span
@@ -222,6 +222,8 @@ onBeforeUnmount(endMove);
   flex: 1;
   min-width: 0;
 }
+.row-label.muted-label {background:#e1e3e1;color:#222;line-height:18px;font-weight:400}
+:global(html.dark) .row-label.muted-label {background:var(--light-border-color);color:inherit}
 .row-label { display:inline-block; max-width:100px; margin-right:5px; padding:0 4px; overflow:hidden; text-overflow:ellipsis; vertical-align:text-bottom; background:var(--light-border-color); border-radius:4px; font:500 12px/17px Arial,sans-serif; }
 .preview,
 .row-date {

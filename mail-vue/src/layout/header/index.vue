@@ -197,6 +197,10 @@ function submitSearch() {
   suggest.value=false;
   if (searchText.value!==appliedText.value) {
     const {query,filters}=readSearchExpression(searchText.value,mailSearch.filters);
+    if (filters.isMuted && searchFolder.value==='email') {
+      const token=userStore.authenticatedToken;
+      return applyAdvanced({scope:'all',query,filters,stillCurrent:()=>token && token===userStore.authenticatedToken && token===localStorage.getItem('token')});
+    }
     mailSearch.applySearch(query,filters,searchText.value.trim());
   }
   searchText.value=appliedText.value;

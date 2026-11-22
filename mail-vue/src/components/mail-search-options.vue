@@ -111,7 +111,7 @@ const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.da
 const filtersEditor=useMessageFilters();
 const ruleCriteria=computed(()=>{
   const f=form.value;
-  if(f.scope!=='all' || !f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
+  if(store.filters.isMuted || f.scope!=='all' || !f.time || f.sizeValue || f.isUnread || f.time==='custom' || f.time.startsWith('relative:') || f.date ||
     f.from.filter(v=>v.trim()).length>1 || f.to.filter(v=>v.trim()).length>1)return null;
   const result={from:f.from.find(v=>v.trim()) || '',to:f.to.find(v=>v.trim()) || '',subject:f.subject,words:f.q,excluded:f.excluded,hasAttachment:f.hasAttachment};
   return Object.values(result).some(v=>typeof v==='string' ? v.trim() : v) ? result : null;

@@ -23,6 +23,18 @@ export const useMailFeedback = defineStore("mail-feedback", {
       else this.previousHolds=this.previousHolds.filter(entry=>entry!==notice);
       if (notice?.recovery && !notice.busy) notice.recovery.dispose().catch(() => {});
     },
+    muteChanged(action,result,token) {
+      const count=result.conversationCount;
+      this.show((count>1 ? count+" conversations " : "Conversation ")+(action==="mute" ? "muted." : "unmuted."));
+      if (!result.undoToken) return;
+      const notice=this.notice;
+      notice.undoFiling=async()=>{
+        if (localStorage.getItem("token")!==token) throw new Error("Reopen your mailbox to undo this action.");
+        await http.post("/email/conversation/undo-move",{token:result.undoToken},{headers:{Authorization:token},noMsg:true});
+        if (localStorage.getItem("token")===token) {this.restored++; useEmailStore().conversationRevision++;}
+        return "Action undone.";
+      };
+    },
     trashed(emailIds, count = 1, noun = "conversation") {
       this.show(count === 1 ? (noun === "message" ? "Message" : "Conversation") + " moved to Trash." :
         count + " " + noun + "s moved to Trash.", emailIds);

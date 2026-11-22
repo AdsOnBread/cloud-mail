@@ -44,11 +44,12 @@ export function formatSearchExpression(query,filters,{compact=false}={}) {
   if (filters.subject) terms.push('subject:('+quoteValue(filters.subject)+')');
   // Advanced search can ask for the literal text "from:alice" in a message.
   // Quote that text so editing another part of the expression keeps it in the body search.
-  const literal=/[(){}"\\]|(?:^|\s)(?:-|(?:from|to|subject):|has:attachment(?:\s|$)|is:unread(?:\s|$)|OR(?:\s|$))/iu.test(query);
+  const literal=/[(){}"\\]|(?:^|\s)(?:-|(?:from|to|subject):|has:attachment(?:\s|$)|is:(?:unread|muted)(?:\s|$)|OR(?:\s|$))/iu.test(query);
   const words=searchBarText(literal ? JSON.stringify(query) : query,filters.excluded);
   if (words) terms.push(words);
   if (filters.hasAttachment) terms.push('has:attachment');
   if (filters.isUnread) terms.push('is:unread');
+  if (filters.isMuted) terms.push('is:muted');
   return terms.join(' ');
 }
 
@@ -95,7 +96,7 @@ function groupedField(token) {
 
 export function readSearchExpression(text,previous={}) {
   const filters={...previous}, excluded=[];
-  for (const key of ['from','to','fromAny','toAny','subject','excluded','hasAttachment','isUnread']) delete filters[key];
+  for (const key of ['from','to','fromAny','toAny','subject','excluded','hasAttachment','isUnread','isMuted']) delete filters[key];
   const input=text.trim(), tokens=splitTerms(input);
   if (tokens.includes('OR')) {
     // The address filters can represent alternatives within one field. Other Boolean
@@ -118,6 +119,7 @@ export function readSearchExpression(text,previous={}) {
       if (field.key==='subject') filters.subject=field.subject;
       else setPeopleTerms(filters,field.key,field.values);
     } else if (lower==='has:attachment') filters.hasAttachment=1;
+    else if (lower==='is:muted') filters.isMuted=1;
     else if (lower==='is:unread') filters.isUnread=1;
     else {
       const negative=token.startsWith('-') && readSearchBar(token);

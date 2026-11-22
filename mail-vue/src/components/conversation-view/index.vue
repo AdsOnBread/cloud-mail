@@ -22,7 +22,7 @@
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
       <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="toolbarRows" :scope="route.fullPath"
-        :can-forward-all="total>1 && hasPerm('email:send')" :forwarding="forwarding" @forward-all="forwardAll" :disabled="busy || loading || !messages.length"
+        :can-forward-all="total>1 && hasPerm('email:send')" :forwarding="forwarding" @forward-all="forwardAll" @mute="value=>mutate(value?'mute':'unmute')" :disabled="busy || loading || !messages.length"
         @snooze="opener=>snoozePicker?.show(opener,[Number(route.query.emailId)])" @apply="ops=>mutate('label',ops)"
         @importance="important=>mutate('importance',{important})">
         <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
@@ -44,7 +44,7 @@
     </div>
     <MailSnoozePicker ref="snoozePicker" @choose="snooze"/>
     <div ref="scroll" class="conversation-body">
-      <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
+      <div class="thread-heading"><h1>{{ threadSubject || "(no subject)" }} <MailImportance v-if="messages.length" :reason="importanceReason" :disabled="busy || loading" @toggle="mutate('importance', { important: $event })" /> <span v-if="muted" class="thread-label" title="Muted">Muted</span> <router-link v-for="label in threadLabels" :key="label.id" class="thread-label" :style="labelStyle(label)" :to="{name:'label',params:{labelId:label.id}}">{{ label.name }}</router-link></h1>
         <div v-if="messages.length" class="heading-actions">
           <button v-if="total>1" type="button" :aria-label="expansionTitle" :data-tip="expansionTitle" :disabled="loading" @click="toggleAll"><Icon :icon="allExpanded || expanding ? 'material-symbols:unfold-less' : 'material-symbols:unfold-more'" width="20"/></button>
           <button type="button" aria-label="Print all" data-tip="Print all" :disabled="printing" @click="printMail()"><Icon icon="material-symbols:print-outline" width="20"/></button>
@@ -155,10 +155,10 @@ watch(()=>labels.applied,change=>{
 const threadLabels=computed(()=>labels.items.filter(label=>labelIds.value.includes(label.id)));
 const importanceReason = ref(null);
 let importanceRevision = 0;
-const snoozePicker=ref();
+const snoozePicker=ref(), muted=ref(false);
 const toolbarRows=computed(()=>[{
   lastEmailId:Number(route.query.emailId),labelIds:labelIds.value,importanceReason:importanceReason.value,
-  lastSenderEmail:messages.value.at(-1)?.sendEmail,
+  lastSenderEmail:messages.value.at(-1)?.sendEmail, muted:muted.value,
 }]);
 function snooze(wakeAt,ids) {
   if (ids.length===1 && ids[0]===Number(route.query.emailId)) return mutate("snooze",{wakeAt});
@@ -378,6 +378,7 @@ let filingVersion=0;
 function applyFiling(data) {
   labelIds.value=data.labelIds || [];
   filedAway.value=Boolean(data.filedAway);
+  muted.value=Boolean(data.muted);
 }
 let pendingFilingRead=null;
 function updateLabels({add,remove}) {
@@ -509,7 +510,7 @@ watch(
     switching = false;
     handledReply = false;
     draftRun++;draftFailure.value=null;currentMessage.value=null;
-    threadSubject.value = "";
+    threadSubject.value = ""; muted.value=false;
     threadId.value = null;
     labelIds.value=[];
     closed();
@@ -701,10 +702,11 @@ async function mutate(action, extra = {}) {
     const result = action === "move" ? await labels.moveConversations([anchor],extra)
       : await conversationAction(action, [anchor], extra);
     if(!current())return;
+    if (action==="mute" || action==="unmute") feedback.muteChanged(action,result,token);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;
-    if (["delete","archive","inbox","move","category","snooze"].includes(action)) back();
+    if (["delete","archive","inbox","move","category","snooze","mute","unmute"].includes(action)) back();
     else if (action === "importance") {
       importanceRevision++;
       importanceReason.value = extra.important ? "user" : null;
@@ -818,11 +820,17 @@ function beforeUnload(event) {
     event.returnValue = "";
   }
 }
+function muteShortcut(event) {
+  if (route.name!=="content" || !reader.value?.getClientRects().length || muted.value || !messages.value.length || loading.value || busy.value) return;
+  event.preventDefault(); mutate("mute");
+}
 onMounted(() => {
+  window.addEventListener("mail-mute-selection",muteShortcut);
   window.addEventListener("keydown", keydown);
   window.addEventListener("beforeunload", beforeUnload);
 });
 onUnmounted(() => {
+  window.removeEventListener("mail-mute-selection",muteShortcut);
   cancelForward();
   printController?.abort();
   viewEpoch++;

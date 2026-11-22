@@ -60,7 +60,7 @@
         <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="selectedRows" label="More actions for selection" :scope="key"
           :disabled="busy || loading" :can-attach="hasPerm('email:send')" :forwarding="forwarding"
           :newer="offset>0" :older="hasMore" @newer="previousPage" @older="nextPage"
-          @snooze="opener=>chooseSnooze(selected,opener)" @attach="forwardMessages(selected)"
+          @mute="value=>mutate(value?'mute':'unmute')" @snooze="opener=>chooseSnooze(selected,opener)" @attach="forwardMessages(selected)"
           @importance="important=>mutate('importance',{important})" @apply="(ops,ids)=>mutate('label',ops,ids)">
           <MovePicker :show-categories="(folder==='inbox' && uiPreferences.inboxTabs) || categoryFolders.some(item=>item.id===folder)" @category="(id,ids)=>mutate('category',{category:id},ids)" :ids="selected" :from-label-id="labelId" :disabled="busy" @move="(ops,ids)=>mutate('move',ops,ids)" />
         </ConversationToolbarActions>
@@ -248,7 +248,7 @@ import {
   computed,
   watch,
   useId,
-  onActivated,
+  onMounted, onActivated,
   onDeactivated,
   onUnmounted,
   nextTick,
@@ -347,7 +347,7 @@ const showCategoryChips = computed(() => categoryChips.value.size > 0);
 function rowLabels(row) {
   const custom = labels.items.filter(label=>row.labelIds?.includes(label.id) && label.id!==props.labelId && label.messages!=='hide');
   const chip = row.category !== props.folder && categoryChips.value.get(row.category);
-  return chip ? [chip,...custom] : custom;
+  return [...(row.muted ? [{id:"system-muted",name:"Muted"}] : []),...(chip ? [chip] : []),...custom];
 }
 const key = computed(() =>
   [
@@ -387,7 +387,7 @@ const firstPage={cursor:null};
 let currentPage=firstPage, failedPage;
 const filedDrafts = computed(() => {
   if (offset.value || !["label","starred"].includes(props.folder) || search.filters.isUnread) return [];
-  const matches=draftSearchMatcher(search.query,search.filters,account.accounts);
+  const matches=draftSearchMatcher(search.query,search.filters,account.accounts,undefined,draft=>drafts.threadSummaries[drafts.threads[draft.emailId]]?.muted);
   return drafts.items.filter(draft => {
     if (props.folder==="starred" ? !draft.starred : !draft.labelIds?.includes(props.labelId)) return false;
     if (props.folder==="label" && !account.currentAccount.allReceive && draft.accountId!==account.currentAccountId) return false;
@@ -689,6 +689,7 @@ async function mutate(action, extra = {}, ids = selected.value) {
   try {
     const result = action === "move" ? await labels.moveConversations(ids, extra) : await conversationAction(action, ids, extra);
     if (!sameSession()) return;
+    if (action==="mute" || action==="unmute") feedback.muteChanged(action,result,token);
     if (action === "delete") feedback.trashed(result?.emailIds || [], ids.length);
     emailStore.conversationRevision++;
     if (!active || path !== route.fullPath || view !== key.value) return;
@@ -725,6 +726,13 @@ const selectedRows = computed(() => rows.value.filter(row => selected.value.incl
 function star(row) {
   return mutate("star", { starred: !row.starred }, [row.lastEmailId]);
 }
+function muteShortcut(event) {
+  if (!active || busy.value || loading.value || !root.value?.getClientRects().length || !selectedRows.value.some(row=>!row.muted)) return;
+  event.preventDefault();
+  mutate("mute",{},selectedRows.value.filter(row=>!row.muted).map(row=>row.lastEmailId));
+}
+onMounted(()=>window.addEventListener("mail-mute-selection",muteShortcut));
+onUnmounted(()=>window.removeEventListener("mail-mute-selection",muteShortcut));
 onActivated(() => {
   active = true;
   if (!loading.value) refresh();

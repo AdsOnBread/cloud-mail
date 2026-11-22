@@ -43,6 +43,7 @@ const user=useUserStore(), ui=useUiStore(), router=useRouter(), route=useRoute()
 const enabled=computed(()=>user.user.generalSettings?.keyboardShortcuts===true);
 const actions=computed(()=>[
   {keys:'/',label:'Search mail'},
+  {keys:'m',label:'Mute conversation'},
   {keys:'c',label:'Compose', permission:'email:send'},
   {keys:'g i',label:'Go to Inbox',route:'email'},
   {keys:'g s',label:'Go to Starred',route:'star'},
@@ -95,8 +96,8 @@ function inMailContext(event){
   if(!props.available || route.query.window==='1' || !user.authenticatedToken ||
      user.authenticatedToken!==localStorage.getItem('token') || event.defaultPrevented || event.isComposing ||
      event.keyCode===229 || event.repeat || event.ctrlKey || event.altKey || event.metaKey) return false;
-  if(event.composedPath().some(node=>node.isContentEditable || node.matches?.(
-    'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="listbox"],[role="menu"],[role="dialog"]'))) return false;
+  if(event.composedPath().some(node=>(event.key!=='m' || !node.matches?.('.conversation-row input[type=checkbox]')) && (node.isContentEditable || node.matches?.(
+    'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="listbox"],[role="menu"],[role="dialog"]')))) return false;
   return ![...document.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[role="listbox"],.el-overlay,.el-dropdown__popper,.compose-format-popup,.nav-overlay,[aria-expanded="true"][aria-haspopup="menu"]')]
     .some(node=>node.getClientRects().length);
 }
@@ -109,6 +110,10 @@ function keydown(event){
   const action=actions.value.find(item=>item.keys===chord);
   if(!showingHelp && event.key!=='g' && !action) return;
   if(!inMailContext(event)) return;
+  if (action?.keys==='m') {
+    if (!window.dispatchEvent(new Event("mail-mute-selection",{cancelable:true}))) event.preventDefault();
+    return;
+  }
   event.preventDefault();
   if(showingHelp){
     opener=document.activeElement;

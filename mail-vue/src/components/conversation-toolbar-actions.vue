@@ -29,6 +29,8 @@
         @click="command('attach')"><Icon icon="material-symbols:forward-to-inbox-outline"/>Forward as attachment</button>
       <button v-if="sender" role="menuitem" tabindex="-1" @pointerenter="sub=false" @click="filterSender">
         <Icon icon="material-symbols:filter-alt-outline"/>Filter messages like these</button>
+      <button role="menuitem" tabindex="-1" @pointerenter="sub=false" @click="command('mute',!rows.every(row=>row.muted))">
+        <Icon :icon="rows.every(row=>row.muted) ? 'material-symbols:volume-up-outline' : 'material-symbols:volume-off-outline'"/>{{ rows.every(row=>row.muted) ? 'Unmute' : 'Mute' }}</button>
       <button v-if="rows.some(row=>!row.importanceReason)" role="menuitem" tabindex="-1" @pointerenter="sub=false"
         @click="command('importance',true)"><Icon icon="material-symbols:label-important-outline"/>Mark as important</button>
       <button v-if="rows.some(row=>row.importanceReason)" role="menuitem" tabindex="-1" @pointerenter="sub=false"
@@ -57,7 +59,7 @@ import LabelPicker from '@/components/mail-labels/picker.vue';
 
 const props=defineProps({rows:{type:Array,required:true},label:{type:String,default:'More email options'},
   scope:String,snoozeAnchor:Object,disabled:Boolean,canAttach:Boolean,canForwardAll:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
-const emit=defineEmits(['snooze','importance','attach','forward-all','apply','newer','older']);
+const emit=defineEmits(['snooze','mute','importance','attach','forward-all','apply','newer','older']);
 const user=useUserStore(),feedback=useMailFeedback(),filters=useMessageFilters(),route=useRoute();
 const advanced=computed(()=>user.user.generalSettings?.advancedToolbar===true);
 const sender=computed(()=>props.rows.length===1 && props.rows[0].lastSenderEmail);

@@ -66,14 +66,14 @@ export function draftRowSubject(draft,thread) {
 export const newestDraft = (a, b) =>
   b.lastDate - a.lastDate || b.draftId - a.draftId;
 
-export function draftSearchMatcher(query, filters, accounts, isUnread = () => false) {
+export function draftSearchMatcher(query, filters, accounts, isUnread = () => false, isMuted = () => false) {
   if (!query && !Object.keys(filters).length) return ()=>true;
   const bounds=searchDateBounds(filters),size=sizeCriterion(filters);
   const from=peopleTerms(filters,'from'), to=peopleTerms(filters,'to');
   const excluded=excludedPhrases(filters.excluded);
   const words=(query || '').toLowerCase(), subject=(filters.subject || '').toLowerCase();
   return draft=>{
-    if (!matchesSize(draft.sizeBytes,size) || (filters.isUnread && !isUnread(draft)) || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
+    if ((filters.isMuted && !isMuted(draft)) || !matchesSize(draft.sizeBytes,size) || (filters.isUnread && !isUnread(draft)) || filters.hasAttachment && !draft.hasFiles || !withinDateBounds(draft.lastDate,bounds)) return false;
     const account=accounts.find(mailbox=>mailbox.accountId===draft.accountId);
     const sender={address:draft.sender || account?.email,name:draft.senderName || account?.name};
     const people=draft.recipientPeople || (draft.recipients || '').split(', ').map(address=>({address}));

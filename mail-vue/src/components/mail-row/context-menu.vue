@@ -66,7 +66,7 @@ const groups=computed(()=>{
         canDelete ? [scheduled ? action("restore",rows.every(row=>row.scheduledDraftId)?"Restore to Drafts":"Restore to previous location","restore-from-trash-outline") : action("inbox","Move to inbox","move-to-inbox-outline")] : []),
       ...(canDelete ? [action("delete",props.trash?"Delete forever":"Delete",props.trash?"delete-forever-outline":"delete-outline")] : []),
       action(markRead?"read":"unread",markRead?"Mark as read":"Mark as unread",markRead?"drafts-outline":"mail-outline"),
-      ...(!props.trash ? [action("snooze","Snooze","schedule-outline")] : []),
+      ...(!props.trash ? [action("snooze","Snooze","schedule-outline"),rows.every(row=>row.muted) ? action("unmute","Unmute","volume-up-outline") : action("mute","Mute","volume-off-outline")] : []),
     ],
     [
       ...(!scheduled && (!props.trash || canDelete) ? [action("move","Move to","drive-file-move-outline",true)] : []),

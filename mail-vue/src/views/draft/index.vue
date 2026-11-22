@@ -130,7 +130,7 @@ function draftUnread(draft) {
   return threadFor(draft)?.unread;
 }
 const filtered = computed(() => drafts.items.filter(draftSearchMatcher(
-  search.query, search.filters, account.accounts, draftUnread,
+  search.query, search.filters, account.accounts, draftUnread, draft=>threadFor(draft)?.muted,
 )));
 const lastOffset = computed(() => Math.max(0, Math.ceil(filtered.value.length / pageSize) - 1) * pageSize);
 const page = computed(() => filtered.value.slice(offset.value, offset.value + pageSize));
