@@ -60,7 +60,7 @@
         </label>
         <div class="checks">
           <label><input v-model="form.hasAttachment" type="checkbox"/> Has attachment</label>
-          <label v-if="supportsUnread"><input v-model="form.isUnread" type="checkbox"/> Is unread</label>
+          <label><input v-model="form.isUnread" type="checkbox"/> Is unread</label>
         </div>
       </div>
       <SearchCalendar v-if="calendarOpen" ref="calendar" v-model:cursor="cursor" :today="today" :selected="parsedDate" :style="calendarStyle" @pick="pickDate"/>
@@ -107,7 +107,6 @@ const relativeChoices=[...recentChoices,...olderChoices];
 const folders=computed(()=>[{id:'all',name:'All Mail'},{id:'email',name:'Inbox'},
   ...systemFolders.filter(item=>item.id!=='all' && (!item.permission || hasPerm(item.permission))),...categoryFolders]);
 const scope=computed(()=>store.folder==='label' ? 'label:'+store.labelId : store.folder);
-const supportsUnread=computed(()=>form.value.scope!=='draft');
 const customRange=computed(()=>store.filters.dateAfter!=null || store.filters.dateBefore!=null);
 const filtersEditor=useMessageFilters();
 const ruleCriteria=computed(()=>{
@@ -201,7 +200,7 @@ function apply() {
   if (f.subject.trim()) next.subject=f.subject.trim(); else delete next.subject;
   if (f.excluded.trim()) next.excluded=f.excluded.trim(); else delete next.excluded;
   if (f.hasAttachment) next.hasAttachment=1; else delete next.hasAttachment;
-  if (supportsUnread.value && f.isUnread) next.isUnread=1; else delete next.isUnread;
+  if (f.isUnread) next.isUnread=1; else delete next.isUnread;
   dismiss();
   emit('applied',{scope:f.scope,query:f.q.trim(),filters:next,stillCurrent,origin});
 }

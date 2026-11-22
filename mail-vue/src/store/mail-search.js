@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia';
-import {formatSearchExpression} from '@/utils/search-expression';
+import {formatSearchExpression,readSearchExpression} from '@/utils/search-expression';
 
 export const advancedSearchOpenerKey=Symbol('advanced search opener');
 
 export const useMailSearchStore = defineStore('mail-search', {
-  state: () => ({ query: '', folder: 'email', labelId:'', filters: {}, spelling:null }),
+  state: () => ({ query: '', folder: 'email', labelId:'', filters: {}, spelling:null, pendingText:null }),
   getters: {
+    inputCriteria() {
+      return this.pendingText==null ? {query:this.query,filters:this.filters} : readSearchExpression(this.pendingText,this.filters);
+    },
     expression(state) {
       const canonical=formatSearchExpression(state.query,state.filters);
       return state.spelling?.canonical===canonical ? state.spelling.text : canonical;
@@ -14,6 +17,7 @@ export const useMailSearchStore = defineStore('mail-search', {
   actions: {
     applySearch(query,filters,text) {
       this.$patch(state=>{
+        state.pendingText=null;
         state.query=query;
         state.filters=filters;
         state.spelling=text==null ? null : {canonical:formatSearchExpression(query,filters),text};

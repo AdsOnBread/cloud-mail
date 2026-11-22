@@ -68,14 +68,16 @@ function close(restore=false) {
   open.value=false;query.value='';index.value=-1;
   if (restore) trigger.value?.focus({preventScroll:true});
 }
+const editedTerms=computed(()=>peopleTerms(store.inputCriteria.filters,props.field));
 function update(terms) {
-  const next={...store.filters};
+  const {query,filters}=store.inputCriteria;
+  const next={...filters};
   setPeopleTerms(next,props.field,terms);
-  store.filters=next;
+  store.applySearch(query,next);
 }
 function add(term) {
-  if (!term.trim() || selected.value.length>=maxPeople) return;
-  update([...selected.value,term]);close(true);
+  if (!term.trim() || editedTerms.value.length>=maxPeople) return;
+  update([...editedTerms.value,term]);close(true);
 }
 function paste(event) {
   const field=event.currentTarget;
@@ -84,13 +86,13 @@ function paste(event) {
   if (!pasted) return;
   const addresses=pasted.split(/[,;\r\n]+/).map(s=>s.trim()).filter(Boolean);
   if (!addresses.length || addresses.some(s=>s.length>maxPersonTerm || !fullAddress(s))) return;
-  const terms=[...selected.value,...addresses];
+  const terms=[...editedTerms.value,...addresses];
   if (new Set(terms.map(personSearchKey)).size>maxPeople) return;
   event.preventDefault();
   update(terms);close(true);
 }
 function remove(term) {
-  update(selected.value.filter(value=>value!==term));
+  update(editedTerms.value.filter(value=>value!==term));
   query.value='';index.value=-1;nextTick(focusInput);
 }
 function keys(event) {

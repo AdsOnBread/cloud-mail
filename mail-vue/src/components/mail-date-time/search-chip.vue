@@ -76,17 +76,17 @@ function choose(key) {
     nextTick(()=>{place();panel.value?.focus({preventScroll:true})});
     return;
   }
-  const next=withoutTime(store.filters);
+  const next=withoutTime(store.inputCriteria.filters);
   if (activeRecent.value && key===activeRecent.value[0]) next.days=key;
   else if (key) next.olderThan=key;
-  store.filters=next;close();
+  store.applySearch(store.inputCriteria.query,next);close();
 }
 function applyRange() {
   if (!valid.value) return;
-  const [start,end]=dates.value, next=withoutTime(store.filters);
+  const [start,end]=dates.value, next=withoutTime(store.inputCriteria.filters);
   if (start) next.dateAfter=midnight(start);
   if (end) next.dateBefore=midnight(end,true);
-  store.filters=next;close();
+  store.applySearch(store.inputCriteria.query,next);close();
 }
 let returning=false;
 function returnToField(i) {

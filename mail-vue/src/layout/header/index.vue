@@ -111,7 +111,10 @@ const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
 const appliedText=computed(()=>mailSearch.expression);
-const searchText = ref(appliedText.value);
+const searchText = computed({
+  get:()=>mailSearch.pendingText ?? appliedText.value,
+  set:value=>{mailSearch.pendingText=value===appliedText.value ? null : value;},
+});
 import {readSearchExpression} from '@/utils/search-expression';
 import {categoryFolders} from "@/utils/inbox-categories";
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name) || categoryFolders.some(item=>item.id===route.name));
@@ -142,7 +145,7 @@ const searchScope = computed(() => {
 });
 const searchLabelId=computed(()=>route.params.labelId || (searchFolder.value==="label" ? route.query.labelId : undefined));
 watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = appliedText.value; }, { immediate:true });
-watch(appliedText, value => { searchText.value = value; });
+
 const labels=useMailLabels(), searchInput=ref(null), suggest=ref(false), choice=ref(0);
 let searchOrigin;
 const labelQuery=computed(()=>/^label:(.*)$/i.exec(searchText.value)?.[1]);

@@ -68,7 +68,7 @@
       </button>
       <el-dropdown v-if="!messageId && !targets.length" trigger="click" :show-arrow="false" popper-class="mail-action-menu">
         <button class="mail-icon" aria-label="More Trash options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
-        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="search.filters={}; search.query=''; load([])">Clear filters and refresh</el-dropdown-item></el-dropdown-menu></template>
+        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="search.applySearch('',{}); load([])">Clear filters and refresh</el-dropdown-item></el-dropdown-menu></template>
       </el-dropdown>
       <template v-if="!messageId">
         <span class="total">{{
@@ -523,7 +523,7 @@ function open(message) {
 }
 function showTrash() {
   history.value=[];
-  if (search.query || filtered.value) search.$patch({query:"",filters:{}});
+  if (search.query || filtered.value) search.applySearch("",{});
   else back();
 }
 function back() {

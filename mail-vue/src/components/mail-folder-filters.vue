@@ -33,10 +33,11 @@ function active(key) {
   return key==='days' ? timeCaption(store.filters)!=='Any time' : Boolean(store.filters[key]);
 }
 function toggle(key) {
-  const filters={...store.filters};
-  if (filters[key]) delete filters[key];
+  const {query,filters:criteria}=store.inputCriteria;
+  const filters={...criteria};
+  if (active(key)) delete filters[key];
   else filters[key]=1;
-  store.filters=filters;
+  store.applySearch(query,filters);
 }
 
 // A DOM move can send focus to the page body when an applied chip moves to the front.
