@@ -16,7 +16,13 @@ function plainHeaderLength(lines) {
   while (end<lines.length && /^(From|Date|Subject|To|Cc):/.test(lines[end].textContent)) end++;
   return end;
 }
-export function changeQuotedBody(html,generated,plainText,mode) {
+export function conversationQuoteHTML(html) {
+  if (!html?.includes("cloudmail-forwarded-conversation")) return null;
+  const template=document.createElement("template");
+  template.innerHTML=html;
+  return Array.from(template.content.children).find(el=>el.classList.contains("cloudmail-forwarded-conversation"))?.innerHTML ?? null;
+}
+export function changeQuotedBody(html,generated,plainText,mode,keepConversation=false) {
   const previous=document.createElement("template"), next=document.createElement("template");
   previous.innerHTML=html;
   const old=Array.from(previous.content.children).find(el=>el.classList.contains("cloudmail-reply-quote"));
@@ -25,6 +31,7 @@ export function changeQuotedBody(html,generated,plainText,mode) {
   const quote=next.content.querySelector(".cloudmail-reply-quote");
   if (!quote) return html;
   if (old.classList.contains("cloudmail-forwarded-conversation")) {
+    if (keepConversation) return html;
     old.replaceWith(quote);
     return previous.innerHTML;
   }

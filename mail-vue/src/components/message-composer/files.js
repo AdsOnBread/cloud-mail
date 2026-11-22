@@ -81,6 +81,12 @@ export function planFiles(files, mode, form, content) {
 }
 
 
+// Serialize each distinct embedded image once, before the cloud request is
+// built. Repeated signatures in a forwarded thread can share the same image.
+export function cloudDraftParts(content, attachments) {
+  return extractDraftImages(content,attachments,parseHTML,()=>crypto.randomUUID()) || {content,attachments};
+}
+
 // Cloud drafts store inline images as CID references and separate binary files.
 export function draftSearchBytes(draft,files=draft.attachments || []) {
   const extracted=extractDraftImages(draft.content,files,parseHTML,()=>'0'.repeat(36));

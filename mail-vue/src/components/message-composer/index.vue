@@ -336,7 +336,7 @@ import {quotedMessage} from "./quoted-message";
 import SignatureManager from "@/components/mail-signatures/manager.vue";
 import {useMailSignatures} from "@/store/mail-signatures";
 import ContactPicker from './contact-picker.vue';
-import {changeQuotedBody,responseSubject,responseFileSignatures,restoreResponseFiles} from "./response";
+import {conversationQuoteHTML,changeQuotedBody,responseSubject,responseFileSignatures,restoreResponseFiles} from "./response";
 import ResponseMenu from "./response-menu.vue";
 import SendControls from "./send-controls.vue";
 import {sendConfirmation} from "./send-confirmation";
@@ -799,8 +799,20 @@ function startSignatureDefault(){
   })();
 }
 const writingStyle=ref({});
+// Compare the editor's normalized quote only, so typing an introduction
+// does not change what switching back to Reply does with the original history.
+let originalConversationQuote=null;
+function conversationQuoteEdited(html) {
+  if (originalConversationQuote===null) return false;
+  const quote=conversationQuoteHTML(html);
+  return quote!==null && (form.forwardQuoteEdited || quote!==originalConversationQuote);
+}
+function rememberConversationQuote() {
+  originalConversationQuote=conversationQuoteHTML(editor.value?.getContent() ?? form.content);
+}
 let windowContactSeed=false;
 function resetForm() {
+  originalConversationQuote=null;
   windowContactSeed=false;
   writingStyle.value=textStyleCSS(userStore.user.generalSettings?.textStyle);
   clearFormatCaption();
@@ -923,6 +935,7 @@ async function openDraft(draft, options) {
     reveal();
     await nextTick();
     await editor.value?.ready?.();
+    rememberConversationQuote();
     baseline = draftFingerprint(form);
     restoredUntouched = Boolean(draft.cloudDraftId);
   } finally {
@@ -1031,6 +1044,7 @@ async function prepareMessage(message, mode, all = false, rowView, conversation)
     reveal();
     await nextTick();
     await editor.value?.ready?.();
+    if (conversation) rememberConversationQuote();
     // TinyMCE normalizes HTML; compare against its actual representation after loading.
     baseline = draftFingerprint(form);
     startSignatureDefault();
@@ -1136,7 +1150,9 @@ async function changeResponse(command) {
       const quote=await quotedMessage(source,mode,controller.signal,session.token);
       session.check();
       if (controller.signal.aborted || !mounted) return;
-      const html=changeQuotedBody(editor.value?.getContent() ?? form.content, quote.content,form.plainText,mode);
+      const previous=editor.value?.getContent() ?? form.content;
+      const keepConversation=conversationQuoteEdited(previous);
+      const html=changeQuotedBody(previous,quote.content,form.plainText,mode,keepConversation);
       const attachments=form.attachments.map(file=>({...file}));
       if (mode==="reply" && !form.responseSourceId && attachments.length && source.attList?.length) {
         // Older saved Trash forwards have no origin markers on copied files.
@@ -1148,6 +1164,7 @@ async function changeResponse(command) {
       }
       const files=attachments.filter(file=>!file.fromResponse);
       form.attachments=[...files,...quote.attachments.map(file=>({...file,fromResponse:true}))];
+      form.forwardQuoteEdited=keepConversation;
       form.content=defValue.value=html;
       form.text=plainMarkup(form.content).text;
       form.subject=responseSubject(source.subject,mode);
@@ -1161,7 +1178,7 @@ async function changeResponse(command) {
     if (mode==="reply") addResponseNames(source);
     Object.assign(form,mode==="reply" ? replyRecipients(source,accountStore.ownAddresses,form.replyAll) : {receiveEmail:[],cc:[],bcc:[]});
     showCc.value=!!form.cc.length;showBcc.value=!!form.bcc.length;
-    quoteExpanded.value=false;
+    quoteExpanded.value=Boolean(form.forwardQuoteEdited);
     editingRecipients.value=mode==="forward";
     validateAddresses.value=false;
     sendError.value="";
@@ -1287,7 +1304,7 @@ const pendingRecipients = computed(() => {
   return patch;
 });
 function snapshot() {
-  return restoreDraft({...toRaw(form), ...pendingRecipients.value});
+  return restoreDraft({...toRaw(form), ...pendingRecipients.value, forwardQuoteEdited:conversationQuoteEdited(form.content) || undefined});
 }
 let saveQueue=Promise.resolve(), pendingWrites=0, saveFailed=false;
 function warnUnsaved(event) {
