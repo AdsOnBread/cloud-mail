@@ -742,7 +742,7 @@ watch([()=>feedback.deliveredReply,activeTarget],([delivery,target],[previous])=
     pendingDelivery=null;
   }
 });
-watch(() => feedback.restored, () => { if (!activeTarget.value) load(); });
+watch(() => feedback.restored, () => activeTarget.value ? refreshFiling() : load());
 async function deleted(message) {
   if (activeTarget.value === message.emailId && !(await save())) return;
   messages.value = messages.value.filter(
