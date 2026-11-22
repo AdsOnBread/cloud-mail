@@ -693,7 +693,8 @@ async function mutate(action, extra = {}) {
   if (busy.value) return;
   const epoch=viewEpoch, anchor=Number(route.query.emailId), token=user.authenticatedToken;
   const valid=readerCurrent();
-  const current=()=>valid() && token && token===user.authenticatedToken && token===localStorage.getItem("token");
+  const sameSession=()=>token && token===user.authenticatedToken && token===localStorage.getItem("token");
+  const current=()=>valid() && sameSession();
   if(!current())return;
   busy.value = true;
   try {
@@ -701,11 +702,11 @@ async function mutate(action, extra = {}) {
     if(!current())return;
     const result = action === "move" ? await labels.moveConversations([anchor],extra)
       : await conversationAction(action, [anchor], extra);
-    if(!current())return;
+    if(!sameSession())return;
     if (action==="mute" || action==="unmute") feedback.muteChanged(action,result,token);
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
-    if (epoch!==viewEpoch) return;
+    if (!valid() || epoch!==viewEpoch) return;
     if (["delete","archive","inbox","move","category","snooze","mute","unmute"].includes(action)) back();
     else if (action === "importance") {
       importanceRevision++;
@@ -722,8 +723,8 @@ async function mutate(action, extra = {}) {
     }
   } catch (e) {
     const message=e.message || "Could not update conversation.";
-    if (action==="move") {
-      if (token && token===user.authenticatedToken && token===localStorage.getItem("token")) {
+    if (["move","mute","unmute"].includes(action)) {
+      if (sameSession()) {
         if (epoch===viewEpoch && route.name==="content" && Number(route.query.emailId)===anchor) error.value=message;
         else feedback.show(message);
       }

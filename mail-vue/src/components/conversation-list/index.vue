@@ -699,7 +699,7 @@ async function mutate(action, extra = {}, ids = selected.value) {
     if (sameSession()) {
       const message = e.message || "Could not update the conversation.";
       if (active && path === route.fullPath && view === key.value) error.value = message;
-      else if (action === "move") feedback.show(message);
+      else if (["move","mute","unmute"].includes(action)) feedback.show(message);
     }
   } finally {
     busy.value = false;
