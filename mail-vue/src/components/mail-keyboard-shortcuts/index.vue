@@ -121,7 +121,7 @@ function inMailContext(event, allowSelection=false){
      event.keyCode===229 || event.repeat || event.ctrlKey || event.altKey || event.metaKey) return false;
   if(event.composedPath().some(node=>(!allowSelection || !node.matches?.('.conversation-row .check-target input[type=checkbox],.mail-toolbar .check-target input[type=checkbox]')) && (node.isContentEditable || node.matches?.(
     'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="listbox"],[role="menu"],[role="dialog"]')))) return false;
-  return ![...document.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[role="listbox"],.el-overlay,.el-dropdown__popper,.compose-format-popup,.nav-overlay,[aria-expanded="true"][aria-haspopup="menu"]')]
+  return ![...document.querySelectorAll('dialog[open],[role="dialog"]:not([aria-modal="false"]),[role="alertdialog"],[role="listbox"],.el-overlay,.el-dropdown__popper,.compose-format-popup,.nav-overlay,[aria-expanded="true"][aria-haspopup="menu"]')]
     .some(node=>node.getClientRects().length);
 }
 function openHelp(origin=document.activeElement) {

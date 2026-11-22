@@ -1,21 +1,21 @@
 <template>
-  <section ref="panel" class="mail-help-panel" role="dialog" aria-label="Help" :style="positionStyle"
+  <section ref="panel" class="mail-help-panel" role="dialog" aria-modal="false" aria-label="Help" :style="positionStyle"
     @keydown.esc.stop.prevent="escape">
     <header>
-      <button v-if="article || searching || notice" class="panel-icon back" aria-label="Back" @click="back">
+      <button type="button" tabindex="0" v-if="article || searching || notice" class="panel-icon back" aria-label="Back" @click="back">
         <Icon icon="material-symbols:arrow-back" width="20"/>
       </button>
-      <h2><button ref="handle" class="drag-title" aria-label="Move Help panel" :aria-describedby="instructionId"
+      <h2><button type="button" tabindex="0" ref="handle" class="drag-title" aria-label="Move Help panel" :aria-describedby="instructionId"
         :aria-pressed="Boolean(keyboardOrigin)" @keydown="moveKey" @pointerdown="startDrag" @pointermove="drag"
         @pointerup="endDrag" @lostpointercapture="endDrag">Help</button></h2>
-      <button class="panel-icon close" aria-label="Close Help panel" @click="emit('close')"><Icon icon="material-symbols:close" width="20"/></button>
+      <button type="button" tabindex="0" class="panel-icon close" aria-label="Close Help panel" @click="emit('close')"><Icon icon="material-symbols:close" width="20"/></button>
     </header>
     <span class="sr-only" :id="instructionId">Press Space to move the Help panel with the arrow keys. Press Space again to finish, or Escape to cancel.</span>
     <div ref="scroller" class="help-scroll">
       <article v-if="article">
         <h3 ref="pageHeading" tabindex="-1">{{article.title}}</h3>
         <ol><li v-for="step in article.steps" :key="step">{{step}}</li></ol>
-        <RouterLink :to="{name:article.route}" @click="emit('close')">{{article.action}}</RouterLink>
+        <RouterLink tabindex="0" :to="{name:article.route}" @click="emit('close')">{{article.action}}</RouterLink>
       </article>
       <article v-else-if="notice">
         <h3 ref="pageHeading" tabindex="-1">Announcements</h3>
@@ -29,17 +29,17 @@
           </label>
           <ul>
             <li v-for="topic in matches" :key="topic.id">
-              <button :data-help-topic="topic.id" @click="read(topic)"><span class="article-icon"><Icon icon="material-symbols:article-outline" width="18"/></span>{{topic.title}}</button>
+              <button type="button" tabindex="0" :data-help-topic="topic.id" @click="read(topic)"><span class="article-icon"><Icon icon="material-symbols:article-outline" width="18"/></span>{{topic.title}}</button>
             </li>
           </ul>
           <p v-if="!matches.length" role="status">No matching help articles.</p>
-          <button v-if="!searching" ref="searchTrigger" class="help-search search-start" @click="search">
+          <button type="button" tabindex="0" v-if="!searching" ref="searchTrigger" class="help-search search-start" @click="search">
             <Icon icon="material-symbols:search" width="20"/>Search Help
           </button>
         </div>
         <section class="more-help">
           <h3>Need more help?</h3>
-          <button @click="emit('shortcuts')"><Icon icon="material-symbols:keyboard-outline" width="20"/>Keyboard shortcuts</button>
+          <button type="button" tabindex="0" @click="emit('shortcuts')"><Icon icon="material-symbols:keyboard-outline" width="20"/>Keyboard shortcuts</button>
         </section>
       </template>
     </div>
@@ -171,10 +171,12 @@ article a{color:#0b57d0;text-decoration:underline}
 .sr-only{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}
 @media(max-width:420px){.mail-help-panel{right:10px}}
 @media(prefers-reduced-motion:reduce){.mail-help-panel{animation:none}}
-:global(html.dark) .mail-help-panel{background:var(--mail-surface);color:var(--el-text-color-primary)}
-:global(html.dark) .help-search,:global(html.dark) li button:hover,:global(html.dark) .panel-icon:hover,:global(html.dark) .more-help button:hover{background:var(--mail-hover)}
-:global(html.dark) .more-help{border-color:var(--light-border-color)}
-:global(html.dark) .article-icon{background:#30445e;color:#b7d1ff}
-:global(html.dark) article a,:global(html.dark) .more-help button{color:#a8c7fa}
 @media(forced-colors:active){.mail-help-panel,.help-search{border:1px solid CanvasText}}
+</style>
+<style>
+html.dark .mail-help-panel{background:var(--mail-surface);color:var(--el-text-color-primary)}
+html.dark .mail-help-panel :is(.help-search,li button:hover,li button:focus-visible,.panel-icon:hover,.panel-icon:focus-visible,.more-help button:hover){background:var(--mail-hover)}
+html.dark .mail-help-panel .more-help{border-color:var(--light-border-color)}
+html.dark .mail-help-panel .article-icon{background:#30445e;color:#b7d1ff}
+html.dark .mail-help-panel :is(article a,.more-help button){color:#a8c7fa}
 </style>

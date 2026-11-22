@@ -1,5 +1,5 @@
 <template>
-  <el-dropdown ref="dropdown" trigger="click" placement="bottom-end" :offset="0" :show-arrow="false"
+  <el-dropdown ref="dropdown" trigger="click" placement="bottom-end" :popper-options="placement" :show-arrow="false"
     popper-class="mail-support-menu" @visible-change="expanded=$event" @command="choose">
     <button ref="trigger" type="button" class="support-trigger" data-tip="Support" aria-label="Support" :aria-expanded="expanded">
       <Icon icon="material-symbols:help-outline" width="24" aria-hidden="true"/>
@@ -12,7 +12,7 @@
       </el-dropdown-menu>
     </template>
   </el-dropdown>
-  <HelpPanel v-if="view" :key="view" :initial="view" @close="closePanel" @shortcuts="openShortcuts"/>
+  <HelpPanel v-if="view" :key="opening" :initial="view" @close="closePanel" @shortcuts="openShortcuts"/>
 </template>
 <script setup>
 import {nextTick,ref,watch} from 'vue';
@@ -23,7 +23,8 @@ import {useSettingStore} from '@/store/setting';
 import HelpPanel from './panel.vue';
 
 const emit=defineEmits(['shortcuts']);
-const trigger=ref(), dropdown=ref(), expanded=ref(false), view=ref('');
+const trigger=ref(), dropdown=ref(), expanded=ref(false), view=ref(''), opening=ref(0);
+const placement={modifiers:[{name:'offset',options:{offset:[0,0]}}]};
 const user=useUserStore(), ui=useUiStore(), settings=useSettingStore();
 function focusFirst(event) {
   if(event.target===event.currentTarget) event.target.querySelector('[role=menuitem]')?.focus({preventScroll:true});
@@ -46,6 +47,7 @@ async function choose(command) {
     ui.showNotice();
     return;
   }
+  opening.value++;
   view.value=command;
 }
 watch(()=>user.authenticatedToken,()=>{closePanel(false);dropdown.value?.handleClose();});
@@ -53,10 +55,10 @@ watch(()=>user.authenticatedToken,()=>{closePanel(false);dropdown.value?.handleC
 <style scoped>
 .support-trigger{display:grid;place-items:center;width:40px;height:40px;padding:8px;flex:none;border-radius:50%;color:var(--regular-text-color);cursor:pointer}
 .support-trigger:is(:hover,[aria-expanded=true]){background:var(--mail-hover)}
-:global(.photo-theme) .support-trigger{color:white}
 @media(max-width:767px){.support-trigger{width:32px;height:36px;padding:4px}}
 </style>
 <style>
+.photo-theme .mail-header .support-trigger{color:white}
 .mail-support-menu.el-popper.is-light{border:0;border-radius:4px;background:white;color:#202124;box-shadow:0 1px 2px #3c40434d,0 2px 6px 2px #3c404326}
 .mail-support-menu .el-dropdown-menu{min-width:220px;padding:6px 0;background:inherit;color:inherit}
 .mail-support-menu .el-dropdown-menu__item{color:inherit;font:14px/20px Arial,sans-serif;padding:6px 30px}
