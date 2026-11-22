@@ -27,8 +27,8 @@
           "
         />
       </label>
-      <el-dropdown v-if="!messageId" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu trash-selection-menu" :popper-options="selectionPlacement" :offset="0" @command="selectGroup">
-        <button class="mail-icon select-options" aria-label="Selection options" data-tip="Select"><Icon icon="material-symbols:arrow-drop-down" width="16"/></button>
+      <el-dropdown v-if="!messageId" ref="selectionMenu" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu trash-selection-menu" :popper-options="selectionPlacement" :offset="0" @command="selectGroup">
+        <button class="mail-icon select-options" @keydown.esc="selectionMenu?.handleClose()" aria-label="Selection options" data-tip="Select"><Icon icon="material-symbols:arrow-drop-down" width="16"/></button>
         <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in Object.keys(selectionGroups)" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
       </el-dropdown>
       <template v-if="targets.length">
@@ -449,7 +449,8 @@ function moveTo({labelId},ids) {
   if (name) return act('move-from-trash',ids,{labelId,name});
 }
 const filtered=computed(()=>Object.keys(search.filters).length>0);
-const selectionPlacement = {modifiers:[{name:'offset',options:{offset:[-24,0]}}]};
+const selectionMenu = ref();
+const selectionPlacement = {modifiers:[{name:'offset',options:{offset:[-25,-5]}}]};
 const selectionGroups = {
   All: () => true, None: () => false,
   Read: message => message.unread !== 0, Unread: message => message.unread === 0,
@@ -752,6 +753,7 @@ onBeforeUnmount(() => {
 .text-button:hover { text-decoration:underline; }
 .retention-action,.toolbar-text {
   position:relative;
+  isolation:isolate;
   display:inline-flex;
   align-items:center;
   justify-content:center;
@@ -780,6 +782,7 @@ onBeforeUnmount(() => {
   position:absolute;
   inset:0;
   pointer-events:none;
+  z-index:-1;
   border-radius:inherit;
   transform:scale(0);
   opacity:0;
@@ -800,7 +803,7 @@ onBeforeUnmount(() => {
   .retention-action::before,.toolbar-text::before {transition:none}
 }
 :global(.trash-selection-menu .el-dropdown-menu) { min-width:160px; padding:6px 0; }
-:global(.trash-selection-menu .el-dropdown-menu__item) { padding:6px 48px; }
+:global(.trash-selection-menu .el-dropdown-menu__item) { padding:6px 48px; line-height:20px; }
 @media (min-width:768px) {
   .mail-toolbar {gap:0;padding-inline:12px 6px}
   .mail-toolbar .mail-icon {width:40px;height:40px}
