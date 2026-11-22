@@ -610,7 +610,7 @@ async function markPageRead() {
   const queued=unreadQueue.value.map(({draftId,version})=>({draftId,version}));
   if (!ids.length && !queued.length) return feedback.show("No unread conversations.");
   const config={noMsg:true,headers:{Authorization:token}};
-  let release,changed=0;
+  let release,failure,changed=0;
   busy.value=true;
   try {
     if (queued.length) {
@@ -632,16 +632,17 @@ async function markPageRead() {
       changed+=messages.length;
       drafts.scheduledRevision++;
     }
-    if (current()) {
-      await refresh();
-      if (current()) feedback.show(changed===1 ? "Conversation marked as read." : changed+" conversations marked as read.");
-    }
   } catch(e) {
-    if (current()) {
-      await refresh();
-      if (current()) feedback.show((changed ? changed+" marked as read. " : "")+(e.message || "Could not mark the page as read."));
-    }
-  } finally {release?.();busy.value=false;}
+    failure=e.message || "Could not mark the page as read.";
+  } finally {
+    release?.();
+    // A filter may have changed while its revision watcher was suppressed by busy.
+    // Reconcile that view too, including successful batches before a later failure.
+    if (sameSession() && active && (changed || failure)) await refresh();
+    busy.value=false;
+  }
+  if (sameSession() && failure) feedback.show((changed ? changed+" marked as read. " : "")+failure);
+  else if (current()) feedback.show(changed===1 ? "Conversation marked as read." : changed+" conversations marked as read.");
 }
 function selectMatching(option) {
   const matches = {
