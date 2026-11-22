@@ -278,15 +278,18 @@ onBeforeUnmount(endMove);
   .file-chip svg,.more-files {flex-shrink:0}
   .pdf{color:#d93025}.document{color:#4285f4}.image{color:#ea8600}.sheet{color:#188038}
 
+  .conversation-row:has(.row-actions :focus),
   .conversation-row:has(:focus-visible),
   .conversation-row:has([aria-expanded="true"]) {
     z-index: 1;
     box-shadow: var(--mail-row-shadow);
   }
+  .row-actions:focus-within,
   .conversation-row:has(:focus-visible) .row-actions,
   .conversation-row:has([aria-expanded="true"]) .row-actions {
     position:static;opacity:1;pointer-events:auto;
   }
+  .conversation-row:has(.row-actions :focus) .row-date,
   .conversation-row:has(:focus-visible):has(.row-actions) .row-date,
   .conversation-row:has([aria-expanded="true"]) .row-date {
     display: none;
