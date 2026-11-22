@@ -412,8 +412,9 @@ const api=createHTTPServer(async(req,res)=>{
    const limit=Number(p.limit)||30,backward=p.pageDirection==='backward';
    const page=threads.slice(0,backward && !p.cursor && total ? (total-1)%limit+1 : limit);
    if(backward)page.reverse();
-   const hasMore=backward ? Boolean(p.cursor && page.length) : threads.length>limit;
-   data={threads:page,total,...(p.includeOffset==='1' ? {offset:backward?threads.length-page.length:total-threads.length} : {}),unreadThreads,categoryUnread:p.category || p.categoryCounts?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore,firstCursor:page[0]?.lastEmailId||null,nextCursor:hasMore?page.at(-1).lastEmailId:null};
+   const offset=backward ? threads.length-page.length : total-threads.length;
+   const hasMore=p.includeOffset==='1' ? page.length>0 && offset+page.length<total : backward ? Boolean(p.cursor && page.length) : threads.length>limit;
+   data={threads:page,total,...(p.includeOffset==='1' ? {offset} : {}),unreadThreads,categoryUnread:p.category || p.categoryCounts?categoryUnread:undefined,nextWakeAt:Math.min(...[...filing.values()].filter(t=>t>now))||null,hasMore,firstCursor:page[0]?.lastEmailId||null,nextCursor:hasMore?page.at(-1).lastEmailId:null};
  }else if(path==='/email/conversation/messages'){
    const p=Object.fromEntries(url.searchParams),members=threadFor(p.emailId),limit=Number(p.limit)||30;
    const filtered=members.filter(row=>!Number(p.before)||row.emailId<Number(p.before)).sort((a,b)=>b.emailId-a.emailId);
