@@ -134,7 +134,7 @@ function matchesFilters(row,p) {
     matchesDate(row.createTime,p) && matchesRowSize(row,p,row.attList);
 }
 let lastSchedule=null;
-let generalSettings={version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false,hoverActions:true};
+let generalSettings={version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false,hoverActions:true,advancedToolbar:false};
 let signatures={version:0,items:[],defaults:{},beforeQuote:false};
 const api=createHTTPServer(async(req,res)=>{
  const url=new URL(req.url,'http://127.0.0.1');

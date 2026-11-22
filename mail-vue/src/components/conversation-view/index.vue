@@ -21,7 +21,7 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <ConversationToolbarActions :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
+      <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
         @snooze="opener=>snoozePicker?.show(opener,[Number(route.query.emailId)])" @apply="ops=>mutate('label',ops)"
         @importance="important=>mutate('importance',{important})">
         <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />
@@ -794,7 +794,7 @@ onUnmounted(() => {
   gap: 0;
   align-items: center;
 }
-.conversation-toolbar button {
+.conversation-toolbar button,.conversation-toolbar :deep(.mail-icon) {
   display: grid;
   place-items: center;
   width: 40px;
@@ -803,7 +803,7 @@ onUnmounted(() => {
   cursor: pointer;
   color: var(--regular-text-color);
 }
-.conversation-toolbar button:hover {
+.conversation-toolbar button:hover,.conversation-toolbar :deep(.mail-icon:hover) {
   background: var(--mail-hover);
 }
 .conversation-toolbar .draft-jump {

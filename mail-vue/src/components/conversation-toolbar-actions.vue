@@ -1,6 +1,6 @@
 <template>
-  <button v-if="advanced" type="button" class="mail-icon" data-tip="Snooze" aria-label="Snooze conversations"
-    aria-haspopup="menu" :disabled="disabled" @click="emit('snooze',$event.currentTarget)">
+  <button v-if="advanced" ref="snoozeButton" type="button" class="mail-icon" data-tip="Snooze" aria-label="Snooze conversations"
+    aria-haspopup="menu" :aria-expanded="!!snoozeAnchor && snoozeAnchor===snoozeButton" :disabled="disabled" @click="emit('snooze',$event.currentTarget)">
     <Icon icon="material-symbols:schedule-outline" width="20"/>
   </button>
   <slot/>
@@ -52,17 +52,18 @@ import {useMessageFilters} from '@/store/message-filters';
 import LabelPicker from '@/components/mail-labels/picker.vue';
 
 const props=defineProps({rows:{type:Array,required:true},label:{type:String,default:'More email options'},
-  scope:String,disabled:Boolean,canAttach:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
+  scope:String,snoozeAnchor:Object,disabled:Boolean,canAttach:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
 const emit=defineEmits(['snooze','importance','attach','apply','newer','older']);
 const user=useUserStore(),feedback=useMailFeedback(),filters=useMessageFilters(),route=useRoute();
 const advanced=computed(()=>user.user.generalSettings?.advancedToolbar===true);
 const sender=computed(()=>props.rows.length===1 && props.rows[0].lastSenderEmail);
-const trigger=ref(),panel=ref(),labelItem=ref(),picker=ref(),open=ref(false),sub=ref(false),saving=ref(false);
+const snoozeButton=ref(),trigger=ref(),panel=ref(),labelItem=ref(),picker=ref(),open=ref(false),sub=ref(false),saving=ref(false);
 const sessionCurrent=()=>user.authenticatedToken && user.authenticatedToken===localStorage.getItem('token');
 function focusTrigger(){trigger.value?.focus({preventScroll:true});}
 function close(restore=false){sub.value=false;open.value=false;if(restore)focusTrigger();}
+let openingFocus;
 function focusFirst(){
-  if(open.value && !sub.value && (document.activeElement===trigger.value || document.activeElement===document.body))
+  if(open.value && !sub.value && (document.activeElement===trigger.value || document.activeElement===document.body || document.activeElement===openingFocus))
     panel.value?.querySelector('button:not(:disabled)')?.focus();
 }
 async function showLabels(){
@@ -112,6 +113,7 @@ function outside(event){
 }
 watch(open,(visible,_,onCleanup)=>{
   if(!visible){sub.value=false;return;}
+  openingFocus=document.activeElement;
   for(const event of ['pointerdown','focusin'])document.addEventListener(event,outside,true);
   onCleanup(()=>{for(const event of ['pointerdown','focusin'])document.removeEventListener(event,outside,true);});
 });
