@@ -1,37 +1,41 @@
 <template>
   <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @keydown.esc.stop.prevent="help.close()" @close="restoreHelpFocus">
-    <div class="help-content">
-      <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
-        <button autofocus tabindex="0" aria-label="Close keyboard shortcuts" @click="help.close()"><Icon icon="material-symbols:close" width="20"/></button>
-      </header>
-      <footer>
-        <span>Keyboard shortcuts are {{enabled ? 'on' : 'off'}}.
-          <button type="button" tabindex="0" class="help-link" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
-        </span>
-        <RouterLink tabindex="0" :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
-        <p v-if="saveError" role="alert">{{saveError}}</p>
-      </footer>
-      <div class="shortcut-content" tabindex="0" role="region" aria-label="Shortcut list">
-      <section><h3>Always available</h3>
-        <dl><div><dt>Show keyboard shortcuts</dt><dd><kbd>?</kbd></dd></div>
-          <div><dt>Next / previous message in a conversation</dt><dd><kbd>n</kbd> / <kbd>p</kbd></dd></div></dl>
-      </section>
-      <section v-if="hasPerm('email:send')"><h3>Compose and format</h3>
-        <dl><div v-for="[label,keys] in composeActions" :key="label"><dt>{{label}}</dt><dd><kbd>{{keys}}</kbd></dd></div></dl>
-      </section>
-      <section><h3>Navigation</h3>
-        <dl><div v-for="item in actions" :key="item.keys"><dt>{{item.label}}</dt><dd>
-          <template v-for="(key,i) in item.keys.split(' ')" :key="i"><span v-if="i"> then </span><kbd>{{key}}</kbd></template>
-        </dd></div></dl>
-      </section>
+    <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
+      <nav aria-label="Shortcut reference">
+        <a href="https://support.google.com/mail/answer/6594" target="_blank" rel="noopener noreferrer" title="Gmail keyboard shortcut reference">Open in a new window</a>
+        <span aria-hidden="true"> | </span>
+        <button autofocus type="button" aria-label="Close keyboard shortcuts" @click="help.close()">Close</button>
+      </nav>
+    </header>
+    <div class="shortcut-content" tabindex="0" role="region" aria-label="Shortcut list">
+      <div class="help-columns">
+        <div><ShortcutGroup v-if="hasPerm('email:send')" title="Compose" :items="composeActions"/>
+          <ShortcutGroup title="Navigation" :items="[{keys:'p / n',label:'Read previous/next message'}]"/>
+        </div>
+        <ShortcutGroup v-if="hasPerm('email:send')" title="Formatting" :items="formatActions"/>
       </div>
+      <div class="shortcut-status">
+        The following keyboard shortcuts are currently {{enabled ? 'enabled' : 'disabled'}}.
+        <button type="button" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
+        <p v-if="saveError" role="alert">{{saveError}}</p>
+      </div>
+      <div class="help-columns">
+        <div><ShortcutGroup title="Jumping" :items="jumpActions"/>
+          <ShortcutGroup title="Threadlist selection" :items="selectionActions"/>
+        </div>
+        <div><ShortcutGroup title="Application" :items="appActions"/>
+          <ShortcutGroup title="Actions" :items="actions.filter(item=>item.keys==='m')"/>
+        </div>
+      </div>
+      <RouterLink class="settings-link" :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
     </div>
   </dialog>
 </template>
 <script setup>
 import {computed,onBeforeUnmount,onMounted,ref,watch} from 'vue';
 import {useRoute,useRouter} from 'vue-router';
-import {Icon} from '@iconify/vue';
+import ShortcutGroup from './shortcut-group.vue';
+import {selectionKeys} from './selection-keys';
 import http from '@/axios';
 import {useUserStore} from '@/store/user';
 import {useUiStore} from '@/store/ui';
@@ -51,14 +55,30 @@ const actions=computed(()=>[
   {keys:'g t',label:'Go to Sent',route:'send',permission:'email:send'},
   {keys:'g d',label:'Go to Drafts',route:'draft',permission:'email:send'},
   {keys:'g a',label:'Go to All mail',route:'all'},
-  {keys:'g l',label:'Go to label'},
+  {keys:'g l',label:'Go to Label'},
+  {keys:'g f',label:'Go to search filters',route:'filter-settings'},
 ].filter(item=>!item.permission || hasPerm(item.permission)));
 const modifier=/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+const modified=(key,label)=>({keys:modifier+' + '+key,label});
 const composeActions=[
-  ['Send',modifier+' + Enter'],['Add Cc recipients',modifier+' + Shift + C'],['Add Bcc recipients',modifier+' + Shift + B'],
-  ['Insert link',modifier+' + K'],['Bold',modifier+' + B'],['Italic',modifier+' + I'],['Underline',modifier+' + U'],
-  ['Discard draft',modifier+' + Shift + D'],
+  modified('Enter','Send'),modified('Shift + c','Add Cc recipients'),modified('Shift + b','Add Bcc recipients'),
+  modified('Shift + d','Discard draft'),modified('k','Insert a link'),modified('Shift + 2','Insert emoji'),
 ];
+const formatActions=[
+  modified('z','Undo'),modified('Shift + z','Redo'),
+  modified('Shift + 5','Previous font'),modified('Shift + 6','Next font'),
+  modified('Shift + -','Decrease text size'),modified('Shift + +','Increase text size'),
+  modified('b','Bold'),modified('i','Italics'),modified('u','Underline'),
+  modified('Shift + 7','Numbered list'),modified('Shift + 8','Bulleted list'),modified('Shift + 9','Quote'),
+  modified('[','Indent less'),modified(']','Indent more'),modified('Shift + l','Align left'),
+  modified('Shift + e','Align center'),modified('Shift + r','Align right'),modified('Shift + x','Strikethrough'),
+  modified('\\','Remove formatting'),
+];
+const jumpActions=computed(()=>actions.value.filter(action=>action.keys.startsWith('g ')).map(action=>({...action,keys:action.keys.replace(' ',' then ')})));
+const selectionActions=Object.entries(selectionKeys).map(([key,group])=>({
+  keys:'* then '+key,label:group==='None' ? 'Deselect all conversations' : 'Select '+group.toLowerCase()+' conversations',
+}));
+const appActions=computed(()=>[...actions.value.filter(action=>['/','c'].includes(action.keys)),{keys:'?',label:'Open keyboard shortcut help'}]);
 const saving=ref(false),saveError=ref('');
 let saveRun=0;
 async function toggle(){
@@ -83,8 +103,8 @@ async function toggle(){
   }
 }
 const help=ref(null);
-let sequenceUntil=0, opener;
-function reset(){sequenceUntil=0;}
+let prefix='', sequenceUntil=0, opener;
+function reset(){prefix='';sequenceUntil=0;}
 function restoreHelpFocus(){
   if (document.activeElement===document.body && opener?.isConnected) opener.focus({preventScroll:true});
   opener=null;
@@ -92,24 +112,31 @@ function restoreHelpFocus(){
 function backdrop(event){
   if(event.target===help.value) help.value.close();
 }
-function inMailContext(event){
+function inMailContext(event, allowSelection=false){
   if(!props.available || route.query.window==='1' || !user.authenticatedToken ||
      user.authenticatedToken!==localStorage.getItem('token') || event.defaultPrevented || event.isComposing ||
      event.keyCode===229 || event.repeat || event.ctrlKey || event.altKey || event.metaKey) return false;
-  if(event.composedPath().some(node=>(event.key!=='m' || !node.matches?.('.conversation-row input[type=checkbox]')) && (node.isContentEditable || node.matches?.(
+  if(event.composedPath().some(node=>(!allowSelection || !node.matches?.('.conversation-row .check-target input[type=checkbox],.mail-toolbar .check-target input[type=checkbox]')) && (node.isContentEditable || node.matches?.(
     'input,textarea,select,.send,[role="textbox"],[role="combobox"],[role="listbox"],[role="menu"],[role="dialog"]')))) return false;
   return ![...document.querySelectorAll('dialog[open],[role="dialog"],[role="alertdialog"],[role="listbox"],.el-overlay,.el-dropdown__popper,.compose-format-popup,.nav-overlay,[aria-expanded="true"][aria-haspopup="menu"]')]
     .some(node=>node.getClientRects().length);
 }
 function keydown(event){
-  const previous=sequenceUntil;
+  const previous=sequenceUntil>performance.now() ? prefix : '';
   reset();
   const showingHelp=event.key==='?';
-  if(!showingHelp && (!enabled.value || event.shiftKey)) return;
-  const chord=previous>performance.now() ? 'g '+event.key : event.key;
+  const startsSequence=event.key==='g' || event.key==='*';
+  if(!showingHelp && (!enabled.value || (event.shiftKey && event.key!=='*'))) return;
+  const group=previous==='*' && selectionKeys[event.key];
+  const chord=previous ? previous+' '+event.key : event.key;
   const action=actions.value.find(item=>item.keys===chord);
-  if(!showingHelp && event.key!=='g' && !action) return;
-  if(!inMailContext(event)) return;
+  if(!showingHelp && !startsSequence && !group && !action) return;
+  if(!inMailContext(event, Boolean(group) || event.key==='*' || action?.keys==='m')) return;
+  if(group) {
+    const request=new CustomEvent('mail-select-group',{cancelable:true,detail:group});
+    if(!window.dispatchEvent(request)) event.preventDefault();
+    return;
+  }
   if (action?.keys==='m') {
     if (!window.dispatchEvent(new Event("mail-mute-selection",{cancelable:true}))) event.preventDefault();
     return;
@@ -119,9 +146,10 @@ function keydown(event){
     opener=document.activeElement;
     saveError.value='';
     help.value.showModal();
+    help.value.querySelector('.shortcut-content').scrollTop=0;
     return;
   }
-  if(event.key==='g'){sequenceUntil=performance.now()+1500;return;}
+  if(startsSequence){prefix=event.key;sequenceUntil=performance.now()+1500;return;}
   if(action.route) router.push({name:action.route});
   else if(action.keys==='c') ui.writerRef?.open();
   else emit('search',action.keys==='g l');
@@ -141,17 +169,20 @@ onBeforeUnmount(()=>{
 });
 </script>
 <style scoped>
-.shortcut-help{box-sizing:border-box;width:min(600px,calc(100vw - 32px));max-height:calc(100dvh - 48px);margin:auto;padding:0;border:0;border-radius:16px;background:var(--mail-surface,var(--el-bg-color));color:var(--el-text-color-primary);box-shadow:0 8px 32px #0004;font:14px/20px Arial,sans-serif}
-.shortcut-help::backdrop{background:#20212460}
-.help-content{padding:20px 24px}.help-content header,.help-content dl div,.help-content footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
-h2{font-size:20px;font-weight:500;margin:0}h3{font-size:14px;margin:18px 0 4px}dl,dd{margin:0}dl div{min-height:28px}
-dd{white-space:nowrap;color:var(--regular-text-color)}kbd{font:13px monospace;border:1px solid var(--light-border-color);border-radius:4px;display:inline-block;min-width:22px;text-align:center;padding:1px 3px}
-header button{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;cursor:pointer}header button:hover{background:var(--mail-hover)}
-footer{border-bottom:1px solid var(--light-border-color);margin-top:8px;padding-bottom:12px;flex-wrap:wrap}
-.help-content{display:flex;flex-direction:column;box-sizing:border-box;max-height:calc(100dvh - 48px)}
-.shortcut-content{min-height:0;overflow:auto;overscroll-behavior:contain;padding-inline-end:4px}
-header,footer{flex:none}footer p{width:100%;margin:0;color:var(--el-color-danger)}
-footer>span{display:inline-flex;align-items:baseline;column-gap:4px;flex-wrap:wrap}
-.help-link{padding:0 3px;cursor:pointer}.help-link:disabled{opacity:.6}
-.help-link,footer a{color:var(--el-color-primary);text-decoration:underline}
+.shortcut-help{box-sizing:border-box;position:fixed;inset:5dvh auto auto 4vw;margin:0;width:92vw;max-width:none;max-height:90dvh;padding:16px;border:0;border-radius:10px;color:white;background:#222;opacity:.85;font:700 16px/normal Arial,sans-serif}
+.shortcut-help[open]{display:flex;flex-direction:column}
+.shortcut-help::backdrop{background:transparent}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding-bottom:.42em}
+h2{margin:0;font:inherit;color:inherit}
+nav{text-align:end}
+.shortcut-help a,.shortcut-help button{padding:0;color:#dd0;background:none;font:inherit;text-decoration:underline;cursor:pointer}
+.shortcut-help button:disabled{opacity:.6;cursor:wait}
+.shortcut-help :is(a,button):focus-visible,.shortcut-content:focus-visible{outline:2px solid currentColor;outline-offset:-1px}
+.shortcut-content{min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+.help-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-top:1px solid #999;padding:3px 0 0;gap:12px}
+.shortcut-status{text-align:center;margin-top:8px;border-top:1px solid #999;padding:8px 0}
+.shortcut-status p{margin:4px 0;color:#ffc6c6}
+.settings-link{display:block;margin:16px 0 2px;text-align:center}
+@media(max-width:700px){.shortcut-help{padding:12px;opacity:.97}header{gap:8px}nav{font-size:14px}.help-columns{grid-template-columns:1fr;gap:0}}
+@media(forced-colors:active){.shortcut-help{opacity:1;border:1px solid CanvasText}.shortcut-help button,.shortcut-help a{color:LinkText}}
 </style>
