@@ -2,9 +2,9 @@
   <dialog ref="help" class="shortcut-help" aria-labelledby="shortcut-heading" @click="backdrop" @keydown.esc.stop.prevent="help.close()" @close="restoreHelpFocus">
     <header><h2 id="shortcut-heading">Keyboard shortcuts</h2>
       <nav aria-label="Shortcut reference">
-        <a href="https://support.google.com/mail/answer/6594" target="_blank" rel="noopener noreferrer" title="Gmail keyboard shortcut reference">Open in a new window</a>
+        <a tabindex="0" href="https://support.google.com/mail/answer/6594" target="_blank" rel="noopener noreferrer" title="Gmail keyboard shortcut reference">Open in a new window</a>
         <span aria-hidden="true"> | </span>
-        <button autofocus type="button" aria-label="Close keyboard shortcuts" @click="help.close()">Close</button>
+        <button autofocus tabindex="0" type="button" aria-label="Close keyboard shortcuts" @click="help.close()">Close</button>
       </nav>
     </header>
     <div class="shortcut-content" tabindex="0" role="region" aria-label="Shortcut list">
@@ -16,7 +16,7 @@
       </div>
       <div class="shortcut-status">
         The following keyboard shortcuts are currently {{enabled ? 'enabled' : 'disabled'}}.
-        <button type="button" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
+        <button type="button" tabindex="0" :disabled="saving" @click="toggle">{{enabled ? 'Disable' : 'Enable'}}</button>
         <p v-if="saveError" role="alert">{{saveError}}</p>
       </div>
       <div class="help-columns">
@@ -27,7 +27,7 @@
           <ShortcutGroup title="Actions" :items="actions.filter(item=>item.keys==='m')"/>
         </div>
       </div>
-      <RouterLink class="settings-link" :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
+      <RouterLink tabindex="0" class="settings-link" :to="{name:'setting',hash:'#keyboard-shortcuts'}" @click="opener=null; help.close()">Keyboard shortcut settings</RouterLink>
     </div>
   </dialog>
 </template>
@@ -65,7 +65,7 @@ const composeActions=[
   modified('Shift + d','Discard draft'),modified('k','Insert a link'),modified('Shift + 2','Insert emoji'),
 ];
 const formatActions=[
-  modified('z','Undo'),modified('Shift + z','Redo'),
+  modified('z','Undo'),modified('y','Redo'),
   modified('Shift + 5','Previous font'),modified('Shift + 6','Next font'),
   modified('Shift + -','Decrease text size'),modified('Shift + +','Increase text size'),
   modified('b','Bold'),modified('i','Italics'),modified('u','Underline'),

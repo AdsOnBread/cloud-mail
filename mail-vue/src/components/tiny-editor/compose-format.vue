@@ -298,7 +298,7 @@ const action = (label, command, icon, shortcut, toggle = false) => ({
 });
 const history = [
   action("Undo", "Undo", "undo", "Z"),
-  action("Redo", "Redo", "redo", "⇧Z"),
+  action("Redo", "Redo", "redo", "Y"),
 ];
 const styles = [
   action("Bold", "Bold", "format-bold", "B"),
