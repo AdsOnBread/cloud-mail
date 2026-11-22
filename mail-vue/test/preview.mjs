@@ -405,7 +405,7 @@ const api=createHTTPServer(async(req,res)=>{
      const state=filing.get(filingAnchor(members));
      const inbox=state===undefined ? members.some(row=>row.type===0 && row.status===0) : state!==null && state<=Date.now()/1000;
      const subject=members.toSorted((a,b)=>a.emailId-b.emailId)[0].subject;
-     return requested.map(row=>({emailId:row.emailId,threadId,subject,inbox:Number(inbox),messageCount:members.length,senders:previewSenders(members)}));
+     return requested.map(row=>({emailId:row.emailId,threadId,subject,inbox:Number(inbox),hasUnread:Number(members.some(m=>m.type===0 && m.unread===0)),messageCount:members.length,senders:previewSenders(members)}));
    });
  }else if(path==='/email/conversation/label-unread'){
    const accountId=Number(url.searchParams.get('accountId')),combined=url.searchParams.get('allReceive')==='1';

@@ -267,7 +267,7 @@ async function openRowResponses(rows, command) {
   } finally { stop(); }
 
 }
-async function discardEditor(ids, session) {
+async function discardEditor(ids, session, onRestore) {
   const matches = occupied.value.filter(
     (item) => ids.includes(item.draftId) || ids.includes(item.requestedId),
   );
@@ -285,7 +285,7 @@ async function discardEditor(ids, session) {
       locked.map((item) => item.expected),
       session,
     );
-    feedback.dismissedDrafts(recovery);
+    feedback.dismissedDrafts(recovery, onRestore);
     for (const { editor } of locked) editor.finishDiscard();
     return true;
   } finally {

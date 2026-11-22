@@ -97,7 +97,7 @@ export function startDraftList() {
           if (!active || db.value !== database) return;
           for (const row of rows) {
             threads[row.emailId] = row.threadId;
-            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount, subject:row.subject, inbox:Boolean(row.inbox)};
+            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount, subject:row.subject, inbox:Boolean(row.inbox), unread:Boolean(row.hasUnread)};
           }
         }
         store.threads = threads;

@@ -315,6 +315,67 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 .mail-action-menu .el-dropdown-menu__item { min-height:32px; padding:5px 18px; color:var(--el-text-color-primary); }
 .mail-action-menu .el-dropdown-menu__item:focus,
 .mail-action-menu .el-dropdown-menu__item:hover { background:var(--mail-read); color:var(--el-text-color-primary); }
+.trash-view .retention-action,.folder-toolbar .toolbar-text {
+  position:relative;
+  isolation:isolate;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  height:36px;
+  padding:0 8px;
+  border-radius:4px;
+  background:transparent;
+  font:500 14px/18px Arial,sans-serif;
+  cursor:pointer;
+}
+.trash-view .retention-action {
+  margin-inline-start:4px;
+  min-width:80px;
+  color:var(--trash-action);
+  --action-hover:rgb(66 133 244 / 3%);
+  --action-focus:rgb(66 133 244 / 6%);
+}
+.folder-toolbar .toolbar-text {
+  color:var(--regular-text-color);
+  --action-hover:var(--format-hover);
+  --action-focus:var(--format-active);
+}
+.trash-view .retention-action::before,.folder-toolbar .toolbar-text::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:-1;
+  border-radius:inherit;
+  transform:scale(0);
+  opacity:0;
+  transition:transform .15s cubic-bezier(.4,0,.2,1),opacity .15s cubic-bezier(.4,0,.2,1);
+}
+:is(.trash-view .retention-action,.folder-toolbar .toolbar-text):hover:not(:disabled)::before {
+  background:var(--action-hover);
+  opacity:1;
+  transform:scale(1);
+}
+:is(.trash-view .retention-action,.folder-toolbar .toolbar-text):is(:focus-visible,:active):not(:disabled)::before {
+  background:var(--action-focus);
+  box-shadow:inset 0 0 0 1px currentColor;
+  opacity:1;
+  transform:scale(1);
+}
+@media (prefers-reduced-motion:reduce) {
+  .trash-view .retention-action::before,.folder-toolbar .toolbar-text::before {transition:none}
+}
+.folder-selection-menu .el-dropdown-menu { min-width:160px; padding:6px 0; }
+.folder-selection-menu .el-dropdown-menu__item { padding:6px 48px; line-height:20px; }
+@media (min-width:768px) {
+  .folder-toolbar {gap:0;padding-inline:12px 6px}
+  .folder-toolbar .mail-icon {width:40px;height:40px}
+  .folder-toolbar .check-target {width:28px;height:36px;border-radius:4px}
+  .folder-toolbar .select-options {width:18px;height:36px;margin-inline-end:8px;border-radius:4px}
+  .folder-toolbar .toolbar-text {margin-inline-start:2px}
+}
+
 .mail-dialog.el-dialog,.mail-confirm.el-message-box { border-radius:20px; padding:24px; }
 .mail-confirm .el-message-box__title,.mail-dialog .el-dialog__title { font-size:20px; font-weight:400; line-height:28px; }
 .mail-confirm .el-message-box__header { padding:0 0 12px; }

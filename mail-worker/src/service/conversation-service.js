@@ -229,12 +229,12 @@ export async function draftThreads(c, ids, userId) {
       WHERE ${visible} AND e.email_id IN (SELECT value FROM json_each(?))
     ), summaries AS (
       SELECT m.thread_id,MIN(e.email_id) first_id,${filingAnchor} filing_id,
-        MAX(e.type=0 AND e.status=0) received
+        MAX(e.type=0 AND e.status=0) received, MAX(e.type=0 AND e.unread=0) has_unread
       FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
       JOIN account a ON a.account_id=e.account_id
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM targets)
       GROUP BY m.thread_id
-    ) SELECT t.email_id,t.thread_id,first.subject,
+    ) SELECT t.email_id,t.thread_id,first.subject,s.has_unread,
       CASE WHEN f.email_id IS NULL THEN s.received ELSE coalesce(f.wake_at<=unixepoch(),0) END inbox
     FROM targets t JOIN summaries s ON s.thread_id=t.thread_id JOIN email first ON first.email_id=s.first_id
     LEFT JOIN conversation_filing f ON f.user_id=? AND f.email_id=s.filing_id

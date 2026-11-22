@@ -93,7 +93,7 @@ describe('Web conversations', () => {
     expect(row.participants).toBe('Taylor, Casey, me');
     expect(row.messageCount).toBe(4);
     expect(await draftThreads(context(),[second.email_id,own.email_id],1)).toEqual([second,own].map(r=>({
-      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,subject:first.subject,inbox:1,
+      emailId:r.email_id,threadId:row.threadId,messageCount:4,senders:row.senders,subject:first.subject,inbox:1,hasUnread:1,
     })));
     expect(await draftThreads(context(),[second.email_id],2)).toEqual([]);
   });
@@ -105,7 +105,7 @@ describe('Web conversations', () => {
     await action('archive',[sent.email_id]);
     expect(await summary()).toMatchObject({subject:'Original title',inbox:0});
     await env.db.prepare("UPDATE email SET trashed_at=CURRENT_TIMESTAMP WHERE email_id=?").bind(root.email_id).run();
-    expect(await summary()).toMatchObject({subject:'Re: Original title',inbox:0,messageCount:1});
+    expect(await summary()).toMatchObject({subject:'Re: Original title',inbox:0,messageCount:1,hasUnread:0});
     expect(await draftThreads(context(),[root.email_id],1)).toEqual([]);
     await action('inbox',[sent.email_id]);
     expect((await summary()).inbox).toBe(1);

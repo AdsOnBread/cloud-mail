@@ -1,7 +1,7 @@
 <template>
   <section ref="root" class="trash-view" aria-label="Trash">
     <FolderFilters v-if="!messageId" folder="trash" :account-id="mailbox" />
-    <div class="mail-toolbar" :class="{'has-selection':selected.length && !messageId}">
+    <div class="mail-toolbar folder-toolbar" :class="{'has-selection':selected.length && !messageId}">
       <button
         v-if="messageId"
         class="mail-icon"
@@ -27,10 +27,7 @@
           "
         />
       </label>
-      <el-dropdown v-if="!messageId" ref="selectionMenu" trigger="click" placement="bottom-start" :show-arrow="false" popper-class="mail-action-menu trash-selection-menu" :popper-options="selectionPlacement" :offset="0" @command="selectGroup">
-        <button class="mail-icon select-options" @keydown.esc="selectionMenu?.handleClose()" aria-label="Selection options" data-tip="Select"><Icon icon="material-symbols:arrow-drop-down" width="16"/></button>
-        <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in Object.keys(selectionGroups)" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
-      </el-dropdown>
+      <MailSelectionMenu v-if="!messageId" :disabled="busy || loading" @select="selectGroup"/>
       <template v-if="targets.length">
         <button v-if="canDelete" class="toolbar-text" :disabled="busy" @click="act('purge', targets, null, $event.currentTarget)">Delete forever</button>
         <span v-if="canDelete" class="toolbar-divider" aria-hidden="true"></span>
@@ -242,6 +239,7 @@ import {searchPage} from '@/services/preparing-search';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
+import MailSelectionMenu from "@/components/mail-selection-menu.vue";
 import MailPageActions from "@/components/mail-page-actions.vue";
 import MailConfirmation from "@/components/mail-confirmation.vue";
 import {useEventListener} from "@vueuse/core";
@@ -458,8 +456,6 @@ function moveTo({labelId},ids) {
   if (name) return act('move-from-trash',ids,{labelId,name});
 }
 const filtered=computed(()=>Object.keys(search.filters).length>0);
-const selectionMenu = ref();
-const selectionPlacement = {modifiers:[{name:'offset',options:{offset:[-25,-5]}}]};
 const selectionGroups = {
   All: () => true, None: () => false,
   Read: message => message.unread !== 0, Unread: message => message.unread === 0,
@@ -760,66 +756,6 @@ onBeforeUnmount(() => {
   cursor:pointer;
 }
 .text-button:hover { text-decoration:underline; }
-.retention-action,.toolbar-text {
-  position:relative;
-  isolation:isolate;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  flex:none;
-  height:36px;
-  padding:0 8px;
-  border-radius:4px;
-  background:transparent;
-  font:500 14px/18px Arial,sans-serif;
-  cursor:pointer;
-}
-.retention-action {
-  margin-inline-start:4px;
-  min-width:80px;
-  color:var(--trash-action);
-  --action-hover:rgb(66 133 244 / 3%);
-  --action-focus:rgb(66 133 244 / 6%);
-}
-.toolbar-text {
-  color:var(--regular-text-color);
-  --action-hover:var(--format-hover);
-  --action-focus:var(--format-active);
-}
-.retention-action::before,.toolbar-text::before {
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:-1;
-  border-radius:inherit;
-  transform:scale(0);
-  opacity:0;
-  transition:transform .15s cubic-bezier(.4,0,.2,1),opacity .15s cubic-bezier(.4,0,.2,1);
-}
-:is(.retention-action,.toolbar-text):hover:not(:disabled)::before {
-  background:var(--action-hover);
-  opacity:1;
-  transform:scale(1);
-}
-:is(.retention-action,.toolbar-text):is(:focus-visible,:active):not(:disabled)::before {
-  background:var(--action-focus);
-  box-shadow:inset 0 0 0 1px currentColor;
-  opacity:1;
-  transform:scale(1);
-}
-@media (prefers-reduced-motion:reduce) {
-  .retention-action::before,.toolbar-text::before {transition:none}
-}
-:global(.trash-selection-menu .el-dropdown-menu) { min-width:160px; padding:6px 0; }
-:global(.trash-selection-menu .el-dropdown-menu__item) { padding:6px 48px; line-height:20px; }
-@media (min-width:768px) {
-  .mail-toolbar {gap:0;padding-inline:12px 6px}
-  .mail-toolbar .mail-icon,.mail-toolbar :deep(.page-more-trigger) {width:40px;height:40px}
-  .mail-toolbar .check-target {width:28px;height:36px;border-radius:4px}
-  .mail-toolbar .select-options {width:18px;height:36px;margin-inline-end:8px;border-radius:4px}
-  .mail-toolbar .toolbar-text {margin-inline-start:2px}
-}
 .trash-detail {
   padding: 16px 24px;
 }
