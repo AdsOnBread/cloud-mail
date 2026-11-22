@@ -1,5 +1,5 @@
 <template>
-  <div v-if="panel" ref="box" class="link-card" :class="{'link-preview':panel.preview, 'selection-link':panel.selectedText}" role="dialog"
+  <div v-if="panel" ref="box" :popover="floating ? 'manual' : undefined" class="link-card" :class="{'link-preview':panel.preview, 'selection-link':panel.selectedText}" role="dialog"
     :aria-label="panel.preview ? 'Link options' : 'Edit or Insert link'"
     @keydown.esc.stop.prevent="close(true)" @keydown.tab="tabWithinPreview" @focusout="leaveCard" @pointerdown.stop>
     <template v-if="panel.preview">
@@ -28,12 +28,14 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
+import {visibleFrame} from "./visible-frame";
 import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, shortenLinkDestination, renameLink } from "./link-text";
+const floating = typeof HTMLElement.prototype.showPopover === "function";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
   box = ref(null),
   textField = ref(null), urlField = ref(null);
-let bookmark, anchor, originalText, owner, range, resize, fragment = null;
+let bookmark, anchor, originalText, owner, range, resize, placementEvents, fragment = null;
 const safeUrl = computed(() => normalizeLinkUrl(panel.value?.url));
 const canVisit = computed(() => /^https?:\/\//i.test(safeUrl.value) ||
   (/^mailto:/i.test(safeUrl.value) && safeUrl.value.includes("?")));
@@ -46,42 +48,58 @@ function outside(event) {
   )
     close(false);
 }
-// The editor selection is inside an iframe, while the card belongs to the outer editor box.
+// Selection rectangles are local to TinyMCE's iframe. Gmail lets the card use
+// space outside the composer, so use viewport coordinates in the top layer.
 function position() {
-  const card = box.value;
-  const frame = owner?.iframeElement;
-  const parent = card?.offsetParent;
-  if (!frame || !parent) return;
-  const bounds = parent.getBoundingClientRect();
-  const frameRect = frame.getBoundingClientRect();
+  const card = box.value, frame = owner?.iframeElement;
+  if (!card || !frame) return;
+  const parent = frame.closest(".editor-box");
+  if (!parent) return;
+  if (!frame.getClientRects().length || frame.closest("[inert]")) {
+    close();
+    return;
+  }
+  const rect = frame.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+  const right = left + (viewport?.width || document.documentElement.clientWidth);
+  const bottom = top + (viewport?.height || document.documentElement.clientHeight);
+  const clip = visibleFrame(frame, {left:Math.max(rect.left,left), right:Math.min(rect.right,right),
+    top:Math.max(rect.top,top), bottom:Math.min(rect.bottom,bottom)});
   const lines = Array.from((fragment == null ? range : anchor).getClientRects());
   const line = (fragment == null ? lines.find(rect => rect.bottom > 0 && rect.top < frame.clientHeight)
     : lines[Math.min(fragment, lines.length - 1)]) || lines[0] || owner.selection.getNode().getBoundingClientRect();
-  if (panel.value.preview && (line.bottom <= 0 || line.top >= frame.clientHeight)) {
-    close(box.value.contains(document.activeElement));
+  const startX = rect.left + frame.clientLeft + line.left;
+  const startY = rect.top + frame.clientTop + line.top;
+  const endY = startY + line.height;
+  if (panel.value.preview && (endY <= clip.top || startY >= clip.bottom || clip.left >= clip.right ||
+      startX + line.width < clip.left || startX > clip.right)) {
+    close(card.contains(document.activeElement));
     return;
   }
-  const edge = 3;
+  const local = parent.getBoundingClientRect();
+  const bounds = floating ? {left,top,right,bottom} : local;
   const preview = panel.value.preview;
-  const gap = preview ? 1 : edge;
-  const x = frameRect.left - bounds.left + frame.clientLeft + line.left - (preview ? 1 : 0);
-  const top = frameRect.top - bounds.top + frame.clientTop + line.top;
-  const below = Math.min(frameRect.bottom - bounds.top, top + line.height) + gap;
-  const maxTop = bounds.height - card.offsetHeight - edge;
-  const above = top - card.offsetHeight - gap;
-  card.style.left = Math.max(edge, Math.min(x, bounds.width - card.offsetWidth - edge)) + "px";
-  card.style.top = Math.max(edge, Math.min(below <= maxTop ? below : above, maxTop)) + "px";
+  const inset = floating ? (preview ? 0 : 10) : 3;
+  const gap = preview ? 1 : 2;
+  card.style.maxWidth = Math.max(0,bounds.right-bounds.left-2*inset)+"px";
+  const x = Math.max(bounds.left+inset, Math.min(startX-(preview ? 1 : 0),bounds.right-card.offsetWidth-inset));
+  const below = Math.min(endY,clip.bottom) + gap;
+  const maxTop = bounds.bottom-card.offsetHeight-inset;
+  const y = Math.max(bounds.top+inset, Math.min(below <= maxTop ? below : startY-card.offsetHeight-gap,maxTop));
+  card.style.left = (floating ? x : x-local.left) + "px";
+  card.style.top = (floating ? y : y-local.top) + "px";
 }
 function close(focus = false) {
   if (!panel.value) return;
   document.removeEventListener("pointerdown", outside, true);
   owner.off("mousedown Undo Redo SetContent", insideEditor);
   owner.off("keydown", editorKey);
-  owner.getWin()?.removeEventListener("scroll", position);
+  placementEvents?.abort();
   resize?.disconnect();
   panel.value = null;
   if (focus && owner === props.editor && !owner.removed) owner.focus();
-  anchor = bookmark = range = owner = resize = null;
+  anchor = bookmark = range = owner = resize = placementEvents = null;
 }
 function leaveCard(event) {
   if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) close();
@@ -196,9 +214,15 @@ async function open(existing = null, preview = false, pointer = null, photoActio
   document.addEventListener("pointerdown", outside, true);
   ed.on("mousedown Undo Redo SetContent", insideEditor);
   ed.on("keydown", editorKey, true);
-  ed.getWin().addEventListener("scroll", position, {passive:true});
+  placementEvents = new AbortController();
+  const options = {capture:true, passive:true, signal:placementEvents.signal};
+  for (const target of [window, ed.getWin(), window.visualViewport].filter(Boolean)) {
+    target.addEventListener("resize", position, options);
+    target.addEventListener("scroll", position, options);
+  }
   await nextTick();
   if (!box.value || panel.value !== opened) return;
+  if (floating) box.value.showPopover();
   position();
   if (!box.value || panel.value !== opened) return;
   resize = new ResizeObserver(position);
@@ -306,6 +330,7 @@ defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
   z-index:8;
   width:324px;
   max-width:calc(100% - 6px);
+  border:0;
   background:var(--el-bg-color);
   color:var(--regular-text-color);
   border-radius:12px;
@@ -313,6 +338,7 @@ defineExpose({ open, close, openPhoto: link => open(link, false, null, true) });
   box-shadow:0 2px 6px 2px #3c404326,0 1px 2px #3c40434d;
   font:14px/20px Arial,sans-serif;
 }
+.link-card:popover-open { position:fixed; inset:auto; margin:0; }
 form { display:grid; grid-template-columns:minmax(0,1fr) 64px; align-items:center; gap:8px 12px; }
 label {
   display:flex; align-items:center; gap:16px; min-width:0; height:32px;
