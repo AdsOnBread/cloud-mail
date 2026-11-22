@@ -156,6 +156,7 @@ export async function conversationList(c, p, userId) {
   // Read backwards from the first visible conversation (or the end of the folder).
   // The returned rows always follow the caller's chosen display order.
   const backward=p.pageDirection==='backward';
+  const includeOffset=String(p.includeOffset)==='1';
   const asc = (Number(p.timeSort) === 1) !== backward;
 	const limit = limitOf(p.limit);
 	const chronological = ['inbox', 'sent', 'starred','all','label','important','purchases',...categoryFolders].includes(p.folder);
@@ -180,7 +181,7 @@ export async function conversationList(c, p, userId) {
           WHEN json_extract(d.data,'$.sendType')='forward' AND json_extract(d.data,'$.ui.inlineReply')=1
             THEN json_extract(d.data,'$.ui.responseSourceId') END
         WHERE d.user_id=? AND d.state='draft' GROUP BY m.thread_id)
-      SELECT g.*,(SELECT json_group_array(DISTINCT lm.label_id) FROM mobile_thread_members tm
+      SELECT g.*,${includeOffset && cursor ? 'COUNT(*) OVER () remaining_count,' : ''}(SELECT json_group_array(DISTINCT lm.label_id) FROM mobile_thread_members tm
         JOIN mailbox_label_members lm ON lm.email_id=tm.email_id AND lm.user_id=tm.user_id JOIN email member ON member.email_id=tm.email_id
         JOIN account ma ON ma.account_id=member.account_id AND ma.user_id=member.user_id AND ma.is_del=0
         WHERE tm.user_id=e.user_id AND tm.thread_id=g.thread_id AND member.is_del=0 AND member.trashed_at IS NULL AND member.status NOT IN (6,7)) label_ids,
@@ -201,7 +202,11 @@ export async function conversationList(c, p, userId) {
   const pageSize=backward && !cursor && total ? (total-1)%limit+1 : limit;
   const rows = page.results.slice(0, pageSize);
   if (backward) rows.reverse();
-  const hasMore=backward ? Boolean(cursor && rows.length) : page.results.length>limit;
+  // Keyset rows can change rank between requests while remaining on the same side
+  // of the date/ID boundary. Count the qualifying side in the page snapshot.
+  const remaining=cursor ? (rows[0]?.remaining_count || 0) : total;
+  const offset=backward ? Math.max(0,remaining-rows.length) : total-remaining;
+  const hasMore=includeOffset ? rows.length>0 && offset+rows.length<total : backward ? Boolean(cursor && rows.length) : page.results.length>limit;
   const cursorOf=row=>chronological ? `${row.activity_time}:${row.last_email_id}` : row.last_email_id;
   const [files, authors] = await Promise.all([
     mailboxAttachments(db, userId, rows, 'threads'),
@@ -210,14 +215,14 @@ export async function conversationList(c, p, userId) {
 
 	return {
 		threads: rows.map((row) => {
-			const { sent_recipients, sent_cc, sent_bcc, first_email_id, last_sent_id, category_source, category_override, purchase_match, importance_change, replied, ...summary } = row;
+			const { sent_recipients, sent_cc, sent_bcc, first_email_id, last_sent_id, category_source, category_override, purchase_match, remaining_count, importance_change, replied, ...summary } = row;
 			const senders = authors.get(row.thread_id)?.senders || [];
 			return { ...camel(summary), ...(p.folder === 'sent' ? {} : {senders}), ...files.get(row.thread_id), labelIds: JSON.parse(row.label_ids), participants: participants(row, p.folder, senders) };
 		}),
 		unreadThreads: totals?.unread_threads||0,
     ...(category?{categoryUnread:Object.fromEntries(count.results.map(row=>[row.category,row.unread_threads]))}:{}),
 		nextWakeAt: nextWake.results[0].wake,
-    total, hasMore,
+    total, hasMore, ...(includeOffset ? {offset} : {}),
     firstCursor:rows.length ? cursorOf(rows[0]) : null,
     nextCursor:hasMore ? cursorOf(rows.at(-1)) : null,
 	};

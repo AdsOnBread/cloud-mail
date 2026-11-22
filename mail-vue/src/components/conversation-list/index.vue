@@ -400,7 +400,7 @@ function params() {
     limit: 50,
   };
 }
-const firstPage={cursor:null,offset:0};
+const firstPage={cursor:null};
 let currentPage=firstPage, failedPage;
 const filedDrafts = computed(() => {
   if (offset.value || !["label","starred"].includes(props.folder) || search.filters.isUnread) return [];
@@ -471,18 +471,24 @@ async function load(target=currentPage) {
   loading.value = true;
   error.value = "";
   try {
-    const includeScheduled = !target.cursor && !target.backward && (["starred","important","label","snoozed"].includes(props.folder) || (props.folder==='inbox' && (!category.value || category.value==='primary')))
-      && owner.user.email && (props.folder==="starred" || account.currentAccountId);
-    const [data, queue] = await Promise.all([
-      searchPage(()=>conversationList({ ...params(), cursor: target.cursor, pageDirection:target.backward ? "backward" : undefined },token),current,()=>{preparingSearch.value=true;}),
-      includeScheduled ? http.get("/v1/scheduled", {params:{...search.filters,q:search.query,mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
-        accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
-        noMsg:true, headers:{Authorization:token}}).then(messages=>({messages}), e=>({error:e.message || "Could not load scheduled messages."})) : {},
+    const showQueue=(["starred","important","label","snoozed"].includes(props.folder) ||
+      (props.folder==='inbox' && (!category.value || category.value==='primary'))) &&
+      owner.user.email && (props.folder==="starred" || account.currentAccountId);
+    const fetchQueue=()=>http.get("/v1/scheduled", {params:{...search.filters,q:search.query,
+      mark:props.folder==="label" ? undefined : props.folder,labelId:props.folder==="label" ? props.labelId : undefined,
+      accountId:props.folder==="starred" || account.currentAccount.allReceive ? undefined : account.currentAccountId},
+      noMsg:true,headers:{Authorization:token}}).then(messages=>({messages}),e=>({error:e.message || "Could not load scheduled messages."}));
+    const first=!target.cursor && !target.backward;
+    const [data,initialQueue]=await Promise.all([
+      searchPage(()=>conversationList({...params(),cursor:target.cursor,includeOffset:1,pageDirection:target.backward ? "backward" : undefined},token),
+        current,()=>{preparingSearch.value=true;}),
+      first && showQueue ? fetchQueue() : {},
     ]);
     if (!data || !current()) return;
-    if ((target.cursor && (data.total !== total.value || !data.threads.length)) ||
-        (target.backward && !target.cursor && data.total<=50)) return load(firstPage);
-    const start=target.backward ? (target.cursor ? target.end : data.total)-data.threads.length : target.offset;
+    if (target.cursor && !data.threads.length) return load(target.backward || !data.total ? firstPage : {backward:true,cursor:null});
+    const start=data.offset;
+    const queue=start===0 && !first && showQueue ? await fetchQueue() : initialQueue;
+    if (!current()) return;
     if (start!==offset.value && containerProps.ref.value) containerProps.ref.value.scrollTop=0;
     if(category.value)categoryUnread.value=data.categoryUnread||{};
     scheduledMatches.value = queue.messages || [];
@@ -542,11 +548,10 @@ function jumpPage(edge) {
   return navigate(edge==="oldest" ? {backward:true,cursor:null} : firstPage,".range-trigger");
 }
 function nextPage() {
-  if (hasMore.value) return navigate({cursor:cursor.value,offset:offset.value+rows.value.length},'[aria-label="Older"]');
+  if (hasMore.value) return navigate({cursor:cursor.value},'[aria-label="Older"]');
 }
 function previousPage() {
-  if (offset.value) return navigate(offset.value<=50 ? firstPage :
-    {backward:true,cursor:firstCursor.value,end:offset.value},'[aria-label="Newer"]');
+  if (offset.value) return navigate({backward:true,cursor:firstCursor.value},'[aria-label="Newer"]');
 }
 watch(
   key,

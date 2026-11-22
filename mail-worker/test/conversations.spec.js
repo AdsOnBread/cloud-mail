@@ -87,15 +87,24 @@ describe('Web conversations', () => {
     const delivered=result=>result.threads.map(row=>row.lastEmailId);
     for(const timeSort of [0,1]) {
       const ordered=timeSort ? ids : [...ids].reverse();
-      const options={limit:3,timeSort,category:'primary'};
+      const options={limit:3,timeSort,category:'primary',includeOffset:1};
       const last=await list({...options,pageDirection:'backward'});
       expect(delivered(last)).toEqual(ordered.slice(6));
       expect(last.hasMore).toBe(false);
+      expect(last.offset).toBe(6);
       const middle=await list({...options,pageDirection:'backward',cursor:last.firstCursor});
       expect(delivered(middle)).toEqual(ordered.slice(3,6));
+      expect(middle.offset).toBe(3);
       expect(delivered(await list({...options,cursor:middle.nextCursor}))).toEqual(delivered(last));
       expect(delivered(await list({...options,pageDirection:'backward',cursor:middle.firstCursor}))).toEqual(ordered.slice(0,3));
     }
+    const opts={limit:3,includeOffset:1};
+    const first=await list(opts);
+    const added=await insert({subject:'Another thread',create_time:'2026-12-01'});
+    const older=await list({...opts,cursor:first.nextCursor});
+    expect(older.offset).toBe(4);
+    expect(delivered(older)).toEqual(ids.slice(1,4).reverse());
+    await cloudMail.trash(context(),1,[added.email_id]);
     expect(delivered(await list({limit:7,pageDirection:'backward'}))).toEqual([...ids].reverse());
     expect(await list({q:'absent-search',pageDirection:'backward'})).toMatchObject({threads:[],total:0,nextCursor:null,firstCursor:null});
   });

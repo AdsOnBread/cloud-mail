@@ -51,6 +51,8 @@ const page = (threads, more = {}) => ({
   threads,
   total: threads.length,
   hasMore: false,
+  offset:0,
+  firstCursor:threads[0]?.lastEmailId || null,
   nextCursor: null,
   ...more,
 });
