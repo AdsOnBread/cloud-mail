@@ -1,5 +1,7 @@
-import { MAX_MESSAGE_BYTES } from "../../../../shared/message-size";
-import { planFiles } from "./files";
+import { MAX_MESSAGE_BYTES, messageSize } from "../../../../shared/message-size";
+import { parseHTML } from "linkedom/worker";
+import { extractDraftImages } from "../../../../shared/draft-inline-images";
+import { fileContentBytes } from "../../../../shared/mail-search-size";
 import { attachmentBlob } from "@/components/mail-attachments/content";
 import {
   downloadablePart,
@@ -26,7 +28,12 @@ async function quotePart(message, mode, signal, token) {
   async function fileData(file) {
     signal.throwIfAborted();
     if (!contents.has(file)) {
+      if (mode === "conversation" && file.size > MAX_MESSAGE_BYTES)
+        throw new Error("This conversation exceeds the 5 MiB message limit.");
       const blob = await attachmentBlob(file, signal, false, token);
+      signal.throwIfAborted();
+      if (mode === "conversation" && blob.size > MAX_MESSAGE_BYTES)
+        throw new Error("This conversation exceeds the 5 MiB message limit.");
       const type = file.mimeType || blob.type || "application/octet-stream";
       contents.set(file, {
         content: await inlineImageURL(blob.slice(0, blob.size, type)),
@@ -50,7 +57,8 @@ async function quotePart(message, mode, signal, token) {
       try {
         image.src = (await fileData(file)).content;
         continue;
-      } catch {
+      } catch (error) {
+        if (mode === "conversation") throw error;
         signal.throwIfAborted();
       }
     }
@@ -116,29 +124,40 @@ export async function quotedMessage(message, mode, signal, token) {
 // Read one original at a time so a paginated thread does not hold every full
 // message and its downloaded files in memory alongside the composed draft.
 export async function quotedConversation(subject, messages, signal, token) {
-  const attachments = [], sections = [];
-  let fileBytes = 0, markupLength = 0;
+  const attachments = [], sections = [], wireSections = [];
+  let inlineFiles = [], fileBytes = 0, markupBytes = 0;
+  const tooLarge = () => new Error("This conversation exceeds the 5 MiB message limit.");
   for await (const message of messages) {
     signal.throwIfAborted();
     const files = (message.attList || []).filter(downloadablePart);
     if (attachments.length + files.length > 10)
       throw new Error("This conversation exceeds the limit of 10 file attachments.");
-    if (markupLength + fileBytes + files.reduce((sum,file)=>sum+(Number(file.size)||0),0) > MAX_MESSAGE_BYTES)
-      throw new Error("This conversation exceeds the 5 MiB message limit.");
+    if (markupBytes + fileBytes + files.reduce((sum,file)=>sum+(Number(file.size)||0),0) > MAX_MESSAGE_BYTES)
+      throw tooLarge();
     const part = await quotePart(message, "conversation", signal, token);
     signal.throwIfAborted();
-    sections.push(part.quote);
-    attachments.push(...part.attachments);
-    // Data URLs inflate inline photos in the editor. Count decoded bytes for
-    // those images in the final MIME calculation instead of their URL length.
-    markupLength += part.quote.replace(/src="data:[^"]*"/gi,'src="cid:image"').length;
+    // The cloud draft represents repeated inline photos using one CID, even
+    // when each source email gave the same image a different identifier.
+    const extracted = extractDraftImages(part.quote,inlineFiles,parseHTML,()=>crypto.randomUUID(),
+      ()=>new Error("This conversation contains an unsupported inline image."));
+    inlineFiles = extracted?.attachments || inlineFiles;
+    if (inlineFiles.length > 10) throw new Error("This conversation exceeds the limit of 10 inline photos.");
+    const wire = extracted?.content || part.quote;
+    markupBytes += new TextEncoder().encode(wire).byteLength;
     fileBytes += part.attachments.reduce((sum,file)=>sum+file.size,0);
-    if (markupLength + fileBytes > MAX_MESSAGE_BYTES)
-      throw new Error("This conversation exceeds the 5 MiB message limit.");
+    if (markupBytes + fileBytes + inlineFiles.reduce((sum,file)=>sum+fileContentBytes(file),0) > MAX_MESSAGE_BYTES)
+      throw tooLarge();
+    sections.push(part.quote);
+    wireSections.push(wire);
+    attachments.push(...part.attachments);
   }
+  signal.throwIfAborted();
   const heading = "<div>Forwarded Conversation<br>Subject: "+escape(subject)+"<br>------------------------</div><br>";
-  const content = '<div><br></div><div class="cloudmail-reply-quote cloudmail-forwarded-conversation">'+
-    heading + sections.join("<br><br><div>----------</div>") + "</div>";
-  planFiles([], "attachments", {attachments,subject}, content);
-  return {attachments,content};
+  const wrap = parts => '<div><br></div><div class="cloudmail-reply-quote cloudmail-forwarded-conversation">'+
+    heading + parts.join("<br><br><div>----------</div>") + "</div>";
+  const html = wrap(wireSections), template = document.createElement("template");
+  template.innerHTML = html;
+  const parts = [...attachments,...inlineFiles].map(file=>({filename:file.filename,size:fileContentBytes(file),type:file.contentType}));
+  if (messageSize({html,text:template.content.textContent,subject,attachments:parts}) > MAX_MESSAGE_BYTES) throw tooLarge();
+  return {attachments,content:wrap(sections)};
 }
