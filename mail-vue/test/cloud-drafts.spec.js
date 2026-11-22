@@ -445,8 +445,24 @@ it('drops deleted CID photos during editing and upload while keeping regular att
  await db.value.att.put({draftId:row.draftId,attachments:[...photos,note]});
  await syncCloudDrafts();
  const payload=http.post.mock.calls.find(([path])=>path==='/v1/drafts')[1];
- expect(payload.attachments).toEqual([...photos.slice(1),note]);
- expect(payload.content).toContain('base64,eA==');
+ expect(payload.attachments.slice(0,-1)).toEqual([...photos.slice(1),note]);
+ const added=payload.attachments.at(-1);
+ expect(added).toMatchObject({content:'eA==',contentType:'image/png'});
+ expect(payload.content).toContain('cid:'+added.contentId);
+ expect(payload.content).not.toContain('data:image/');
+});
+
+it('uploads repeated large forwarded photos as one file while preserving the editable local draft',async()=>{
+ const photo='data:image/png;base64,'+btoa('x'.repeat(2*1024*1024));
+ const content='<div class="cloudmail-reply-quote cloudmail-forwarded-conversation">'+('<img src="'+photo+'">').repeat(2)+'</div>';
+ const row=await saveLocalDraft(input({content,sendType:'forward',responseSourceId:10,inlineReply:true}));
+ await syncCloudDrafts();
+ const payload=http.post.mock.calls.find(([path])=>path==='/v1/drafts')[1];
+ expect(payload.attachments).toHaveLength(1);
+ expect(payload.attachments[0].content).toBe(photo.split(',')[1]);
+ expect(payload.content.match(/cid:/g)).toHaveLength(2);
+ expect(payload.content).not.toContain('data:image');
+ expect((await db.value.draft.get(row.draftId)).content).toBe(content);
 });
 
 it('uses only the acknowledged cloud revision and original owner for schedule Undo', async () => {

@@ -280,7 +280,7 @@ function cancelForward() {
   forwardController=undefined;
   forwarding.value=false;
 }
-watch([()=>route.fullPath,()=>user.authenticatedToken,()=>user.user.userId,()=>accountStore.currentAccountId],cancelForward,{flush:"sync"});
+watch([()=>route.fullPath,()=>user.authenticatedToken,()=>user.user.userId,()=>accountStore.currentAccountId,()=>accountStore.currentAccount.allReceive],cancelForward,{flush:"sync"});
 
 async function forwardAll() {
   if (forwarding.value || switching || loading.value || total.value<2 || !hasPerm('email:send')) return;

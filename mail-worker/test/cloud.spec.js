@@ -13,6 +13,7 @@ import cryptoUtils from '../src/utils/crypto-utils';
 import worker from '../src/index';
 import loginService from '../src/service/login-service';
 import {parseHTML} from 'linkedom';
+import {extractDraftImages} from '../../shared/draft-inline-images';
 const bindings=()=>({...env,app_access_secret:'test-installation-secret',init_secret:'test-init',mcp_public_url:'https://mail.example.com/mcp'});
 const c=()=>({env:bindings(),get:k=>k==='user'?{userId:1,email:'admin@example.com'}:undefined,set:()=>{},req:{header:()=>undefined},text:s=>s});
 const message=async(extra={})=>{const row={user_id:1,account_id:1,subject:'Original',send_email:'outside@example.net',recipient:'[{"address":"admin@example.com"},{"address":"copy@example.net"}]',cc:'[{"address":"cc@example.net"}]',bcc:'[{"address":"hidden@example.net"}]',text:'Original body',content:'<p>Original body</p>',message_id:'<original@example.net>',...extra};return env.db.prepare(`INSERT INTO email(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(()=>'?').join(',')}) RETURNING *`).bind(...Object.values(row)).first();};
@@ -25,6 +26,17 @@ beforeEach(async()=>{
  await env.db.prepare('UPDATE setting SET send=0').run();await settingService.refresh(c());
 });
 afterEach(()=>vi.restoreAllMocks());
+it('persists and reopens a conversation with the same 2 MiB photo in two originals',async()=>{
+ const photo='data:image/png;base64,'+btoa('x'.repeat(2*1024*1024));
+ const html='<div class="cloudmail-reply-quote cloudmail-forwarded-conversation">'+('<img src="'+photo+'">').repeat(2)+'</div>';
+ const parts=extractDraftImages(html,[],parseHTML,()=>crypto.randomUUID());
+ const saved=await draft({...parts,sendType:'forward'});
+ const reopened=await drafts.get(c(),1,saved.draftId);
+ expect(reopened.attachments).toHaveLength(1);
+ const [file]=reopened.attachments;
+ expect(file.size).toBe(2*1024*1024);
+ expect(reopened.content.split('cid:'+file.contentId)).toHaveLength(3);
+});
 it('keeps saved contacts with the sending mailbox and includes their names in autocomplete',async()=>{
   const person={accountId:1,email:'Person@Example.net',name:'Casey Rivera',saved:true};
   const search={accountId:1,field:'any',folder:'compose',q:'Rivera'};
