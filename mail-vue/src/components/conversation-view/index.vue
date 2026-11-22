@@ -21,7 +21,7 @@
       <button :disabled="busy || !messages.length" :aria-label="readTitle" :data-tip="readTitle" @click="mutate('read',{unread:hasUnread?1:0})">
         <Icon :icon="hasUnread?'material-symbols:mark-email-read-outline':'material-symbols:mark-email-unread-outline'" width="20" />
       </button>
-      <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" @dismiss-snooze="snoozePicker?.close()" :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
+      <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="toolbarRows" :scope="route.fullPath" :disabled="busy || loading || !messages.length"
         @snooze="opener=>snoozePicker?.show(opener,[Number(route.query.emailId)])" @apply="ops=>mutate('label',ops)"
         @importance="important=>mutate('importance',{important})">
         <MovePicker :show-categories="(route.query.folder==='inbox' && ui.inboxTabs) || categoryFolders.some(item=>item.id===route.query.folder)" @category="id=>mutate('category',{category:id})" :ids="[Number(route.query.emailId)]" :from-label-id="Number(route.query.labelId)||undefined" :disabled="busy || !messages.length" @move="ops=>mutate('move',ops)" />

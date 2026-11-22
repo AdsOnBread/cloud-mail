@@ -57,7 +57,7 @@
         >
           <Icon :icon="readIcon(selectedUnread)" width="20" />
         </button>
-        <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" @dismiss-snooze="snoozePicker?.close()" :rows="selectedRows" label="More actions for selection" :scope="key"
+        <ConversationToolbarActions :snooze-anchor="snoozePicker?.anchor" :rows="selectedRows" label="More actions for selection" :scope="key"
           :disabled="busy || loading" :can-attach="hasPerm('email:send')" :forwarding="forwarding"
           :newer="offset>0" :older="hasMore" @newer="previousPage" @older="nextPage"
           @snooze="opener=>chooseSnooze(selected,opener)" @attach="forwardMessages(selected)"

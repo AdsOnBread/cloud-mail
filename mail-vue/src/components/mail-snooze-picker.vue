@@ -32,13 +32,26 @@
     </el-dialog>
 </template>
 <script setup>
-import {nextTick,ref,shallowRef} from 'vue';
+import {nextTick,ref,shallowRef,watch} from 'vue';
 import MailDateTime from '@/components/mail-date-time/index.vue';
 const emit=defineEmits(['choose']);
 const snoozeAnchor=shallowRef(),snoozeMenu=ref(),snoozePicker=ref(),snoozeOpen=ref(false);
 const snoozeOptions=ref([]),initial=ref();
 let targets=[],opener;
 function close(){snoozeAnchor.value=null;snoozeOpen.value=false;targets=[];}
+watch(snoozeAnchor,(anchor,_,onCleanup)=>{
+  if(!anchor)return;
+  // A virtual dropdown may briefly move focus to the page while opening.
+  const dismiss=event=>{
+    if(event.key!=='Escape' || snoozeOpen.value)return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+    restoreSnoozeFocus();
+  };
+  document.addEventListener('keydown',dismiss,true);
+  onCleanup(()=>document.removeEventListener('keydown',dismiss,true));
+},{flush:'sync'});
 async function show(element,selection,wakeAt=0) {
   if(snoozeAnchor.value===element){close();return;}
   opener=element;
