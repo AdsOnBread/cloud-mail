@@ -188,6 +188,9 @@ html:not(.dark) {
     --mail-selected: #cde3cd;
     --mail-hover: #e6ece3;
     --mail-read: #f5f6ef;
+    --format-hover: rgb(32 33 36 / 6%);
+    --format-active: rgb(32 33 36 / 12%);
+    --format-pressed: #d3e3fd;
     --send-blue: #0b57d0;
     --send-ink: #fff;
     --send-outline: #747775;
@@ -219,6 +222,9 @@ html:not(.dark) {
     --aside-right-border: none;
 }
 html.dark {
+    --format-hover: rgb(227 227 227 / 8%);
+    --format-active: rgb(227 227 227 / 16%);
+    --format-pressed: #344a68;
     --send-blue: #a8c7fa;
     --send-ink: #062e6f;
     --send-outline: #8e918f;

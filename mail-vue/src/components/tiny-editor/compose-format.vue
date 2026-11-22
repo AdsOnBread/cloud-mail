@@ -155,7 +155,7 @@
         label="More formatting options"
         :choices="overflowChoices"
         actions
-        :icons-only="showIndent"
+        icons-only
         @open="opened(true)"
         @choose="(command) => apply(command)"
         ><Icon icon="material-symbols:more-horiz" width="18"
@@ -350,9 +350,9 @@ const visibleParagraph = computed(() =>
   showIndent.value ? [...lists, ...indents] : lists,
 );
 const overflow = computed(() => [
-  ...(!showLists.value ? [...alignments, ...lists] : []),
-  ...(!showIndent.value ? indents : []),
   ...extra.slice(extraCount.value).reverse(),
+  ...(!showIndent.value ? [...indents].reverse() : []),
+  ...(!showLists.value ? [...lists].reverse().concat(alignments) : []),
   ...(width.value < 395 ? history : []),
   ...editing,
 ]);
@@ -383,6 +383,8 @@ const overflowChoices = computed(() =>
     value: a.command,
     icon: icon(a),
     tooltip: tip(a),
+    checked: alignments.includes(a) ? alignment.value.command===a.command : a.toggle ? !!active.value[a.command] : undefined,
+    radio: alignments.includes(a),
     disabled: history.includes(a) && !active.value[a.command],
   })),
 );
@@ -457,7 +459,7 @@ watch(
   (ed, old, cleanup) => {
     bookmark = null;
     if (!ed) return;
-    const events = "NodeChange Undo Redo AddUndo init";
+    const events = "SelectionChange NodeChange Undo Redo AddUndo init";
     ed.on(events, update);
     ed.on("blur", remember);
     update();
@@ -691,13 +693,36 @@ button {
   padding: 0 3px;
   border-radius: 4px;
 }
-.format-strip :deep(button:hover),
-.default-color:hover {
-  background: var(--mail-hover);
+.default-color:hover { background:var(--mail-hover); }
+.format-strip :deep(button) {
+  position:relative;
+  isolation:isolate;
 }
-.format-strip :deep(button[aria-pressed="true"]) {
-  background: var(--mail-selected);
-  color: var(--el-color-primary);
+.format-strip :deep(button::before) {
+  content:"";
+  position:absolute;
+  z-index:-1;
+  inset:0;
+  border-radius:4px;
+  background:var(--format-hover);
+  opacity:0;
+  transform:scale(.86);
+  transition:transform 150ms cubic-bezier(.4,0,.2,1),opacity 150ms cubic-bezier(.4,0,.2,1);
+}
+.spaced :deep(button::before) { inset:-4px; }
+.spaced :deep(button[aria-haspopup]::before) { inset:-4px 0; }
+.spaced :deep(button.detached-more::before) { inset:0; border-radius:50%; }
+.format-strip :deep(button:is(:hover,:focus-visible,[aria-pressed="true"],[aria-expanded="true"])::before) {
+  opacity:1;
+  transform:scale(1);
+}
+.format-strip :deep(button[aria-pressed="true"]::before) { background:var(--format-pressed); }
+.format-strip :deep(button:active::before) { background:var(--format-active); }
+@media (prefers-reduced-motion:reduce) {
+  .format-strip :deep(button::before) { transition:none; }
+}
+@media (forced-colors:active) {
+  .format-strip :deep(button[aria-pressed="true"]::before) { border:2px solid ButtonText; }
 }
 .format-strip :deep(button:disabled) {
   opacity: 0.4;

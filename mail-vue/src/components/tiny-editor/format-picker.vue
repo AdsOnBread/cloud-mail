@@ -5,7 +5,7 @@
     :tooltip="tooltip"
     centered
     :panel-class="
-      iconsOnly ? 'format-icon-menu' : actions ? 'format-more-menu' :
+      iconsOnly ? (actions ? 'format-icon-menu format-command-menu' : 'format-icon-menu') : actions ? 'format-more-menu' :
         sizePreview ? 'format-type-menu format-size-menu' : 'format-type-menu'
     "
     @open="emit('open')"
@@ -22,12 +22,12 @@
         v-for="(item, i) in choices"
         :key="item.value"
         type="button"
-        :role="actions ? 'menuitem' : 'menuitemradio'"
+        :role="actions ? commandRole(item) : 'menuitemradio'"
         :disabled="item.disabled"
         :aria-label="item.name"
-        :aria-checked="actions ? undefined : item.value === value"
+        :aria-checked="actions ? item.checked : item.value === value"
         :tabindex="i === position ? 0 : -1"
-        :title="item.tooltip"
+        :title="iconsOnly ? undefined : item.tooltip"
         :data-tip="iconsOnly ? item.tooltip : undefined"
         @focus="position = i"
         @mousedown.prevent
@@ -64,6 +64,10 @@ const emit = defineEmits(["open", "choose"]);
 const visible = ref(false),
   position = ref(0),
   menu = ref(null);
+function commandRole(item) {
+  if (item.checked===undefined) return 'menuitem';
+  return item.radio ? 'menuitemradio' : 'menuitemcheckbox';
+}
 function focusAt(index) {
   position.value = index;
   menu.value?.children[index]?.focus({ preventScroll: true });
@@ -182,5 +186,18 @@ function navigate(event) {
 :global(.format-icon-menu [aria-checked="true"]) {
   color: var(--el-color-primary);
   background: var(--mail-selected);
+}
+.format-command-menu .choices button {
+  position:relative; isolation:isolate; color:var(--regular-text-color); background:transparent;
+}
+.format-command-menu .choices button::before {
+  content:""; position:absolute; z-index:-1; inset:0 4px; border-radius:4px;
+}
+.format-command-menu .choices button:is(:hover,:focus-visible)::before { background:var(--format-hover); }
+.format-command-menu .choices button[aria-checked="true"]::before { background:var(--format-active); }
+.format-command-menu .choices button:focus-visible::before { outline:2px solid var(--send-blue); outline-offset:-2px; }
+@media (forced-colors:active) {
+  .format-command-menu .choices button[aria-checked="true"]::before {border:2px solid ButtonText;}
+  .format-command-menu .choices button:focus-visible::before {outline-color:Highlight;}
 }
 </style>
