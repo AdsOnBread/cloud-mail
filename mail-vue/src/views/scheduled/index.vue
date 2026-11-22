@@ -25,27 +25,7 @@
             @change="select($event.target.checked)"
           />
         </label>
-        <el-dropdown
-          trigger="click"
-          placement="bottom-start"
-          :show-arrow="false"
-          popper-class="mail-action-menu"
-          @command="select"
-        >
-          <button
-            class="mail-icon select-options"
-            aria-label="Selection options"
-            ref="selectionButton"
-            data-tip="Select"
-          >
-            <Icon icon="material-symbols:arrow-drop-down" width="16" />
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item v-for="option in selectionOptions" :key="option" :command="option">{{ option }}</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <MailSelectionMenu ref="selectionButton" :disabled="busy || loading" @select="select"/>
         <button
           v-if="selected.length"
           class="cancel-action"
@@ -243,6 +223,7 @@ import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
 import MailPageActions from "@/components/mail-page-actions.vue";
+import MailSelectionMenu from "@/components/mail-selection-menu.vue";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import ScheduledLabelActions from "./label-actions.vue";
@@ -306,7 +287,6 @@ const inboxAction=computed(()=>moveIntoInbox.value ? 'Move to Inbox' : 'Archive'
 const readAction = computed(()=>readTargets.value.some(row=>row.unread) ? 'Mark as read' : 'Mark as unread');
 const readIcon = unread => unread ? 'material-symbols:drafts-outline' : 'material-symbols:mail-outline';
 const reading = computed(()=>pendingScheduledReads(db.value,user.authenticatedToken));
-const selectionOptions = ['All','None','Read','Unread','Starred','Unstarred'];
 const filtered = computed(() =>
   Boolean(search.query || Object.keys(search.filters).length),
 );
