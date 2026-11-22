@@ -313,9 +313,8 @@ html.dark { --mail-draft:#f2b8b5; --mail-row-shadow:inset 0 0 0 1px #74777c,0 1p
 .mail-confirm .el-message-box__content { padding:0; color:var(--regular-text-color); }
 .mail-confirm .el-message-box__btns { padding:24px 0 0; }
 .mail-confirm .el-button { min-height:36px; padding:0 16px; border:0; font-weight:500; }
-.mail-confirm .el-button:not(.delete-confirm) { background:transparent; color:var(--el-color-primary); }
-.mail-confirm .el-button:not(.delete-confirm):hover { background:var(--mail-read); }
-.mail-confirm .delete-confirm { background:var(--mail-draft); color:var(--mail-surface); }
+.mail-confirm .el-button { background:transparent; color:var(--el-color-primary); }
+.mail-confirm .el-button:hover { background:var(--mail-read); }
 
 .snooze-menu.el-popper.is-light { border:0; border-radius:4px; }
 .snooze-menu .el-dropdown-menu { width:256px; max-width:calc(100vw - 16px); padding:4px 0; }

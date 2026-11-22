@@ -1,6 +1,7 @@
 <template>
   <section class="filter-settings" aria-label="Filter settings">
     <SettingsTabs />
+    <MailConfirmation ref="confirmation"/>
     <div class="rules">
       <p>The following filters are applied to all incoming mail:</p>
       <p v-if="error" role="alert">
@@ -27,7 +28,7 @@
 </template>
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessageBox } from "element-plus";
+import MailConfirmation from "@/components/mail-confirmation.vue";
 import http from "@/axios";
 import { filterSession, useMessageFilters } from "@/store/message-filters";
 import { useMailLabels } from "@/store/mail-labels";
@@ -36,7 +37,7 @@ import SettingsTabs from "./tabs.vue";
 const store = useMessageFilters(),
   labels = useMailLabels(),
   user = useUserStore(),
-  rows = ref([]),
+  rows = ref([]), confirmation=ref(),
   loading = ref(false),
   error = ref("");
 let generation = 0;
@@ -71,6 +72,7 @@ function actionText(a) {
     .join(", ");
 }
 async function load() {
+  confirmation.value?.cancel();
   const run = ++generation,
     s = filterSession();
   rows.value = [];
@@ -90,15 +92,7 @@ async function load() {
 async function remove(r) {
   const run = generation,
     s = filterSession();
-  try {
-    await ElMessageBox.confirm(
-      "Delete this filter?",
-      "Confirm filter deletion",
-      { confirmButtonText: "Delete", cancelButtonText: "Cancel" },
-    );
-  } catch {
-    return;
-  }
+  if (!await confirmation.value?.ask("Confirm filter deletion","Delete this filter?","Delete")) return;
   if (run !== generation || !s.current()) return;
   try {
     await http.delete("/v1/filters/" + r.id, {
@@ -117,6 +111,7 @@ watch(() => [store.revision, user.user.userId, user.authenticatedToken], load, {
 function storage(e) {
   if ((e.key === "token" || e.key === null) && !filterSession().current()) {
     generation++;
+    confirmation.value?.cancel();
     rows.value = [];
     error.value = "Your signed-in account changed. Reload to see its filters.";
     loading.value = false;

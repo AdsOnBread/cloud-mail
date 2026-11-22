@@ -32,7 +32,7 @@
         <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="option in ['All','None','Read','Unread']" :key="option" :command="option">{{ option }}</el-dropdown-item></el-dropdown-menu></template>
       </el-dropdown>
       <template v-if="targets.length">
-        <button v-if="canDelete" class="toolbar-text" :disabled="busy" @click="act('purge', targets)">Delete forever</button>
+        <button v-if="canDelete" class="toolbar-text" :disabled="busy" @click="act('purge', targets, null, $event.currentTarget)">Delete forever</button>
         <span v-if="canDelete" class="toolbar-divider" aria-hidden="true"></span>
         <button class="mail-icon" :data-tip="readLabel(targetUnread)" :aria-label="readLabel(targetUnread)" :disabled="busy || loading"
           @click="setRead(targets,targetUnread)">
@@ -162,7 +162,7 @@
           v-if="canDelete && messages.length && !search.query && !filtered"
           class="text-button"
           :disabled="busy || loading"
-          @click="emptyTrash"
+          @click="act('purge', null, null, $event.currentTarget)"
         >
           Empty Trash now
         </button>
@@ -217,7 +217,7 @@
             data-tip="Delete forever"
             aria-label="Delete forever"
             :disabled="busy"
-            @click="act('purge', [message.emailId])"
+            @click="act('purge', [message.emailId], null, $event.currentTarget)"
           >
             <Icon icon="material-symbols:delete-forever-outline" width="20" />
           </button>
@@ -233,6 +233,7 @@
         }}
       </p>
     </div>
+    <MailConfirmation ref="confirmation"/>
     <RowContextMenu v-if="!messageId" ref="rowMenu" trash :scope="String(mailbox ?? '')" :rows="selectedRows"
       :busy="busy || loading" :forwarding="forwarding" @select-only="selected=$event" @command="rowCommand" @move="moveTo" @label="setLabels"/>
     <div v-if="notice" class="snackbar" role="status">{{ notice }}</div>
@@ -243,7 +244,8 @@ import {searchPage} from '@/services/preparing-search';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
-import { ElMessageBox } from "element-plus";
+import MailConfirmation from "@/components/mail-confirmation.vue";
+import {useEventListener} from "@vueuse/core";
 import {useNow} from "@vueuse/core";
 import {printMessages} from "@/components/conversation-view/print";
 import {useUserStore} from "@/store/user";
@@ -346,12 +348,12 @@ const targets = computed(() =>
 const selectedRows=computed(()=>messageId.value ? [detail.value].filter(Boolean) : messages.value.filter(row=>selected.value.includes(row.emailId)));
 const hasScheduled=computed(()=>selectedRows.value.some(row=>row.scheduledDraftId));
 const {forwarding, forwardMessages} = useForwardAttachments(() => JSON.stringify([mailbox.value, targets.value, search.query, search.filters]));
-const rowMenu=ref();
-function rowCommand(command,ids) {
+const rowMenu=ref(), confirmation=ref();
+function rowCommand(command,ids,opener) {
   if (command==='attach') return forwardTrash(ids);
   if (command==='inbox') return moveTo({labelId:0},ids);
   if (command==='read' || command==='unread') return setRead(ids,command==='read');
-  return act(command==='delete' ? 'purge' : 'restore',ids);
+  return act(command==='delete' ? 'purge' : 'restore',ids,null,opener);
 }
 function forwardTrash(ids) {
   return forwardMessages(Array.isArray(ids) ? ids : selectedRows.value.map(row => row.emailId), {
@@ -469,6 +471,7 @@ function list(cursor, q, accountId = mailbox.value, filters = search.filters) {
   });
 }
 async function load(pages = history.value) {
+  confirmation.value?.cancel();
   const request = ++revision;
   error.value = "";
   loading.value = true;
@@ -533,6 +536,7 @@ function back() {
   else router.replace({ path: route.path });
 }
 async function loadDetail(id) {
+  confirmation.value?.cancel();
   const request = ++revision;
   detail.value = null;
   loading.value = true;
@@ -585,20 +589,23 @@ function notify(message) {
     notice.value = "";
   }, 5000);
 }
-async function emptyTrash() {
-  await act("purge", null);
-}
-async function act(action, ids, destination) {
+watch([()=>route.fullPath,mailbox,canDelete,()=>user.authenticatedToken,()=>user.user.userId],
+  ()=>confirmation.value?.cancel(),{flush:"sync"});
+useEventListener(window,"storage",event=>{
+  if ((event.key==="token" || event.key===null) && user.authenticatedToken!==localStorage.getItem("token")) confirmation.value?.cancel();
+});
+async function act(action, ids, destination, opener) {
   if (busy.value || !canDelete.value) return;
   busy.value = true;
   error.value = "";
-  let changed = 0;
+  let changed = 0, canceled=false;
+  const wholeFolder=ids===null, path=route.fullPath, owner=user.user.userId;
   const scope = mailbox.value;
   const scopeLabel = scope
     ? (scope === account.currentAccountId ? account.currentAccount.email : account.accounts.find(a => a.accountId === scope)?.email || "this mailbox")
     : "all your mailboxes";
   const request = revision, token = user.authenticatedToken;
-  const stillCurrent = () => !disposed && request === revision && token === user.authenticatedToken && token === localStorage.getItem("token");
+  const stillCurrent = () => !disposed && canDelete.value && owner===user.user.userId && path===route.fullPath && scope===mailbox.value && request === revision && token === user.authenticatedToken && token === localStorage.getItem("token");
   const selectedIndex = ids?.length ? messages.value.findIndex(message=>ids.includes(message.emailId)) : 0;
   try {
     if (responses.value && !await responses.value.save()) return;
@@ -616,23 +623,13 @@ async function act(action, ids, destination) {
     if (!ids.length || disposed) return;
     const unsent=action==='restore' && [detail.value,...messages.value].some(row=>row?.scheduledDraftId && ids.includes(row.emailId));
     const count = ids.length === 1 ? "1 message" : ids.length + " messages";
-    if (action === "purge")
-      await ElMessageBox.confirm(
-        "This will permanently delete " +
-          count +
-          " and any attachments" +
-          (scopeLabel ? " from " + scopeLabel : "") +
-          ".",
-        "Delete forever?",
-        {
-          confirmButtonText: "Delete forever",
-          cancelButtonText: "Cancel",
-          confirmButtonClass: "delete-confirm",
-          customClass: "mail-confirm",
-          showClose: false,
-          autofocus: false,
-        },
-      );
+    if (action === "purge") {
+      const message="This will permanently delete "+(wholeFolder ? "all " : "")+count+" and any attachments from "+scopeLabel+".";
+      if (!await confirmation.value?.ask("Confirm deleting messages",message,wholeFolder ? "OK" : "Delete forever")) {
+        canceled=true;
+        return;
+      }
+    }
     if (!stillCurrent()) return;
     const undoableRecovery=action==='move-from-trash' || (action==='restore' && !unsent);
     if (undoableRecovery) {
@@ -668,6 +665,10 @@ async function act(action, ids, destination) {
       }
     }
     busy.value = false;
+    if (canceled && stillCurrent()) {
+      await nextTick();
+      if (stillCurrent() && opener?.isConnected && document.activeElement===document.body) opener.focus({preventScroll:true});
+    }
   }
 }
 function attachmentBlob(file) {
