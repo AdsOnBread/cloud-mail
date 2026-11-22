@@ -6,7 +6,7 @@
         <Icon icon="material-symbols:arrow-back" width="20"/>
       </button>
       <h2><button type="button" tabindex="0" ref="handle" class="drag-title" aria-label="Move Help panel" :aria-describedby="instructionId"
-        :aria-pressed="Boolean(keyboardOrigin)" @keydown="moveKey" @pointerdown="startDrag" @pointermove="drag"
+        :aria-pressed="Boolean(keyboardOrigin)" @blur="keyboardOrigin=null" @keydown="moveKey" @pointerdown="startDrag" @pointermove="drag"
         @pointerup="endDrag" @lostpointercapture="endDrag">Help</button></h2>
       <button type="button" tabindex="0" class="panel-icon close" aria-label="Close Help panel" @click="emit('close')"><Icon icon="material-symbols:close" width="20"/></button>
     </header>
