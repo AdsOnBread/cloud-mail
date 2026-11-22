@@ -29,7 +29,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { Icon } from "@iconify/vue";
 import {visibleFrame} from "./visible-frame";
-import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, shortenLinkDestination, renameLink } from "./link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, selectedTextLink, shortenLinkDestination, renameLink } from "./link-text";
 const floating = typeof HTMLElement.prototype.showPopover === "function";
 const props = defineProps({ editor: Object });
 const panel = ref(null),
@@ -192,14 +192,9 @@ function focusField() {
 function insert() {
   const ed=props.editor;
   if (!ed?.initialized || ed.removed) return;
-  const selection=ed.selection.getRng();
-  const container=selection.commonAncestorContainer;
-  // A browser can select an entire link by its offsets in the parent block.
-  const singleChild=selection.startContainer===selection.endContainer && selection.endOffset===selection.startOffset+1
-    && container.childNodes[selection.startOffset];
-  const link=ed.dom.getParent(container,"a[href]") || (singleChild?.nodeType===1 && singleChild.matches("a[href]") && singleChild);
-  if (!link || !link.textContent.trim() || link.closest('[contenteditable="false"]') ||
-      ed.selection.getNode()?.nodeName==="IMG") return open();
+  const link = selectedTextLink(ed.selection.getRng());
+  if (link?.closest('[contenteditable="false"]') || link?.querySelector('[contenteditable="false"]')) return;
+  if (!link || !link.textContent.trim() || ed.selection.getNode()?.nodeName==="IMG") return open();
   close();
   ed.focus();
   ed.undoManager.transact(()=>{

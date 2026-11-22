@@ -79,6 +79,30 @@ export function selectedLinkUrl(text) {
   return text.split(/[.。．｡]/).length > 2 || /[:/?#]/.test(text) ? href : "";
 }
 
+// At an inline boundary, Safari can leave the selection endpoint at the end
+// of the preceding text. Find the actual first and last selected leaf nodes.
+function selectedEdge(range, first) {
+  let node = first ? range.startContainer : range.endContainer;
+  const offset = first ? range.startOffset : range.endOffset;
+  if (node.nodeType === Node.TEXT_NODE && (first ? offset < node.length : offset > 0)) return node;
+  let edge = node.childNodes[first ? offset : offset - 1];
+  while (!edge && node !== range.commonAncestorContainer) {
+    edge = first ? node.nextSibling : node.previousSibling;
+    node = node.parentNode;
+  }
+  if (!edge) return null;
+  while (edge.firstChild) edge = first ? edge.firstChild : edge.lastChild;
+  return edge;
+}
+
+export function selectedTextLink(range) {
+  const closest = node => (node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement)?.closest("a[href]");
+  const link = closest(range.commonAncestorContainer);
+  if (link || range.collapsed) return link;
+  const first = closest(selectedEdge(range,true));
+  return first && first === closest(selectedEdge(range,false)) ? first : null;
+}
+
 // Keep the existing inline elements, including styles on text between separate edits.
 export function renameLink(link, label) {
   const original = link.textContent;

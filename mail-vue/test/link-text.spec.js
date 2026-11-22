@@ -1,5 +1,32 @@
 import { it, expect } from "vitest";
-import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, selectedWebUrl, shortenLinkDestination, renameLink } from "../src/components/tiny-editor/link-text";
+import { editableLinkUrl, normalizeLinkUrl, selectedLinkUrl, selectedTextLink, selectedWebUrl, shortenLinkDestination, renameLink } from "../src/components/tiny-editor/link-text";
+
+it("recognizes a selection by the linked content inside its boundaries", () => {
+  const block = document.createElement("div");
+  block.innerHTML = 'Before<a href="/project"><b>Project</b> notes</a>After';
+  const [before, link, after] = block.childNodes;
+  const word = link.firstChild.firstChild;
+  const range = document.createRange();
+  for (const [start, offset, end, limit, expected] of [
+    [word, 2, word, 2, link], [before, before.length, word, 1, link],
+    [word, 1, after, 0, link], [block, 1, word, 1, link], [block, 1, block, 2, link],
+    [after, 0, after, 0, null], [before, before.length-1, word, 1, null],
+    [word, 0, after, 1, null],
+  ]) {
+    range.setStart(start, offset);
+    range.setEnd(end, limit);
+    expect(selectedTextLink(range) ?? null).toBe(expected);
+  }
+  before.remove();
+  after.remove();
+  const body = document.createElement("div");
+  body.append(block);
+  range.selectNodeContents(body);
+  expect(selectedTextLink(range)).toBe(link);
+  block.append(document.createElement("img"));
+  range.selectNodeContents(body);
+  expect(selectedTextLink(range)).toBeNull();
+});
 
 it.each([
   ["Read <b>these</b> <i>notes</i>", "Read those notes", "Read <b>those</b> <i>notes</i>"],
