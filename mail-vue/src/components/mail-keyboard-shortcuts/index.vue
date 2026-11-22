@@ -111,7 +111,9 @@ function restoreHelpFocus(){
   opener=null;
 }
 function backdrop(event){
-  if(event.target===help.value) help.value.close();
+  if(event.target!==help.value) return;
+  const {left,right,top,bottom}=help.value.getBoundingClientRect();
+  if(event.clientX<left || event.clientX>=right || event.clientY<top || event.clientY>=bottom) help.value.close();
 }
 function inMailContext(event, allowSelection=false){
   if(!props.available || route.query.window==='1' || !user.authenticatedToken ||
