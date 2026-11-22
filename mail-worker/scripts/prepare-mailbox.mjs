@@ -12,9 +12,9 @@ const command = ['exec','wrangler','d1','execute','db','--remote','--config',con
 function execute(sql) {
   return JSON.parse(execFileSync('pnpm',[...command,sql],{encoding:'utf8'}));
 }
-const [schema] = execute("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('email','cloud_drafts')");
+const [schema] = execute("SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('email','cloud_drafts','mobile_changes')");
 const existing = new Set(schema.results.map(row => row.name));
-// A new installation creates these two tables during its normal initializer.
+// A new installation creates the core tables during its normal initializer.
 if (existing.has('email')) await ensureRawSizeColumn(()=>execute('PRAGMA table_info(email)')[0].results,execute);
 if (existing.has('email')) {
   execute(mailWordSchema().join(';\n'));

@@ -1,6 +1,7 @@
 import {mailboxEntries} from "../../../shared/stored-recipients.js";
 // Store membership by message. The thread identifier may change when an older
 // original is deleted or explicit reply headers join two threads.
+export const muteNotificationIndex = "CREATE INDEX IF NOT EXISTS idx_mute_new_mail ON mobile_changes(user_id,entity_id) WHERE entity='message' AND new_mail=1";
 export const muteSchema = [
   `CREATE TABLE IF NOT EXISTS conversation_mutes (
     user_id INTEGER NOT NULL,email_id INTEGER NOT NULL REFERENCES email(email_id) ON DELETE CASCADE,
@@ -10,7 +11,6 @@ export const muteSchema = [
     token TEXT NOT NULL REFERENCES conversation_move_undo(token) ON DELETE CASCADE,
     email_id INTEGER NOT NULL,origin TEXT,quiet INTEGER,PRIMARY KEY(token,email_id))`,
   'CREATE INDEX IF NOT EXISTS idx_mute_prior_email ON conversation_mute_prior(email_id,token)',
-  "CREATE INDEX IF NOT EXISTS idx_mute_new_mail ON mobile_changes(user_id,entity_id) WHERE entity='message' AND new_mail=1",
   ...['INSERT','DELETE','UPDATE'].map(event=>{
     const row=event==='DELETE' ? 'OLD' : 'NEW';
     return `CREATE TRIGGER IF NOT EXISTS mute_undo_${event.toLowerCase()} AFTER ${event} ON conversation_mutes BEGIN

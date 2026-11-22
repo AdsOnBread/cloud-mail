@@ -1,4 +1,4 @@
-import {muteSchema} from "./conversation-mutes.js";
+import {muteSchema,muteNotificationIndex} from "./conversation-mutes.js";
 import { moveUndoSchema } from './conversation-move-undo.js';
 import { importanceSchema } from './mail-importance.js';
 import { categorySchema } from './inbox-categories.js';
@@ -12,14 +12,14 @@ export async function ensureDeliveredWakeColumn(readColumns,execute) {
   try { await execute('ALTER TABLE scheduled_inbox_deliveries ADD COLUMN wake_at INTEGER NOT NULL DEFAULT 0'); }
   catch (error) { if (!(await hasColumn())) throw error; }
 }
-export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
+export function filingSchema(tables = new Set(['email','cloud_drafts','mobile_changes'])) {
 	const statements = [
 		...labelSchema, categorySchema, importanceSchema, scheduledInboxSchema,
 		`CREATE TABLE IF NOT EXISTS conversation_filing (
 			user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, wake_at INTEGER, notified INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (user_id,email_id))`,
 		'CREATE INDEX IF NOT EXISTS idx_filing_wake ON conversation_filing(user_id,notified,wake_at)',
-    ...moveUndoSchema, ...muteSchema
+    ...moveUndoSchema, ...muteSchema, ...(tables.has('mobile_changes') ? [muteNotificationIndex] : [])
 	];
 	if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_due_drafts ON cloud_drafts(json_extract(data,'$.scheduledAt'),draft_id) WHERE state='scheduled'");
     if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_queued_wake ON cloud_drafts(user_id,json_extract(data,'$.scheduledWakeAt')) WHERE json_extract(data,'$.scheduledAt') IS NOT NULL");

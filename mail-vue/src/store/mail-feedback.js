@@ -25,12 +25,19 @@ export const useMailFeedback = defineStore("mail-feedback", {
     },
     muteChanged(action,result,token) {
       const count=result.conversationCount;
+      if (result.alreadyProcessed) return this.show("This action was already processed.");
+      if (!count) return this.show("No conversations changed.");
       this.show((count>1 ? count+" conversations " : "Conversation ")+(action==="mute" ? "muted." : "unmuted."));
       if (!result.undoToken) return;
       const notice=this.notice;
       notice.undoFiling=async()=>{
         if (localStorage.getItem("token")!==token) throw new Error("Reopen your mailbox to undo this action.");
-        await http.post("/email/conversation/undo-move",{token:result.undoToken},{headers:{Authorization:token},noMsg:true});
+        try {
+          await http.post("/email/conversation/undo-move",{token:result.undoToken},{headers:{Authorization:token},noMsg:true});
+        } catch (error) {
+          if (error.code===409 || error.response?.status===409) delete notice.undoFiling;
+          throw error;
+        }
         if (localStorage.getItem("token")===token) {this.restored++; useEmailStore().conversationRevision++;}
         return "Action undone.";
       };
