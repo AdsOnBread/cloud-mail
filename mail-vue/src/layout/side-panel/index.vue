@@ -19,20 +19,6 @@
       aria-orientation="vertical"
       @keydown="navigate"
     >
-      <a
-        v-for="(tool, index) in links"
-        :key="tool.name"
-        class="rail-tool"
-        :href="tool.href"
-        target="_blank"
-        rel="noopener noreferrer"
-        :aria-label="tool.name + ' (opens in a new tab)'"
-        :data-tip="tool.name"
-        :tabindex="active === index ? 0 : -1"
-        @focus="active = index"
-      >
-        <span><img :src="tool.icon" alt="" width="20" height="20" /></span>
-      </a>
       <button
         ref="contactsButton"
         type="button"
@@ -42,8 +28,8 @@
         data-tip="Contacts"
         :aria-expanded="open"
         :aria-controls="open ? panelId : undefined"
-        :tabindex="active === 3 ? 0 : -1"
-        @focus="active = 3"
+        :tabindex="active === 0 ? 0 : -1"
+        @focus="active = 0"
         @click="toggleContacts"
       >
         <span
@@ -59,8 +45,8 @@
         :to="{ name: 'account-settings', hash: '#connected-apps' }"
         data-tip="Connected apps"
         aria-label="Connected apps"
-        :tabindex="active === 4 ? 0 : -1"
-        @focus="active = 4"
+        :tabindex="active === 1 ? 0 : -1"
+        @focus="active = 1"
         @click="openConnections"
         ><span><Icon icon="material-symbols:add" width="22" /></span
       ></RouterLink>
@@ -103,23 +89,6 @@ const ui = useUiStore(),
   toolbar = ref(),
   contactsButton = ref(),
   panelId = useId();
-const links = [
-  {
-    name: "Calendar",
-    href: "https://calendar.google.com/",
-    icon: "/side-panel/calendar.png",
-  },
-  {
-    name: "Keep",
-    href: "https://keep.google.com/",
-    icon: "/side-panel/keep.png",
-  },
-  {
-    name: "Tasks",
-    href: "https://tasks.google.com/",
-    icon: "/side-panel/tasks.png",
-  },
-];
 const toggleLabel = computed(() =>
   ui.sideRailHidden ? "Show side panel" : "Hide side panel",
 );
