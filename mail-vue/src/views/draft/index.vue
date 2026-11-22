@@ -243,7 +243,7 @@ watch([pendingFocus, page, busy], () => {
     return;
   }
   const active = document.activeElement;
-  if (active !== document.body && active !== target.trigger && !(target.restored && active?.closest(".mail-feedback[inert]"))) {
+  if (active !== document.body && active !== target.trigger && active !== target.fallback && !(target.restored && active?.closest(".mail-feedback[inert]"))) {
     pendingFocus.value = null;
     return;
   }
@@ -251,6 +251,13 @@ watch([pendingFocus, page, busy], () => {
   const index = target.restored
     ? filtered.value.findIndex(d => target.ids.includes(d.draftId))
     : Math.min(target.index, filtered.value.length - 1);
+  // An unread filter needs the restored reply's server-side conversation state.
+  if (target.restored && index < 0 && search.filters.isUnread &&
+      drafts.items.some(d => target.ids.includes(d.draftId) && draftUnread(d) === undefined)) {
+    target.fallback = root.value.querySelector(".check-target input");
+    target.fallback?.focus();
+    return;
+  }
   const start = Math.floor(index / pageSize) * pageSize;
   if (index >= 0 && offset.value !== start) {
     offset.value = start;
