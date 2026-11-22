@@ -103,7 +103,6 @@
   </section>
 </template>
 <script setup>
-import http from "@/axios";
 import {useNow} from '@vueuse/core';
 import {hasReplyAll} from '@/utils/recipients';
 import {useUserStore} from '@/store/user';
@@ -639,16 +638,15 @@ async function mutate(action, extra = {}) {
   if (busy.value) return;
   const epoch=viewEpoch, anchor=Number(route.query.emailId), token=user.authenticatedToken;
   const valid=readerCurrent();
-  const canSnooze=()=>valid() && token && token===user.authenticatedToken && token===localStorage.getItem("token");
-  if(action==="snooze" && !canSnooze())return;
+  const current=()=>valid() && token && token===user.authenticatedToken && token===localStorage.getItem("token");
+  if(!current())return;
   busy.value = true;
   try {
     if ((!["label", "importance"].includes(action) && !(await save())) || epoch!==viewEpoch) return;
-    if(action==="snooze" && !canSnooze())return;
+    if(!current())return;
     const result = action === "move" ? await labels.moveConversations([anchor],extra)
-      : action==="snooze" ? await conversationAction(action,[anchor],extra,http,{headers:{Authorization:token}})
       : await conversationAction(action, [anchor], extra);
-    if(action==="snooze" && !canSnooze())return;
+    if(!current())return;
     if (action === "delete") feedback.trashed(result?.emailIds || []);
     store.conversationRevision++;
     if (epoch!==viewEpoch) return;

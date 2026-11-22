@@ -201,12 +201,12 @@ describe('General mail settings',()=>{
  it('rejects stale edits, keeps preferences per user, and removes them on deletion',async()=>{
    const {saveGeneralSettings,readGeneralSettings}=await import('../src/cloud/general-settings');
    const input={version:0,undoSeconds:30,replyAll:true};
-   expect(await saveGeneralSettings(env.db,1,input)).toEqual({...input,version:1,keyboardShortcuts:false,hoverActions:true});
+   expect(await saveGeneralSettings(env.db,1,input)).toEqual({...input,version:1,keyboardShortcuts:false,hoverActions:true,advancedToolbar:false});
    await expect(saveGeneralSettings(env.db,1,input)).rejects.toMatchObject({code:409});
    await expect(saveGeneralSettings(env.db,1,{...input,version:1,undoSeconds:6})).rejects.toMatchObject({code:400});
    const updated=await saveGeneralSettings(env.db,1,{...input,version:1,undoSeconds:20});
    expect(await readGeneralSettings(env.db,1)).toEqual(updated);
-   expect(await readGeneralSettings(env.db,2)).toEqual({version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false,hoverActions:true});
+   expect(await readGeneralSettings(env.db,2)).toEqual({version:0,undoSeconds:null,replyAll:false,keyboardShortcuts:false,hoverActions:true,advancedToolbar:false});
    const d=await draft({}), req={version:d.version,idempotencyKey:'account-undo-period',undoSeconds:5}, start=Date.now();
    const held=await send(c(),1,req,{draftId:d.draftId});
    expect(held.undoUntil).toBeGreaterThanOrEqual(start+20000);

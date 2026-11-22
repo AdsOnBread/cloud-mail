@@ -24,23 +24,31 @@ import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
 import FilingMenu from "./filing-menu.vue";
+import {useUserStore} from "@/store/user";
+import {useAccountStore} from "@/store/account";
 import { useMailLabels } from "@/store/mail-labels";
 const props = defineProps({ rows:{type:Array,required:true}, disabled:Boolean, external:Boolean, reference:Object, trash:Boolean, scheduled:Boolean, submenu:Boolean, returnFocus:Function });
 const emit = defineEmits(["apply","finish","back"]);
-const router=useRouter(), labels=useMailLabels();
+const router=useRouter(), labels=useMailLabels(), user=useUserStore(), account=useAccountStore();
 const open=ref(false), query=ref(""), changes=ref({}), menu=ref(), trigger=ref();
 const filtered=computed(()=>labels.items.filter(item=>item.name.toLowerCase().includes(query.value.trim().toLowerCase())));
 const rowIds=computed(()=>props.scheduled ? props.rows.map(({draftId,version})=>({draftId,version})) : props.rows.map(row=>row.lastEmailId));
-let anchors=[];
+let anchors=[], sessionToken, mailbox;
+function validSelection() {
+  return sessionToken && sessionToken===user.authenticatedToken && sessionToken===localStorage.getItem("token") &&
+    mailbox===account.currentAccountId && !props.disabled;
+}
 defineExpose({show:()=>{if (!props.disabled && rowIds.value.length) open.value=true;},open});
 watch(open,value=>{
   if (value) {
+    sessionToken=user.authenticatedToken;mailbox=account.currentAccountId;
+    if(!validSelection()){open.value=false;return;}
     query.value="";
     changes.value={};
     anchors=[...rowIds.value];
   }
 });
-watch(()=>JSON.stringify(rowIds.value),()=>{open.value=false;});
+watch([()=>JSON.stringify(rowIds.value),()=>user.authenticatedToken,()=>account.currentAccountId],()=>{open.value=false;});
 function restoreFocus() { (props.reference || trigger.value)?.focus(); }
 function dismiss() { open.value=false; restoreFocus(); emit("back"); }
 function backToParent(event) {
@@ -50,6 +58,7 @@ function backToParent(event) {
   dismiss();
 }
 function createLabel() {
+  if(!validSelection())return dismiss();
   dismiss();
   labels.edit={clientId:crypto.randomUUID(),name:query.value.trim(),anchors:[...anchors],trash:props.trash,scheduled:props.scheduled,restoreFocus:props.returnFocus || restoreFocus};
   emit("finish");
@@ -69,6 +78,7 @@ function toggle(id) {
   else changes.value[id]=next;
 }
 function apply() {
+  if(!validSelection())return dismiss();
   const ops={add:[],remove:[]};
   for (const [id,on] of Object.entries(changes.value)) ops[on ? "add" : "remove"].push(Number(id));
   dismiss();

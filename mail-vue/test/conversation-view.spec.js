@@ -108,6 +108,8 @@ async function setup(query = "emailId=10", attachTo) {
 }
 beforeEach(() => {
   setActivePinia(createPinia());
+  useUserStore().authenticatedToken="reader-test";
+  localStorage.setItem("token","reader-test");
   vi.mocked(conversationMessages).mockReset();
   state.save.mockReset().mockResolvedValue(true);
   state.reply.mockClear();

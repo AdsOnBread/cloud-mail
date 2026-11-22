@@ -684,6 +684,7 @@ async function mutate(action, extra = {}, ids = selected.value) {
   if (busy.value) return;
   const token = owner.authenticatedToken, path = route.fullPath, view = key.value;
   const sameSession = () => owner.authenticatedToken === token && localStorage.getItem("token") === token;
+  if (!token || !sameSession()) return;
   busy.value = true;
   try {
     const result = action === "move" ? await labels.moveConversations(ids, extra) : await conversationAction(action, ids, extra);
