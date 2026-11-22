@@ -69,7 +69,7 @@ export async function threads(db,userId,p={}) {
 const summarySelect = `SELECT e.email_id,e.user_id,e.account_id,e.send_email,e.name,e.subject,e.type,e.status,e.unread,e.create_time,
 	e.message_id,e.in_reply_to,e.relation,e.reply_to_email_id,e.recipient,e.cc,
 	CASE WHEN e.type=1 THEN e.bcc ELSE '[]' END bcc,
-	COALESCE(m.thread_id,'t-'||e.email_id) thread_id,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star,
+	(SELECT mute.quiet FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id) quiet,COALESCE(m.thread_id,'t-'||e.email_id) thread_id,CASE WHEN s.star_id IS NULL THEN 0 ELSE 1 END is_star,
 	SUBSTR(COALESCE(NULLIF(e.text,''),e.subject,''),1,180) list_text
 	FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN mobile_thread_members m ON m.email_id=e.email_id
 	LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id`;
@@ -104,7 +104,7 @@ export async function changes(db,userId,p) {
 	return { cursor:events.at(-1)?.seq ?? after,hasMore,mailboxes:mailboxes.results.map(camel),unreadTotal:unread.results[0].total,
 		changes:events.map(e=>({seq:e.seq,entity:e.entity,entityId:e.entity_id,
 			operation:e.entity==='message' && !currentMap.has(e.entity_id) ? 'delete' : e.operation,
-			newMail:!!e.new_mail,message:currentMap.get(e.entity_id) || null})),
+			newMail:!!e.new_mail && !currentMap.get(e.entity_id)?.quiet,message:currentMap.get(e.entity_id) || null})),
 		threads:changedThreads.threads,removedThreadIds:allThreadIds.filter(id=>!retained.has(id)) };
 }
 export async function threadMessages(db,userId,threadId,p={}) {

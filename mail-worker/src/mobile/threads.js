@@ -1,3 +1,4 @@
+import {inheritedMutes,inheritMuteStatements} from "../service/conversation-mutes.js";
 import {normalizedSubject} from '../../../shared/mail-subject.js';
 export {normalizedSubject};
 const parseAddresses = value => {
@@ -81,8 +82,8 @@ export async function ensureThreads(db, userId) {
 
 async function indexThreads(db,userId,revision) {
 	const [rows, accounts] = await db.batch([
-		db.prepare(`SELECT ${threadColumns}
-			FROM email e JOIN account a ON a.account_id=e.account_id WHERE e.user_id=? AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0`).bind(userId),
+		db.prepare(`SELECT ${threadColumns},e.type,e.status,mute.origin AS mute_origin
+			FROM email e JOIN account a ON a.account_id=e.account_id LEFT JOIN conversation_mutes mute ON mute.user_id=e.user_id AND mute.email_id=e.email_id WHERE e.user_id=? AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7) AND a.is_del=0`).bind(userId),
 		db.prepare('SELECT email FROM account WHERE user_id=?').bind(userId)
 	]);
 	const groups = groupThreads(rows.results, accounts.results.map(a => a.email));
@@ -91,5 +92,7 @@ async function indexThreads(db,userId,revision) {
 			ON CONFLICT(email_id) DO UPDATE SET thread_id=excluded.thread_id,user_id=excluded.user_id WHERE thread_id!=excluded.thread_id OR user_id!=excluded.user_id`).bind(m.emailId,m.userId,m.threadId)));
 	}
 	// Preserve a concurrent writer's newer revision so the next request reindexes it.
-	await db.prepare('UPDATE mobile_thread_state SET indexed_revision=? WHERE user_id=?').bind(revision,userId).run();
+	const updates=inheritedMutes(rows.results,groups,accounts.results.map(a=>a.email));
+  await db.batch([...inheritMuteStatements(db,userId,revision,updates),
+    db.prepare('UPDATE mobile_thread_state SET indexed_revision=? WHERE user_id=? AND revision=?').bind(revision,userId,revision)]);
 }

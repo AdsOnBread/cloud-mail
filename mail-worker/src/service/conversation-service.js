@@ -1,3 +1,4 @@
+import {changeMuteStatements} from "./conversation-mutes.js";
 import {captureMove,withMoveRetry} from './conversation-move-undo.js';
 import {conversationSenders} from './conversation-senders';
 import {prepareExcludedSearch} from './mail-word-index';
@@ -108,6 +109,7 @@ export async function conversationList(c, p, userId) {
     args.push(Number(p.labelId));
   }
   if (p.folder === 'inbox') filters.push(inboxMember);
+  if (String(p.isMuted)==='1') filters.push('EXISTS(SELECT 1 FROM conversation_mutes mute WHERE mute.user_id=e.user_id AND mute.email_id=e.email_id)');
 	if (p.folder === 'archived') filters.push('f.email_id IS NOT NULL AND f.wake_at IS NULL');
 	if (p.folder === 'snoozed') filters.push('f.wake_at>unixepoch()');
 	if (p.folder === 'sent') filters.push('e.type=1');
@@ -136,12 +138,13 @@ export async function conversationList(c, p, userId) {
     JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
     LEFT JOIN filed f ON f.thread_id=m.thread_id
     LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id WHERE ${visible} AND ${filters.join(' AND ') || '1'}),
-    summaries AS (SELECT m.thread_id,${importanceFields},${purchases?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
+    summaries AS (SELECT m.thread_id,MAX(mute.email_id IS NOT NULL) muted,${importanceFields},${purchases?'MAX(CASE WHEN '+purchaseMessage+' THEN 1 ELSE 0 END) purchase_match,':''}${categorize?"MIN(CASE WHEN e.type=0 THEN e.email_id END) category_source, MAX(override.change_id) category_override,":""} MIN(e.email_id) first_email_id,MAX(CASE WHEN e.type=1 THEN e.email_id END) last_sent_id,MAX(e.email_id) last_email_id,COUNT(*) message_count,
       SUM(CASE WHEN e.type=0 AND e.unread=0 THEN 1 ELSE 0 END) unread_count,
       MAX(CASE WHEN s.star_id IS NOT NULL THEN 1 ELSE 0 END) starred
       FROM email e JOIN account a ON a.account_id=e.account_id JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id
       LEFT JOIN star s ON s.email_id=e.email_id AND s.user_id=e.user_id
       ${importanceJoin}
+      LEFT JOIN conversation_mutes mute ON mute.email_id=e.email_id AND mute.user_id=e.user_id
       ${categorize?'LEFT JOIN mailbox_categories override ON override.email_id=e.email_id AND override.user_id=e.user_id':''}
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM eligible) GROUP BY m.thread_id),
     grouped AS (SELECT summary.*, ${importanceReason} AS importance_reason FROM summaries summary
@@ -244,10 +247,11 @@ export async function draftThreads(c, ids, userId) {
       WHERE ${visible} AND m.thread_id IN (SELECT thread_id FROM targets)
       GROUP BY m.thread_id
     ) SELECT t.email_id,t.thread_id,first.subject,s.has_unread,
-      CASE WHEN f.email_id IS NULL THEN s.received ELSE coalesce(f.wake_at<=unixepoch(),0) END inbox
+      CASE WHEN f.email_id IS NULL AND coalesce(mute.quiet,0)=0 THEN s.received ELSE coalesce(f.wake_at<=unixepoch(),0) END inbox
     FROM targets t JOIN summaries s ON s.thread_id=t.thread_id JOIN email first ON first.email_id=s.first_id
     LEFT JOIN conversation_filing f ON f.user_id=? AND f.email_id=s.filing_id
-    ORDER BY t.email_id`).bind(userId,JSON.stringify(ids.map(Number)),userId,userId).all();
+    LEFT JOIN conversation_mutes mute ON mute.user_id=? AND mute.email_id=s.filing_id
+    ORDER BY t.email_id`).bind(userId,JSON.stringify(ids.map(Number)),userId,userId,userId).all();
 	const authors = await conversationSenders(db,userId,[...new Set(results.map(row => row.thread_id))]);
   return results.map(row => ({...camel(row),...authors.get(row.thread_id)}));
 }
@@ -260,12 +264,12 @@ export async function conversationMessages(c, p, userId) {
 	const [count, page, accounts, labels] = await db.batch([
 		db
 			.prepare(
-				`WITH ${filedConversations}, summary AS (SELECT COUNT(*) total,${importanceFields},
+				`WITH ${filedConversations}, summary AS (SELECT COUNT(*) total,MAX(mute.email_id IS NOT NULL) muted,${importanceFields},
         SUM(e.type=0) incoming, SUM(e.type=0 AND e.unread=0) unread_count,
         CASE WHEN f.email_id IS NOT NULL AND (f.wake_at IS NULL OR f.wake_at>unixepoch()) THEN 1 ELSE 0 END filed_away,
         MIN(e.email_id) first_id FROM email e JOIN account a ON a.account_id=e.account_id
         JOIN mobile_thread_members m ON m.email_id=e.email_id AND m.user_id=e.user_id LEFT JOIN filed f ON f.thread_id=m.thread_id
-        ${importanceJoin} WHERE ${visible} AND m.thread_id=?)
+        ${importanceJoin} LEFT JOIN conversation_mutes mute ON mute.email_id=e.email_id AND mute.user_id=e.user_id WHERE ${visible} AND m.thread_id=?)
         SELECT summary.*,first.subject,${importanceReason} AS importance_reason FROM summary
         LEFT JOIN email first ON first.email_id=summary.first_id
         LEFT JOIN mailbox_importance choice ON choice.change_id=summary.importance_change`,
@@ -290,7 +294,7 @@ export async function conversationMessages(c, p, userId) {
 	const rows = page.results.slice(0, limit);
 	return {
 		threadId,
-		subject: count.results[0].subject, importanceReason:count.results[0].importance_reason,
+		subject: count.results[0].subject, muted:Boolean(count.results[0].muted), importanceReason:count.results[0].importance_reason,
     unreadCount: count.results[0].unread_count, incoming: count.results[0].incoming, filedAway: Boolean(count.results[0].filed_away),
 		labelIds: labels.results.map(row=>row.label_id),
 		ownedAddresses: accounts.results.map((row) => row.email),
@@ -311,6 +315,8 @@ export async function conversationAction(c, p, userId, action) {
 	const apply=record=>applyConversationAction(c,p,userId,action,anchors,record);
 	if (action==='move' && p.clientId!==undefined)
 		return withLabelMove(c.env.db,userId,p.clientId,p.labelId,['move',p.fromLabelId??0,[...anchors].sort((a,b)=>a-b)],apply);
+  if (['mute','unmute'].includes(action) && p.requestId!==undefined)
+    return withMoveRetry(c.env.db,userId,p.requestId,JSON.stringify([action,...[...anchors].sort((a,b)=>a-b)]),apply);
   if (action==='move' && p.undoable===true && p.requestId!==undefined)
     return withMoveRetry(c.env.db,userId,p.requestId,JSON.stringify([p.labelId,p.fromLabelId??0,[...anchors].sort((a,b)=>a-b)]),apply);
 	return apply(null);
@@ -339,7 +345,16 @@ async function applyConversationAction(c,p,userId,action,anchors,record) {
 		stars.push(...results.filter((r) => r.star_id).map((r) => r.email_id));
 		if (!results.some((r) => r.star_id)) latest.push(results[0].email_id);
 	}
-	if(action==='importance'){
+	if(action==='mute' || action==='unmute') {
+    const token=crypto.randomUUID();
+    const result={conversationCount:threads.size,messageCount:ids.length,undoToken:token};
+    const statements=[...captureMove(db,userId,token,null,null,ids),...changeMuteStatements(db,userId,ids,action==='mute',token),
+      db.prepare("INSERT INTO mobile_changes(user_id,entity,entity_id,operation) SELECT ?,'message',value,'upsert' FROM json_each(?)").bind(userId,JSON.stringify(anchors)),
+      db.prepare("UPDATE conversation_move_undo SET state='ready' WHERE token=?").bind(token)];
+    if(record) statements.push(record(result));
+    await db.batch(statements);
+    return result;
+  } else if(action==='importance'){
     await setImportance(db,userId,ids,p.important);
   } else if (action === 'category') {
     await fileCategory(db,userId,ids,p.category);

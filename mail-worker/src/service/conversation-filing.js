@@ -1,3 +1,4 @@
+import {muteSchema} from "./conversation-mutes.js";
 import { moveUndoSchema } from './conversation-move-undo.js';
 import { importanceSchema } from './mail-importance.js';
 import { categorySchema } from './inbox-categories.js';
@@ -18,7 +19,7 @@ export function filingSchema(tables = new Set(['email','cloud_drafts'])) {
 			user_id INTEGER NOT NULL, email_id INTEGER NOT NULL, wake_at INTEGER, notified INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (user_id,email_id))`,
 		'CREATE INDEX IF NOT EXISTS idx_filing_wake ON conversation_filing(user_id,notified,wake_at)',
-    ...moveUndoSchema
+    ...moveUndoSchema, ...muteSchema
 	];
 	if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_due_drafts ON cloud_drafts(json_extract(data,'$.scheduledAt'),draft_id) WHERE state='scheduled'");
     if (tables.has('cloud_drafts')) statements.push("CREATE INDEX IF NOT EXISTS idx_queued_wake ON cloud_drafts(user_id,json_extract(data,'$.scheduledWakeAt')) WHERE json_extract(data,'$.scheduledAt') IS NOT NULL");
@@ -45,11 +46,15 @@ export const filedConversations = `filing_anchors AS (
   FROM mobile_thread_members m JOIN email e ON e.email_id=m.email_id AND e.user_id=m.user_id
   JOIN account a ON a.account_id=e.account_id AND a.user_id=e.user_id
   WHERE m.user_id=? AND a.is_del=0 AND e.is_del=0 AND e.trashed_at IS NULL AND e.status NOT IN (6,7)
-    AND (m.user_id,m.thread_id) IN (SELECT member.user_id,member.thread_id FROM conversation_filing old
-      JOIN mobile_thread_members member ON old.user_id=member.user_id AND old.email_id=member.email_id WHERE old.user_id=?)
+    AND m.thread_id IN (SELECT member.thread_id FROM (
+      SELECT user_id,email_id FROM conversation_filing WHERE user_id=?2
+      UNION ALL SELECT user_id,email_id FROM conversation_mutes WHERE user_id=?2 AND quiet=1
+    ) old JOIN mobile_thread_members member ON old.user_id=member.user_id AND old.email_id=member.email_id)
   GROUP BY m.user_id,m.thread_id),
-  filed AS (SELECT a.thread_id,f.email_id,f.wake_at,f.notified FROM filing_anchors a
-    JOIN conversation_filing f ON f.user_id=a.user_id AND f.email_id=a.anchor)`;
+  filed AS (SELECT a.thread_id,a.anchor AS email_id,f.wake_at,coalesce(f.notified,1) AS notified FROM filing_anchors a
+    LEFT JOIN conversation_filing f ON f.user_id=a.user_id AND f.email_id=a.anchor
+    LEFT JOIN conversation_mutes mute ON mute.user_id=a.user_id AND mute.email_id=a.anchor
+    WHERE f.email_id IS NOT NULL OR mute.quiet=1)`;
 
 export const inboxMember = `((e.type=0 AND e.status=0 OR e.email_id=f.email_id AND f.wake_at<=unixepoch())
   AND (f.email_id IS NULL OR f.wake_at<=unixepoch()))`;
