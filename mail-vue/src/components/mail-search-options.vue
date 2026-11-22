@@ -86,7 +86,7 @@ import {hasPerm} from '@/perm/perm';
 import {categoryFolders} from '@/utils/inbox-categories';
 import {systemFolders} from './mail-labels/system-folders';
 import {positionMailboxPopup} from './mail-popup-position';
-import {readSearchBar} from '../../../shared/mail-search-words';
+import {readSearchExpression} from '@/utils/search-expression';
 import {sizeCriterion,sizeUnits} from '../../../shared/mail-search-size';
 import {maxPersonTerm,peopleTerms,setPeopleTerms} from '../../../shared/mail-search-people';
 import {centeredRange,olderChoices,parseRangeInput,rangeInput,recentChoices,timeCaption,withinChoices,withoutTime} from './mail-date-time/search-range';
@@ -122,10 +122,10 @@ function createFilter(){
   const criteria={...ruleCriteria.value};dismiss();filtersEditor.open(criteria,null,'actions');
 }
 function reset() {
-  const f=store.filters, preset=f.olderThan || f.days;
-  const search=props.queryText == null ? {query:store.query,excluded:f.excluded} : readSearchBar(props.queryText);
+  const {query,filters:f}=props.queryText==null || props.queryText===store.expression ? store : readSearchExpression(props.queryText,store.filters);
+  const preset=f.olderThan || f.days;
   form.value={from:f.from ? peopleTerms(f,'from') : [''],to:f.to ? peopleTerms(f,'to') : [''],
-    subject:f.subject || '',q:search.query,excluded:search.excluded || '',
+    subject:f.subject || '',q:query,excluded:f.excluded || '',
     scope:scope.value,hasAttachment:Boolean(f.hasAttachment),isUnread:Boolean(f.isUnread),
     sizeValue:String(f.sizeValue ?? ''),sizeUnit:f.sizeUnit || 'MB',sizeOperator:f.sizeOperator || 'larger',
     date:f.dateCenter || '',

@@ -35,6 +35,7 @@ import {hasPerm} from "@/perm/perm";
 import {useUserStore} from "@/store/user";
 import {useAccountStore} from "@/store/account";
 import {useUiStore} from "@/store/ui";
+import {formatSearchExpression} from "@/utils/search-expression";
 import {useMailSearchStore} from "@/store/mail-search";
 import {inboxCategories} from "@/utils/inbox-categories";
 import LabelPicker from "@/components/mail-labels/picker.vue";
@@ -117,8 +118,8 @@ function choose(event,item) {
     // Preserve a separately opened Trash window's mailbox scope.
     const pinned=props.trash && route.query.window==="1";
     if (!pinned) search.visit("all");
-    search.query="";
-    search.filters={from:address};
+    const filters={from:address};
+    search.applySearch("",filters,formatSearchExpression("",filters,{compact:true}));
     if (!pinned && route.name!=="all") router.push({name:"all"});
   } else emit("command",item.key,ids,opener);
 }

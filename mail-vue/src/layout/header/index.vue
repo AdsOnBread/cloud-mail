@@ -110,9 +110,9 @@ import {useI18n} from "vue-i18n";
 const {t} = useI18n();
 const route = useRoute();
 const mailSearch = useMailSearchStore();
-const appliedText=computed(()=>searchBarText(mailSearch.query,mailSearch.filters.excluded));
+const appliedText=computed(()=>mailSearch.expression);
 const searchText = ref(appliedText.value);
-import {readSearchBar,searchBarText} from '../../../../shared/mail-search-words';
+import {readSearchExpression} from '@/utils/search-expression';
 import {categoryFolders} from "@/utils/inbox-categories";
 const searchable = computed(() => ['email','send','star','content','draft','archived','snoozed','important','trash','scheduled','all','label'].includes(route.name) || categoryFolders.some(item=>item.id===route.name));
 const searchFolder = computed(() => {
@@ -183,8 +183,8 @@ async function openLabel(item){
   await router.push(item.to);
   if(router.resolve(item.to).fullPath!==router.currentRoute.value.fullPath ||
      token!==userStore.authenticatedToken || token!==localStorage.getItem('token') || owner!==userStore.user.userId) return;
-  const {query,excluded}=readSearchBar(item.query || '');
-  mailSearch.$patch(state=>{state.query=query;state.filters=excluded ? {excluded} : {};});
+  const {query,filters}=readSearchExpression(item.query || '');
+  mailSearch.applySearch(query,filters,item.query);
   searchText.value=appliedText.value;
   suggest.value=false;choice.value=0;searchInput.value?.blur();searchOrigin=null;
 }
@@ -192,10 +192,10 @@ function submitSearch() {
   const selected=matches.value[choice.value];
   if(showLabels.value && selected){openLabel(selected);return;}
   suggest.value=false;
-  const {query,excluded}=readSearchBar(searchText.value);
-  const filters={...mailSearch.filters};
-  if (excluded) filters.excluded=excluded; else delete filters.excluded;
-  mailSearch.$patch(state=>{state.query=query;state.filters=filters;});
+  if (searchText.value!==appliedText.value) {
+    const {query,filters}=readSearchExpression(searchText.value,mailSearch.filters);
+    mailSearch.applySearch(query,filters,searchText.value.trim());
+  }
   searchText.value=appliedText.value;
   returnToResults();
 }
@@ -212,13 +212,12 @@ async function applyAdvanced({scope,query,filters,stillCurrent,origin}) {
   if (route.fullPath!==router.resolve(target).fullPath) await router.push(target);
   if (route.name!==name || (name==='label' && String(route.params.labelId)!==labelId) || !stillCurrent()) return;
   mailSearch.visit(name,labelId);
-  mailSearch.query=query;
-  mailSearch.filters=filters;
+  mailSearch.applySearch(query,filters);
   searchText.value=appliedText.value;
   await nextTick();
   if (!origin?.isConnected && document.activeElement===document.body) document.querySelector('.mail-search [data-search-options]')?.focus({preventScroll:true});
 }
-function clearSearch() { choice.value=0; searchText.value = ''; mailSearch.query = ''; mailSearch.filters={}; }
+function clearSearch() { choice.value=0; searchText.value = ''; mailSearch.applySearch('',{}); }
 
 const settingStore = useSettingStore();
 const userStore = useUserStore();
