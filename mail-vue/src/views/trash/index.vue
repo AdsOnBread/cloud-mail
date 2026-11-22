@@ -66,10 +66,9 @@
       >
         <Icon icon="material-symbols:refresh" width="20" />
       </button>
-      <el-dropdown v-if="!messageId && !targets.length" trigger="click" :show-arrow="false" popper-class="mail-action-menu">
-        <button class="mail-icon" aria-label="More Trash options" data-tip="More"><Icon icon="material-symbols:more-vert" width="20"/></button>
-        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="search.applySearch('',{}); load([])">Clear filters and refresh</el-dropdown-item></el-dropdown-menu></template>
-      </el-dropdown>
+      <MailPageActions v-if="!messageId && !targets.length" label="More Trash options"
+        :key="JSON.stringify([mailbox,search.query,search.filters,offset])"
+        :disabled="busy || loading || !!error" @mark-read="markPageRead"/>
       <template v-if="!messageId">
         <span class="total">{{
           messages.length
@@ -243,6 +242,7 @@ import {searchPage} from '@/services/preparing-search';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Icon } from "@iconify/vue";
+import MailPageActions from "@/components/mail-page-actions.vue";
 import MailConfirmation from "@/components/mail-confirmation.vue";
 import {useEventListener} from "@vueuse/core";
 import {useNow} from "@vueuse/core";
@@ -427,21 +427,30 @@ async function markImportance(message,important) {
     if (current() && trigger?.isConnected && document.activeElement===document.body)trigger.focus();
   }
 }
-async function setRead(ids,read) {
+function markPageRead() {
+  if (busy.value || loading.value || error.value || messageId.value || selected.value.length) return;
+  const ids=messages.value.filter(row=>row.unread===0).map(row=>row.emailId);
+  if (!ids.length) return notify("No unread conversations.");
+  return setRead(ids,true,true);
+}
+async function setRead(ids,read,announce=false) {
   if (busy.value || loading.value || !ids.length) return;
   busy.value=true;
-  const request=revision;
+  const request=revision, token=user.authenticatedToken;
+  const current=()=>!disposed && request===revision && token===user.authenticatedToken && token===localStorage.getItem('token');
   try {
-    await http.post('/v1/messages/trash-read',{emailIds:ids,read});
+    if (!token || !current()) return;
+    await http.post('/v1/messages/trash-read',{emailIds:ids,read},{headers:{Authorization:token}});
     mail.conversationRevision++;
-    if (disposed || request!==revision) return;
+    if (!current()) return;
+    if (announce) notify(ids.length===1 ? "Message marked as read." : ids.length+" messages marked as read.");
     if (detail.value && ids.includes(detail.value.emailId)) {
       detail.value.unread=Number(read);
       if (!read) back();
     } else if (search.filters.isUnread && read) await reloadAfterRemoval(messages.value.findIndex(m=>ids.includes(m.emailId)));
     else for (const message of messages.value) if (ids.includes(message.emailId)) message.unread=Number(read);
   } catch(e) {
-    if (!disposed && request===revision) error.value=e.message || 'Could not update read status.';
+    if (current()) error.value=e.message || 'Could not update read status.';
   } finally {busy.value=false;}
 }
 function moveTo({labelId},ids) {
@@ -806,7 +815,7 @@ onBeforeUnmount(() => {
 :global(.trash-selection-menu .el-dropdown-menu__item) { padding:6px 48px; line-height:20px; }
 @media (min-width:768px) {
   .mail-toolbar {gap:0;padding-inline:12px 6px}
-  .mail-toolbar .mail-icon {width:40px;height:40px}
+  .mail-toolbar .mail-icon,.mail-toolbar :deep(.page-more-trigger) {width:40px;height:40px}
   .mail-toolbar .check-target {width:28px;height:36px;border-radius:4px}
   .mail-toolbar .select-options {width:18px;height:36px;margin-inline-end:8px;border-radius:4px}
   .mail-toolbar .toolbar-text {margin-inline-start:2px}

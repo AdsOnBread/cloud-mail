@@ -64,29 +64,8 @@
           >
             <Icon icon="material-symbols:refresh" width="20" />
           </button>
-          <el-dropdown
-            trigger="click"
-            placement="bottom-start"
-            :show-arrow="false"
-            popper-class="mail-action-menu"
-          >
-            <button
-              class="mail-icon"
-              aria-label="More email options"
-              data-tip="More"
-            >
-              <Icon icon="material-symbols:more-vert" width="20" />
-            </button>
-            <template #dropdown
-              ><el-dropdown-menu>
-                <el-dropdown-item @click="latestFirst = !latestFirst">{{
-                  latestFirst
-                    ? "Show earliest scheduled first"
-                    : "Show latest scheduled first"
-                }}</el-dropdown-item>
-              </el-dropdown-menu></template
-            >
-          </el-dropdown>
+          <MailPageActions label="More email options" :key="JSON.stringify([identity,search.query,search.filters,offset,latestFirst])"
+            :disabled="pageReadDisabled" @mark-read="markPageRead"/>
         </template>
       </template>
       <button v-if="readTargets.length" class="mail-icon" :aria-label="readAction" :data-tip="readAction"
@@ -101,7 +80,16 @@
       <ScheduledLabelActions v-if="readTargets.length" ref="labelActions" :rows="readTargets" :disabled="busy"
         :can-delete="canDelete" :filing-disabled="labelsDisabled" @trash="trash(readTargets)" @apply="applyLabels" @snooze="chooseSnooze(readTargets,$event)"/>
       <div class="scheduled-pager">
-      <span class="total">{{ range }}</span>
+      <el-dropdown v-if="range && !messageId && !originFolder" trigger="click" placement="bottom-end"
+        :show-arrow="false" popper-class="mail-action-menu" @command="latestFirst=$event==='latest'">
+        <button type="button" class="total scheduled-range" aria-label="Change scheduled message order" :aria-description="range"
+          data-tip="Change scheduled message order">{{ range }}</button>
+        <template #dropdown><el-dropdown-menu>
+          <el-dropdown-item command="earliest" :disabled="!latestFirst">Show earliest scheduled first</el-dropdown-item>
+          <el-dropdown-item command="latest" :disabled="latestFirst">Show latest scheduled first</el-dropdown-item>
+        </el-dropdown-menu></template>
+      </el-dropdown>
+      <span v-else class="total">{{ range }}</span>
       <button
         class="mail-icon"
         aria-label="Previous"
@@ -254,6 +242,7 @@ import { openSavedDraft } from "@/services/draft-list";
 import { mailboxDate, formatDetailDate } from "@/utils/day";
 import MailRow from "@/components/mail-row/index.vue";
 import MailSnoozePicker from "@/components/mail-snooze-picker.vue";
+import MailPageActions from "@/components/mail-page-actions.vue";
 import FolderFilters from "@/components/mail-folder-filters.vue";
 import {useMailLabels} from "@/store/mail-labels";
 import ScheduledLabelActions from "./label-actions.vue";
@@ -488,13 +477,21 @@ function select(option) {
   const match=matches[option===true ? 'All' : option===false ? 'None' : option];
   if (match) selected.value=page.value.filter(match).map(row=>row.draftId);
 }
-async function setRead(batch,unread,leaveReader=false) {
+const unreadPage=computed(()=>page.value.filter(row=>row.unread));
+const pageReadDisabled=computed(()=>busy.value || loading.value || Boolean(listError.value) ||
+  unreadPage.value.some(row=>!canCancel(row) || reading.value.has(row.draftId)));
+function markPageRead() {
+  if (pageReadDisabled.value || selected.value.length || messageId.value) return;
+  if (!unreadPage.value.length) return feedback.show("No unread conversations.");
+  return setRead(unreadPage.value,false,false,true);
+}
+async function setRead(batch,unread,leaveReader=false,announce=false) {
   const operations=reading.value;
   if (!batch.length || batch.some(row=>!canCancel(row) || operations.has(row.draftId))) return;
   const owner=identity.value, email=user.user.email, session=localStorage.getItem("token"), origin=route.fullPath;
   const sameSession=()=>user.user.email===email && localStorage.getItem("token")===session;
   const current=()=>!disposed && identity.value===owner && sameSession();
-  const focused=document.activeElement, navigation=navigations;
+  const focused=document.activeElement, navigation=navigations, actionAtStart=interaction;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
   let finish;
   const pending=new Promise(resolve=>{finish=resolve});
@@ -504,6 +501,8 @@ async function setRead(batch,unread,leaveReader=false) {
     // The user may already be back in a filtered Starred, Important or label list.
     if (sameSession()) drafts.scheduledRevision++;
     if (!current()) return;
+    if (announce && route.fullPath===origin && interaction===actionAtStart)
+      feedback.show(batch.length===1 ? "Message marked as read." : batch.length+" messages marked as read.");
     const ids=new Set(messages.map(row=>row.draftId));
     for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
     if (leaveReader && route.fullPath===origin && navigation===navigations) back();
@@ -781,6 +780,8 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
 }
+.scheduled-range {height:36px;border-radius:4px;cursor:pointer}
+.scheduled-range:is(:hover,:focus-visible) {background:var(--mail-hover)}
 .scheduled-pager {margin-inline-start:auto;display:flex;align-items:center;gap:4px;}
 @media(max-width:420px) {
   .selected-toolbar {height:auto;min-height:48px;flex-wrap:wrap;padding-block:4px;row-gap:0;}

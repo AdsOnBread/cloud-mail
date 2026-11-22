@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createRouter, createMemoryHistory } from "vue-router";
@@ -36,8 +36,11 @@ beforeEach(() => {
   setActivePinia(createPinia());
   useAccountStore().select({ accountId: 7, email: "one@example.com" });
   useUserStore().user.permKeys = ["email:delete"];
+  localStorage.setItem("token","trash-test");
+  useUserStore().authenticatedToken="trash-test";
   vi.resetAllMocks();
 });
+afterEach(()=>localStorage.removeItem("token"));
 it("paginates within the selected mailbox and confirms its full Trash before deleting in batches", async () => {
   const messages = Array.from({ length: 50 }, (_, i) => message(100 - i));
   http.get.mockImplementation(async (_url, { params }) =>
@@ -86,7 +89,7 @@ it("marks a row read without removing it and preserves the selection for another
   await wrapper.get('.conversation-row input[type=checkbox]').setValue(true);
   await wrapper.get('.mail-toolbar [aria-label="Mark as read"]').trigger('click');
   await flushPromises();
-  expect(http.post).toHaveBeenCalledWith('/v1/messages/trash-read',{emailIds:[1],read:true});
+  expect(http.post).toHaveBeenCalledWith('/v1/messages/trash-read',{emailIds:[1],read:true},{headers:{Authorization:'trash-test'}});
   expect(wrapper.get('.conversation-row').classes()).toContain('selected');
   expect(wrapper.find('.mail-toolbar [aria-label="Mark as unread"]').exists()).toBe(true);
   wrapper.unmount();
@@ -144,4 +147,24 @@ it("returns focus to the selected Delete forever action when the server declines
     expect(document.activeElement).toBe(opener.element);
     expect(opener.element.disabled).toBe(false);
   } finally { wrapper.unmount(); }
+});
+
+it("marks only unread messages on the current Trash page and skips an already-read page", async()=>{
+  const first=[{...message(60),unread:0}];
+  const second=[{...message(10),unread:0,scheduledDraftId:1},{...message(9),unread:1}];
+  http.get.mockImplementation(async (_url,{params})=>params.cursor ? {messages:second,nextCursor:null} : {messages:first,nextCursor:60});
+  const wrapper=await mountTrash("/trash?window=1&sender=7");
+  try {
+    await wrapper.get('[aria-label="Next page"]').trigger('click');
+    await flushPromises();
+    const more=wrapper.getComponent({name:'MailPageActions'});
+    more.vm.$emit('mark-read');
+    await flushPromises();
+    expect(http.post.mock.calls.map(([,body])=>body)).toEqual([{emailIds:[10],read:true}]);
+    expect(wrapper.text()).toContain("Message marked as read.");
+    more.vm.$emit('mark-read');
+    await flushPromises();
+    expect(wrapper.text()).toContain("No unread conversations.");
+    expect(http.post).toHaveBeenCalledTimes(1);
+  } finally {wrapper.unmount();}
 });

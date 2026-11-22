@@ -9,6 +9,8 @@
     </template>
     <button type="button" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
       :aria-expanded="Boolean(opener)" @click="opener=opener ? null : $event.currentTarget">Advanced search</button>
+    <button v-if="folder==='trash' && (store.query || Object.keys(store.filters).length)" type="button"
+      class="filter-chip" @click="store.applySearch('',{})">Clear filters</button>
   </div>
 </template>
 
