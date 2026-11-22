@@ -97,6 +97,19 @@ describe('Web conversations', () => {
     })));
     expect(await draftThreads(context(),[second.email_id],2)).toEqual([]);
   });
+  it('shows the first visible subject and current Inbox filing on draft anchors',async()=>{
+    const root=await insert({subject:'Original title',message_id:'<plan@external.com>'});
+    const sent=await insert({subject:'Re: Original title',type:1,status:2,in_reply_to:root.message_id,send_email:'admin@example.com'});
+    const summary=async()=>(await draftThreads(context(),[sent.email_id],1))[0];
+    expect(await summary()).toMatchObject({subject:'Original title',inbox:1});
+    await action('archive',[sent.email_id]);
+    expect(await summary()).toMatchObject({subject:'Original title',inbox:0});
+    await env.db.prepare("UPDATE email SET trashed_at=CURRENT_TIMESTAMP WHERE email_id=?").bind(root.email_id).run();
+    expect(await summary()).toMatchObject({subject:'Re: Original title',inbox:0,messageCount:1});
+    expect(await draftThreads(context(),[root.email_id],1)).toEqual([]);
+    await action('inbox',[sent.email_id]);
+    expect((await summary()).inbox).toBe(1);
+  });
 	it('names the destination of a sent blind-copy-only message without returning its raw address fields', async () => {
 		await insert({ type: 1, status: 1, recipient: '[]', cc: '[]', bcc: '[{"address":"private@example.com"}]' });
 		const [row] = (await list({folder:'sent'})).threads;

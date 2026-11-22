@@ -1,6 +1,6 @@
 import {describe,expect,it,vi} from 'vitest';
 import {containsExcluded,excludedPhrases,readSearchBar,searchBarText} from '../../shared/mail-search-words';
-import {draftSearchMatcher,draftSummary} from '../src/utils/draft-summary';
+import {draftRowSubject,draftSearchMatcher,draftSummary} from '../src/utils/draft-summary';
 import {searchPage} from '../src/services/preparing-search';
 
 describe('excluded search terms',()=>{
@@ -25,4 +25,15 @@ describe('excluded search terms',()=>{
     try {const result=await searchPage(async()=>{localStorage.setItem('token','replacement');return {threads:[]};},()=>true,vi.fn());expect(result).toBeNull();}
     finally {if(old===null)localStorage.removeItem('token');else localStorage.setItem('token',old);}
   });
+});
+
+it('keeps authored draft subjects and searches draft recipient display names',()=>{
+  const thread={subject:'Summer plans'};
+  const row=draftSummary({subject:'Re: Summer plans',cc:[{address:'alex@example.org',name:'Alex Ito'}],
+    bcc:['sam@example.org'],replyRecipientNames:{'sam@example.org':'Sam Finch'}});
+  expect(draftRowSubject(row,thread)).toBe('Summer plans');
+  expect(draftRowSubject(row,null)).toBe('Re: Summer plans');
+  expect(draftRowSubject({...row,subject:'A new title'},thread)).toBe('A new title');
+  for (const to of ['ITO','finch','sam@example.org']) expect(draftSearchMatcher('',{to},[])(row)).toBe(true);
+  expect(draftSearchMatcher('',{to:'other@example.org'},[])(row)).toBe(false);
 });

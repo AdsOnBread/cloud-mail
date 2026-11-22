@@ -141,7 +141,7 @@ const searchScope = computed(() => {
     if(label) return 'label:'+label.name;
   }
   if (categoryFolders.some(item=>item.id===searchFolder.value)) return "category:" + searchFolder.value;
-  return ["trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
+  return ["draft","trash","scheduled"].includes(searchFolder.value) ? "in:" + searchFolder.value : "";
 });
 const searchLabelId=computed(()=>route.params.labelId || (searchFolder.value==="label" ? route.query.labelId : undefined));
 watch([searchFolder,searchLabelId], ([name,labelId]) => { mailSearch.visit(name,labelId); searchText.value = appliedText.value; }, { immediate:true });

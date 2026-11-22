@@ -4,7 +4,7 @@
       <button v-if="flags[key]" type="button" class="filter-chip" :aria-pressed="active(key)" @click="toggle(key)">
         <Icon v-if="active(key)" icon="material-symbols:check" width="16" />{{ flags[key] }}
       </button>
-      <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" :local-people="localPeople" />
+      <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" :suggest-people="suggestPeople" />
       <SearchDateChip v-else />
     </template>
     <button type="button" ref="advanced" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
@@ -22,7 +22,7 @@ import PeopleFilter from './mail-people-filter.vue';
 import SearchDateChip from './mail-date-time/search-chip.vue';
 import {timeCaption} from './mail-date-time/search-range';
 
-const props=defineProps({folder:{type:String,required:true},accountId:Number,localPeople:Array});
+const props=defineProps({folder:{type:String,required:true},accountId:Number,suggestPeople:Function});
 const store=useMailSearchStore();
 const row=ref(), opener=inject(advancedSearchOpenerKey);
 const advanced=ref();

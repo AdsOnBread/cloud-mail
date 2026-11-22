@@ -30,7 +30,7 @@
   </Teleport>
 </template>
 <script setup>
-import {computed,nextTick,onBeforeUnmount,ref,useId,watch} from 'vue';
+import {computed,nextTick,onDeactivated,onBeforeUnmount,ref,useId,watch} from 'vue';
 import {positionMailboxPopup} from './mail-popup-position';
 import {Icon} from '@iconify/vue';
 import http from '@/axios';
@@ -39,7 +39,7 @@ import {useUserStore} from '@/store/user';
 import {useAccountStore} from '@/store/account';
 import {fullAddress,maxPeople,maxPersonTerm,peopleTerms,personSearchKey,setPeopleTerms} from '../../../shared/mail-search-people';
 
-const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number,localPeople:Array});
+const props=defineProps({field:{type:String,required:true},folder:{type:String,required:true},accountId:Number,suggestPeople:Function});
 const store=useMailSearchStore(), account=useAccountStore(), user=useUserStore();
 const trigger=ref(), panel=ref(), input=ref(), id=useId();
 const position=ref({});
@@ -52,9 +52,9 @@ const caption=computed(()=>{
   return first ? label.value+' '+first+(rest.length ? ' +'+rest.length : '') : label.value;
 });
 const options=computed(()=>{
-  if (editedTerms.value.length>=maxPeople) return [];
+  if (!open.value || editedTerms.value.length>=maxPeople) return [];
   const omit=new Set(editedTerms.value.map(s=>s.toLowerCase())), typed=query.value.trim();
-  const matches=(props.localPeople ?? contacts.value).filter(p=>!omit.has(p.email.toLowerCase()) &&
+  const matches=(props.suggestPeople ? props.suggestPeople(typed) : contacts.value).filter(p=>!omit.has(p.email.toLowerCase()) &&
     [p.name,p.email].some(value=>personSearchKey(value).includes(personSearchKey(typed)))).slice(0,8);
   if (typed && !omit.has(typed.toLowerCase()) && !matches.some(p=>p.email.toLowerCase()===typed.toLowerCase()))
     matches.push({name:typed,email:typed,typed:true});
@@ -125,21 +125,23 @@ function listen(visible) {
   window[method]('resize',place);window[method]('scroll',place,true);
   window.visualViewport?.[method]('resize',place);window.visualViewport?.[method]('scroll',place);
 }
+watch(options,(next,previous)=>{
+  if (index.value<0) return;
+  const highlighted=previous[index.value]?.email;
+  index.value=next.findIndex(person=>person.email===highlighted);
+},{flush:'sync'});
 watch(open,listen);
+onDeactivated(()=>close());
 watch([options,editedTerms],()=>nextTick(place));
 watch([()=>props.folder,()=>props.accountId,()=>account.currentAccountId,()=>user.user.email],()=>close(),{flush:'sync'});
 watch([open,query],([visible,text],_,cleanup)=>{
   index.value=-1;
-  if (!visible || props.localPeople) { contacts.value=[];return; }
+  if (!visible || props.suggestPeople) { contacts.value=[];return; }
   let current=true;
   const timer=setTimeout(async()=>{
     try {
       const data=await http.get('/v1/search/people',{params:{field:props.field,folder:props.folder,accountId:props.accountId,q:text.trim()},noMsg:true});
-      if (current) {
-        const highlighted=options.value[index.value]?.email;
-        contacts.value=data;
-        index.value=highlighted ? options.value.findIndex(person=>person.email===highlighted) : -1;
-      }
+      if (current) contacts.value=data;
     } catch { if (current) contacts.value=[]; }
   },text ? 120 : 0);
   cleanup(()=>{current=false;clearTimeout(timer)});

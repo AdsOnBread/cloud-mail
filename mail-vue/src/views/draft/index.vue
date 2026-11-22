@@ -1,6 +1,6 @@
 <template>
   <section class="draft-list" aria-label="Drafts">
-    <FolderFilters folder="draft" :local-people="draftPeople"/>
+    <FolderFilters folder="draft" :suggest-people="suggestPeople"/>
     <div class="mail-toolbar">
       <label class="check-target" data-tip="Select"
         ><input
@@ -149,7 +149,8 @@ const displayed=computed(()=>page.value.map(draft=>{
   const custom=labels.items.filter(label=>draft.labelIds?.includes(label.id) && label.messages!=="hide");
   return {draft,thread,subject:draftRowSubject(draft,thread),rowLabels:thread?.inbox ? [inboxLabel,...custom] : custom};
 }));
-const draftPeople=computed(()=>peopleSuggestions(drafts.items.map(draft=>({recipients:draft.recipientPeople})), "to", "", Infinity));
+const recipientRows=computed(()=>drafts.items.map(draft=>({recipients:draft.recipientPeople})));
+function suggestPeople(query) { return peopleSuggestions(recipientRows.value,"to",query,Infinity); }
 function toggle(id) {
   selected.value = selected.value.includes(id)
     ? selected.value.filter((old) => old !== id)
