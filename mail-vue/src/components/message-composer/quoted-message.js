@@ -1,3 +1,5 @@
+import { MAX_MESSAGE_BYTES } from "../../../../shared/message-size";
+import { planFiles } from "./files";
 import { attachmentBlob } from "@/components/mail-attachments/content";
 import {
   downloadablePart,
@@ -16,7 +18,7 @@ const escape = (value) =>
       ],
   );
 
-export async function quotedMessage(message, mode, signal, token) {
+async function quotePart(message, mode, signal, token) {
   const template = document.createElement("template");
   template.innerHTML = message.content || "";
   const files = message.attList || [],
@@ -68,7 +70,7 @@ export async function quotedMessage(message, mode, signal, token) {
   const date = message.createTime ? formatDetailDate(message.createTime) : "";
   const attachments = [];
   let quote;
-  if (mode === "forward") {
+  if (mode !== "reply") {
     for (const file of files.filter(downloadablePart)) {
       attachments.push({
         filename: file.filename || "Attachment",
@@ -78,7 +80,7 @@ export async function quotedMessage(message, mode, signal, token) {
     const headers = [
       ["From", sender],
       ["Date", date],
-      ["Subject", message.subject],
+      ["Subject", mode === "forward" && message.subject],
       [
         "To",
         headerRecipients(message.recipient).map(headerAddressText).join(", "),
@@ -86,7 +88,7 @@ export async function quotedMessage(message, mode, signal, token) {
       ["Cc", headerRecipients(message.cc).map(headerAddressText).join(", ")],
     ];
     quote =
-      "<div>---------- Forwarded message ---------<br>" +
+      (mode === "forward" ? "<div>---------- Forwarded message ---------<br>" : "<div>") +
       headers
         .filter(([, value]) => value)
         .map(([label, value]) => label + ": " + escape(value))
@@ -103,9 +105,40 @@ export async function quotedMessage(message, mode, signal, token) {
       body +
       "</blockquote>";
   }
-  return {
-    attachments,
-    content:
-      '<div><br></div><div class="cloudmail-reply-quote">' + quote + "</div>",
-  };
+  return {attachments, quote};
+}
+
+export async function quotedMessage(message, mode, signal, token) {
+  const {attachments, quote} = await quotePart(message, mode, signal, token);
+  return {attachments, content:'<div><br></div><div class="cloudmail-reply-quote">'+quote+'</div>'};
+}
+
+// Read one original at a time so a paginated thread does not hold every full
+// message and its downloaded files in memory alongside the composed draft.
+export async function quotedConversation(subject, messages, signal, token) {
+  const attachments = [], sections = [];
+  let fileBytes = 0, markupLength = 0;
+  for await (const message of messages) {
+    signal.throwIfAborted();
+    const files = (message.attList || []).filter(downloadablePart);
+    if (attachments.length + files.length > 10)
+      throw new Error("This conversation exceeds the limit of 10 file attachments.");
+    if (markupLength + fileBytes + files.reduce((sum,file)=>sum+(Number(file.size)||0),0) > MAX_MESSAGE_BYTES)
+      throw new Error("This conversation exceeds the 5 MiB message limit.");
+    const part = await quotePart(message, "conversation", signal, token);
+    signal.throwIfAborted();
+    sections.push(part.quote);
+    attachments.push(...part.attachments);
+    // Data URLs inflate inline photos in the editor. Count decoded bytes for
+    // those images in the final MIME calculation instead of their URL length.
+    markupLength += part.quote.replace(/src="data:[^"]*"/gi,'src="cid:image"').length;
+    fileBytes += part.attachments.reduce((sum,file)=>sum+file.size,0);
+    if (markupLength + fileBytes > MAX_MESSAGE_BYTES)
+      throw new Error("This conversation exceeds the 5 MiB message limit.");
+  }
+  const heading = "<div>Forwarded Conversation<br>Subject: "+escape(subject)+"<br>------------------------</div><br>";
+  const content = '<div><br></div><div class="cloudmail-reply-quote cloudmail-forwarded-conversation">'+
+    heading + sections.join("<br><br><div>----------</div>") + "</div>";
+  planFiles([], "attachments", {attachments,subject}, content);
+  return {attachments,content};
 }

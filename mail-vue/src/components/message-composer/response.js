@@ -24,6 +24,10 @@ export function changeQuotedBody(html,generated,plainText,mode) {
   next.innerHTML=plainText ? plainMarkup(generated).content : generated;
   const quote=next.content.querySelector(".cloudmail-reply-quote");
   if (!quote) return html;
+  if (old.classList.contains("cloudmail-forwarded-conversation")) {
+    old.replaceWith(quote);
+    return previous.innerHTML;
+  }
   if (plainText) {
     const original=Array.from(old.childNodes), updated=Array.from(quote.childNodes);
     const heading=updated.slice(0,plainHeaderLength(updated));

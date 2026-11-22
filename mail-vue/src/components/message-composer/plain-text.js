@@ -49,6 +49,8 @@ export function plainMarkup(html) {
     const dest=kind?doc.createElement('div'):out;
     if(kind){
       dest.className=kind;
+      if(kind==='cloudmail-reply-quote' && source.classList.contains('cloudmail-forwarded-conversation'))
+        dest.classList.add('cloudmail-forwarded-conversation');
       if(kind==='cloudmail-signature' && source.dataset.signatureId)dest.dataset.signatureId=source.dataset.signatureId;
       out.append(dest);
     }
