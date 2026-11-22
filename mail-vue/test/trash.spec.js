@@ -44,7 +44,7 @@ afterEach(()=>localStorage.removeItem("token"));
 it("paginates within the selected mailbox and confirms its full Trash before deleting in batches", async () => {
   const messages = Array.from({ length: 50 }, (_, i) => message(100 - i));
   http.get.mockImplementation(async (_url, { params }) =>
-    params.cursor || params.page===2
+    params.cursor || params.page==="older"
       ? { messages: [message(49)], offset:50, total:51, nextCursor: null }
       : { messages, offset:0, total:51, nextCursor: 51 },
   );
@@ -152,7 +152,7 @@ it("returns focus to the selected Delete forever action when the server declines
 it("marks only unread messages on the current Trash page and skips an already-read page", async()=>{
   const first=Array.from({length:50},(_,i)=>({...message(60-i),unread:0}));
   const second=[{...message(10),unread:0,scheduledDraftId:1},{...message(9),unread:1}];
-  http.get.mockImplementation(async (_url,{params})=>params.page===2 ? {messages:second,total:52,offset:50,nextCursor:null} : {messages:first,total:52,offset:0,nextCursor:11});
+  http.get.mockImplementation(async (_url,{params})=>params.page==="older" ? {messages:second,total:52,offset:50,nextCursor:null} : {messages:first,total:52,offset:0,nextCursor:11});
   const wrapper=await mountTrash("/trash?window=1&sender=7");
   try {
     await wrapper.get('[aria-label="Older"]').trigger('click');
@@ -176,7 +176,7 @@ it("ignores a Trash page from a previous session and does not read using a repla
   const wrapper=await mountTrash();
   try {
     await wrapper.get('[aria-label="Older"]').trigger('click');
-    expect(http.get.mock.calls.at(-1)[1]).toMatchObject({headers:{Authorization:'trash-test'},params:{page:2}});
+    expect(http.get.mock.calls.at(-1)[1]).toMatchObject({headers:{Authorization:'trash-test'},params:{page:"older",anchor:60}});
     localStorage.setItem('token','another-user');
     finish({total:51,offset:50,messages:[message(7)],nextCursor:null});
     await flushPromises();

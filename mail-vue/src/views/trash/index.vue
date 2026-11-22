@@ -68,7 +68,7 @@
         :disabled="busy || loading || !!error" @mark-read="markPageRead"/>
       <template v-if="!messageId">
         <MailRangeMenu :offset="offset" :count="messages.length" :total="total" :disabled="busy || loading"
-          @jump="load($event==='oldest' ? 'last' : 1)"/>
+          @jump="navigate({page:$event==='oldest' ? 'last' : 1}, '.range-trigger')"/>
         <button
           class="mail-icon pager"
           aria-label="Newer"
@@ -460,7 +460,7 @@ function selectGroup(option) {
   selected.value=messages.value.filter(selectionGroups[option]).map(m=>m.emailId);
 }
 const pageSize = 50;
-const pageNumber = computed(() => Math.floor(offset.value / pageSize) + 1);
+let currentPage={page:1};
 let failedPage;
 const hasOlder = computed(() => offset.value + messages.value.length < total.value);
 let returnFocus;
@@ -479,7 +479,7 @@ function list(paging, q, accountId, filters, token) {
     },
   });
 }
-async function load(target = pageNumber.value) {
+async function load(target = currentPage) {
   failedPage=undefined;
   confirmation.value?.cancel();
   const request = ++revision, token=user.authenticatedToken, scope=mailbox.value;
@@ -490,9 +490,10 @@ async function load(target = pageNumber.value) {
   loading.value = true;
   try {
     preparingSearch.value=false;
-    const page=await searchPage(()=>list({page:target},search.query,scope,search.filters,token),current,()=>{preparingSearch.value=true;});
+    const page=await searchPage(()=>list(target,search.query,scope,search.filters,token),current,()=>{preparingSearch.value=true;});
     if (!page || !current()) return;
     const changedPage=offset.value!==page.offset;
+    currentPage=target;
     offset.value = page.offset;
     total.value = page.total;
     messages.value = page.messages;
@@ -518,11 +519,25 @@ async function load(target = pageNumber.value) {
     if (request === revision) loading.value = false;
   }
 }
+async function navigate(target, selector) {
+  if (busy.value || loading.value) return;
+  const request=revision+1, path=route.fullPath, token=user.authenticatedToken;
+  await load(target);
+  await nextTick();
+  if (disposed || revision!==request || route.fullPath!==path || token!==localStorage.getItem("token") ||
+      document.activeElement!==document.body) return;
+  const bar=root.value?.querySelector(".mail-toolbar");
+  const preferred=bar?.querySelector(selector);
+  const fallback=bar?.querySelector(".range-trigger:not(:disabled)");
+  if (preferred && !preferred.disabled && preferred.getClientRects().length) preferred.focus();
+  else if (fallback?.getClientRects().length) fallback.focus();
+  else bar?.querySelector(".select-options")?.focus();
+}
 function next() {
-  if (!busy.value && !loading.value && hasOlder.value) load(pageNumber.value + 1);
+  if (hasOlder.value) navigate({page:"older",anchor:messages.value.at(-1).emailId}, '[aria-label="Older"]');
 }
 function previous() {
-  if (!busy.value && !loading.value && offset.value) load(pageNumber.value - 1);
+  if (offset.value) navigate({page:"newer",anchor:messages.value[0].emailId}, '[aria-label="Newer"]');
 }
 function toggle(id) {
   if (busy.value || loading.value) return;
@@ -535,6 +550,7 @@ function open(message) {
   router.push({ path: route.path, query: { ...route.query, message: message.emailId } });
 }
 function showTrash() {
+  currentPage={page:1};
   offset.value=0;
   if (search.query || filtered.value) search.applySearch("",{});
   else back();
@@ -574,7 +590,7 @@ async function loadDetail(id) {
   }
 }
 function retry() {
-  return messageId.value ? loadDetail(messageId.value) : load(failedPage ?? pageNumber.value);
+  return messageId.value ? loadDetail(messageId.value) : load(failedPage ?? currentPage);
 }
 function reload() {
   return messageId.value ? loadDetail(messageId.value) : load();
@@ -588,12 +604,13 @@ watch(() => useMailFeedback().restored, reload);
 watch(()=>labels.returnedToTrash,change=>{if(change && !messageId.value) reload();});
 watch(messageId, reload, { immediate: true });
 watch([() => search.query, () => search.filters, mailbox, () => user.authenticatedToken], () => {
+  currentPage={page:1};
   offset.value = 0;
   messages.value = [];
   selected.value = [];
   total.value = 0;
   if (messageId.value) back();
-  else load(1);
+  else load();
 });
 function notify(message) {
   clearTimeout(noticeTimer);

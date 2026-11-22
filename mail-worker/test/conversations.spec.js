@@ -591,8 +591,8 @@ it('jumps directly to filtered Trash pages and clamps a page after its last item
  await insert({...fixture,account_id:3});
  await insert({...fixture,user_id:2,account_id:2});
  await insert({...fixture,subject:'Other subject'});
- const read=async page=>{
-   const {total,offset,messages,hasMore,nextCursor}=await cloudMail.list(context(),1,{...trash,page});
+ const read=async (page,anchor)=>{
+   const {total,offset,messages,hasMore,nextCursor}=await cloudMail.list(context(),1,{...trash,page,anchor});
    return [total,offset,messages.map(m=>m.emailId),hasMore,nextCursor];
  };
  expect(await read(1)).toEqual([5,0,[ids[4],ids[3]],true,ids[3]]);
@@ -602,6 +602,14 @@ it('jumps directly to filtered Trash pages and clamps a page after its last item
  expect(await read(3)).toEqual([4,2,[ids[2],ids[1]],false,null]);
  expect(await read('last')).toEqual(await read(3));
  expect((await cloudMail.list(context(),1,{...trash,cursor:ids[3]})).messages.map(m=>m.emailId)).toEqual([ids[2],ids[1]]);
+ const added=(await insert(fixture)).email_id;
+ expect(await read('older',ids[3])).toEqual([5,3,[ids[2],ids[1]],false,null]);
+ expect(await read('newer',ids[2])).toEqual([5,1,[ids[4],ids[3]],true,ids[3]]);
+ expect(await read('newer',ids[4])).toEqual([5,0,[added],true,added]);
+ await cloudMail.trash(context(),1,[added,ids[4]],'restore');
+ expect(await read('older',ids[3])).toEqual([3,1,[ids[2],ids[1]],false,null]);
+ expect(await read('newer',ids[2])).toEqual([3,0,[ids[3]],true,ids[3]]);
+ await expect(read('older',0)).rejects.toMatchObject({code:400});
  await expect(read(0)).rejects.toMatchObject({code:400});
  await expect(cloudMail.list(context(),1,{...trash,page:1,cursor:ids[3]})).rejects.toMatchObject({code:400});
  expect(await cloudMail.list(context(),1,{...trash,subject:'no such fixture',page:'last'})).toMatchObject({total:0,offset:0,messages:[]});

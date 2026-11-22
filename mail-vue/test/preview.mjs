@@ -310,10 +310,17 @@ const api=createHTTPServer(async(req,res)=>{
      matchesFilters(r,params) && (!q || [r.subject,r.sendEmail,r.text].some(v=>v?.toLowerCase().includes(q))))
      .sort((a,b)=>b.emailId-a.emailId);
    const last=Math.max(0,Math.ceil(all.length/limit)-1);
-   const start=params.page ? Math.min(last,params.page==='last' ? last : Number(params.page)-1)*limit : 0;
+   let start=0,take=limit;
+   if(params.page==='older') {
+     const before=all.filter(r=>r.emailId>=Number(params.anchor)).length;
+     start=before<all.length ? before : last*limit;
+   } else if(params.page==='newer') {
+     const before=all.filter(r=>r.emailId>Number(params.anchor)).length;
+     start=Math.max(0,before-limit);take=Math.min(limit,before || limit);
+   } else if(params.page) start=Math.min(last,params.page==='last' ? last : Number(params.page)-1)*limit;
    const remaining=params.cursor ? all.filter(r=>r.emailId<Number(params.cursor)) : all.slice(start);
-   const messages=remaining.slice(0,limit).map(r=>({...r,importanceReason:r.scheduledDraftId ? scheduledImportance(cloudDrafts.get(r.scheduledDraftId),r.sendEmail) : importanceReason([r]),...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text}));
-   const hasMore=remaining.length>limit;
+   const messages=remaining.slice(0,take).map(r=>({...r,importanceReason:r.scheduledDraftId ? scheduledImportance(cloudDrafts.get(r.scheduledDraftId),r.sendEmail) : importanceReason([r]),...attachmentSummary(r.attList||[]),labelIds:[...(membership.get(r.emailId)||[])],preview:r.text}));
+   const hasMore=remaining.length>take;
    data={messages,hasMore,nextCursor:hasMore ? messages.at(-1).emailId : null,...(params.page ? {total:all.length,offset:start} : {})};
  }
  else if(path==='/v1/messages/trash-labels'){

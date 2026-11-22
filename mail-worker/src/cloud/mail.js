@@ -117,16 +117,36 @@ export async function list(c,userId,p={}) {
   let rows, bounds;
   if (folder==='trash' && p.page!=null) {
     if (p.cursor) throw new BizError('Choose a page or a cursor.',400);
-    const requested=p.page==='last' ? Number.MAX_SAFE_INTEGER : positive(p.page,'page');
+    const older=p.page==='older', newer=p.page==='newer';
+    const boundaryArgs=[], startArgs=[];
+    let boundary='', start, take='?';
+    if (older || newer) {
+      // Keep consecutive pages anchored when another tab changes earlier messages.
+      boundaryArgs.push(positive(p.anchor,'page boundary'));
+      boundary=`, count(*) FILTER (WHERE email_id ${older ? '>=' : '>'} ?) AS before_anchor`;
+      if (older) {
+        start='CASE WHEN before_anchor<total THEN before_anchor ELSE CAST(max(0,total-1)/? AS INTEGER)*? END';
+        startArgs.push(limit,limit);
+      } else {
+        start='max(0,before_anchor-?)';
+        startArgs.push(limit);
+        take='min(?,CASE WHEN before_anchor>0 THEN before_anchor ELSE ? END)';
+      }
+    } else {
+      const requested=p.page==='last' ? Number.MAX_SAFE_INTEGER : positive(p.page,'page');
+      start='min(?,CAST(max(0,total-1)/? AS INTEGER))*?';
+      startArgs.push(requested-1,limit,limit);
+    }
     // Count and select from the same snapshot. Only the displayed IDs need message metadata.
     const query=`WITH matches AS MATERIALIZED (
       SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${where}
-    ), size AS (SELECT count(*) total FROM matches),
-    bounds AS (SELECT total, min(?, CAST(max(0,total-1)/? AS INTEGER)) * ? AS start FROM size),
-    page_ids AS (SELECT email_id FROM matches ORDER BY email_id DESC LIMIT ? OFFSET (SELECT start FROM bounds))
+    ), size AS (SELECT count(*) total${boundary} FROM matches),
+    bounds AS (SELECT total,${start} AS start,${take} AS take FROM size),
+    page_ids AS (SELECT email_id FROM matches ORDER BY email_id DESC
+      LIMIT (SELECT take FROM bounds) OFFSET (SELECT start FROM bounds))
     SELECT ${fields},bounds.total AS page_total,bounds.start AS page_start ${joins}
     CROSS JOIN bounds WHERE e.email_id IN (SELECT email_id FROM page_ids) ORDER BY e.email_id DESC`;
-    rows=(await c.env.db.prepare(query).bind(...args,requested-1,limit,limit,limit).all()).results;
+    rows=(await c.env.db.prepare(query).bind(...args,...boundaryArgs,...startArgs,limit,...(newer ? [limit] : [])).all()).results;
     bounds={total:rows[0]?.page_total ?? 0,offset:rows[0]?.page_start ?? 0};
   } else {
     const prefix=folder==='inbox' ? `WITH ${filedConversations}` : '';
