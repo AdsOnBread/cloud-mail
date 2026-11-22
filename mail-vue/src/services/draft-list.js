@@ -88,6 +88,8 @@ export function startDraftList() {
       const threads = {}, summaries = {};
       try {
         const list = ids.split(",").map(Number);
+        // A completed lookup with no visible conversation leaves a standalone draft.
+        for (const id of list) threads[id] = null;
         for (let i = 0; i < list.length; i += 95) {
           const rows = await http.post(
             "/email/conversation/draft-threads",
@@ -97,7 +99,7 @@ export function startDraftList() {
           if (!active || db.value !== database) return;
           for (const row of rows) {
             threads[row.emailId] = row.threadId;
-            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount, subject:row.subject, inbox:Boolean(row.inbox), unread:Boolean(row.hasUnread)};
+            if (row.senders) summaries[row.threadId] = {senders:row.senders, messageCount:row.messageCount, subject:row.subject, inbox:Boolean(row.inbox), unread:row.hasUnread == null ? undefined : Boolean(row.hasUnread)};
           }
         }
         store.threads = threads;

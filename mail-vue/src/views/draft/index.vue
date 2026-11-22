@@ -133,8 +133,12 @@ const root = ref(), rangeMenu = ref();
 function threadFor(draft) {
   return draft.reply && !draft.trashSource ? drafts.threadSummaries[drafts.threads[draft.emailId]] : null;
 }
+function draftUnread(draft) {
+  if (!draft.reply || !draft.emailId || draft.trashSource || drafts.threads[draft.emailId] === null) return false;
+  return threadFor(draft)?.unread;
+}
 const filtered = computed(() => drafts.items.filter(draftSearchMatcher(
-  search.query, search.filters, account.accounts, draft => threadFor(draft)?.unread,
+  search.query, search.filters, account.accounts, draftUnread,
 )));
 const lastOffset = computed(() => Math.max(0, Math.ceil(filtered.value.length / pageSize) - 1) * pageSize);
 const page = computed(() => filtered.value.slice(offset.value, offset.value + pageSize));
@@ -166,8 +170,8 @@ function selectGroup(group) {
   selected.value = page.value.filter(draft => {
     switch (group) {
       case "All": return true;
-      case "Read": return !threadFor(draft)?.unread;
-      case "Unread": return threadFor(draft)?.unread;
+      case "Read": return draftUnread(draft) === false;
+      case "Unread": return draftUnread(draft) === true;
       case "Starred": return draft.starred;
       case "Unstarred": return !draft.starred;
       default: return false;
@@ -292,7 +296,7 @@ async function discard(ids, trigger) {
 :global(.draft-range-menu .el-dropdown-menu__item.is-disabled) {color:var(--el-text-color-disabled)}
 @media(max-width:420px) {
   .draft-list .mail-toolbar {gap:0;padding-inline:4px}
-  .draft-list .select-options,.draft-list :deep(.select-options) {width:20px}
+  .draft-list :deep(.select-options) {width:20px}
   .draft-list .mail-icon {width:30px}
 }
 p {
