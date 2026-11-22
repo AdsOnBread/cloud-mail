@@ -122,10 +122,10 @@ export async function list(c,userId,p={}) {
     const query=`WITH matches AS MATERIALIZED (
       SELECT e.email_id FROM email e JOIN account a ON a.account_id=e.account_id WHERE ${where}
     ), size AS (SELECT count(*) total FROM matches),
-    window AS (SELECT total, min(?, max(0,total-1)/?) * ? AS start FROM size),
-    page_ids AS (SELECT email_id FROM matches ORDER BY email_id DESC LIMIT ? OFFSET (SELECT start FROM window))
-    SELECT ${fields},window.total AS page_total,window.start AS page_start ${joins}
-    CROSS JOIN window WHERE e.email_id IN (SELECT email_id FROM page_ids) ORDER BY e.email_id DESC`;
+    bounds AS (SELECT total, min(?, CAST(max(0,total-1)/? AS INTEGER)) * ? AS start FROM size),
+    page_ids AS (SELECT email_id FROM matches ORDER BY email_id DESC LIMIT ? OFFSET (SELECT start FROM bounds))
+    SELECT ${fields},bounds.total AS page_total,bounds.start AS page_start ${joins}
+    CROSS JOIN bounds WHERE e.email_id IN (SELECT email_id FROM page_ids) ORDER BY e.email_id DESC`;
     rows=(await c.env.db.prepare(query).bind(...args,requested-1,limit,limit,limit).all()).results;
     bounds={total:rows[0]?.page_total ?? 0,offset:rows[0]?.page_start ?? 0};
   } else {
