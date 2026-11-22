@@ -497,7 +497,8 @@ async function load(target = currentPage) {
     offset.value = page.offset;
     total.value = page.total;
     messages.value = page.messages;
-    if (changedPage) root.value?.querySelector('.trash-list')?.scrollTo(0,0);
+    const scroll=root.value?.querySelector('.trash-list');
+    if (changedPage && scroll) scroll.scrollTop=0;
     selected.value = [];
     if (returnFocus) {
       await nextTick();
