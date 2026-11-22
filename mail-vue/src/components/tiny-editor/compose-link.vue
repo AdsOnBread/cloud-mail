@@ -83,6 +83,7 @@ function position() {
   const inset = floating ? (preview ? 0 : 10) : 3;
   const gap = preview ? 1 : 2;
   card.style.maxWidth = Math.max(0,bounds.right-bounds.left-2*inset)+"px";
+  if (floating) card.style.maxHeight = Math.max(0,bounds.bottom-bounds.top-2*inset)+"px";
   const x = Math.max(bounds.left+inset, Math.min(startX-(preview ? 1 : 0),bounds.right-card.offsetWidth-inset));
   const below = Math.min(endY,clip.bottom) + gap;
   const maxTop = bounds.bottom-card.offsetHeight-inset;
