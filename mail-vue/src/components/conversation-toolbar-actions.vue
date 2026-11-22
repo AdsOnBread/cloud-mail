@@ -1,6 +1,6 @@
 <template>
   <button v-if="advanced" ref="snoozeButton" type="button" class="mail-icon" data-tip="Snooze" aria-label="Snooze conversations"
-    aria-haspopup="menu" :aria-expanded="!!snoozeAnchor && snoozeAnchor===snoozeButton" :disabled="disabled" @click="emit('snooze',$event.currentTarget)">
+    aria-haspopup="menu" :aria-expanded="!!snoozeAnchor && snoozeAnchor===snoozeButton" :disabled="disabled" @click="emit('snooze',$event.currentTarget)" @keydown.esc="escapeTrigger">
     <Icon icon="material-symbols:schedule-outline" width="20"/>
   </button>
   <slot/>
@@ -10,7 +10,7 @@
     <template #reference>
       <button ref="trigger" type="button" class="mail-icon" :aria-label="label" data-tip="More" aria-haspopup="menu"
         :aria-expanded="open" :disabled="disabled" @click="open=!open" @keydown.down.prevent="open=true"
-        @keydown.esc.stop.prevent="close(true)"><Icon icon="material-symbols:more-vert" width="20"/></button>
+        @keydown.esc="escapeTrigger"><Icon icon="material-symbols:more-vert" width="20"/></button>
     </template>
     <div ref="panel" role="menu" aria-label="More email options" @keydown="navigate">
       <template v-if="!advanced">
@@ -53,13 +53,19 @@ import LabelPicker from '@/components/mail-labels/picker.vue';
 
 const props=defineProps({rows:{type:Array,required:true},label:{type:String,default:'More email options'},
   scope:String,snoozeAnchor:Object,disabled:Boolean,canAttach:Boolean,forwarding:Boolean,newer:Boolean,older:Boolean});
-const emit=defineEmits(['snooze','importance','attach','apply','newer','older']);
+const emit=defineEmits(['snooze','dismiss-snooze','importance','attach','apply','newer','older']);
 const user=useUserStore(),feedback=useMailFeedback(),filters=useMessageFilters(),route=useRoute();
 const advanced=computed(()=>user.user.generalSettings?.advancedToolbar===true);
 const sender=computed(()=>props.rows.length===1 && props.rows[0].lastSenderEmail);
 const snoozeButton=ref(),trigger=ref(),panel=ref(),labelItem=ref(),picker=ref(),open=ref(false),sub=ref(false),saving=ref(false);
 const sessionCurrent=()=>user.authenticatedToken && user.authenticatedToken===localStorage.getItem('token');
 function focusTrigger(){trigger.value?.focus({preventScroll:true});}
+function escapeTrigger(event){
+  if(props.snoozeAnchor===event.currentTarget)emit('dismiss-snooze');
+  else if(open.value)close(true);
+  else return;
+  event.stopPropagation();event.preventDefault();
+}
 function close(restore=false){sub.value=false;open.value=false;if(restore)focusTrigger();}
 let openingFocus;
 function focusFirst(){
