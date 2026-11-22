@@ -7,15 +7,15 @@
       <PeopleFilter v-else-if="key==='from' || key==='to'" :field="key" :folder="folder" :account-id="accountId" />
       <SearchDateChip v-else />
     </template>
-    <button type="button" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
+    <button type="button" ref="advanced" class="filter-chip advanced" aria-haspopup="dialog" data-search-options
       :aria-expanded="Boolean(opener)" @click="opener=opener ? null : $event.currentTarget">Advanced search</button>
     <button v-if="folder==='trash' && (store.query || Object.keys(store.filters).length)" type="button"
-      class="filter-chip" @click="store.applySearch('',{})">Clear filters</button>
+      class="filter-chip" @click="clearFilters">Clear filters</button>
   </div>
 </template>
 
 <script setup>
-import {computed,inject,onBeforeUpdate,onUpdated,ref} from 'vue';
+import {computed,inject,nextTick,onBeforeUpdate,onUpdated,ref} from 'vue';
 import {Icon} from '@iconify/vue';
 import {advancedSearchOpenerKey,useMailSearchStore} from '@/store/mail-search';
 import PeopleFilter from './mail-people-filter.vue';
@@ -25,6 +25,13 @@ import {timeCaption} from './mail-date-time/search-range';
 const props=defineProps({folder:{type:String,required:true},accountId:Number});
 const store=useMailSearchStore();
 const row=ref(), opener=inject(advancedSearchOpenerKey);
+const advanced=ref();
+async function clearFilters(event) {
+  const restoreFocus=document.activeElement===event.currentTarget;
+  store.applySearch('',{});
+  await nextTick();
+  if (restoreFocus && document.activeElement===document.body) advanced.value?.focus({preventScroll:true});
+}
 const flags={hasAttachment:'Has attachment',isUnread:'Is unread'};
 const ordered=computed(()=>{
   const keys=['from','days','hasAttachment','to'];
@@ -50,3 +57,7 @@ onUpdated(()=>{
   focused=null;
 });
 </script>
+
+<style scoped>
+@media(min-width:768px){.filter-row {min-height:56px}}
+</style>

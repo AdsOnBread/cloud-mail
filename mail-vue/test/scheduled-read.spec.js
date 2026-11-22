@@ -1,4 +1,4 @@
-import {expect,it,vi} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
 import {flushPromises,shallowMount} from '@vue/test-utils';
 import {createMemoryHistory,createRouter} from 'vue-router';
 import {createPinia,setActivePinia} from 'pinia';
@@ -10,11 +10,14 @@ import http from '../src/axios';
 vi.mock('../src/axios',()=>({default:{get:vi.fn(),post:vi.fn()}}));
 vi.mock('../src/db/db',async()=>({default:(await import('vue')).shallowRef({})}));
 
+afterEach(()=>localStorage.removeItem('token'));
+
 it('finishes an earlier mark before reading a reopened message and keeps the new reader open',async()=>{
   const pinia=createPinia();
   setActivePinia(pinia);
   useAccountStore().select({accountId:7,email:'me@example.com'});
   useUserStore().user.email='me@example.com';
+  useUserStore().authenticatedToken='session';localStorage.setItem('token','session');
   const messages=[1,2].map(draftId=>({draftId,version:2,accountId:7,state:'scheduled',
     subject:'Message '+draftId,sendAt:1900000000,recipients:['someone@example.com'],unread:0}));
   http.get.mockImplementation(async path=>{
@@ -43,4 +46,39 @@ it('finishes an earlier mark before reading a reopened message and keeps the new
     expect(http.post.mock.calls.map(([,payload])=>payload.unread)).toEqual([true,false]);
     expect(messages[0].unread).toBe(0);
   } finally {release();wrapper.unmount();}
+});
+
+it('retries the displayed page and ignores a sign-in change in another tab',async()=>{
+  vi.resetAllMocks();
+  const pinia=createPinia();
+  setActivePinia(pinia);
+  const user=useUserStore();
+  user.user.email='me@example.com';user.authenticatedToken='old-session';
+  localStorage.setItem('token','old-session');
+  useAccountStore().select({accountId:7,email:user.user.email});
+  const messages=Array.from({length:52},(_,i)=>({draftId:i+1,version:3,accountId:7,state:'scheduled',
+    subject:'Message '+(i+1),sendAt:1900000000+i,recipients:['someone@example.com'],unread:Number(i!==51)}));
+  http.get.mockImplementation(async()=>messages.map(row=>({...row})));
+  http.post.mockRejectedValueOnce(new Error('Message changed.')).mockImplementation(async(_path,payload)=>{
+    for (const {draftId} of payload.messages) messages.find(row=>row.draftId===draftId).unread=0;
+  });
+  const router=createRouter({history:createMemoryHistory(),routes:[{name:'scheduled',path:'/scheduled',component:Scheduled}]});
+  await router.push('/scheduled');
+  const wrapper=shallowMount(Scheduled,{global:{plugins:[pinia,router]}});
+  try {
+    await flushPromises();
+    await wrapper.get('[aria-label="Next"]').trigger('click');
+    const pageRead=()=>wrapper.getComponent({name:'MailPageActions'}).vm.$emit('mark-read');
+    pageRead();await flushPromises();
+    expect(wrapper.text()).toContain('Message changed.');
+    pageRead();await flushPromises();
+    expect(wrapper.text()).not.toContain('Message changed.');
+    expect(http.post.mock.calls[1]).toEqual(['/v1/scheduled/read',{messages:[{draftId:51,version:3}],unread:false},
+      {noMsg:true,headers:{Authorization:'old-session'}}]);
+    expect(messages[0].unread).toBe(1);
+    await wrapper.get('[aria-label="Previous"]').trigger('click');
+    localStorage.setItem('token','new-session');
+    pageRead();await flushPromises();
+    expect(http.post).toHaveBeenCalledTimes(2);
+  } finally {wrapper.unmount();}
 });

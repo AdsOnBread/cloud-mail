@@ -379,22 +379,19 @@ watch(
 );
 async function load() {
   const request = ++generation;
-  const identityAtStart = identity.value;
-  if (!user.user.email || !account.currentAccountId) return;
+  const identityAtStart=identity.value, session=user.authenticatedToken;
+  const current=()=>!disposed && request===generation && identityAtStart===identity.value &&
+    session===user.authenticatedToken && session===localStorage.getItem("token");
+  if (!user.user.email || !account.currentAccountId || !session || !current()) return;
   loading.value = true;
   listError.value = "";
   try {
     const data = await http.get("/v1/scheduled", {
       // Scheduled is capped at 100 messages. Keep read state available for the open reader.
       params: { accountId: scope.value, ...(receiptSender.value ? {} : {q: search.query, ...search.filters}), isUnread:undefined },
-      noMsg: true,
+      noMsg:true,headers:{Authorization:session},
     });
-    if (
-      disposed ||
-      request !== generation ||
-      identityAtStart !== identity.value
-    )
-      return;
+    if (!current()) return;
     rows.value = data;
     offset.value = Math.min(
       offset.value,
@@ -404,7 +401,7 @@ async function load() {
       page.value.some((row) => row.draftId === id),
     );
   } catch (e) {
-    if (request === generation)
+    if (current())
       listError.value = e.message || "Could not load Scheduled.";
   } finally {
     if (request === generation) loading.value = false;
@@ -488,20 +485,23 @@ function markPageRead() {
 async function setRead(batch,unread,leaveReader=false,announce=false) {
   const operations=reading.value;
   if (!batch.length || batch.some(row=>!canCancel(row) || operations.has(row.draftId))) return;
-  const owner=identity.value, email=user.user.email, session=localStorage.getItem("token"), origin=route.fullPath;
-  const sameSession=()=>user.user.email===email && localStorage.getItem("token")===session;
+  const owner=identity.value, email=user.user.email, session=user.authenticatedToken, origin=route.fullPath;
+  const sameSession=()=>session && session===user.authenticatedToken && user.user.email===email && localStorage.getItem("token")===session;
+  if (!sameSession()) return;
   const current=()=>!disposed && identity.value===owner && sameSession();
   const focused=document.activeElement, navigation=navigations, actionAtStart=interaction;
+  const sameView=()=>current() && route.fullPath===origin && interaction===actionAtStart;
   const messages=batch.map(({draftId,version})=>({draftId,version}));
+  error.value="";
   let finish;
   const pending=new Promise(resolve=>{finish=resolve});
   for (const {draftId} of messages) operations.set(draftId,pending);
   try {
-    await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true});
+    await http.post('/v1/scheduled/read',{messages,unread},{noMsg:true,headers:{Authorization:session}});
     // The user may already be back in a filtered Starred, Important or label list.
     if (sameSession()) drafts.scheduledRevision++;
     if (!current()) return;
-    if (announce && route.fullPath===origin && interaction===actionAtStart)
+    if (announce && sameView())
       feedback.show(batch.length===1 ? "Message marked as read." : batch.length+" messages marked as read.");
     const ids=new Set(messages.map(row=>row.draftId));
     for (const row of rows.value) if (ids.has(row.draftId)) row.unread=Number(unread);
@@ -512,9 +512,9 @@ async function setRead(batch,unread,leaveReader=false,announce=false) {
         focusList();
     }
   } catch(e) {
-    if (current()) {
+    if (sameView()) {
       await load();
-      if (current()) error.value=e.message || 'Could not update read status.';
+      if (sameView()) error.value=e.message || 'Could not update read status.';
     }
   } finally {
     for (const {draftId} of messages) operations.delete(draftId);
@@ -688,7 +688,7 @@ async function cancel(batch) {
   }
 }
 watch(
-  [() => user.user.email, scope, () => account.currentAccountId, receiptSender],
+  [() => user.user.email, scope, () => account.currentAccountId, receiptSender, () => user.authenticatedToken],
   (_, old) => {
     rows.value = [];
     selected.value = [];

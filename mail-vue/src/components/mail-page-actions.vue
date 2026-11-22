@@ -6,7 +6,7 @@
       <Icon icon="material-symbols:more-vert" width="20"/>
     </button>
     <template #dropdown>
-      <el-dropdown-menu>
+      <el-dropdown-menu @focusin="focusCommand">
         <el-dropdown-item command="read" :disabled="disabled" :aria-describedby="hint">
           <Icon aria-hidden="true" icon="material-symbols:drafts-outline" width="20"/>
           Mark all as read
@@ -24,6 +24,10 @@ import {Icon} from '@iconify/vue';
 defineProps({label:{type:String,required:true},disabled:Boolean});
 defineEmits(['mark-read']);
 const dropdown=ref(), hint=useId();
+function focusCommand(event) {
+  if (event.target===event.currentTarget)
+    event.target.querySelector('[role="menuitem"]:not([aria-disabled="true"])')?.focus({preventScroll:true});
+}
 const placement={modifiers:[{name:'offset',options:{
   offset:({reference})=>[(reference.width-20)/2,-(reference.height-20)/2],
 }}]};
@@ -62,4 +66,8 @@ const placement={modifiers:[{name:'offset',options:{
 .mail-page-actions .page-action-hint {padding:6px 48px;color:var(--secondary-text-color);font:italic 14px/20px Arial,sans-serif}
 html.dark .mail-page-actions.el-popper.is-light {color:var(--el-text-color-primary);background:var(--mail-surface)}
 html.dark .mail-page-actions .el-dropdown-menu__item:not(.is-disabled):is(:hover,:focus) {background:var(--mail-hover)}
+@media (forced-colors:active) {
+  .mail-page-actions.el-popper.is-light {outline:1px solid CanvasText}
+  .mail-page-actions .el-dropdown-menu__item:focus-visible {outline:2px solid Highlight;outline-offset:-2px}
+}
 </style>
