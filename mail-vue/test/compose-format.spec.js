@@ -1,3 +1,7 @@
+import {mount} from "@vue/test-utils";
+import {nextTick} from "vue";
+import FormatToolbar from "../src/components/tiny-editor/compose-format.vue";
+import FormatPicker from "../src/components/tiny-editor/format-picker.vue";
 import { describe, it, expect, vi } from "vitest";
 import {
   colorRows,
@@ -73,4 +77,31 @@ describe("compose formatting", () => {
       expect(press(ed, "Digit8", keys).preventDefault).not.toHaveBeenCalled();
     expect(ed.execCommand).not.toHaveBeenCalled();
   });
+});
+
+it("updates toggle and overflow states when the selection changes within the same editor node",async()=>{
+  let command="Bold";
+  const events=new Map();
+  const ed={
+    ...editor(), initialized:true,
+    queryCommandState:key=>key===command,
+    undoManager:{hasUndo:()=>false,hasRedo:()=>false},
+    on:(names,fn)=>names.split(" ").forEach(name=>events.set(name,fn)),
+    off:(names,fn)=>names.split(" ").forEach(name=>{if(events.get(name)===fn)events.delete(name);}),
+  };
+  const wrapper=mount(FormatToolbar,{props:{editor:ed},global:{stubs:{Icon:true,FormatPicker:true,FormatPopup:true}}});
+  try {
+    expect(wrapper.get('button[aria-label=Bold]').attributes("aria-pressed")).toBe("true");
+    command="Strikethrough";
+    events.get("SelectionChange")();
+    await nextTick();
+    expect(wrapper.get('button[aria-label=Bold]').attributes("aria-pressed")).toBe("false");
+    const more=wrapper.findAllComponents(FormatPicker).find(p=>p.props("label")==="More formatting options");
+    const choices=more.props("choices");
+    expect(choices.slice(0,5).map(c=>c.name)).toEqual(["Remove formatting","Strikethrough","Quote","Indent more","Indent less"]);
+    expect(choices.find(c=>c.value==="Strikethrough").checked).toBe(true);
+    expect(choices.find(c=>c.value==="mceBlockQuote").checked).toBe(false);
+    expect(choices.find(c=>c.value==="RemoveFormat").checked).toBeUndefined();
+  } finally { wrapper.unmount(); }
+  expect(events.has("SelectionChange")).toBe(false);
 });
